@@ -4,6 +4,7 @@
 
 ### Added
 - Added a Common Issues guide with user-facing fixes for WiFi, uploads, EPUB cache rebuilds, covers, reading stats, and OTA update problems.
+- Added an in-reader confirmation message when a shortcut turns tilt-to-turn on or off.
 
 ### Fixed
 - Fixed Lyra Carousel selected menu icons rendering as black squares on X3 devices.

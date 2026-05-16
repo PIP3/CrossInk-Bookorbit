@@ -49,7 +49,7 @@ constexpr uint16_t MIN_AUTO_PAGE_TURN_INTERVAL_S = 5;
 constexpr uint16_t MAX_AUTO_PAGE_TURN_INTERVAL_S = 120;
 constexpr int MAX_PAGE_LOAD_RETRIES = 3;
 
-void drawToast(const GfxRenderer& renderer, const char* msg) {
+void drawToastBuffer(const GfxRenderer& renderer, const char* msg) {
   constexpr int toastPadX = 20;
   constexpr int toastPadY = 12;
   const int msgW = renderer.getTextWidth(UI_10_FONT_ID, msg);
@@ -60,6 +60,10 @@ void drawToast(const GfxRenderer& renderer, const char* msg) {
   const int toastY = (renderer.getScreenHeight() - toastH) / 2;
   renderer.fillRect(toastX, toastY, toastW, toastH, true);
   renderer.drawText(UI_10_FONT_ID, toastX + toastPadX, toastY + toastPadY, msg, false);
+}
+
+void drawToast(const GfxRenderer& renderer, const char* msg) {
+  drawToastBuffer(renderer, msg);
   renderer.displayBuffer();
 }
 
@@ -364,6 +368,18 @@ void EpubReaderActivity::loop() {
                             mappedInput.wasReleased(MappedInputManager::Button::Down);
     if (timedOut || navPressed) {
       pendingCompletedFeedback = false;
+      requestUpdate();
+      return;
+    }
+  }
+  if (pendingTiltPageTurnFeedback) {
+    const bool timedOut = (millis() - tiltPageTurnFeedbackShowTime) >= 1000UL;
+    const bool navPressed = mappedInput.wasReleased(MappedInputManager::Button::Left) ||
+                            mappedInput.wasReleased(MappedInputManager::Button::Right) ||
+                            mappedInput.wasReleased(MappedInputManager::Button::Up) ||
+                            mappedInput.wasReleased(MappedInputManager::Button::Down);
+    if (timedOut || navPressed) {
+      pendingTiltPageTurnFeedback = false;
       requestUpdate();
       return;
     }
@@ -1044,6 +1060,8 @@ void EpubReaderActivity::executeReaderQuickAction(CrossPointSettings::LONG_PRESS
                                                                                       : CrossPointSettings::TILT_OFF;
         SETTINGS.saveToFile();
         halTiltSensor.clearPendingEvents();
+        showTiltPageTurnFeedback(SETTINGS.tiltPageTurn != CrossPointSettings::TILT_OFF);
+        requestUpdate();
       }
       break;
     case CrossPointSettings::LONG_MENU_OFF:
@@ -1192,6 +1210,12 @@ void EpubReaderActivity::showCompletedFeedback(bool isCompleted) {
   completedFeedbackIsFinished = isCompleted;
   pendingCompletedFeedback = true;
   completedFeedbackShowTime = millis();
+}
+
+void EpubReaderActivity::showTiltPageTurnFeedback(bool enabled) {
+  tiltPageTurnFeedbackEnabled = enabled;
+  pendingTiltPageTurnFeedback = true;
+  tiltPageTurnFeedbackShowTime = millis();
 }
 
 void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
@@ -1632,29 +1656,15 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
         msg = tr(STR_BOOKMARK_LIMIT_REACHED);
         break;
     }
-    constexpr int toastPadX = 20;
-    constexpr int toastPadY = 12;
-    const int msgW = renderer.getTextWidth(UI_10_FONT_ID, msg);
-    const int msgH = renderer.getLineHeight(UI_10_FONT_ID);
-    const int toastW = msgW + toastPadX * 2;
-    const int toastH = msgH + toastPadY * 2;
-    const int toastX = (renderer.getScreenWidth() - toastW) / 2;
-    const int toastY = (renderer.getScreenHeight() - toastH) / 2;
-    renderer.fillRect(toastX, toastY, toastW, toastH, true);
-    renderer.drawText(UI_10_FONT_ID, toastX + toastPadX, toastY + toastPadY, msg, false);
+    drawToastBuffer(renderer, msg);
   }
   if (pendingCompletedFeedback) {
     const char* msg = completedFeedbackIsFinished ? tr(STR_MARKED_FINISHED) : tr(STR_MARKED_UNFINISHED);
-    constexpr int toastPadX = 20;
-    constexpr int toastPadY = 12;
-    const int msgW = renderer.getTextWidth(UI_10_FONT_ID, msg);
-    const int msgH = renderer.getLineHeight(UI_10_FONT_ID);
-    const int toastW = msgW + toastPadX * 2;
-    const int toastH = msgH + toastPadY * 2;
-    const int toastX = (renderer.getScreenWidth() - toastW) / 2;
-    const int toastY = (renderer.getScreenHeight() - toastH) / 2;
-    renderer.fillRect(toastX, toastY, toastW, toastH, true);
-    renderer.drawText(UI_10_FONT_ID, toastX + toastPadX, toastY + toastPadY, msg, false);
+    drawToastBuffer(renderer, msg);
+  }
+  if (pendingTiltPageTurnFeedback) {
+    const char* msg = tiltPageTurnFeedbackEnabled ? tr(STR_TILT_TO_TURN_ON) : tr(STR_TILT_TO_TURN_OFF);
+    drawToastBuffer(renderer, msg);
   }
   fcm->logStats("bw_render");
   const auto tBwRender = millis();
