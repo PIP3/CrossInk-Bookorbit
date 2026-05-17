@@ -1,5 +1,6 @@
 #include "HttpDownloader.h"
 
+#include <Arduino.h>
 #include <HTTPClient.h>
 #include <Logging.h>
 #include <NetworkClient.h>
@@ -12,32 +13,12 @@
 #include <utility>
 
 #include "AppVersion.h"
+#include "network/WifiPowerSaveGuard.h"
 #include "util/UrlUtils.h"
 
-#ifndef SIMULATOR
-#include "esp_wifi.h"
-#endif
-
 namespace {
-#ifndef SIMULATOR
-class WifiPowerSaveGuard final {
- public:
-  WifiPowerSaveGuard() { esp_wifi_set_ps(WIFI_PS_NONE); }
-  ~WifiPowerSaveGuard() { esp_wifi_set_ps(WIFI_PS_MIN_MODEM); }
-
-  WifiPowerSaveGuard(const WifiPowerSaveGuard&) = delete;
-  WifiPowerSaveGuard& operator=(const WifiPowerSaveGuard&) = delete;
-};
-#else
-class WifiPowerSaveGuard final {
- public:
-  WifiPowerSaveGuard() = default;
-  ~WifiPowerSaveGuard() = default;
-
-  WifiPowerSaveGuard(const WifiPowerSaveGuard&) = delete;
-  WifiPowerSaveGuard& operator=(const WifiPowerSaveGuard&) = delete;
-};
-#endif
+constexpr size_t PROGRESS_UPDATE_BYTES = 64 * 1024;
+constexpr uint32_t PROGRESS_UPDATE_MS = 250;
 
 class FileWriteStream final : public Stream {
  public:
@@ -56,7 +37,7 @@ class FileWriteStream final : public Stream {
       writeOk_ = false;
     }
     downloaded_ += accepted;
-    notifyProgress();
+    notifyProgress(false);
     return accepted;
   }
 
@@ -67,17 +48,26 @@ class FileWriteStream final : public Stream {
 
   size_t downloaded() const { return downloaded_; }
   bool ok() const { return writeOk_; }
+  void finishProgress() { notifyProgress(true); }
 
  private:
-  void notifyProgress() const {
+  void notifyProgress(const bool force) {
     if (progress_ && total_ > 0) {
-      progress_(downloaded_, total_);
+      const uint32_t now = millis();
+      if (force || downloaded_ == total_ || downloaded_ - lastProgressBytes_ >= PROGRESS_UPDATE_BYTES ||
+          now - lastProgressMs_ >= PROGRESS_UPDATE_MS) {
+        lastProgressBytes_ = downloaded_;
+        lastProgressMs_ = now;
+        progress_(downloaded_, total_);
+      }
     }
   }
 
   FsFile& file_;
   size_t total_;
   size_t downloaded_ = 0;
+  size_t lastProgressBytes_ = 0;
+  uint32_t lastProgressMs_ = 0;
   bool writeOk_ = true;
   HttpDownloader::ProgressCallback progress_;
 };
@@ -85,6 +75,8 @@ class FileWriteStream final : public Stream {
 
 bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent, const std::string& username,
                               const std::string& password) {
+  WifiPowerSaveGuard wifiPowerSaveGuard;
+
   std::unique_ptr<NetworkClient> client;
   if (UrlUtils::isHttpsUrl(url)) {
     auto* secureClient = new (std::nothrow) NetworkClientSecure();
@@ -215,6 +207,7 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   FileWriteStream fileStream(file, contentLength, progress);
   const int writeResult = http.writeToStream(&fileStream);
   fileStream.flush();
+  fileStream.finishProgress();
 
   file.close();
   http.end();

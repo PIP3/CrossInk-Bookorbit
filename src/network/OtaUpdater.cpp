@@ -15,7 +15,7 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback, void*, s
 #include "OtaUpdater.h"
 #include "esp_http_client.h"
 #include "esp_https_ota.h"
-#include "esp_wifi.h"
+#include "network/WifiPowerSaveGuard.h"
 
 namespace {
 #ifndef CROSSINK_OTA_RELEASE_URL
@@ -157,6 +157,8 @@ esp_err_t event_handler(esp_http_client_event_t* event) {
 }  // namespace
 
 OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
+  WifiPowerSaveGuard wifiPowerSaveGuard;
+
   updateAvailable = false;
   latestVersion.clear();
   otaUrl.clear();
@@ -284,8 +286,7 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgres
       .http_client_init_cb = http_client_set_header_cb,
   };
 
-  /* For better timing and connectivity, we disable power saving for WiFi */
-  esp_wifi_set_ps(WIFI_PS_NONE);
+  WifiPowerSaveGuard wifiPowerSaveGuard;
 
   esp_err = esp_https_ota_begin(&ota_config, &ota_handle);
   if (esp_err != ESP_OK) {
@@ -296,7 +297,6 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgres
   do {
     if (isCancellationRequested()) {
       LOG_INF("OTA", "Update cancelled");
-      esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
       esp_https_ota_abort(ota_handle);
       return CANCELLED_ERROR;
     }
@@ -309,13 +309,9 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgres
 
   if (isCancellationRequested()) {
     LOG_INF("OTA", "Update cancelled");
-    esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
     esp_https_ota_abort(ota_handle);
     return CANCELLED_ERROR;
   }
-
-  /* Return back to default power saving for WiFi in case of failing */
-  esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
 
   if (esp_err != ESP_OK) {
     LOG_ERR("OTA", "esp_https_ota_perform Failed: %s", esp_err_to_name(esp_err));

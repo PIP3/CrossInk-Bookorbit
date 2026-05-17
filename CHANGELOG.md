@@ -8,7 +8,7 @@
 - Added a 9pt `Itty Bitty` reader font size, plus build flags for omitting Itty Bitty and Large reader font assets in size-constrained firmware variants.
 
 ### Fixed
-- Disabled WiFi power saving during regular file downloads so OPDS book downloads and SD font downloads can run more consistently.
+- Disabled WiFi power saving during OPDS browsing, regular file downloads, and OTA update checks so network transfers can run more consistently.
 - Reduced stack usage when copying files over WebDAV.
 - Fixed Lyra Carousel selected menu icons rendering as black squares on X3 devices.
 - Relaxed KOReader Sync auth response validation so compatible self-hosted servers that return valid JSON on successful login can authenticate.
@@ -18,6 +18,7 @@
 - Reduced false EPUB low-memory chapter failures by laying out very long text blocks earlier, streaming table fallback content when heap is tight, and clarifying the warning text.
 
 ### Changed
+- Reduced unnecessary screen refresh work during OPDS book downloads and SD font downloads so transfers spend more time downloading and less time repainting progress.
 - Kept OPDS feed parsing safer on low-memory devices while preserving older parser iteration helpers for future OPDS work.
 - Reduced unnecessary OPDS browser list clearing when moving between catalog feeds.
 
