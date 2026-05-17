@@ -33,18 +33,24 @@ constexpr char LANG_FILE_BIN[] = "/.crosspoint/language.bin";
 constexpr char LANG_FILE_BAK[] = "/.crosspoint/language.bin.bak";
 constexpr uint8_t INVALID_READER_FONT_SIZE = 0xFF;
 constexpr CrossPointSettings::FONT_SIZE READER_FONT_SIZE_STORAGE_ORDER[] = {
-    CrossPointSettings::TINY,     CrossPointSettings::SMALL,       CrossPointSettings::MEDIUM,
-    CrossPointSettings::LARGE,    CrossPointSettings::EXTRA_LARGE, CrossPointSettings::TEENSY,
-    CrossPointSettings::HUGE_SIZE};
+    CrossPointSettings::TINY,      CrossPointSettings::SMALL,       CrossPointSettings::MEDIUM,
+    CrossPointSettings::LARGE,     CrossPointSettings::EXTRA_LARGE, CrossPointSettings::TEENSY,
+    CrossPointSettings::HUGE_SIZE, CrossPointSettings::ITTY_BITTY};
 constexpr CrossPointSettings::FONT_SIZE READER_FONT_SIZE_CYCLE_ORDER[] = {
-    CrossPointSettings::TEENSY,   CrossPointSettings::TINY,  CrossPointSettings::SMALL,
-    CrossPointSettings::MEDIUM,   CrossPointSettings::LARGE, CrossPointSettings::EXTRA_LARGE,
-    CrossPointSettings::HUGE_SIZE};
+    CrossPointSettings::TEENSY,      CrossPointSettings::ITTY_BITTY, CrossPointSettings::TINY,
+    CrossPointSettings::SMALL,       CrossPointSettings::MEDIUM,     CrossPointSettings::LARGE,
+    CrossPointSettings::EXTRA_LARGE, CrossPointSettings::HUGE_SIZE};
 
 bool isReaderFontSizeAvailable(const CrossPointSettings::FONT_SIZE size) {
   switch (size) {
     case CrossPointSettings::TEENSY:
 #ifdef OMIT_TEENSY_FONT
+      return false;
+#else
+      return true;
+#endif
+    case CrossPointSettings::ITTY_BITTY:
+#ifdef OMIT_ITTY_BITTY_FONT
       return false;
 #else
       return true;
@@ -73,13 +79,18 @@ bool isReaderFontSizeAvailable(const CrossPointSettings::FONT_SIZE size) {
 #else
       return true;
 #endif
+    case CrossPointSettings::LARGE:
+#ifdef OMIT_LARGE_FONT
+      return false;
+#else
+      return true;
+#endif
     case CrossPointSettings::HUGE_SIZE:
 #ifdef OMIT_HUGE_FONT
       return false;
 #else
       return true;
 #endif
-    case CrossPointSettings::LARGE:
     default:
       return true;
   }
@@ -511,6 +522,10 @@ int CrossPointSettings::getReaderFontId() const {
         case TEENSY:
           return LEXENDDECA_8_FONT_ID;
 #endif
+#ifndef OMIT_ITTY_BITTY_FONT
+        case ITTY_BITTY:
+          return LEXENDDECA_9_FONT_ID;
+#endif
 #ifndef OMIT_TINY_FONT
         case TINY:
           return LEXENDDECA_10_FONT_ID;
@@ -524,11 +539,13 @@ int CrossPointSettings::getReaderFontId() const {
         default:
           return LEXENDDECA_14_FONT_ID;
 #endif
+#ifndef OMIT_LARGE_FONT
         case LARGE:
 #ifdef OMIT_MEDIUM_FONT
         default:
 #endif
           return LEXENDDECA_16_FONT_ID;
+#endif
 #ifndef OMIT_XLARGE_FONT
         case EXTRA_LARGE:
           return LEXENDDECA_18_FONT_ID;
@@ -544,6 +561,10 @@ int CrossPointSettings::getReaderFontId() const {
         case TEENSY:
           return CHAREINK_8_FONT_ID;
 #endif
+#ifndef OMIT_ITTY_BITTY_FONT
+        case ITTY_BITTY:
+          return CHAREINK_9_FONT_ID;
+#endif
 #ifndef OMIT_TINY_FONT
         case TINY:
           return CHAREINK_10_FONT_ID;
@@ -557,11 +578,13 @@ int CrossPointSettings::getReaderFontId() const {
         default:
           return CHAREINK_14_FONT_ID;
 #endif
+#ifndef OMIT_LARGE_FONT
         case LARGE:
 #ifdef OMIT_MEDIUM_FONT
         default:
 #endif
           return CHAREINK_16_FONT_ID;
+#endif
 #ifndef OMIT_XLARGE_FONT
         case EXTRA_LARGE:
           return CHAREINK_18_FONT_ID;
@@ -577,6 +600,10 @@ int CrossPointSettings::getReaderFontId() const {
         case TEENSY:
           return BITTER_8_FONT_ID;
 #endif
+#ifndef OMIT_ITTY_BITTY_FONT
+        case ITTY_BITTY:
+          return BITTER_9_FONT_ID;
+#endif
 #ifndef OMIT_TINY_FONT
         case TINY:
           return BITTER_10_FONT_ID;
@@ -590,11 +617,13 @@ int CrossPointSettings::getReaderFontId() const {
         default:
           return BITTER_14_FONT_ID;
 #endif
+#ifndef OMIT_LARGE_FONT
         case LARGE:
 #ifdef OMIT_MEDIUM_FONT
         default:
 #endif
           return BITTER_16_FONT_ID;
+#endif
 #ifndef OMIT_XLARGE_FONT
         case EXTRA_LARGE:
           return BITTER_18_FONT_ID;
