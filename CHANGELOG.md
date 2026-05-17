@@ -13,6 +13,7 @@
 - Fixed OPDS browsing on memory-constrained builds so large catalog feeds fail safely instead of rebooting the device.
 - Fixed a crash when opening the XTC chapter selector on memory-constrained builds.
 - Kept the Minimal theme home navigation button labels in English so all four labels stay consistent and compact.
+- Reduced false EPUB low-memory chapter failures by laying out very long text blocks earlier, streaming table fallback content when heap is tight, and clarifying the warning text.
 
 ### Changed
 - Kept OPDS feed parsing safer on low-memory devices while preserving older parser iteration helpers for future OPDS work.

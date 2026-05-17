@@ -1414,7 +1414,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
                                       SETTINGS.bionicReadingEnabled, SETTINGS.guideReadingEnabled, popupFn,
                                       &imagesWereSuppressed, &layoutAbortedForLowMemory)) {
         if (layoutAbortedForLowMemory) {
-          LOG_ERR("ERS", "EPUB section layout aborted for low heap; file may be corrupted or badly formatted");
+          LOG_ERR("ERS", "EPUB section layout aborted for low heap; chapter exceeds safe layout memory");
         }
         if (!layoutAbortedForLowMemory) {
           LOG_ERR("ERS", "Failed to persist page data to SD");
