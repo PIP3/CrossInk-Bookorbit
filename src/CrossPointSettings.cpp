@@ -120,8 +120,10 @@ int getFallbackReaderFontIdForFamily(const CrossPointSettings::FONT_FAMILY famil
       return CHAREINK_20_FONT_ID;
 #elif !defined(OMIT_TEENSY_FONT)
       return CHAREINK_8_FONT_ID;
-#else
+#elif !defined(OMIT_ITTY_BITTY_FONT)
       return CHAREINK_9_FONT_ID;
+#else
+#error "No reader fonts enabled for CHAREINK"
 #endif
     case CrossPointSettings::BITTER:
 #ifndef OMIT_TINY_FONT
@@ -138,8 +140,10 @@ int getFallbackReaderFontIdForFamily(const CrossPointSettings::FONT_FAMILY famil
       return BITTER_20_FONT_ID;
 #elif !defined(OMIT_TEENSY_FONT)
       return BITTER_8_FONT_ID;
-#else
+#elif !defined(OMIT_ITTY_BITTY_FONT)
       return BITTER_9_FONT_ID;
+#else
+#error "No reader fonts enabled for BITTER"
 #endif
     case CrossPointSettings::LEXENDDECA:
     default:
@@ -157,8 +161,10 @@ int getFallbackReaderFontIdForFamily(const CrossPointSettings::FONT_FAMILY famil
       return LEXENDDECA_20_FONT_ID;
 #elif !defined(OMIT_TEENSY_FONT)
       return LEXENDDECA_8_FONT_ID;
-#else
+#elif !defined(OMIT_ITTY_BITTY_FONT)
       return LEXENDDECA_9_FONT_ID;
+#else
+#error "No reader fonts enabled for LEXENDDECA"
 #endif
   }
 }

@@ -73,7 +73,7 @@ There are 3 available build variants to choose from due to build size constraint
 **teensy**
 > Only the small sized fonts.
 - Emoji & Misc. Symbols Support
-- 5 Font sizes:
+- 4 Font sizes:
   - Teensy (8pt)
   - Itty Bitty (9pt)
   - Tiny (10pt)

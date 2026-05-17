@@ -3118,7 +3118,7 @@ static const EpdLigaturePair ubuntu_12_regularLigaturePairs[] = {
     { 0xFB00006C, 0xFB04 }, // U+FB00 l -> U+FB04
 };
 
-static const EpdFontData ubuntu_12_regular = {
+static constexpr EpdFontData ubuntu_12_regular = {
     ubuntu_12_regularBitmaps,
     ubuntu_12_regularGlyphs,
     ubuntu_12_regularIntervals,

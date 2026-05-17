@@ -3434,7 +3434,7 @@ static const EpdLigaturePair charein_9_regularLigaturePairs[] = {
     { 0xFB00006C, 0xFB04 }, // U+FB00 l -> U+FB04
 };
 
-static const EpdFontData charein_9_regular = {
+static constexpr EpdFontData charein_9_regular = {
     charein_9_regularBitmaps,
     charein_9_regularGlyphs,
     charein_9_regularIntervals,

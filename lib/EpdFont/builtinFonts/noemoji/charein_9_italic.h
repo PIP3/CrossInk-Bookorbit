@@ -3279,7 +3279,7 @@ static const EpdLigaturePair charein_9_italicLigaturePairs[] = {
     { 0xFB00006C, 0xFB04 }, // U+FB00 l -> U+FB04
 };
 
-static const EpdFontData charein_9_italic = {
+static constexpr EpdFontData charein_9_italic = {
     charein_9_italicBitmaps,
     charein_9_italicGlyphs,
     charein_9_italicIntervals,
