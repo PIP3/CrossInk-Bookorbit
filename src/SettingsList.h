@@ -152,7 +152,9 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
 #ifndef OMIT_MEDIUM_FONT
                               StrId::STR_MEDIUM,
 #endif
+#ifndef OMIT_LARGE_FONT
                               StrId::STR_LARGE,
+#endif
 #ifndef OMIT_XLARGE_FONT
                               StrId::STR_X_LARGE,
 #endif
@@ -161,6 +163,9 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
 #endif
 #ifndef OMIT_HUGE_FONT
                               StrId::STR_HUGE,
+#endif
+#ifndef OMIT_ITTY_BITTY_FONT
+                              StrId::STR_ITTY_BITTY,
 #endif
                           },
                           "fontSize", StrId::STR_CAT_READER),

@@ -127,6 +127,7 @@ class CrossPointSettings {
     EXTRA_LARGE = 4,
     TEENSY = 5,
     HUGE_SIZE = 6,
+    ITTY_BITTY = 7,
     FONT_SIZE_COUNT
   };
   enum LINE_COMPRESSION { TIGHT = 0, NORMAL = 1, WIDE = 2, LINE_COMPRESSION_COUNT };

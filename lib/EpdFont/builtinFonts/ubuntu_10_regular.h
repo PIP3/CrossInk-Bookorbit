@@ -2757,7 +2757,7 @@ static const EpdLigaturePair ubuntu_10_regularLigaturePairs[] = {
     { 0xFB00006C, 0xFB04 }, // U+FB00 l -> U+FB04
 };
 
-static const EpdFontData ubuntu_10_regular = {
+static constexpr EpdFontData ubuntu_10_regular = {
     ubuntu_10_regularBitmaps,
     ubuntu_10_regularGlyphs,
     ubuntu_10_regularIntervals,

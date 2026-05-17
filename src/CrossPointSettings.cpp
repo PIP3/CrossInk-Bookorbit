@@ -33,18 +33,24 @@ constexpr char LANG_FILE_BIN[] = "/.crosspoint/language.bin";
 constexpr char LANG_FILE_BAK[] = "/.crosspoint/language.bin.bak";
 constexpr uint8_t INVALID_READER_FONT_SIZE = 0xFF;
 constexpr CrossPointSettings::FONT_SIZE READER_FONT_SIZE_STORAGE_ORDER[] = {
-    CrossPointSettings::TINY,     CrossPointSettings::SMALL,       CrossPointSettings::MEDIUM,
-    CrossPointSettings::LARGE,    CrossPointSettings::EXTRA_LARGE, CrossPointSettings::TEENSY,
-    CrossPointSettings::HUGE_SIZE};
+    CrossPointSettings::TINY,      CrossPointSettings::SMALL,       CrossPointSettings::MEDIUM,
+    CrossPointSettings::LARGE,     CrossPointSettings::EXTRA_LARGE, CrossPointSettings::TEENSY,
+    CrossPointSettings::HUGE_SIZE, CrossPointSettings::ITTY_BITTY};
 constexpr CrossPointSettings::FONT_SIZE READER_FONT_SIZE_CYCLE_ORDER[] = {
-    CrossPointSettings::TEENSY,   CrossPointSettings::TINY,  CrossPointSettings::SMALL,
-    CrossPointSettings::MEDIUM,   CrossPointSettings::LARGE, CrossPointSettings::EXTRA_LARGE,
-    CrossPointSettings::HUGE_SIZE};
+    CrossPointSettings::TEENSY,      CrossPointSettings::ITTY_BITTY, CrossPointSettings::TINY,
+    CrossPointSettings::SMALL,       CrossPointSettings::MEDIUM,     CrossPointSettings::LARGE,
+    CrossPointSettings::EXTRA_LARGE, CrossPointSettings::HUGE_SIZE};
 
 bool isReaderFontSizeAvailable(const CrossPointSettings::FONT_SIZE size) {
   switch (size) {
     case CrossPointSettings::TEENSY:
 #ifdef OMIT_TEENSY_FONT
+      return false;
+#else
+      return true;
+#endif
+    case CrossPointSettings::ITTY_BITTY:
+#ifdef OMIT_ITTY_BITTY_FONT
       return false;
 #else
       return true;
@@ -73,13 +79,18 @@ bool isReaderFontSizeAvailable(const CrossPointSettings::FONT_SIZE size) {
 #else
       return true;
 #endif
+    case CrossPointSettings::LARGE:
+#ifdef OMIT_LARGE_FONT
+      return false;
+#else
+      return true;
+#endif
     case CrossPointSettings::HUGE_SIZE:
 #ifdef OMIT_HUGE_FONT
       return false;
 #else
       return true;
 #endif
-    case CrossPointSettings::LARGE:
     default:
       return true;
   }
@@ -90,6 +101,72 @@ CrossPointSettings::FONT_SIZE firstAvailableReaderFontSize() {
       std::find_if(std::begin(READER_FONT_SIZE_STORAGE_ORDER), std::end(READER_FONT_SIZE_STORAGE_ORDER),
                    [](const CrossPointSettings::FONT_SIZE size) { return isReaderFontSizeAvailable(size); });
   return (it != std::end(READER_FONT_SIZE_STORAGE_ORDER)) ? *it : CrossPointSettings::LARGE;
+}
+
+int getFallbackReaderFontIdForFamily(const CrossPointSettings::FONT_FAMILY family) {
+  switch (family) {
+    case CrossPointSettings::CHAREINK:
+#ifndef OMIT_TINY_FONT
+      return CHAREINK_10_FONT_ID;
+#elif !defined(OMIT_SMALL_FONT)
+      return CHAREINK_12_FONT_ID;
+#elif !defined(OMIT_MEDIUM_FONT)
+      return CHAREINK_14_FONT_ID;
+#elif !defined(OMIT_LARGE_FONT)
+      return CHAREINK_16_FONT_ID;
+#elif !defined(OMIT_XLARGE_FONT)
+      return CHAREINK_18_FONT_ID;
+#elif !defined(OMIT_HUGE_FONT)
+      return CHAREINK_20_FONT_ID;
+#elif !defined(OMIT_TEENSY_FONT)
+      return CHAREINK_8_FONT_ID;
+#elif !defined(OMIT_ITTY_BITTY_FONT)
+      return CHAREINK_9_FONT_ID;
+#else
+#error "No reader fonts enabled for CHAREINK"
+#endif
+    case CrossPointSettings::BITTER:
+#ifndef OMIT_TINY_FONT
+      return BITTER_10_FONT_ID;
+#elif !defined(OMIT_SMALL_FONT)
+      return BITTER_12_FONT_ID;
+#elif !defined(OMIT_MEDIUM_FONT)
+      return BITTER_14_FONT_ID;
+#elif !defined(OMIT_LARGE_FONT)
+      return BITTER_16_FONT_ID;
+#elif !defined(OMIT_XLARGE_FONT)
+      return BITTER_18_FONT_ID;
+#elif !defined(OMIT_HUGE_FONT)
+      return BITTER_20_FONT_ID;
+#elif !defined(OMIT_TEENSY_FONT)
+      return BITTER_8_FONT_ID;
+#elif !defined(OMIT_ITTY_BITTY_FONT)
+      return BITTER_9_FONT_ID;
+#else
+#error "No reader fonts enabled for BITTER"
+#endif
+    case CrossPointSettings::LEXENDDECA:
+    default:
+#ifndef OMIT_TINY_FONT
+      return LEXENDDECA_10_FONT_ID;
+#elif !defined(OMIT_SMALL_FONT)
+      return LEXENDDECA_12_FONT_ID;
+#elif !defined(OMIT_MEDIUM_FONT)
+      return LEXENDDECA_14_FONT_ID;
+#elif !defined(OMIT_LARGE_FONT)
+      return LEXENDDECA_16_FONT_ID;
+#elif !defined(OMIT_XLARGE_FONT)
+      return LEXENDDECA_18_FONT_ID;
+#elif !defined(OMIT_HUGE_FONT)
+      return LEXENDDECA_20_FONT_ID;
+#elif !defined(OMIT_TEENSY_FONT)
+      return LEXENDDECA_8_FONT_ID;
+#elif !defined(OMIT_ITTY_BITTY_FONT)
+      return LEXENDDECA_9_FONT_ID;
+#else
+#error "No reader fonts enabled for LEXENDDECA"
+#endif
+  }
 }
 
 // Convert legacy front button layout into explicit logical->hardware mapping.
@@ -511,6 +588,10 @@ int CrossPointSettings::getReaderFontId() const {
         case TEENSY:
           return LEXENDDECA_8_FONT_ID;
 #endif
+#ifndef OMIT_ITTY_BITTY_FONT
+        case ITTY_BITTY:
+          return LEXENDDECA_9_FONT_ID;
+#endif
 #ifndef OMIT_TINY_FONT
         case TINY:
           return LEXENDDECA_10_FONT_ID;
@@ -524,11 +605,13 @@ int CrossPointSettings::getReaderFontId() const {
         default:
           return LEXENDDECA_14_FONT_ID;
 #endif
+#ifndef OMIT_LARGE_FONT
         case LARGE:
 #ifdef OMIT_MEDIUM_FONT
         default:
 #endif
           return LEXENDDECA_16_FONT_ID;
+#endif
 #ifndef OMIT_XLARGE_FONT
         case EXTRA_LARGE:
           return LEXENDDECA_18_FONT_ID;
@@ -538,11 +621,16 @@ int CrossPointSettings::getReaderFontId() const {
           return LEXENDDECA_20_FONT_ID;
 #endif
       }
+      return getFallbackReaderFontIdForFamily(LEXENDDECA);
     case CHAREINK:
       switch (effectiveSize) {
 #ifndef OMIT_TEENSY_FONT
         case TEENSY:
           return CHAREINK_8_FONT_ID;
+#endif
+#ifndef OMIT_ITTY_BITTY_FONT
+        case ITTY_BITTY:
+          return CHAREINK_9_FONT_ID;
 #endif
 #ifndef OMIT_TINY_FONT
         case TINY:
@@ -557,11 +645,13 @@ int CrossPointSettings::getReaderFontId() const {
         default:
           return CHAREINK_14_FONT_ID;
 #endif
+#ifndef OMIT_LARGE_FONT
         case LARGE:
 #ifdef OMIT_MEDIUM_FONT
         default:
 #endif
           return CHAREINK_16_FONT_ID;
+#endif
 #ifndef OMIT_XLARGE_FONT
         case EXTRA_LARGE:
           return CHAREINK_18_FONT_ID;
@@ -571,11 +661,16 @@ int CrossPointSettings::getReaderFontId() const {
           return CHAREINK_20_FONT_ID;
 #endif
       }
+      return getFallbackReaderFontIdForFamily(CHAREINK);
     case BITTER:
       switch (effectiveSize) {
 #ifndef OMIT_TEENSY_FONT
         case TEENSY:
           return BITTER_8_FONT_ID;
+#endif
+#ifndef OMIT_ITTY_BITTY_FONT
+        case ITTY_BITTY:
+          return BITTER_9_FONT_ID;
 #endif
 #ifndef OMIT_TINY_FONT
         case TINY:
@@ -590,11 +685,13 @@ int CrossPointSettings::getReaderFontId() const {
         default:
           return BITTER_14_FONT_ID;
 #endif
+#ifndef OMIT_LARGE_FONT
         case LARGE:
 #ifdef OMIT_MEDIUM_FONT
         default:
 #endif
           return BITTER_16_FONT_ID;
+#endif
 #ifndef OMIT_XLARGE_FONT
         case EXTRA_LARGE:
           return BITTER_18_FONT_ID;
@@ -604,5 +701,7 @@ int CrossPointSettings::getReaderFontId() const {
           return BITTER_20_FONT_ID;
 #endif
       }
+      return getFallbackReaderFontIdForFamily(BITTER);
   }
+  return getFallbackReaderFontIdForFamily(static_cast<FONT_FAMILY>(fontFamily));
 }
