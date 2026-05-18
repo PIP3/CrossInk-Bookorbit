@@ -6,6 +6,7 @@
 #include <NetworkClient.h>
 #include <NetworkClientSecure.h>
 #include <StreamString.h>
+#include <WiFi.h>
 #include <base64.h>
 
 #include <algorithm>
@@ -25,6 +26,11 @@ constexpr uint16_t HTTP_RESPONSE_TIMEOUT_MS = 15000;
 constexpr int32_t HTTP_CONNECT_TIMEOUT_MS = 10000;
 constexpr uint32_t HTTPS_HANDSHAKE_TIMEOUT_SECONDS = 10;
 constexpr uint32_t DOWNLOAD_IDLE_TIMEOUT_MS = 15000;
+
+void logNetworkState(const char* phase) {
+  LOG_DBG("HTTP", "%s: heap free=%u maxAlloc=%u wifi=%d rssi=%d", phase, ESP.getFreeHeap(), ESP.getMaxAllocHeap(),
+          static_cast<int>(WiFi.status()), WiFi.status() == WL_CONNECTED ? WiFi.RSSI() : 0);
+}
 
 class ProgressNotifier {
  public:
@@ -177,6 +183,7 @@ bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent, const 
 
   http.begin(*client, url.c_str());
   http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+  http.setReuse(false);
   http.setConnectTimeout(HTTP_CONNECT_TIMEOUT_MS);
   http.setTimeout(HTTP_RESPONSE_TIMEOUT_MS);
   http.addHeader("User-Agent", "CrossInk-ESP32-" CROSSINK_VERSION);
@@ -247,6 +254,7 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
 
   http.begin(*client, url.c_str());
   http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+  http.setReuse(false);
   http.setConnectTimeout(HTTP_CONNECT_TIMEOUT_MS);
   http.setTimeout(HTTP_RESPONSE_TIMEOUT_MS);
   http.addHeader("User-Agent", "CrossInk-ESP32-" CROSSINK_VERSION);
@@ -277,6 +285,7 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   if (httpCode != HTTP_CODE_OK && !isResumeResponse) {
     if (httpCode < 0) {
       LOG_ERR("HTTP", "Download failed: %d (%s)", httpCode, HTTPClient::errorToString(httpCode).c_str());
+      logNetworkState("Download failure");
     } else {
       LOG_ERR("HTTP", "Download failed: %d", httpCode);
     }

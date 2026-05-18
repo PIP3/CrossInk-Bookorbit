@@ -26,6 +26,8 @@
 - Let failed downloaded-font installs retry from already completed files and resume the interrupted file when possible.
 - Clarified downloaded-font failure messages so interrupted network transfers explain that retry can continue saved progress.
 - Made downloaded-font transfers tolerate longer stalls and retry individual files before showing a failure.
+- Freed the active SD-card reader font while downloading fonts so HTTPS transfers have more memory available.
+- Closed each HTTP connection before following font download redirects so GitHub asset downloads do not keep extra TLS state alive.
 
 ### Changed
 - Reduced unnecessary screen refresh work during OPDS book downloads and SD font downloads so transfers spend more time downloading and less time repainting progress.

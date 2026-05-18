@@ -94,6 +94,14 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
   }
 }
 
+void SdCardFontSystem::releaseLoadedFont(GfxRenderer& renderer) {
+  if (manager_.currentFamilyName().empty()) return;
+
+  const std::string familyName = manager_.currentFamilyName();
+  manager_.unloadAll(renderer);
+  LOG_DBG("SDFS", "Released SD card font before low-memory operation: %s", familyName.c_str());
+}
+
 int SdCardFontSystem::resolveFontId(const char* familyName, uint8_t /*fontSizeEnum*/) const {
   // The manager loads exactly one size (closest to SETTINGS.fontSize), so the
   // enum is implicit — always return the single loaded font ID for this family.

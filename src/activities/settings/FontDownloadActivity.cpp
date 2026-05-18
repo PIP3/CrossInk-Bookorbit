@@ -131,6 +131,7 @@ FontDownloadActivity::FontDownloadActivity(GfxRenderer& renderer, MappedInputMan
 
 void FontDownloadActivity::onEnter() {
   Activity::onEnter();
+  sdFontSystem.releaseLoadedFont(renderer);
   WiFi.mode(WIFI_STA);
   startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput),
                          [this](const ActivityResult& result) { onWifiSelectionComplete(!result.isCancelled); });
@@ -142,6 +143,7 @@ void FontDownloadActivity::onExit() {
   delay(100);
   WiFi.mode(WIFI_OFF);
   delay(100);
+  sdFontSystem.ensureLoaded(renderer);
 }
 
 void FontDownloadActivity::onWifiSelectionComplete(const bool success) {
