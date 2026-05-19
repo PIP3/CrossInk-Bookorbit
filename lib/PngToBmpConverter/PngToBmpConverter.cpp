@@ -244,6 +244,21 @@ static OutputGeometry calculateOutputGeometry(const int srcWidth, const int srcH
 
   return geometry;
 }
+
+static bool shouldContainAdaptive(const int srcWidth, const int srcHeight, const int targetWidth,
+                                  const int targetHeight) {
+  if (srcWidth <= 0 || srcHeight <= 0 || targetWidth <= 0 || targetHeight <= 0) {
+    return false;
+  }
+
+  constexpr int64_t kAspectTolerancePercent = 18;
+  const int64_t sourceScaledToTargetHeight = static_cast<int64_t>(srcWidth) * targetHeight;
+  const int64_t targetScaledToSourceHeight = static_cast<int64_t>(targetWidth) * srcHeight;
+  const int64_t diff = sourceScaledToTargetHeight > targetScaledToSourceHeight
+                           ? sourceScaledToTargetHeight - targetScaledToSourceHeight
+                           : targetScaledToSourceHeight - sourceScaledToTargetHeight;
+  return diff * 100 > targetScaledToSourceHeight * kAspectTolerancePercent;
+}
 }  // namespace
 
 // Context for streaming PNG decompression
@@ -469,7 +484,7 @@ static void convertScanlineToGray(const PngDecodeContext& ctx, uint8_t* grayRow)
 }
 
 bool PngToBmpConverter::pngFileToBmpStreamInternal(FsFile& pngFile, Print& bmpOut, int targetWidth, int targetHeight,
-                                                   bool oneBit, bool crop) {
+                                                   bool oneBit, bool crop, bool adaptiveContain) {
   LOG_DBG("PNG", "Converting PNG to %s BMP (target: %dx%d)", oneBit ? "1-bit" : "2-bit", targetWidth, targetHeight);
 
   // Verify PNG signature
@@ -641,13 +656,18 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(FsFile& pngFile, Print& bmpOu
 
   // Calculate output dimensions. Crop mode behaves like CSS object-fit: cover:
   // scale to fill the requested box, then sample a centered source crop before dithering.
+  const bool containInsteadOfCrop =
+      crop && adaptiveContain &&
+      shouldContainAdaptive(static_cast<int>(width), static_cast<int>(height), targetWidth, targetHeight);
+  const bool cropOutput = crop && !containInsteadOfCrop;
   const OutputGeometry geometry =
-      calculateOutputGeometry(static_cast<int>(width), static_cast<int>(height), targetWidth, targetHeight, crop);
+      calculateOutputGeometry(static_cast<int>(width), static_cast<int>(height), targetWidth, targetHeight, cropOutput);
   const int outWidth = geometry.outWidth;
   const int outHeight = geometry.outHeight;
   const bool needsScaling = geometry.needsScaling;
-  LOG_DBG("PNG", "Scaling %ux%u -> %dx%d (target %dx%d, offset %u,%u)", width, height, outWidth, outHeight, targetWidth,
-          targetHeight, geometry.srcXOffset_fp >> 16, geometry.srcYOffset_fp >> 16);
+  LOG_DBG("PNG", "Scaling %ux%u -> %dx%d (target %dx%d, mode=%s, offset %u,%u)", width, height, outWidth, outHeight,
+          targetWidth, targetHeight, cropOutput ? "cover" : "contain", geometry.srcXOffset_fp >> 16,
+          geometry.srcYOffset_fp >> 16);
 
   // Write BMP header
   int bytesPerRow;
@@ -888,11 +908,11 @@ bool PngToBmpConverter::pngFileToBmpStream(FsFile& pngFile, Print& bmpOut, bool 
 }
 
 bool PngToBmpConverter::pngFileToBmpStreamWithSize(FsFile& pngFile, Print& bmpOut, int targetMaxWidth,
-                                                   int targetMaxHeight) {
-  return pngFileToBmpStreamInternal(pngFile, bmpOut, targetMaxWidth, targetMaxHeight, false);
+                                                   int targetMaxHeight, bool adaptiveContain) {
+  return pngFileToBmpStreamInternal(pngFile, bmpOut, targetMaxWidth, targetMaxHeight, false, true, adaptiveContain);
 }
 
 bool PngToBmpConverter::pngFileTo1BitBmpStreamWithSize(FsFile& pngFile, Print& bmpOut, int targetMaxWidth,
-                                                       int targetMaxHeight) {
-  return pngFileToBmpStreamInternal(pngFile, bmpOut, targetMaxWidth, targetMaxHeight, true, true);
+                                                       int targetMaxHeight, bool adaptiveContain) {
+  return pngFileToBmpStreamInternal(pngFile, bmpOut, targetMaxWidth, targetMaxHeight, true, true, adaptiveContain);
 }

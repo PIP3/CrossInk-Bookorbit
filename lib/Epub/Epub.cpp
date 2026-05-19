@@ -24,7 +24,17 @@ int32_t readLe32(const uint8_t* data) {
                               (static_cast<uint32_t>(data[2]) << 16) | (static_cast<uint32_t>(data[3]) << 24));
 }
 
-bool cachedBmpMatchesDimensions(const std::string& path, const int width, const int height) {
+void normalizeThumbDimensions(int& width, int& height) {
+  if (height <= 0) {
+    height = kDefaultThumbHeight;
+  }
+  if (width <= 0) {
+    width = static_cast<int>((static_cast<int64_t>(height) * 3 + 2) / 5);
+  }
+}
+
+bool cachedBmpMatchesDimensions(const std::string& path, const int width, const int height,
+                                const bool allowContainedDimensions = false) {
   if (!Storage.exists(path.c_str())) {
     return false;
   }
@@ -41,7 +51,10 @@ bool cachedBmpMatchesDimensions(const std::string& path, const int width, const 
   const int32_t bmpWidth = isBmp ? readLe32(header + 18) : 0;
   const int32_t bmpHeight = isBmp ? readLe32(header + 22) : 0;
   const int32_t absHeight = bmpHeight < 0 ? -bmpHeight : bmpHeight;
-  const bool matches = isBmp && bmpWidth == width && absHeight == height;
+  const bool exactMatch = isBmp && bmpWidth == width && absHeight == height;
+  const bool containedMatch = allowContainedDimensions && isBmp && bmpWidth > 0 && absHeight > 0 && bmpWidth <= width &&
+                              absHeight <= height && (bmpWidth == width || absHeight == height);
+  const bool matches = exactMatch || containedMatch;
   if (!matches) {
     LOG_DBG("EBP", "Removing stale thumbnail dimensions: %s (%dx%d expected %dx%d)", path.c_str(), bmpWidth, absHeight,
             width, height);
@@ -52,6 +65,10 @@ bool cachedBmpMatchesDimensions(const std::string& path, const int width, const 
 
 std::string getThumbBmpPathForDimensions(const std::string& cachePath, int width, int height) {
   return cachePath + "/thumb_" + std::to_string(width) + "x" + std::to_string(height) + ".bmp";
+}
+
+std::string getAdaptiveThumbBmpPathForDimensions(const std::string& cachePath, int width, int height) {
+  return cachePath + "/thumb_" + std::to_string(width) + "x" + std::to_string(height) + "_fit.bmp";
 }
 
 std::string legacyCachePathForFilePath(const std::string& filepath, const std::string& cacheDir) {
@@ -730,12 +747,7 @@ bool Epub::generateCoverBmp(bool cropped) const {
 std::string Epub::getThumbBmpPath() const { return cachePath + "/thumb_[WIDTH]x[HEIGHT].bmp"; }
 std::string Epub::getThumbBmpPath(int height) const { return getThumbBmpPath(0, height); }
 std::string Epub::getThumbBmpPath(int width, int height) const {
-  if (height <= 0) {
-    height = kDefaultThumbHeight;
-  }
-  if (width <= 0) {
-    width = static_cast<int>((static_cast<int64_t>(height) * 3 + 2) / 5);
-  }
+  normalizeThumbDimensions(width, height);
   const std::string newPath = getThumbBmpPathForDimensions(cachePath, width, height);
   if (Storage.exists(newPath.c_str())) {
     return newPath;
@@ -747,22 +759,29 @@ std::string Epub::getThumbBmpPath(int width, int height) const {
   return newPath;
 }
 
+std::string Epub::getAdaptiveThumbBmpPath(int width, int height) const {
+  normalizeThumbDimensions(width, height);
+  return getAdaptiveThumbBmpPathForDimensions(cachePath, width, height);
+}
+
 bool Epub::generateThumbBmp(int height) const { return generateThumbBmp(0, height); }
 
-bool Epub::generateThumbBmp(int width, int height) const { return generateThumbBmpInternal(width, height); }
+bool Epub::generateThumbBmp(int width, int height) const { return generateThumbBmpInternal(width, height, false); }
 
-bool Epub::generateThumbBmpInternal(int width, int height) const {
+bool Epub::generateAdaptiveThumbBmp(int width, int height) const {
+  return generateThumbBmpInternal(width, height, true);
+}
+
+bool Epub::generateThumbBmpInternal(int width, int height, const bool adaptiveContain) const {
   if (height <= 0) {
     LOG_DBG("EBP", "Using default thumb BMP height for requested dimensions: %dx%d", width, height);
-    height = kDefaultThumbHeight;
   }
-  if (width <= 0) {
-    width = static_cast<int>((static_cast<int64_t>(height) * 3 + 2) / 5);
-  }
-  const std::string thumbPath = getThumbBmpPathForDimensions(cachePath, width, height);
+  normalizeThumbDimensions(width, height);
+  const std::string thumbPath = adaptiveContain ? getAdaptiveThumbBmpPathForDimensions(cachePath, width, height)
+                                                : getThumbBmpPathForDimensions(cachePath, width, height);
 
   // Already generated with matching dimensions, return true
-  if (cachedBmpMatchesDimensions(thumbPath, width, height)) {
+  if (cachedBmpMatchesDimensions(thumbPath, width, height, adaptiveContain)) {
     return true;
   }
 
@@ -805,7 +824,7 @@ bool Epub::generateThumbBmpInternal(int width, int height) const {
     int THUMB_TARGET_WIDTH = width;
     int THUMB_TARGET_HEIGHT = height;
     const bool success = JpegToBmpConverter::jpegFileTo1BitBmpStreamWithSize(coverJpg, thumbBmp, THUMB_TARGET_WIDTH,
-                                                                             THUMB_TARGET_HEIGHT);
+                                                                             THUMB_TARGET_HEIGHT, adaptiveContain);
     // Explicitly close() files before calling Storage.remove()
     coverJpg.close();
     thumbBmp.close();
@@ -847,8 +866,8 @@ bool Epub::generateThumbBmpInternal(int width, int height) const {
     }
     int THUMB_TARGET_WIDTH = width;
     int THUMB_TARGET_HEIGHT = height;
-    const bool success =
-        PngToBmpConverter::pngFileTo1BitBmpStreamWithSize(coverPng, thumbBmp, THUMB_TARGET_WIDTH, THUMB_TARGET_HEIGHT);
+    const bool success = PngToBmpConverter::pngFileTo1BitBmpStreamWithSize(coverPng, thumbBmp, THUMB_TARGET_WIDTH,
+                                                                           THUMB_TARGET_HEIGHT, adaptiveContain);
     // Explicitly close() files before calling Storage.remove()
     coverPng.close();
     thumbBmp.close();

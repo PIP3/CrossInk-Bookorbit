@@ -2,6 +2,8 @@
 
 #include <Arduino.h>
 #include <Bitmap.h>
+#include <Epub.h>
+#include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalPowerManager.h>
 #include <HalStorage.h>
@@ -81,6 +83,22 @@ Rect fittedBitmapRect(const Bitmap& bitmap, const Rect& target) {
   const int drawnW = std::min(target.width, std::max(1, static_cast<int>(std::ceil(bitmap.getWidth() * scale))));
   const int drawnH = std::min(target.height, std::max(1, static_cast<int>(std::ceil(bitmap.getHeight() * scale))));
   return Rect{target.x + (target.width - drawnW) / 2, target.y + (target.height - drawnH) / 2, drawnW, drawnH};
+}
+
+std::string coverPathForImageRect(const RecentBook& book, const Rect& imageRect) {
+  if (book.coverBmpPath.empty()) {
+    return {};
+  }
+
+  if (FsHelpers::hasEpubExtension(book.path)) {
+    return Epub(book.path, "/.crosspoint").getAdaptiveThumbBmpPath(imageRect.width, imageRect.height);
+  }
+
+  std::string coverBmpPath = UITheme::getCoverThumbPath(book.coverBmpPath, imageRect.width, imageRect.height);
+  if (coverBmpPath.empty() || !Storage.exists(coverBmpPath.c_str())) {
+    coverBmpPath = UITheme::getCoverThumbPath(book.coverBmpPath, imageRect.height);
+  }
+  return coverBmpPath;
 }
 
 uint8_t selectedQuoteIndex() {
@@ -201,10 +219,7 @@ void drawBookCover(GfxRenderer& renderer, const Rect& coverRect, const RecentBoo
   bool hasCover = false;
   if (!book.coverBmpPath.empty()) {
     const Rect imageRect = coverImageRectForFrame(coverRect);
-    std::string coverBmpPath = UITheme::getCoverThumbPath(book.coverBmpPath, imageRect.width, imageRect.height);
-    if (coverBmpPath.empty() || !Storage.exists(coverBmpPath.c_str())) {
-      coverBmpPath = UITheme::getCoverThumbPath(book.coverBmpPath, imageRect.height);
-    }
+    const std::string coverBmpPath = coverPathForImageRect(book, imageRect);
     if (!coverBmpPath.empty() && Storage.exists(coverBmpPath.c_str())) {
       FsFile file;
       if (Storage.openFileForRead("HOME", coverBmpPath, file)) {

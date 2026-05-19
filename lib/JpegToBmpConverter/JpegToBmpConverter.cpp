@@ -303,6 +303,21 @@ static OutputGeometry calculateOutputGeometry(const int srcWidth, const int srcH
   return geometry;
 }
 
+static bool shouldContainAdaptive(const int srcWidth, const int srcHeight, const int targetWidth,
+                                  const int targetHeight) {
+  if (srcWidth <= 0 || srcHeight <= 0 || targetWidth <= 0 || targetHeight <= 0) {
+    return false;
+  }
+
+  constexpr int64_t kAspectTolerancePercent = 18;
+  const int64_t sourceScaledToTargetHeight = static_cast<int64_t>(srcWidth) * targetHeight;
+  const int64_t targetScaledToSourceHeight = static_cast<int64_t>(targetWidth) * srcHeight;
+  const int64_t diff = sourceScaledToTargetHeight > targetScaledToSourceHeight
+                           ? sourceScaledToTargetHeight - targetScaledToSourceHeight
+                           : targetScaledToSourceHeight - sourceScaledToTargetHeight;
+  return diff * 100 > targetScaledToSourceHeight * kAspectTolerancePercent;
+}
+
 // Write a fully-assembled output row (grayscale bytes, length outWidth) to BMP
 static void writeOutputRow(BmpConvertCtx* ctx, const uint8_t* srcRow, int outY) {
   memset(ctx->bmpRow.get(), 0, ctx->bytesPerRow);
@@ -497,7 +512,7 @@ static bool isProgressiveJpeg(FsFile& file) {
 
 // Internal implementation with configurable target size and bit depth
 bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bmpOut, int targetWidth, int targetHeight,
-                                                     bool oneBit, bool crop) {
+                                                     bool oneBit, bool crop, bool adaptiveContain) {
   LOG_DBG("JPG", "Converting JPEG to %s BMP (target: %dx%d)", oneBit ? "1-bit" : "2-bit", targetWidth, targetHeight);
 
   if (ESP.getFreeHeap() < MIN_FREE_HEAP) {
@@ -545,13 +560,17 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
 
   // Calculate output dimensions. Crop mode behaves like CSS object-fit: cover:
   // scale to fill the requested box, then sample a centered source crop before dithering.
+  const bool containInsteadOfCrop =
+      crop && adaptiveContain && shouldContainAdaptive(effectiveSrcW, effectiveSrcH, targetWidth, targetHeight);
+  const bool cropOutput = crop && !containInsteadOfCrop;
   const OutputGeometry geometry =
-      calculateOutputGeometry(effectiveSrcW, effectiveSrcH, targetWidth, targetHeight, crop);
+      calculateOutputGeometry(effectiveSrcW, effectiveSrcH, targetWidth, targetHeight, cropOutput);
   const int outWidth = geometry.outWidth;
   const int outHeight = geometry.outHeight;
   const bool needsScaling = geometry.needsScaling;
-  LOG_DBG("JPG", "Scaling %dx%d -> %dx%d (target %dx%d, offset %u,%u)", effectiveSrcW, effectiveSrcH, outWidth,
-          outHeight, targetWidth, targetHeight, geometry.srcXOffset_fp >> 16, geometry.srcYOffset_fp >> 16);
+  LOG_DBG("JPG", "Scaling %dx%d -> %dx%d (target %dx%d, mode=%s, offset %u,%u)", effectiveSrcW, effectiveSrcH, outWidth,
+          outHeight, targetWidth, targetHeight, cropOutput ? "cover" : "contain", geometry.srcXOffset_fp >> 16,
+          geometry.srcYOffset_fp >> 16);
 
   // Write BMP header with output dimensions
   int bytesPerRow;
@@ -656,12 +675,12 @@ bool JpegToBmpConverter::jpegFileToBmpStream(FsFile& jpegFile, Print& bmpOut, bo
 
 // Convert with custom target size (for thumbnails, 2-bit)
 bool JpegToBmpConverter::jpegFileToBmpStreamWithSize(FsFile& jpegFile, Print& bmpOut, int targetMaxWidth,
-                                                     int targetMaxHeight) {
-  return jpegFileToBmpStreamInternal(jpegFile, bmpOut, targetMaxWidth, targetMaxHeight, false, true);
+                                                     int targetMaxHeight, bool adaptiveContain) {
+  return jpegFileToBmpStreamInternal(jpegFile, bmpOut, targetMaxWidth, targetMaxHeight, false, true, adaptiveContain);
 }
 
 // Convert to 1-bit BMP (black and white only, no grays) for fast home screen rendering
 bool JpegToBmpConverter::jpegFileTo1BitBmpStreamWithSize(FsFile& jpegFile, Print& bmpOut, int targetMaxWidth,
-                                                         int targetMaxHeight) {
-  return jpegFileToBmpStreamInternal(jpegFile, bmpOut, targetMaxWidth, targetMaxHeight, true, true);
+                                                         int targetMaxHeight, bool adaptiveContain) {
+  return jpegFileToBmpStreamInternal(jpegFile, bmpOut, targetMaxWidth, targetMaxHeight, true, true, adaptiveContain);
 }

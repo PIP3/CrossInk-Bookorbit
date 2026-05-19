@@ -272,6 +272,13 @@ int minimalHomeCoverHeight(int coverHeight) {
 }
 
 std::string minimalHomeCoverPath(const RecentBook& book, int coverHeight) {
+  if (book.coverBmpPath.empty()) {
+    return {};
+  }
+  if (FsHelpers::hasEpubExtension(book.path)) {
+    return Epub(book.path, "/.crosspoint")
+        .getAdaptiveThumbBmpPath(minimalHomeCoverWidth(coverHeight), minimalHomeCoverHeight(coverHeight));
+  }
   return UITheme::getCoverThumbPath(book.coverBmpPath, minimalHomeCoverWidth(coverHeight),
                                     minimalHomeCoverHeight(coverHeight));
 }
@@ -570,8 +577,8 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
               progress++;
               continue;
             }
-            const bool success = useMinimalThumb ? epub.generateThumbBmp(minimalHomeCoverWidth(coverHeight),
-                                                                         minimalHomeCoverHeight(coverHeight))
+            const bool success = useMinimalThumb ? epub.generateAdaptiveThumbBmp(minimalHomeCoverWidth(coverHeight),
+                                                                                 minimalHomeCoverHeight(coverHeight))
                                                  : epub.generateThumbBmp(0, coverHeight);
             if (!success) {
               updateRecentBookCoverPath(book, "");

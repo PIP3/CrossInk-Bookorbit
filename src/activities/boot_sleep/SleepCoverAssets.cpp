@@ -39,7 +39,7 @@ bool prepareEpub(const Epub& epub) {
     success = epub.generateCoverBmp(cropped) && success;
   }
   if (shouldPrepareMinimalCover()) {
-    success = epub.generateThumbBmp(kMinimalSleepCoverWidth, kMinimalSleepCoverHeight) && success;
+    success = epub.generateAdaptiveThumbBmp(kMinimalSleepCoverWidth, kMinimalSleepCoverHeight) && success;
   }
   return success;
 }
@@ -91,6 +91,12 @@ std::string cachedCoverPathFor(const std::string& bookPath, const bool cropped) 
 }
 
 std::string cachedMinimalCoverPathFor(const std::string& bookPath) {
+  if (FsHelpers::hasEpubExtension(bookPath)) {
+    const Epub epub(bookPath, "/.crosspoint");
+    const std::string coverPath = epub.getAdaptiveThumbBmpPath(kMinimalSleepCoverWidth, kMinimalSleepCoverHeight);
+    return fileExists(coverPath) ? epub.getThumbBmpPath() : std::string{};
+  }
+
   const std::string reusablePath = reusableCoverPathFor(bookPath);
   const std::string coverPath =
       UITheme::getCoverThumbPath(reusablePath, kMinimalSleepCoverWidth, kMinimalSleepCoverHeight);

@@ -60,6 +60,9 @@ class Epub {
   // (width:height) thumbnail width from height; height <= 0 uses the default
   // thumbnail height.
   std::string getThumbBmpPath(int width, int height) const;
+  // Returns a Minimal-style adaptive thumbnail path. Normal cover ratios fill
+  // the requested box; unusual ratios are contained inside the box.
+  std::string getAdaptiveThumbBmpPath(int width, int height) const;
   // Deprecated compatibility wrapper; forwards to generateThumbBmp(0, height).
   [[deprecated("use generateThumbBmp(int width, int height)")]]
   bool generateThumbBmp(int height) const;
@@ -68,6 +71,9 @@ class Epub {
   // thumbnail height.
   // Returns false on missing cache/cover, unsupported image format, or conversion failure.
   bool generateThumbBmp(int width, int height) const;
+  // Writes a thumbnail that can either crop-to-fill or contain unusual cover
+  // ratios, depending on the source image dimensions.
+  bool generateAdaptiveThumbBmp(int width, int height) const;
   uint8_t* readItemContentsToBytes(const std::string& itemHref, size_t* size = nullptr,
                                    bool trailingNullByte = false) const;
   bool readItemContentsToStream(const std::string& itemHref, Print& out, size_t chunkSize) const;
@@ -87,5 +93,5 @@ class Epub {
   int resolveHrefToSpineIndex(const std::string& href) const;
 
  private:
-  bool generateThumbBmpInternal(int width, int height) const;
+  bool generateThumbBmpInternal(int width, int height, bool adaptiveContain) const;
 };
