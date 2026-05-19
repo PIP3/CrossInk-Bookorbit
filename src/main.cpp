@@ -15,6 +15,8 @@
 #include <Logging.h>
 #include <SPI.h>
 #include <builtinFonts/all.h>
+#include <esp_sleep.h>
+#include <esp_system.h>
 
 #include <algorithm>
 #include <cstring>
@@ -251,6 +253,91 @@ unsigned long t2 = 0;
 // Set when the screenshot combo (Power + Volume Down) fires, so the subsequent
 // power button release does not also trigger a short-press action (e.g. sleep).
 static bool screenshotComboHandled = false;
+
+const char* resetReasonName(const esp_reset_reason_t reason) {
+  switch (reason) {
+    case ESP_RST_POWERON:
+      return "POWERON";
+    case ESP_RST_EXT:
+      return "EXT";
+    case ESP_RST_SW:
+      return "SW";
+    case ESP_RST_PANIC:
+      return "PANIC";
+    case ESP_RST_INT_WDT:
+      return "INT_WDT";
+    case ESP_RST_TASK_WDT:
+      return "TASK_WDT";
+    case ESP_RST_WDT:
+      return "WDT";
+    case ESP_RST_DEEPSLEEP:
+      return "DEEPSLEEP";
+    case ESP_RST_BROWNOUT:
+      return "BROWNOUT";
+    case ESP_RST_SDIO:
+      return "SDIO";
+    case ESP_RST_USB:
+      return "USB";
+    case ESP_RST_JTAG:
+      return "JTAG";
+    case ESP_RST_EFUSE:
+      return "EFUSE";
+    case ESP_RST_PWR_GLITCH:
+      return "PWR_GLITCH";
+    case ESP_RST_CPU_LOCKUP:
+      return "CPU_LOCKUP";
+    case ESP_RST_UNKNOWN:
+    default:
+      return "UNKNOWN";
+  }
+}
+
+const char* wakeupCauseName(const esp_sleep_wakeup_cause_t cause) {
+  switch (cause) {
+    case ESP_SLEEP_WAKEUP_UNDEFINED:
+      return "UNDEFINED";
+    case ESP_SLEEP_WAKEUP_ALL:
+      return "ALL";
+    case ESP_SLEEP_WAKEUP_EXT0:
+      return "EXT0";
+    case ESP_SLEEP_WAKEUP_EXT1:
+      return "EXT1";
+    case ESP_SLEEP_WAKEUP_TIMER:
+      return "TIMER";
+    case ESP_SLEEP_WAKEUP_TOUCHPAD:
+      return "TOUCHPAD";
+    case ESP_SLEEP_WAKEUP_ULP:
+      return "ULP";
+    case ESP_SLEEP_WAKEUP_GPIO:
+      return "GPIO";
+    case ESP_SLEEP_WAKEUP_UART:
+      return "UART";
+    case ESP_SLEEP_WAKEUP_WIFI:
+      return "WIFI";
+    case ESP_SLEEP_WAKEUP_COCPU:
+      return "COCPU";
+    case ESP_SLEEP_WAKEUP_COCPU_TRAP_TRIG:
+      return "COCPU_TRAP";
+    case ESP_SLEEP_WAKEUP_BT:
+      return "BT";
+    default:
+      return "UNKNOWN";
+  }
+}
+
+const char* wakeupRouteName(const HalGPIO::WakeupReason reason) {
+  switch (reason) {
+    case HalGPIO::WakeupReason::PowerButton:
+      return "PowerButton";
+    case HalGPIO::WakeupReason::AfterFlash:
+      return "AfterFlash";
+    case HalGPIO::WakeupReason::AfterUSBPower:
+      return "AfterUSBPower";
+    case HalGPIO::WakeupReason::Other:
+    default:
+      return "Other";
+  }
+}
 
 // Definitions for SilentRestart.h. RTC_NOINIT survives ESP.restart() but not power loss.
 RTC_NOINIT_ATTR uint32_t silentRebootMagic;
@@ -549,6 +636,9 @@ void setupDisplayAndFonts() {
 void setup() {
   t1 = millis();
 
+  const esp_reset_reason_t rawResetReason = esp_reset_reason();
+  const esp_sleep_wakeup_cause_t rawWakeupCause = esp_sleep_get_wakeup_cause();
+
 #ifdef ENABLE_SERIAL_LOG
   // Earliest possible Serial setup. The 250 ms stall before begin() lets the
   // USB Serial/JTAG peripheral finish power-on and lets the host complete USB
@@ -567,6 +657,8 @@ void setup() {
 #endif
 
   HalSystem::begin();
+  LOG_INF("BOOT", "Reset diagnostic: reset=%d(%s) sleepWake=%d(%s)", static_cast<int>(rawResetReason),
+          resetReasonName(rawResetReason), static_cast<int>(rawWakeupCause), wakeupCauseName(rawWakeupCause));
 
   // Read-and-clear so a panic later in setup() doesn't loop into silent reboot.
   // Bound the target range too — RTC_NOINIT memory is uninitialized on cold boot.
@@ -582,6 +674,9 @@ void setup() {
   halClock.begin();
 
   LOG_INF("MAIN", "Hardware detect: %s", gpio.deviceIsX3() ? "X3" : "X4");
+  LOG_INF("BOOT", "Post-GPIO diagnostic: device=%s usb=%d silentReboot=%d silentTarget=%lu",
+          gpio.deviceIsX3() ? "X3" : "X4", gpio.isUsbConnected() ? 1 : 0, isSilentReboot ? 1 : 0,
+          static_cast<unsigned long>(snapshotTarget));
 
   // SD Card Initialization
   // We need 6 open files concurrently when parsing a new chapter
@@ -602,21 +697,26 @@ void setup() {
   ButtonNavigator::setMappedInputManager(mappedInputManager);
 
   const auto wakeupReason = gpio.getWakeupReason();
+  LOG_INF("BOOT", "Wake route: %s", wakeupRouteName(wakeupReason));
   switch (wakeupReason) {
     case HalGPIO::WakeupReason::PowerButton:
-      LOG_DBG("MAIN", "Verifying power button press duration");
+      LOG_INF("BOOT", "Power-button wake: verifying duration required=%u shortAllowed=%d",
+              SETTINGS.getPowerButtonWakeDuration(), SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP);
       gpio.verifyPowerButtonWakeup(SETTINGS.getPowerButtonWakeDuration(),
                                    SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP);
       break;
     case HalGPIO::WakeupReason::AfterUSBPower:
-      // If USB power caused a cold boot, go back to sleep
-      LOG_DBG("MAIN", "Wakeup reason: After USB Power");
-      powerManager.startDeepSleep(gpio);
+      // TEMP: continue booting while diagnosing post-flash/reset behavior.
+      // Normal behavior is to go back to sleep when USB power causes a cold boot.
+      LOG_INF("BOOT", "AfterUSBPower route: TEMP continuing boot instead of deep sleep");
       break;
     case HalGPIO::WakeupReason::AfterFlash:
       // After flashing, just proceed to boot
+      LOG_INF("BOOT", "AfterFlash route: continuing boot");
+      break;
     case HalGPIO::WakeupReason::Other:
     default:
+      LOG_INF("BOOT", "Other wake route: continuing boot");
       break;
   }
 
