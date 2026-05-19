@@ -7,27 +7,19 @@
 - Added a Minimal sleep screen option that shows the current book cover and reading progress on a dark background.
 - Added an in-reader confirmation message when a shortcut turns tilt-to-turn on or off.
 - Added a 9pt `Itty Bitty` reader font size, plus build flags for omitting Itty Bitty and Large reader font assets in size-constrained firmware variants.
+- Added an `all` downloaded-font size range for installing every generated size from Teensy through Huge.
 
 ### Fixed
-- Vertically align File Browser icons with filenames icon-based themes.
+- Fixed File Browser and Lyra Carousel icon alignment issues in icon-based themes.
 - Fixed EPUB cache folder keys so they use a stable path hash across firmware builds, with best-effort migration of older cache folders.
-- Reduced battery drain risk by letting the OPDS browser idle normally after catalog pages load and by putting the X3 tilt sensor back to sleep outside the reader.
-- Disabled WiFi power saving during OPDS browsing, regular file downloads, and OTA update checks so network transfers can run more consistently.
-- Reduced stack usage when copying files over WebDAV.
-- Fixed Lyra Carousel selected menu icons rendering as black squares on X3 devices.
-- Relaxed KOReader Sync auth response validation so compatible self-hosted servers that return valid JSON on successful login can authenticate.
+- Improved low-memory EPUB handling by laying out very long text blocks earlier, streaming table fallback content when heap is tight, and clarifying the warning text.
+- Reduced sleep-entry memory and battery risk by reusing already-cached sleep-screen assets, idling OPDS pages normally after load, and putting the X3 tilt sensor back to sleep outside the reader.
+- Improved network transfer reliability by disabling WiFi power saving during downloads and updates, reducing WebDAV stack usage, tolerating longer stalls, retrying individual font files, and closing HTTP connections before following font-download redirects.
+- Fixed SD-card font downloads on low-memory devices by freeing the active reader font during downloads and retrying from saved progress when possible.
+- Fixed SD-card font size selection to use actual point sizes instead of filename order.
 - Fixed OPDS browsing on memory-constrained builds so large catalog feeds fail safely instead of rebooting the device.
 - Fixed a crash when opening the XTC chapter selector on memory-constrained builds.
-- Kept the Minimal theme home navigation button labels in English so all four labels stay consistent and compact.
-- Reduced false EPUB low-memory chapter failures by laying out very long text blocks earlier, streaming table fallback content when heap is tight, and clarifying the warning text.
-- Kept sleep entry lighter by rendering only already-cached cover and thumbnail assets on sleep screens.
-- Fixed SD-card font size selection to choose by actual point size instead of filename order.
-- Fixed SD-card font downloads failing on low-memory devices when the HTTP client could not allocate its larger receive buffer.
-- Let failed downloaded-font installs retry from already completed files and resume the interrupted file when possible.
-- Clarified downloaded-font failure messages so interrupted network transfers explain that retry can continue saved progress.
-- Made downloaded-font transfers tolerate longer stalls and retry individual files before showing a failure.
-- Freed the active SD-card reader font while downloading fonts so HTTPS transfers have more memory available.
-- Closed each HTTP connection before following font download redirects so GitHub asset downloads do not keep extra TLS state alive.
+- Relaxed KOReader Sync auth response validation so compatible self-hosted servers that return valid JSON on successful login can authenticate.
 
 ### Changed
 - Reduced unnecessary screen refresh work during OPDS book downloads and SD font downloads so transfers spend more time downloading and less time repainting progress.
@@ -35,7 +27,6 @@
 - Reduced unnecessary OPDS browser list clearing when moving between catalog feeds.
 - Made the Font Size setting follow the actual sizes installed for the selected SD-card font family.
 - Installed downloaded SD-card fonts with their size range in the family name so multiple ranges can coexist.
-- Added an `all` downloaded-font size range for installing every generated size from Teensy through Huge.
 
 ## [v1.2.11.1] - 2026-05-15
 
