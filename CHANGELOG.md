@@ -11,6 +11,7 @@
 
 ### Fixed
 - Fixed File Browser and Lyra Carousel icon alignment issues in icon-based themes.
+- Reduced grid-like artifacts on Lyra Carousel center covers by generating cached thumbnails at the actual displayed image size.
 - Reduced grid-like and over-zoomed artifacts on Minimal EPUB cover thumbnails by cropping normal covers before dithering while containing unusual cover ratios.
 - Reduced duplicate Home progress/stat loading when returning from another screen.
 - Fixed EPUB cache folder keys so they use a stable path hash across firmware builds, with best-effort migration of older cache folders.

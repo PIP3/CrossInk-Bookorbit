@@ -35,7 +35,7 @@
 
 namespace {
 constexpr uint32_t CAROUSEL_CACHE_MAGIC = 0x43434152;  // "CCAR"
-constexpr uint16_t CAROUSEL_CACHE_VERSION = 3;
+constexpr uint16_t CAROUSEL_CACHE_VERSION = 4;
 constexpr char CAROUSEL_CACHE_PATH[] = "/.crosspoint/home_carousel_cache.bin";
 constexpr char CAROUSEL_CACHE_TMP_PATH[] = "/.crosspoint/home_carousel_cache.tmp";
 
@@ -296,7 +296,7 @@ void appendCarouselCoverStateToKey(std::string& key, const RecentBook& book) {
   }
 
   const std::string centerPath =
-      UITheme::getCoverThumbPath(book.coverBmpPath, LyraCarouselTheme::kCenterCoverW, LyraCarouselTheme::kCenterCoverH);
+      UITheme::getCoverThumbPath(book.coverBmpPath, LyraCarouselTheme::kCenterThumbW, LyraCarouselTheme::kCenterThumbH);
   const std::string sidePath =
       UITheme::getCoverThumbPath(book.coverBmpPath, LyraCarouselTheme::kSideCoverW, LyraCarouselTheme::kSideCoverH);
   key += Storage.exists(centerPath.c_str()) ? '1' : '0';
@@ -331,8 +331,8 @@ bool isCarouselCacheHeaderValid(const CarouselCacheHeader& header, uint64_t cach
   return header.magic == CAROUSEL_CACHE_MAGIC && header.version == CAROUSEL_CACHE_VERSION &&
          header.keyHash == cacheKeyHash && header.frameCount == bookCount &&
          header.frameBufferSize == renderer.getBufferSize() && header.screenWidth == renderer.getScreenWidth() &&
-         header.screenHeight == renderer.getScreenHeight() && header.centerCoverW == LyraCarouselTheme::kCenterCoverW &&
-         header.centerCoverH == LyraCarouselTheme::kCenterCoverH &&
+         header.screenHeight == renderer.getScreenHeight() && header.centerCoverW == LyraCarouselTheme::kCenterThumbW &&
+         header.centerCoverH == LyraCarouselTheme::kCenterThumbH &&
          header.sideCoverW == LyraCarouselTheme::kSideCoverW && header.sideCoverH == LyraCarouselTheme::kSideCoverH;
 }
 
@@ -487,10 +487,10 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
     }
     if (!book.coverBmpPath.empty()) {
       if (isCarouselTheme) {
-        // For carousel: generate exact-size thumbnails for center and side slots.
+        // For carousel: generate exact-size thumbnails for the center image rect and side slots.
         // Load the source image once even when both sizes are missing.
-        const std::string centerPath = UITheme::getCoverThumbPath(book.coverBmpPath, LyraCarouselTheme::kCenterCoverW,
-                                                                  LyraCarouselTheme::kCenterCoverH);
+        const std::string centerPath = UITheme::getCoverThumbPath(book.coverBmpPath, LyraCarouselTheme::kCenterThumbW,
+                                                                  LyraCarouselTheme::kCenterThumbH);
         const std::string sidePath = UITheme::getCoverThumbPath(book.coverBmpPath, LyraCarouselTheme::kSideCoverW,
                                                                 LyraCarouselTheme::kSideCoverH);
         const bool centerMissing = !Storage.exists(centerPath.c_str());
@@ -516,7 +516,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
             bool success = true;
             if (centerMissing)
               success =
-                  epub.generateThumbBmp(LyraCarouselTheme::kCenterCoverW, LyraCarouselTheme::kCenterCoverH) && success;
+                  epub.generateThumbBmp(LyraCarouselTheme::kCenterThumbW, LyraCarouselTheme::kCenterThumbH) && success;
             if (sideMissing)
               success =
                   epub.generateThumbBmp(LyraCarouselTheme::kSideCoverW, LyraCarouselTheme::kSideCoverH) && success;
@@ -539,7 +539,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
               bool success = true;
               if (centerMissing)
                 success =
-                    xtc.generateThumbBmp(LyraCarouselTheme::kCenterCoverW, LyraCarouselTheme::kCenterCoverH) && success;
+                    xtc.generateThumbBmp(LyraCarouselTheme::kCenterThumbW, LyraCarouselTheme::kCenterThumbH) && success;
               if (sideMissing)
                 success =
                     xtc.generateThumbBmp(LyraCarouselTheme::kSideCoverW, LyraCarouselTheme::kSideCoverH) && success;
@@ -922,8 +922,8 @@ bool HomeActivity::buildCarouselCacheFile(const std::string& cacheKey, uint64_t 
       cacheKeyHash,
       static_cast<uint16_t>(renderer.getScreenWidth()),
       static_cast<uint16_t>(renderer.getScreenHeight()),
-      static_cast<uint16_t>(LyraCarouselTheme::kCenterCoverW),
-      static_cast<uint16_t>(LyraCarouselTheme::kCenterCoverH),
+      static_cast<uint16_t>(LyraCarouselTheme::kCenterThumbW),
+      static_cast<uint16_t>(LyraCarouselTheme::kCenterThumbH),
       static_cast<uint16_t>(LyraCarouselTheme::kSideCoverW),
       static_cast<uint16_t>(LyraCarouselTheme::kSideCoverH),
   };
