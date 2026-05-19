@@ -4,6 +4,7 @@
 #include <FontDecompressor.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include <HalClock.h>
 #include <HalDisplay.h>
 #include <HalGPIO.h>
 #include <HalPowerManager.h>
@@ -14,6 +15,8 @@
 #include <Logging.h>
 #include <SPI.h>
 #include <builtinFonts/all.h>
+#include <esp_sleep.h>
+#include <esp_system.h>
 
 #include <algorithm>
 #include <cstring>
@@ -251,50 +254,114 @@ unsigned long t2 = 0;
 // power button release does not also trigger a short-press action (e.g. sleep).
 static bool screenshotComboHandled = false;
 
-// Verify power button press duration on wake-up from deep sleep
-// Pre-condition: isWakeupByPowerButton() == true
-void verifyPowerButtonDuration() {
-  if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP) {
-    // Fast path for short press
-    // Needed because inputManager.isPressed() may take up to ~500ms to return the correct state
-    return;
-  }
-
-  // Give the user up to 1000ms to start holding the power button, and must hold for
-  // SETTINGS.getPowerButtonWakeDuration()
-  const auto start = millis();
-  bool abort = false;
-  // Subtract the current time, because inputManager only starts counting the HeldTime from the first update()
-  // This way, we remove the time we already took to reach here from the duration,
-  // assuming the button was held until now from millis()==0 (i.e. device start time).
-  const uint16_t calibration = start;
-  const uint16_t calibratedPressDuration =
-      (calibration < SETTINGS.getPowerButtonWakeDuration()) ? SETTINGS.getPowerButtonWakeDuration() - calibration : 1;
-
-  gpio.update();
-  // Needed because inputManager.isPressed() may take up to ~500ms to return the correct state
-  while (!gpio.isPressed(HalGPIO::BTN_POWER) && millis() - start < 1000) {
-    delay(10);  // only wait 10ms each iteration to not delay too much in case of short configured duration.
-    gpio.update();
-  }
-
-  t2 = millis();
-  if (gpio.isPressed(HalGPIO::BTN_POWER)) {
-    do {
-      delay(10);
-      gpio.update();
-    } while (gpio.isPressed(HalGPIO::BTN_POWER) && gpio.getHeldTime() < calibratedPressDuration);
-    abort = gpio.getHeldTime() < calibratedPressDuration;
-  } else {
-    abort = true;
-  }
-
-  if (abort) {
-    // Button released too early. Returning to sleep.
-    // IMPORTANT: Re-arm the wakeup trigger before sleeping again
-    powerManager.startDeepSleep(gpio);
+const char* resetReasonName(const esp_reset_reason_t reason) {
+  switch (reason) {
+    case ESP_RST_POWERON:
+      return "POWERON";
+    case ESP_RST_EXT:
+      return "EXT";
+    case ESP_RST_SW:
+      return "SW";
+    case ESP_RST_PANIC:
+      return "PANIC";
+    case ESP_RST_INT_WDT:
+      return "INT_WDT";
+    case ESP_RST_TASK_WDT:
+      return "TASK_WDT";
+    case ESP_RST_WDT:
+      return "WDT";
+    case ESP_RST_DEEPSLEEP:
+      return "DEEPSLEEP";
+    case ESP_RST_BROWNOUT:
+      return "BROWNOUT";
+    case ESP_RST_SDIO:
+      return "SDIO";
+    case ESP_RST_USB:
+      return "USB";
+    case ESP_RST_JTAG:
+      return "JTAG";
+    case ESP_RST_EFUSE:
+      return "EFUSE";
+    case ESP_RST_PWR_GLITCH:
+      return "PWR_GLITCH";
+    case ESP_RST_CPU_LOCKUP:
+      return "CPU_LOCKUP";
+    case ESP_RST_UNKNOWN:
+    default:
+      return "UNKNOWN";
   }
 }
+
+const char* wakeupCauseName(const esp_sleep_wakeup_cause_t cause) {
+  switch (cause) {
+    case ESP_SLEEP_WAKEUP_UNDEFINED:
+      return "UNDEFINED";
+    case ESP_SLEEP_WAKEUP_ALL:
+      return "ALL";
+    case ESP_SLEEP_WAKEUP_EXT0:
+      return "EXT0";
+    case ESP_SLEEP_WAKEUP_EXT1:
+      return "EXT1";
+    case ESP_SLEEP_WAKEUP_TIMER:
+      return "TIMER";
+    case ESP_SLEEP_WAKEUP_TOUCHPAD:
+      return "TOUCHPAD";
+    case ESP_SLEEP_WAKEUP_ULP:
+      return "ULP";
+    case ESP_SLEEP_WAKEUP_GPIO:
+      return "GPIO";
+    case ESP_SLEEP_WAKEUP_UART:
+      return "UART";
+    case ESP_SLEEP_WAKEUP_WIFI:
+      return "WIFI";
+    case ESP_SLEEP_WAKEUP_COCPU:
+      return "COCPU";
+    case ESP_SLEEP_WAKEUP_COCPU_TRAP_TRIG:
+      return "COCPU_TRAP";
+    case ESP_SLEEP_WAKEUP_BT:
+      return "BT";
+    default:
+      return "UNKNOWN";
+  }
+}
+
+const char* wakeupRouteName(const HalGPIO::WakeupReason reason) {
+  switch (reason) {
+    case HalGPIO::WakeupReason::PowerButton:
+      return "PowerButton";
+    case HalGPIO::WakeupReason::AfterFlash:
+      return "AfterFlash";
+    case HalGPIO::WakeupReason::AfterUSBPower:
+      return "AfterUSBPower";
+    case HalGPIO::WakeupReason::Other:
+    default:
+      return "Other";
+  }
+}
+
+// Definitions for SilentRestart.h. RTC_NOINIT survives ESP.restart() but not power loss.
+RTC_NOINIT_ATTR uint32_t silentRebootMagic;
+RTC_NOINIT_ATTR uint32_t silentRebootTarget;
+constexpr uint32_t SILENT_REBOOT_MAGIC = 0xC1EAB007;
+constexpr uint32_t SILENT_REBOOT_TARGET_HOME = 0;
+constexpr uint32_t SILENT_REBOOT_TARGET_READER = 1;
+
+void silentRestart() {
+  silentRebootTarget = SILENT_REBOOT_TARGET_HOME;
+  silentRebootMagic = SILENT_REBOOT_MAGIC;
+  LOG_DBG("MAIN", "Silent restart (target=home)");
+  delay(50);
+  ESP.restart();
+}
+
+void silentRestartToReader() {
+  silentRebootTarget = SILENT_REBOOT_TARGET_READER;
+  silentRebootMagic = SILENT_REBOOT_MAGIC;
+  LOG_DBG("MAIN", "Silent restart (target=reader)");
+  delay(50);
+  ESP.restart();
+}
+
 void waitForPowerRelease() {
   gpio.update();
   while (gpio.isPressed(HalGPIO::BTN_POWER)) {
@@ -569,22 +636,47 @@ void setupDisplayAndFonts() {
 void setup() {
   t1 = millis();
 
+  const esp_reset_reason_t rawResetReason = esp_reset_reason();
+  const esp_sleep_wakeup_cause_t rawWakeupCause = esp_sleep_get_wakeup_cause();
+
+#ifdef ENABLE_SERIAL_LOG
+  // Earliest possible Serial setup. The 250 ms stall before begin() lets the
+  // USB Serial/JTAG peripheral finish power-on and lets the host complete USB
+  // enumeration before we touch the CDC state — otherwise cold boot races
+  // and the host has to be physically replugged for logs to flow. Warm reboot
+  // worked without the delay because USB was already enumerated.
+  //
+  // setTxTimeoutMs(0) makes writes non-blocking — the HWCDC TX FIFO drops
+  // bytes harmlessly if the host isn't actively draining, instead of blocking
+  // for the default 250 ms per write and chaining into a firmware hang.
+  delay(250);
+  Serial.begin(115200);
+#ifndef SIMULATOR
+  logSerial.setTxTimeoutMs(0);
+#endif
+#endif
+
   HalSystem::begin();
+  LOG_INF("BOOT", "Reset diagnostic: reset=%d(%s) sleepWake=%d(%s)", static_cast<int>(rawResetReason),
+          resetReasonName(rawResetReason), static_cast<int>(rawWakeupCause), wakeupCauseName(rawWakeupCause));
+
+  // Read-and-clear so a panic later in setup() doesn't loop into silent reboot.
+  // Bound the target range too — RTC_NOINIT memory is uninitialized on cold boot.
+  const bool isSilentReboot = (silentRebootMagic == SILENT_REBOOT_MAGIC);
+  const uint32_t snapshotTarget =
+      (isSilentReboot && silentRebootTarget <= SILENT_REBOOT_TARGET_READER) ? silentRebootTarget : 0;
+  silentRebootMagic = 0;
+  silentRebootTarget = 0;
+
   gpio.begin();
   powerManager.begin();
   halTiltSensor.begin();
-
-#ifdef ENABLE_SERIAL_LOG
-  if (gpio.isUsbConnected()) {
-    Serial.begin(115200);
-    const unsigned long start = millis();
-    while (!Serial && (millis() - start) < 500) {
-      delay(10);
-    }
-  }
-#endif
+  halClock.begin();
 
   LOG_INF("MAIN", "Hardware detect: %s", gpio.deviceIsX3() ? "X3" : "X4");
+  LOG_INF("BOOT", "Post-GPIO diagnostic: device=%s usb=%d silentReboot=%d silentTarget=%lu",
+          gpio.deviceIsX3() ? "X3" : "X4", gpio.isUsbConnected() ? 1 : 0, isSilentReboot ? 1 : 0,
+          static_cast<unsigned long>(snapshotTarget));
 
   // SD Card Initialization
   // We need 6 open files concurrently when parsing a new chapter
@@ -605,21 +697,26 @@ void setup() {
   ButtonNavigator::setMappedInputManager(mappedInputManager);
 
   const auto wakeupReason = gpio.getWakeupReason();
+  LOG_INF("BOOT", "Wake route: %s", wakeupRouteName(wakeupReason));
   switch (wakeupReason) {
     case HalGPIO::WakeupReason::PowerButton:
-      LOG_DBG("MAIN", "Verifying power button press duration");
+      LOG_INF("BOOT", "Power-button wake: verifying duration required=%u shortAllowed=%d",
+              SETTINGS.getPowerButtonWakeDuration(), SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP);
       gpio.verifyPowerButtonWakeup(SETTINGS.getPowerButtonWakeDuration(),
                                    SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP);
       break;
     case HalGPIO::WakeupReason::AfterUSBPower:
-      // If USB power caused a cold boot, go back to sleep
-      LOG_DBG("MAIN", "Wakeup reason: After USB Power");
-      powerManager.startDeepSleep(gpio);
+      // TEMP: continue booting while diagnosing post-flash/reset behavior.
+      // Normal behavior is to go back to sleep when USB power causes a cold boot.
+      LOG_INF("BOOT", "AfterUSBPower route: TEMP continuing boot instead of deep sleep");
       break;
     case HalGPIO::WakeupReason::AfterFlash:
       // After flashing, just proceed to boot
+      LOG_INF("BOOT", "AfterFlash route: continuing boot");
+      break;
     case HalGPIO::WakeupReason::Other:
     default:
+      LOG_INF("BOOT", "Other wake route: continuing boot");
       break;
   }
 
@@ -647,7 +744,11 @@ void setup() {
 
   setupDisplayAndFonts();
 
-  activityManager.goToBoot();
+  // First paint after silent reboot is HALF_REFRESH (SDK forces it after begin()'s
+  // panel reset); subsequent paints FAST.
+  if (!isSilentReboot) {
+    activityManager.goToBoot();
+  }
 
   APP_STATE.loadFromFile();
   RECENT_BOOKS.loadFromFile();
@@ -659,6 +760,13 @@ void setup() {
   } else if (HalSystem::isRebootFromPanic()) {
     // If we rebooted from a panic, go to crash report screen to show the panic info
     activityManager.goToCrashReport();
+  } else if (isSilentReboot && snapshotTarget == SILENT_REBOOT_TARGET_READER && !APP_STATE.openEpubPath.empty()) {
+    activityManager.goToReader(APP_STATE.openEpubPath);
+  } else if (isSilentReboot) {
+    // target == home (or reader with no open book): land on home — don't fall
+    // through to the sleep-wake "resume reader" logic, which fires on stale
+    // openEpubPath + lastSleepFromReader from a prior session.
+    activityManager.goHome();
   } else if (APP_STATE.openEpubPath.empty() || !APP_STATE.lastSleepFromReader ||
              mappedInputManager.isPressed(MappedInputManager::Button::Back) || APP_STATE.readerActivityLoadCount > 0) {
     // Boot to home screen if no book is open, last sleep was not from reader, back button is held, or reader activity
