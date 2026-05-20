@@ -12,7 +12,7 @@
 - Fixed File Browser and Lyra Carousel icon alignment issues in icon-based themes.
 - Reduced grid-like and over-zoomed artifacts on Lyra Carousel and Minimal theme's EPUB cover thumbnails by cropping normal covers before dithering while containing unusual cover ratios.
 - Reduced duplicate Home progress/stat loading when returning from another screen.
-- Fixed EPUB cache folder keys so they use a stable path hash across firmware builds, with best-effort migration of older cache folders.
+- Fixed EPUB cache folder keys so they use a stable path hash across firmware builds, including moved finished books, with best-effort migration of older cache folders.
 - Improved low-memory EPUB handling by laying out very long text blocks earlier, streaming table fallback content when heap is tight, and clarifying the warning text.
 - Reduced sleep-entry memory and battery risk by reusing already-cached sleep-screen assets, idling OPDS pages normally after load, and putting the X3 tilt sensor back to sleep outside the reader.
 - Improved network transfer reliability by disabling WiFi power saving during downloads and updates, reducing WebDAV stack usage, tolerating longer stalls, retrying individual font files, and closing HTTP connections before following font-download redirects.
