@@ -4,34 +4,29 @@
 
 ### Added
 - Added a Recent Books long-press menu in both List and Grid views with delete, cache delete, completion, and remove-from-recents actions.
-- Added a Common Issues guide with user-facing fixes for WiFi, uploads, EPUB cache rebuilds, covers, reading stats, and OTA update problems.
 - Added a Minimal sleep screen option that shows the current book cover and reading progress on a dark background.
 - Added an in-reader confirmation message when a shortcut turns tilt-to-turn on or off.
 - Added a 9pt `Itty Bitty` reader font size, plus build flags for omitting Itty Bitty and Large reader font assets in size-constrained firmware variants.
-- Added an `all` downloaded-font size range for installing every generated size from Teensy through Huge.
 
 ### Fixed
 - Fixed File Browser and Lyra Carousel icon alignment issues in icon-based themes.
-- Reduced grid-like artifacts on Lyra Carousel center covers by generating cached thumbnails at the actual displayed image size.
-- Reduced grid-like and over-zoomed artifacts on Minimal EPUB cover thumbnails by cropping normal covers before dithering while containing unusual cover ratios.
+- Reduced grid-like and over-zoomed artifacts on Lyra Carousel and Minimal theme's EPUB cover thumbnails by cropping normal covers before dithering while containing unusual cover ratios.
 - Reduced duplicate Home progress/stat loading when returning from another screen.
 - Fixed EPUB cache folder keys so they use a stable path hash across firmware builds, with best-effort migration of older cache folders.
 - Improved low-memory EPUB handling by laying out very long text blocks earlier, streaming table fallback content when heap is tight, and clarifying the warning text.
 - Reduced sleep-entry memory and battery risk by reusing already-cached sleep-screen assets, idling OPDS pages normally after load, and putting the X3 tilt sensor back to sleep outside the reader.
 - Improved network transfer reliability by disabling WiFi power saving during downloads and updates, reducing WebDAV stack usage, tolerating longer stalls, retrying individual font files, and closing HTTP connections before following font-download redirects.
 - Fixed SD-card font downloads on low-memory devices by freeing the active reader font during downloads and retrying from saved progress when possible.
-- Fixed SD-card font size selection to use actual point sizes instead of filename order.
 - Fixed OPDS browsing on memory-constrained builds so large catalog feeds fail safely instead of rebooting the device.
 - Fixed a crash when opening the XTC chapter selector on memory-constrained builds.
+- Fixed the Font Size setting to follow the actual sizes installed for the selected SD-card font family.
 - Relaxed KOReader Sync auth response validation so compatible self-hosted servers that return valid JSON on successful login can authenticate.
 
 ### Changed
 - Moved the in-reader Footnotes shortcut above Select Chapter when footnotes are available on the current page.
-- Reduced unnecessary screen refresh work during OPDS book downloads and SD font downloads so transfers spend more time downloading and less time repainting progress.
+- Reduced unnecessary screen refresh work during OPDS and SD font downloads so transfers spend more time downloading and less time repainting progress.
 - Kept OPDS feed parsing safer on low-memory devices while preserving older parser iteration helpers for future OPDS work.
 - Reduced unnecessary OPDS browser list clearing when moving between catalog feeds.
-- Made the Font Size setting follow the actual sizes installed for the selected SD-card font family.
-- Installed downloaded SD-card fonts with their size range in the family name so multiple ranges can coexist.
 
 ## [v1.2.11.1] - 2026-05-15
 
