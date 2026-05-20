@@ -714,6 +714,17 @@ void HomeActivity::onEnter() {
     }
   }
 
+  if (initialMenuItem != HomeMenuItem::NONE) {
+    const bool includeContinueReading = metrics.homeContinueReadingInMenu && !recentBooks.empty();
+    const auto menuItems =
+        buildSelectableHomeMenuItems(hasOpdsServers, hasReadingStats, hasBookmarks, includeContinueReading);
+    const int menuIndex = findMenuActionIndex(menuItems, homeActionForInitialMenuItem(initialMenuItem));
+    if (menuIndex >= 0) {
+      selectorIndex = getHomeMenuSelectionOffset(recentBooks) + menuIndex;
+      updateHighlightedBookContext();
+    }
+  }
+
   if (isCarouselTheme && hasValidCarouselDiskCache(recentBooks, renderer)) {
     preRenderCarouselFrames(false);
   }
