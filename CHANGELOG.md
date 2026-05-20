@@ -9,6 +9,7 @@
 - Added a 9pt `Itty Bitty` reader font size, plus build flags for omitting Itty Bitty and Large reader font assets in size-constrained firmware variants.
 
 ### Fixed
+- Fixed missing Vietnamese labels for the sleep timeout resume settings.
 - Fixed File Browser and Lyra Carousel icon alignment issues in icon-based themes.
 - Reduced grid-like and over-zoomed artifacts on Lyra Carousel and Minimal theme's EPUB cover thumbnails by cropping normal covers before dithering while containing unusual cover ratios.
 - Reduced duplicate Home progress/stat loading when returning from another screen.
@@ -23,6 +24,7 @@
 - Relaxed KOReader Sync auth response validation so compatible self-hosted servers that return valid JSON on successful login can authenticate.
 
 ### Changed
+- Moved the full-time page-as-sleep behavior into a new `Sleep Screen > Quick Resume` option, which also keeps `Quick Resume on Timeout` on, and renamed the timeout-only toggle.
 - Moved the in-reader Footnotes shortcut above Select Chapter when footnotes are available on the current page.
 - Reduced unnecessary screen refresh work during OPDS and SD font downloads so transfers spend more time downloading and less time repainting progress.
 - Kept OPDS feed parsing safer on low-memory devices while preserving older parser iteration helpers for future OPDS work.

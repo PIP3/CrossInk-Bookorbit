@@ -27,6 +27,7 @@ class CrossPointSettings {
     OVERLAY = 6,
     READING_STATS_SLEEP = 7,
     MINIMAL_SLEEP = 8,
+    QUICK_RESUME = 9,
     SLEEP_SCREEN_MODE_COUNT
   };
   enum SLEEP_SCREEN_COVER_MODE { FIT = 0, CROP = 1, SLEEP_SCREEN_COVER_MODE_COUNT };
@@ -244,11 +245,10 @@ class CrossPointSettings {
   // Annotation underline visibility
   enum ANNOTATION_VISIBILITY : uint8_t { ANNOT_VISIBLE = 0, ANNOT_HIDDEN = 1, ANNOTATION_VISIBILITY_COUNT };
 
-  enum SEAMLESS_SLEEP_SCREEN {
-    SEAMLESS_NEVER = 0,
-    SEAMLESS_AFTER_TIMEOUT = 1,
-    SEAMLESS_ALWAYS = 2,
-    SEAMLESS_SLEEP_SCREEN_COUNT
+  enum QUICK_RESUME_SLEEP_SCREEN {
+    QUICK_RESUME_NEVER = 0,
+    QUICK_RESUME_AFTER_TIMEOUT = 1,
+    QUICK_RESUME_SLEEP_SCREEN_COUNT
   };
 
   // Sleep screen settings
@@ -366,8 +366,8 @@ class CrossPointSettings {
   uint8_t tiltPageTurn = TILT_OFF;
   // Language setting (Language enum index, default 0 = EN)
   uint8_t language = 0;
-  // Seamless sleep: keep current content visible with moon icon instead of showing sleep screen
-  uint8_t seamlessSleepScreen = SEAMLESS_NEVER;
+  // Quick Resume: keep current content visible with moon icon instead of showing a static sleep screen.
+  uint8_t quickResumeSleepScreen = QUICK_RESUME_NEVER;
 
   ~CrossPointSettings() = default;
 
@@ -414,6 +414,7 @@ class CrossPointSettings {
   static uint8_t sleepTimeoutEnumToMinutes(uint8_t legacyValue);
   static uint8_t sleepScreenStorageToMode(uint8_t storedValue);
   static uint8_t sleepScreenModeToStorage(uint8_t mode);
+  static void normalizeDependentSettings(CrossPointSettings& settings);
 #ifdef SIMULATOR
   static bool verifySleepTimeoutMigrationContract();
   static bool verifySleepScreenMigrationContract();

@@ -42,6 +42,7 @@ constexpr uint8_t SLEEP_SCREEN_STORAGE_ORDER[] = {
     static_cast<uint8_t>(CrossPointSettings::OVERLAY),
     static_cast<uint8_t>(CrossPointSettings::READING_STATS_SLEEP),
     static_cast<uint8_t>(CrossPointSettings::MINIMAL_SLEEP),
+    static_cast<uint8_t>(CrossPointSettings::QUICK_RESUME),
 };
 constexpr uint8_t SLEEP_SCREEN_STORAGE_ORDER_COUNT =
     sizeof(SLEEP_SCREEN_STORAGE_ORDER) / sizeof(SLEEP_SCREEN_STORAGE_ORDER[0]);
@@ -294,6 +295,12 @@ uint8_t CrossPointSettings::sleepScreenModeToStorage(const uint8_t mode) {
     }
   }
   return 0;
+}
+
+void CrossPointSettings::normalizeDependentSettings(CrossPointSettings& settings) {
+  if (settings.sleepScreen == SLEEP_SCREEN_MODE::QUICK_RESUME) {
+    settings.quickResumeSleepScreen = QUICK_RESUME_SLEEP_SCREEN::QUICK_RESUME_AFTER_TIMEOUT;
+  }
 }
 
 bool CrossPointSettings::saveToFile() const {
@@ -553,14 +560,18 @@ bool CrossPointSettings::verifySleepTimeoutMigrationContract() {
 
 bool CrossPointSettings::verifySleepScreenMigrationContract() {
   constexpr uint8_t legacyModeCountBeforeMinimal = 8;
+  constexpr uint8_t minimalSleepStorageValue = 8;
+  constexpr uint8_t quickResumeStorageValue = 9;
   for (uint8_t storedValue = 0; storedValue < legacyModeCountBeforeMinimal; storedValue++) {
     if (sleepScreenStorageToMode(storedValue) != storedValue) {
       return false;
     }
   }
 
-  return sleepScreenStorageToMode(legacyModeCountBeforeMinimal) == MINIMAL_SLEEP &&
-         sleepScreenModeToStorage(MINIMAL_SLEEP) == legacyModeCountBeforeMinimal &&
+  return sleepScreenStorageToMode(minimalSleepStorageValue) == MINIMAL_SLEEP &&
+         sleepScreenModeToStorage(MINIMAL_SLEEP) == minimalSleepStorageValue &&
+         sleepScreenStorageToMode(quickResumeStorageValue) == QUICK_RESUME &&
+         sleepScreenModeToStorage(QUICK_RESUME) == quickResumeStorageValue &&
          sleepScreenStorageToMode(UINT8_MAX) == DARK;
 }
 #endif
