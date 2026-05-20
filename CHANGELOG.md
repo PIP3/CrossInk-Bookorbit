@@ -26,6 +26,7 @@
 - Relaxed KOReader Sync auth response validation so compatible self-hosted servers that return valid JSON on successful login can authenticate.
 
 ### Changed
+- Moved the in-reader Footnotes shortcut above Select Chapter when footnotes are available on the current page.
 - Reduced unnecessary screen refresh work during OPDS book downloads and SD font downloads so transfers spend more time downloading and less time repainting progress.
 - Kept OPDS feed parsing safer on low-memory devices while preserving older parser iteration helpers for future OPDS work.
 - Reduced unnecessary OPDS browser list clearing when moving between catalog feeds.
