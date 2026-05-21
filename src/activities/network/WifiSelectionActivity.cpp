@@ -275,10 +275,16 @@ void WifiSelectionActivity::checkConnectionStatus() {
       requestUpdate();
     } else {
       // Using saved password or open network - complete immediately
-      LOG_DBG("WIFI",
-              "Connected with saved/open credentials, "
-              "completing immediately");
-      onComplete(true);
+      if (allowAutoConnect) {
+        LOG_DBG("WIFI",
+                "Connected with saved/open credentials, "
+                "completing immediately");
+        onComplete(true);
+      } else {
+        LOG_DBG("WIFI", "Connected from manual network settings, showing connected status");
+        state = WifiSelectionState::CONNECTED;
+        requestUpdate();
+      }
     }
     return;
   }
@@ -394,11 +400,11 @@ void WifiSelectionActivity::loop() {
     return;
   }
 
-  // Handle connected state (should not normally be reached - connection
-  // completes immediately)
   if (state == WifiSelectionState::CONNECTED) {
-    // Safety fallback - immediately complete
-    onComplete(true);
+    if (mappedInput.wasPressed(MappedInputManager::Button::Back) ||
+        mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+      onComplete(true);
+    }
     return;
   }
 

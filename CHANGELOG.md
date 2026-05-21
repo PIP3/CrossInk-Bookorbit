@@ -9,6 +9,7 @@
 - Added a 9pt `Itty Bitty` reader font size, plus build flags for omitting Itty Bitty and Large reader font assets in size-constrained firmware variants.
 
 ### Fixed
+- Fixed manual WiFi connections from Settings returning immediately to the settings list after a saved-password or open-network connection succeeded, so the connected status and IP address are shown first.
 - Fixed missing Vietnamese labels for the sleep timeout resume settings.
 - Fixed File Browser and Lyra Carousel icon alignment issues in icon-based themes.
 - Reduced grid-like and over-zoomed artifacts on Lyra Carousel and Minimal theme's EPUB cover thumbnails by cropping normal covers before dithering while containing unusual cover ratios.
