@@ -32,6 +32,9 @@ const StrId SettingsActivity::categoryNames[categoryCount] = {StrId::STR_CAT_DIS
                                                               StrId::STR_CAT_CONTROLS, StrId::STR_CAT_SYSTEM};
 
 namespace {
+constexpr int systemVersionFooterSideMargin = 20;
+constexpr int systemVersionFooterBottomInset = 15;
+
 uint8_t enumDisplayIndexForRawValue(const SettingInfo& setting, uint8_t rawValue) {
   if (setting.enumRawValues.empty()) {
     return rawValue;
@@ -52,6 +55,53 @@ uint8_t enumRawValueForDisplayIndex(const SettingInfo& setting, uint8_t displayI
     return setting.enumRawValues.front();
   }
   return setting.enumRawValues[displayIndex];
+}
+
+void drawCenteredTextLine(const GfxRenderer& renderer, const int pageWidth, const int y, const std::string& text) {
+  const int labelWidth = renderer.getTextWidth(SMALL_FONT_ID, text.c_str());
+  const int labelX = (pageWidth - labelWidth) / 2;
+  renderer.drawText(SMALL_FONT_ID, labelX, y, text.c_str());
+}
+
+bool isVersionBreakChar(const char c) { return c == ' ' || c == '-' || c == '+' || c == '.' || c == '_'; }
+
+void drawSystemVersionFooter(const GfxRenderer& renderer, const int pageWidth, const int pageHeight,
+                             const ThemeMetrics& metrics) {
+  const std::string label = "CrossInk " CROSSINK_VERSION;
+  const int maxWidth = pageWidth - systemVersionFooterSideMargin * 2;
+  const int bottomLineY =
+      pageHeight - metrics.buttonHintsHeight - metrics.verticalSpacing - systemVersionFooterBottomInset;
+
+  if (renderer.getTextWidth(SMALL_FONT_ID, label.c_str()) <= maxWidth) {
+    drawCenteredTextLine(renderer, pageWidth, bottomLineY, label);
+    return;
+  }
+
+  size_t fallbackBreak = std::string::npos;
+  size_t preferredBreak = std::string::npos;
+  for (size_t i = 1; i < label.size(); i++) {
+    if (!isVersionBreakChar(label[i - 1])) continue;
+
+    const std::string firstLine = label.substr(0, i);
+    if (renderer.getTextWidth(SMALL_FONT_ID, firstLine.c_str()) > maxWidth) break;
+
+    fallbackBreak = i;
+    const std::string secondLine = label.substr(i);
+    if (renderer.getTextWidth(SMALL_FONT_ID, secondLine.c_str()) <= maxWidth) {
+      preferredBreak = i;
+    }
+  }
+
+  const size_t lineBreak = preferredBreak != std::string::npos ? preferredBreak : fallbackBreak;
+  const std::string firstLine = lineBreak == std::string::npos
+                                    ? renderer.truncatedText(SMALL_FONT_ID, label.c_str(), maxWidth)
+                                    : label.substr(0, lineBreak);
+  const std::string secondLine = lineBreak == std::string::npos
+                                     ? ""
+                                     : renderer.truncatedText(SMALL_FONT_ID, label.substr(lineBreak).c_str(), maxWidth);
+  const int lineHeight = renderer.getLineHeight(SMALL_FONT_ID);
+  drawCenteredTextLine(renderer, pageWidth, bottomLineY - lineHeight, firstLine);
+  drawCenteredTextLine(renderer, pageWidth, bottomLineY, secondLine);
 }
 }  // namespace
 
@@ -440,11 +490,7 @@ void SettingsActivity::render(RenderLock&&) {
 
   // Draw CrossInk version label at the bottom of the System tab
   if (selectedCategoryIndex == 3) {
-    const int labelWidth = renderer.getTextWidth(SMALL_FONT_ID, "CrossInk " CROSSINK_VERSION);
-    const int labelX = (pageWidth - labelWidth) / 2;
-    const int labelY =
-        pageHeight - metrics.buttonHintsHeight - metrics.verticalSpacing - 15;  // 15px above the button hints
-    renderer.drawText(SMALL_FONT_ID, labelX, labelY, "CrossInk " CROSSINK_VERSION);
+    drawSystemVersionFooter(renderer, pageWidth, pageHeight, metrics);
   }
 
   // Draw help text
