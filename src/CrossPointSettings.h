@@ -414,7 +414,6 @@ class CrossPointSettings {
   static uint8_t sleepTimeoutEnumToMinutes(uint8_t legacyValue);
   static uint8_t sleepScreenStorageToMode(uint8_t storedValue);
   static uint8_t sleepScreenModeToStorage(uint8_t mode);
-  static void normalizeDependentSettings(CrossPointSettings& settings);
 #ifdef SIMULATOR
   static bool verifySleepTimeoutMigrationContract();
   static bool verifySleepScreenMigrationContract();
