@@ -197,17 +197,26 @@ void StatusBarSettingsActivity::handleSelection() {
 void StatusBarSettingsActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
-  auto metrics = UITheme::getInstance().getMetrics();
+  const auto& metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_CUSTOMISE_STATUS_BAR));
+  const auto orientation = renderer.getOrientation();
+  const bool isLandscapeCw = orientation == GfxRenderer::Orientation::LandscapeClockwise;
+  const bool isLandscapeCcw = orientation == GfxRenderer::Orientation::LandscapeCounterClockwise;
+  const int hintGutterWidth = (isLandscapeCw || isLandscapeCcw) ? metrics.buttonHintsHeight : 0;
+  const int contentX = isLandscapeCw ? hintGutterWidth : 0;
+  const int contentWidth = pageWidth - hintGutterWidth;
+
+  GUI.drawHeader(renderer, Rect{contentX, metrics.topPadding, contentWidth, metrics.headerHeight},
+                 tr(STR_CUSTOMISE_STATUS_BAR));
 
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
   GUI.drawList(
-      renderer, Rect{0, contentTop, pageWidth, contentHeight}, visibleItemCount, static_cast<int>(selectedIndex),
-      [](int index) { return std::string(I18N.get(menuNames[index])); }, nullptr, nullptr,
+      renderer, Rect{contentX, contentTop, contentWidth, contentHeight}, visibleItemCount,
+      static_cast<int>(selectedIndex), [](int index) { return std::string(I18N.get(menuNames[index])); }, nullptr,
+      nullptr,
       [](int index) -> std::string {
         switch (index) {
           case ITEM_CHAPTER_PAGE_COUNT:
@@ -242,7 +251,7 @@ void StatusBarSettingsActivity::render(RenderLock&&) {
 
   // Draw button hints
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_TOGGLE), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4, true);
 
   std::string title;
   if (SETTINGS.statusBarTitle == CrossPointSettings::STATUS_BAR_TITLE::BOOK_TITLE) {
