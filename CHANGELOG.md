@@ -5,6 +5,7 @@
 ### Added
 
 ### Fixed
+- Fixed Lyra Carousel popup rendering so loading, indexing, and sleep-entry popups appear in the right place again.
 
 ### Changed
 
