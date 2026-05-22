@@ -25,9 +25,10 @@ My goal with this fork was to maintain the core Crosspoint firmware while integr
 
 - New reader fonts: ChareInk, Lexend Deca, and Bitter
 - Unicode emoji and miscellaneous symbols support (a limited subset)
-- Adjusted font sizes: Teensy (8pt), Tiny (10pt), Small (12pt), Medium (14pt), Large (16pt), Extra Large (18pt), Huge (20pt). See [Font Sizes](#font-sizes) for more details.
+- Adjusted font sizes: Teensy (8pt), Itty Bitty (9pt), Tiny (10pt), Small (12pt), Medium (14pt), Large (16pt), Extra Large (18pt), Huge (20pt). See [Font Sizes](#font-sizes) for more details.
 - Added ~~strikethrough~~ support
 - Made <u>underlines</u> thicker for better visibility
+- Added a custom `Minimal` theme and sleep screen option for the minimalists out there.
 - Added support for `<hr>` section breaks
 - Added support for "redaction" style rendering
 - Added improved support for tables with simple markup
@@ -68,7 +69,7 @@ The UI now uses [Inter](https://fonts.google.com/specimen/Inter) as the display 
 
 ### Font Sizes
 
-There are 3 available build variants to choose from due to build size constraints: tiny, xlarge, and no_emoji
+There are 4 available build variants to choose from due to build size constraints: tiny, xlarge, and no_emoji
 
 **teensy**
 > Only the small sized fonts.
