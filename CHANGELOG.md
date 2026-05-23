@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- Added an adjustable reader line-height setting with percent-based spacing for EPUB and TXT books.
 
 ### Fixed
 - Fixed Lyra Carousel popup rendering so loading, indexing, and sleep-entry popups appear in the right place again.
