@@ -328,6 +328,7 @@ STR_AUTO_TURN_STEP_HINT: "Влево/Вправо: 1 с  Вверх/Вниз: 5 
 STR_SLEEP_TIMER_VALUE_FORMAT: "%u мин"
 STR_SLEEP_TIMER_STEP_HINT: "Влево/Вправо: 1 мин  Вверх/Вниз: 5 мин"
 STR_TILT_PAGE_TURN: "Перелистывание наклоном"
+STR_TILT_PAGE_TURN_DIRECTION: "Направление наклона"
 STR_ADD_SERVER: "Добавить сервер"
 STR_SERVER_NAME: "Имя сервера"
 STR_NO_SERVERS: "Нет настроенных серверов OPDS"

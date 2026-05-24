@@ -274,7 +274,7 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
   if (selectedIndex >= 0) {
     renderer.fillRect(rect.x, rect.y + selectedIndex % pageItems * rowHeight - 2, rect.width, rowHeight);
   }
-  constexpr int maxValueWidth = 200;
+  constexpr int maxValueWidth = 240;
   constexpr int minValueGap = 10;
 
   // Draw all items

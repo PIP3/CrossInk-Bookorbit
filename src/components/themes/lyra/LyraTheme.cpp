@@ -38,7 +38,7 @@ namespace {
 constexpr int hPaddingInSelection = 8;
 constexpr int cornerRadius = 6;
 constexpr int topHintButtonY = 345;
-constexpr int maxListValueWidth = 200;
+constexpr int maxListValueWidth = 240;
 constexpr uint32_t mainMenuIconSize = 32;
 constexpr uint32_t listIconSize = 24;
 constexpr int mainMenuColumns = 2;

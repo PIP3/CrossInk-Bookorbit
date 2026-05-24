@@ -356,4 +356,5 @@ STR_CRASH_DESCRIPTION: "Szczegółowy raport zapisany do crash_report.txt. Prosi
 STR_CRASH_REASON: "Powód awarii:"
 STR_CRASH_NO_REASON: "(Nie odnotowano powodu)"
 STR_TILT_PAGE_TURN: "Kartkowanie przechyłem"
+STR_TILT_PAGE_TURN_DIRECTION: "Kierunek przechyłu"
 STR_BOOKMARK_LIMIT_REACHED: "Osiągnięto limit zakładek"

@@ -355,6 +355,7 @@ STR_CRASH_DESCRIPTION: "En detaljerad rapport sparades till crash_report.txt. V�
 STR_CRASH_REASON: "Orsak till kraschen:"
 STR_CRASH_NO_REASON: "(Ingen orsak registrerades)"
 STR_TILT_PAGE_TURN: "Luta för att vända sida"
+STR_TILT_PAGE_TURN_DIRECTION: "Lutningsriktning"
 STR_KB_HINT_MOVE_CURSOR: "Tryck VÄNSTER eller HÖGER för att flytta markören"
 STR_KB_HINT_RETURN_CURSOR: "Tryck VÄNSTER för att återgå till markörpositionen"
 STR_KB_HINT_HIDE_PASSWORD: "Håll HÖGER och tryck sedan på [***] för att dölja lösenordet"

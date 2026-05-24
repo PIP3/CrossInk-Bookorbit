@@ -12,6 +12,7 @@
 
 ### Fixed
 - Fixed Lyra Carousel popup rendering so loading, indexing, and sleep-entry popups appear in the right place again.
+- Fixed settings rows so longer option values like "Forward-Back Inverted" are no longer cut off.
 - Fixed EPUB progress saves so KOReader Sync writes complete resume data without truncating the existing progress file first.
 - Fixed KOReader Sync remote-progress saves so refined page positions cannot be saved with a too-small page count.
 - Improved OPDS book download throughput by using a larger transfer buffer while keeping SD-card font downloads on the lower-memory path.
