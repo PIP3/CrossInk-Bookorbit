@@ -13,6 +13,7 @@
 #include <esp_system.h>
 
 #include <algorithm>
+#include <cstring>
 #include <iterator>
 #include <limits>
 #include <memory>
@@ -78,6 +79,37 @@ int clampPercent(int percent) {
     return 100;
   }
   return percent;
+}
+
+bool isSnippetWhitespace(const std::string& word) {
+  if (word.empty()) return true;
+  for (const char c : word) {
+    if (c != ' ' && c != '\r' && c != '\n' && c != '\t') return false;
+  }
+  return true;
+}
+
+void buildBookmarkSnippet(const Page& page, char* out, const size_t outSize) {
+  if (!out || outSize == 0) return;
+  out[0] = '\0';
+  size_t len = 0;
+
+  for (const auto& el : page.elements) {
+    if (el->getTag() != TAG_PageLine) continue;
+    const auto& line = static_cast<const PageLine&>(*el);
+    if (!line.getBlock()) continue;
+    const auto& words = line.getBlock()->getWords();
+    for (const auto& word : words) {
+      if (isSnippetWhitespace(word)) continue;
+      const size_t separatorLen = len > 0 ? 1 : 0;
+      const size_t wordLen = word.size();
+      if (len + separatorLen + wordLen >= outSize) return;
+      if (separatorLen > 0) out[len++] = ' ';
+      memcpy(out + len, word.c_str(), wordLen);
+      len += wordLen;
+      out[len] = '\0';
+    }
+  }
 }
 
 uint16_t clampAutoPageTurnIntervalSeconds(const uint16_t seconds) {
@@ -1035,7 +1067,12 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
         if (const auto pIdx = section->getParagraphIndexForPage(static_cast<uint16_t>(section->currentPage))) {
           paragraphIndex = *pIdx;
         }
-        const auto addResult = BOOKMARKS.addBookmark(spine, progress, section->pageCount, chapterTitle, paragraphIndex);
+        char snippet[BOOKMARK_SNIPPET_MAX] = {};
+        if (auto page = section->loadPageFromSectionFile()) {
+          buildBookmarkSnippet(*page, snippet, sizeof(snippet));
+        }
+        const auto addResult =
+            BOOKMARKS.addBookmark(spine, progress, section->pageCount, chapterTitle, paragraphIndex, snippet);
         bookmarkFeedbackType = (addResult == BookmarkStore::AddResult::Added) ? BookmarkFeedbackType::Added
                                                                               : BookmarkFeedbackType::LimitReached;
       }

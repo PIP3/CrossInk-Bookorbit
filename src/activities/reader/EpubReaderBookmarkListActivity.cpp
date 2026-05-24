@@ -12,7 +12,7 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
-static constexpr int ROW_HEIGHT = 50;
+static constexpr int ROW_HEIGHT = 68;
 static constexpr int LIST_START_Y = 60;
 static constexpr unsigned long BOOKMARK_DELETE_HOLD_MS = 1000;
 
@@ -183,12 +183,18 @@ void EpubReaderBookmarkListActivity::render(RenderLock&&) {
 
     const Bookmark& bm = bookmarks[itemIndex];
     const char* chapter = (bm.chapterTitle[0] != '\0') ? bm.chapterTitle : tr(STR_UNKNOWN_CHAPTER);
-    const std::string chapterTrunc = renderer.truncatedText(UI_10_FONT_ID, chapter, contentWidth - 40);
-    renderer.drawText(UI_10_FONT_ID, marginLeft, rowY + 6, chapterTrunc.c_str(), !isSelected);
+    const bool hasSnippet = bm.snippet[0] != '\0';
+    if (hasSnippet) {
+      const std::string snippetTrunc = renderer.truncatedText(UI_10_FONT_ID, bm.snippet, contentWidth - 40);
+      renderer.drawText(UI_10_FONT_ID, marginLeft, rowY + 5, snippetTrunc.c_str(), !isSelected);
+    }
+
+    const std::string chapterTrunc = renderer.truncatedText(SMALL_FONT_ID, chapter, contentWidth - 40);
+    renderer.drawText(SMALL_FONT_ID, marginLeft, rowY + (hasSnippet ? 27 : 10), chapterTrunc.c_str(), !isSelected);
 
     char pageBuf[24];
     snprintf(pageBuf, sizeof(pageBuf), "%d%%", static_cast<int>(std::lround(bm.progress * 100.0)));
-    renderer.drawText(SMALL_FONT_ID, marginLeft, rowY + 28, pageBuf, !isSelected);
+    renderer.drawText(SMALL_FONT_ID, marginLeft, rowY + (hasSnippet ? 47 : 36), pageBuf, !isSelected);
   }
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
