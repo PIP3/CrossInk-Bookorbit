@@ -725,7 +725,9 @@ void HomeActivity::onEnter() {
     }
   }
 
-  globalStats = GlobalReadingStats::loadAggregated();
+  globalStats = GlobalReadingStats::load();
+  showAllDevicesStats = GlobalReadingStats::hasSyncedStats();
+  allDevicesGlobalStats = showAllDevicesStats ? GlobalReadingStats::loadAggregated(globalStats) : globalStats;
   if (isCarouselTheme) {
     loadAllBookStats();
   }
@@ -781,7 +783,8 @@ void HomeActivity::updateHighlightedBookContext() {
     }
   }
 
-  hasReadingStats = hasAnyBookStats(currentBookStats) || hasAnyGlobalStats(globalStats);
+  hasReadingStats = hasAnyBookStats(currentBookStats) || hasAnyGlobalStats(globalStats) ||
+                    (showAllDevicesStats && hasAnyGlobalStats(allDevicesGlobalStats));
   LOG_DBG("HOME", "updateHighlightedBookContext idx=%d cached=%s took %lums", idx, useCachedStats ? "yes" : "no",
           millis() - start);
 }
@@ -908,7 +911,8 @@ void HomeActivity::renderCarouselFrameToCurrentBuffer(int bookIdx, BookReadingSt
       renderer, Rect{0, metrics.homeTopPadding, pageWidth, metrics.homeCoverTileHeight}, recentBooks, bookCount, dummy1,
       dummy2, dummy3, []() { return true; }, frameStatsPtr, frameProgressPercent);
 
-  const bool frameHasReadingStats = hasAnyBookStats(frameStats) || hasAnyGlobalStats(globalStats);
+  const bool frameHasReadingStats = hasAnyBookStats(frameStats) || hasAnyGlobalStats(globalStats) ||
+                                    (showAllDevicesStats && hasAnyGlobalStats(allDevicesGlobalStats));
   const auto menuItems = buildHomeMenuItems(hasOpdsServers, frameHasReadingStats, hasBookmarks);
   GUI.drawButtonMenu(
       renderer,
@@ -1625,9 +1629,15 @@ void HomeActivity::onReadingStatsOpen() {
   const int highlightedBookIdx = getHighlightedBookIndex();
   const std::string bookTitle =
       highlightedBookIdx >= 0 ? recentBooks[highlightedBookIdx].title : std::string(tr(STR_READING_STATS));
-  startActivityForResult(
-      std::make_unique<BookStatsActivity>(renderer, mappedInput, bookTitle, currentBookStats, globalStats),
-      [this](const ActivityResult&) { requestUpdate(); });
+  if (showAllDevicesStats) {
+    startActivityForResult(std::make_unique<BookStatsActivity>(renderer, mappedInput, bookTitle, currentBookStats,
+                                                               globalStats, allDevicesGlobalStats),
+                           [this](const ActivityResult&) { requestUpdate(); });
+  } else {
+    startActivityForResult(
+        std::make_unique<BookStatsActivity>(renderer, mappedInput, bookTitle, currentBookStats, globalStats),
+        [this](const ActivityResult&) { requestUpdate(); });
+  }
 }
 
 void HomeActivity::onBookmarksOpen() {

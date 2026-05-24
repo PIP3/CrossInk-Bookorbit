@@ -8,10 +8,12 @@
 #include "fontIds.h"
 
 void renderBookStatsView(GfxRenderer& renderer, const MappedInputManager* mappedInput, const std::string& bookTitle,
-                         const BookReadingStats& stats, const GlobalReadingStats& globalStats, bool showButtonHints) {
+                         const BookReadingStats& stats, const GlobalReadingStats& globalStats,
+                         const GlobalReadingStats* allDevicesStats, bool showButtonHints) {
   renderer.clearScreen();
 
   const auto& metrics = UITheme::getInstance().getMetrics();
+  const bool compactLayout = allDevicesStats != nullptr;
   const int screenWidth = renderer.getScreenWidth();
   const int cardX = metrics.contentSidePadding;
   const int cardW = screenWidth - metrics.contentSidePadding * 2;
@@ -36,9 +38,23 @@ void renderBookStatsView(GfxRenderer& renderer, const MappedInputManager* mapped
   const int labelLineH = renderer.getLineHeight(SMALL_FONT_ID);
   const int titleLineH = renderer.getLineHeight(UI_10_FONT_ID);
 
-  constexpr int cardTitleH = 40;
-  constexpr int cellH = 90;
-  constexpr int labelPad = 6;
+  const int screenHeight = renderer.getScreenHeight();
+  const int buttonHintsReserve = showButtonHints ? metrics.buttonHintsHeight : 0;
+  const int cardGap = compactLayout ? metrics.verticalSpacing : metrics.verticalSpacing;
+  int cardTitleH = 40;
+  int cellH = 90;
+  if (compactLayout) {
+    constexpr int cardCount = 3;
+    const int availableCardsH =
+        screenHeight - y - buttonHintsReserve - metrics.verticalSpacing - cardGap * (cardCount - 1);
+    const int minTitleH = titleLineH + 4;
+    const int minCellH = valueLineH + labelLineH + 2;
+    const int minCardH = minTitleH + minCellH * 2;
+    const int cardH = availableCardsH / cardCount > minCardH ? availableCardsH / cardCount : minCardH;
+    cardTitleH = cardH >= 160 ? 40 : minTitleH;
+    cellH = (cardH - cardTitleH) / 2;
+  }
+  const int labelPad = compactLayout ? 2 : 6;
 
   auto drawStatCell = [&](int x, int w, int cellY, const char* value, const char* label) {
     const int totalTextH = valueLineH + labelPad + labelLineH;
@@ -51,19 +67,18 @@ void renderBookStatsView(GfxRenderer& renderer, const MappedInputManager* mapped
     renderer.drawText(SMALL_FONT_ID, x + (w - lw) / 2, textY + valueLineH + labelPad, label, true);
   };
 
+  auto drawCardTitle = [&](int cardY, const char* title) {
+    const std::string truncTitle =
+        renderer.truncatedText(UI_10_FONT_ID, title, cardW - metrics.contentSidePadding * 2, EpdFontFamily::BOLD);
+    const int tw = renderer.getTextWidth(UI_10_FONT_ID, truncTitle.c_str(), EpdFontFamily::BOLD);
+    renderer.drawText(UI_10_FONT_ID, cardX + (cardW - tw) / 2, cardY + (cardTitleH - titleLineH) / 2,
+                      truncTitle.c_str(), true, EpdFontFamily::BOLD);
+  };
+
   char buf[32];
 
   renderer.drawRect(cardX, y, cardW, cardTitleH + cellH * 2);
-
-  {
-    const auto lines =
-        renderer.wrappedText(UI_10_FONT_ID, bookTitle.c_str(), cardW - metrics.contentSidePadding * 2, 1);
-    if (!lines.empty()) {
-      const int tw = renderer.getTextWidth(UI_10_FONT_ID, lines[0].c_str(), EpdFontFamily::BOLD);
-      renderer.drawText(UI_10_FONT_ID, cardX + (cardW - tw) / 2, y + (cardTitleH - titleLineH) / 2, lines[0].c_str(),
-                        true, EpdFontFamily::BOLD);
-    }
-  }
+  drawCardTitle(y, bookTitle.c_str());
 
   y += cardTitleH;
   renderer.drawLine(cardX, y, cardX + cardW, y);
@@ -95,63 +110,69 @@ void renderBookStatsView(GfxRenderer& renderer, const MappedInputManager* mapped
   drawStatCell(cardX + halfW, halfW, row2Y, buf, tr(STR_STATS_PAGES_PER_MIN));
 
   y += cellH;
-  y += metrics.verticalSpacing;
+  y += cardGap;
 
-  const int screenHeight = renderer.getScreenHeight();
-  const int buttonHintsReserve = showButtonHints ? metrics.buttonHintsHeight : 0;
   const int card2H = cardTitleH + cellH * 2;
-  if (screenHeight - y - buttonHintsReserve - metrics.verticalSpacing >= card2H) {
-    renderer.drawRect(cardX, y, cardW, card2H);
+  auto drawGlobalCard = [&](int cardY, const char* title, const GlobalReadingStats& cardStats) {
+    renderer.drawRect(cardX, cardY, cardW, card2H);
 
-    const int tw = renderer.getTextWidth(UI_10_FONT_ID, tr(STR_STATS_ALL_TIME), EpdFontFamily::BOLD);
-    renderer.drawText(UI_10_FONT_ID, cardX + (cardW - tw) / 2, y + (cardTitleH - titleLineH) / 2,
-                      tr(STR_STATS_ALL_TIME), true, EpdFontFamily::BOLD);
+    drawCardTitle(cardY, title);
 
-    y += cardTitleH;
-    renderer.drawLine(cardX, y, cardX + cardW, y);
+    int cardContentY = cardY + cardTitleH;
+    renderer.drawLine(cardX, cardContentY, cardX + cardW, cardContentY);
 
-    snprintf(buf, sizeof(buf), "%lu", static_cast<unsigned long>(globalStats.totalSessions));
-    drawStatCell(cardX, thirdW, y, buf, tr(STR_STATS_SESSIONS_LBL));
+    snprintf(buf, sizeof(buf), "%lu", static_cast<unsigned long>(cardStats.totalSessions));
+    drawStatCell(cardX, thirdW, cardContentY, buf, tr(STR_STATS_SESSIONS_LBL));
 
-    BookReadingStats::formatDuration(globalStats.totalReadingSeconds, buf, sizeof(buf));
-    drawStatCell(cardX + thirdW, thirdW, y, buf, tr(STR_STATS_TIME_LBL));
+    BookReadingStats::formatDuration(cardStats.totalReadingSeconds, buf, sizeof(buf));
+    drawStatCell(cardX + thirdW, thirdW, cardContentY, buf, tr(STR_STATS_TIME_LBL));
 
-    snprintf(buf, sizeof(buf), "%lu", static_cast<unsigned long>(globalStats.totalPagesTurned));
-    drawStatCell(cardX + thirdW * 2, thirdW, y, buf, tr(STR_STATS_PAGES_LBL));
+    snprintf(buf, sizeof(buf), "%lu", static_cast<unsigned long>(cardStats.totalPagesTurned));
+    drawStatCell(cardX + thirdW * 2, thirdW, cardContentY, buf, tr(STR_STATS_PAGES_LBL));
 
-    y += cellH;
+    cardContentY += cellH;
 
-    if (globalStats.completedBooks > 0) {
+    if (cardStats.completedBooks > 0) {
       const uint32_t globalAvgSecs =
-          globalStats.totalSessions > 0 ? globalStats.totalReadingSeconds / globalStats.totalSessions : 0;
+          cardStats.totalSessions > 0 ? cardStats.totalReadingSeconds / cardStats.totalSessions : 0;
       BookReadingStats::formatDuration(globalAvgSecs, buf, sizeof(buf));
-      drawStatCell(cardX, thirdW, y, buf, tr(STR_STATS_AVG_SESSION_LBL));
+      drawStatCell(cardX, thirdW, cardContentY, buf, tr(STR_STATS_AVG_SESSION_LBL));
 
-      if (globalStats.totalReadingSeconds > 60) {
-        const float ppm = static_cast<float>(globalStats.totalPagesTurned) * 60.0f /
-                          static_cast<float>(globalStats.totalReadingSeconds);
+      if (cardStats.totalReadingSeconds > 60) {
+        const float ppm =
+            static_cast<float>(cardStats.totalPagesTurned) * 60.0f / static_cast<float>(cardStats.totalReadingSeconds);
         snprintf(buf, sizeof(buf), "%.1f", ppm);
       } else {
         snprintf(buf, sizeof(buf), "0.0");
       }
-      drawStatCell(cardX + thirdW, thirdW, y, buf, tr(STR_STATS_PAGES_PER_MIN));
+      drawStatCell(cardX + thirdW, thirdW, cardContentY, buf, tr(STR_STATS_PAGES_PER_MIN));
 
-      snprintf(buf, sizeof(buf), "%lu", static_cast<unsigned long>(globalStats.completedBooks));
-      drawStatCell(cardX + thirdW * 2, thirdW, y, buf, tr(STR_STATS_COMPLETED_LBL));
+      snprintf(buf, sizeof(buf), "%lu", static_cast<unsigned long>(cardStats.completedBooks));
+      drawStatCell(cardX + thirdW * 2, thirdW, cardContentY, buf, tr(STR_STATS_COMPLETED_LBL));
     } else {
       const uint32_t globalAvgSecs =
-          globalStats.totalSessions > 0 ? globalStats.totalReadingSeconds / globalStats.totalSessions : 0;
+          cardStats.totalSessions > 0 ? cardStats.totalReadingSeconds / cardStats.totalSessions : 0;
       BookReadingStats::formatDuration(globalAvgSecs, buf, sizeof(buf));
-      drawStatCell(cardX, halfW, y, buf, tr(STR_STATS_AVG_SESSION_LBL));
+      drawStatCell(cardX, halfW, cardContentY, buf, tr(STR_STATS_AVG_SESSION_LBL));
 
-      if (globalStats.totalReadingSeconds > 60) {
-        const float ppm = static_cast<float>(globalStats.totalPagesTurned) * 60.0f /
-                          static_cast<float>(globalStats.totalReadingSeconds);
+      if (cardStats.totalReadingSeconds > 60) {
+        const float ppm =
+            static_cast<float>(cardStats.totalPagesTurned) * 60.0f / static_cast<float>(cardStats.totalReadingSeconds);
         snprintf(buf, sizeof(buf), "%.1f", ppm);
       } else {
         snprintf(buf, sizeof(buf), "0.0");
       }
-      drawStatCell(cardX + halfW, halfW, y, buf, tr(STR_STATS_PAGES_PER_MIN));
+      drawStatCell(cardX + halfW, halfW, cardContentY, buf, tr(STR_STATS_PAGES_PER_MIN));
+    }
+  };
+
+  if (screenHeight - y - buttonHintsReserve - metrics.verticalSpacing >= card2H || compactLayout) {
+    drawGlobalCard(y, allDevicesStats ? tr(STR_STATS_THIS_DEVICE) : tr(STR_STATS_ALL_TIME), globalStats);
+    y += card2H;
+
+    if (allDevicesStats) {
+      y += cardGap;
+      drawGlobalCard(y, tr(STR_STATS_ALL_DEVICES), *allDevicesStats);
     }
   }
 

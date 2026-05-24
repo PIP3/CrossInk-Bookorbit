@@ -49,6 +49,8 @@ class HomeActivity final : public Activity {
   float currentBookProgressPercent = -1.0f;
   BookReadingStats currentBookStats;
   GlobalReadingStats globalStats;
+  GlobalReadingStats allDevicesGlobalStats;
+  bool showAllDevicesStats = false;
 
   // Per-book stats and progress cached at onEnter() to avoid SD reads during navigation.
   std::array<BookReadingStats, kMaxCachedBooks> cachedBookStats{};

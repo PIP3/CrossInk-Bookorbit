@@ -159,6 +159,15 @@ GlobalReadingStats GlobalReadingStats::load() {
 
 GlobalReadingStats GlobalReadingStats::loadAggregated() { return loadAggregated(load()); }
 
+bool GlobalReadingStats::hasSyncedStats() {
+  FsFile dir = Storage.open(SYNCED_STATS_DIR);
+  if (!dir) return false;
+
+  const bool exists = dir.isDirectory();
+  dir.close();
+  return exists;
+}
+
 GlobalReadingStats GlobalReadingStats::loadAggregated(const GlobalReadingStats& localStats) {
   GlobalReadingStats stats = localStats;
   FsFile dir = Storage.open(SYNCED_STATS_DIR);

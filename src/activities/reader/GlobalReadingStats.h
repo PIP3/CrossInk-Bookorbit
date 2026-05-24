@@ -13,6 +13,9 @@ struct GlobalReadingStats {
   // stats if the file is missing or the version byte does not match.
   static GlobalReadingStats load();
 
+  // Returns true when the optional synced stats directory exists.
+  static bool hasSyncedStats();
+
   // Loads this device's local stats plus one synced stats file per other device
   // from /.crosspoint/synced_stats/. A stale file matching this device's MAC is
   // skipped to avoid double counting.

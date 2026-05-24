@@ -9,4 +9,5 @@ class GfxRenderer;
 class MappedInputManager;
 
 void renderBookStatsView(GfxRenderer& renderer, const MappedInputManager* mappedInput, const std::string& bookTitle,
-                         const BookReadingStats& stats, const GlobalReadingStats& globalStats, bool showButtonHints);
+                         const BookReadingStats& stats, const GlobalReadingStats& globalStats,
+                         const GlobalReadingStats* allDevicesStats, bool showButtonHints);
