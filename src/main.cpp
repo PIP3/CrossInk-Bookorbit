@@ -936,7 +936,8 @@ void loop() {
   static unsigned long lastMemPrint = 0;
 
   gpio.update();
-  halTiltSensor.update(SETTINGS.tiltPageTurn, SETTINGS.orientation, activityManager.isReaderActivity());
+  halTiltSensor.update(SETTINGS.tiltPageTurn, SETTINGS.tiltPageTurnDirection, SETTINGS.orientation,
+                       activityManager.isReaderActivity());
 
   renderer.setFadingFix(SETTINGS.fadingFix);
 

@@ -456,12 +456,19 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
           setting.enumValues.push_back(StrId::STR_TILT_PAGE_TURN);
         }
       }
-      const auto shortPowerIt = std::find_if(
-          v.begin(), v.end(), [](const SettingInfo& setting) { return setting.nameId == StrId::STR_SHORT_PWR_BTN; });
-      if (shortPowerIt != v.end()) {
-        v.insert(shortPowerIt + 1, SettingInfo::Enum(StrId::STR_TILT_PAGE_TURN, &CrossPointSettings::tiltPageTurn,
-                                                     {StrId::STR_STATE_OFF, StrId::STR_NORMAL, StrId::STR_INVERTED},
-                                                     "tiltPageTurn", StrId::STR_CAT_CONTROLS));
+      for (auto it = v.begin(); it != v.end(); ++it) {
+        if (it->nameId == StrId::STR_SHORT_PWR_BTN) {
+          auto insertPos =
+              v.insert(it + 1, SettingInfo::Toggle(StrId::STR_TILT_PAGE_TURN, &CrossPointSettings::tiltPageTurn,
+                                                   "tiltPageTurn", StrId::STR_CAT_CONTROLS));
+          v.insert(insertPos + 1,
+                   SettingInfo::Enum(
+                       StrId::STR_TILT_PAGE_TURN_DIRECTION, &CrossPointSettings::tiltPageTurnDirection,
+                       {StrId::STR_TILT_DIRECTION_LEFT_RIGHT, StrId::STR_TILT_DIRECTION_LEFT_RIGHT_INVERTED,
+                        StrId::STR_TILT_DIRECTION_FORWARD_BACK, StrId::STR_TILT_DIRECTION_FORWARD_BACK_INVERTED},
+                       "tiltPageTurnDirection", StrId::STR_CAT_CONTROLS));
+          break;
+        }
       }
     }
     return v;

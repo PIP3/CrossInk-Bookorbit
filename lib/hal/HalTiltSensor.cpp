@@ -149,12 +149,13 @@ bool HalTiltSensor::deepSleep() {
   }
 }
 
-void HalTiltSensor::update(const uint8_t mode, const uint8_t orientation, const bool inReader) {
+void HalTiltSensor::update(const uint8_t enabled, const uint8_t direction, const uint8_t orientation,
+                           const bool inReader) {
   if (!_available) {
     return;
   }
 
-  const bool shouldBeAwake = (mode != CrossPointTiltPageTurn::TILT_OFF) && inReader;
+  const bool shouldBeAwake = (enabled != CrossPointTiltPageTurn::TILT_OFF) && inReader;
 
   // State machine: keep the sensor awake only while tilt is enabled in a reader.
   if (shouldBeAwake && !_isAwake) {
@@ -186,25 +187,32 @@ void HalTiltSensor::update(const uint8_t mode, const uint8_t orientation, const 
     return;
   }
 
-  // Map the gyro axis to left/right tilt based on reader orientation.
+  // Map the gyro axis to the selected gesture based on reader orientation.
   // On the X3 PCB: X axis = left/right in portrait, Y axis = left/right in landscape.
+  const bool forwardBack = direction == CrossPointTiltPageTurnDirection::TILT_FORWARD_BACK ||
+                           direction == CrossPointTiltPageTurnDirection::TILT_FORWARD_BACK_INVERTED;
+  const bool inverted = direction == CrossPointTiltPageTurnDirection::TILT_LEFT_RIGHT_INVERTED ||
+                        direction == CrossPointTiltPageTurnDirection::TILT_FORWARD_BACK_INVERTED;
   float tiltAxis;
   switch (orientation) {
     case CrossPointOrientation::PORTRAIT:
-      tiltAxis = mode == CrossPointTiltPageTurn::TILT_INVERTED ? -gx : gx;
+      tiltAxis = forwardBack ? gy : gx;
       break;
     case CrossPointOrientation::INVERTED:
-      tiltAxis = mode == CrossPointTiltPageTurn::TILT_INVERTED ? gx : -gx;
+      tiltAxis = forwardBack ? -gy : -gx;
       break;
     case CrossPointOrientation::LANDSCAPE_CW:
-      tiltAxis = mode == CrossPointTiltPageTurn::TILT_INVERTED ? gy : -gy;
+      tiltAxis = forwardBack ? gx : -gy;
       break;
     case CrossPointOrientation::LANDSCAPE_CCW:
-      tiltAxis = mode == CrossPointTiltPageTurn::TILT_INVERTED ? -gy : gy;
+      tiltAxis = forwardBack ? -gx : gy;
       break;
     default:
-      tiltAxis = gx;
+      tiltAxis = forwardBack ? gy : gx;
       break;
+  }
+  if (inverted) {
+    tiltAxis = -tiltAxis;
   }
 
   if (_inTilt) {

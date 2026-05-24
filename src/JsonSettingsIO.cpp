@@ -209,6 +209,8 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
   }
 
   auto clamp = [](uint8_t val, uint8_t maxVal, uint8_t def) -> uint8_t { return val < maxVal ? val : def; };
+  const bool migrateLegacyTiltMode = !doc["tiltPageTurn"].isNull() && doc["tiltPageTurnDirection"].isNull();
+  const uint8_t legacyTiltMode = doc["tiltPageTurn"] | static_cast<uint8_t>(CrossPointSettings::TILT_OFF);
 
   // Legacy migration: if statusBarChapterPageCount is absent this is a pre-refactor settings file.
   // Populate s with migrated values now so the generic loop below picks them up as defaults and clamps them.
@@ -278,6 +280,17 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
           v = info.valueRange.max;
       }
       s.*(info.valuePtr) = v;
+    }
+  }
+
+  if (migrateLegacyTiltMode) {
+    if (legacyTiltMode == 1 || legacyTiltMode == 2) {
+      s.tiltPageTurn = CrossPointSettings::TILT_ON;
+      s.tiltPageTurnDirection =
+          legacyTiltMode == 2 ? CrossPointSettings::TILT_LEFT_RIGHT_INVERTED : CrossPointSettings::TILT_LEFT_RIGHT;
+      if (needsResave) *needsResave = true;
+    } else {
+      s.tiltPageTurn = CrossPointSettings::TILT_OFF;
     }
   }
 

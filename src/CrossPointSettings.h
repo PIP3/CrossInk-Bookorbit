@@ -218,7 +218,14 @@ class CrossPointSettings {
   // Image rendering in EPUB reader
   enum IMAGE_RENDERING { IMAGES_DISPLAY = 0, IMAGES_PLACEHOLDER = 1, IMAGES_SUPPRESS = 2, IMAGE_RENDERING_COUNT };
 
-  enum TILT_PAGE_TURN { TILT_OFF = 0, TILT_NORMAL = 1, TILT_INVERTED = 2, TILT_PAGE_TURN_COUNT };
+  enum TILT_PAGE_TURN { TILT_OFF = 0, TILT_ON = 1, TILT_PAGE_TURN_COUNT };
+  enum TILT_PAGE_TURN_DIRECTION {
+    TILT_LEFT_RIGHT = 0,
+    TILT_LEFT_RIGHT_INVERTED = 1,
+    TILT_FORWARD_BACK = 2,
+    TILT_FORWARD_BACK_INVERTED = 3,
+    TILT_PAGE_TURN_DIRECTION_COUNT
+  };
 
   // Long-press Confirm (menu button) quick action in reader
   enum LONG_PRESS_MENU_ACTION {
@@ -366,6 +373,7 @@ class CrossPointSettings {
   uint8_t longPressMenuAction = LONG_MENU_OFF;
   // Tilt-based page turning (X3 only — requires QMI8658 IMU)
   uint8_t tiltPageTurn = TILT_OFF;
+  uint8_t tiltPageTurnDirection = TILT_LEFT_RIGHT;
   // Language setting (Language enum index, default 0 = EN)
   uint8_t language = 0;
   // Quick Resume: keep current content visible with moon icon instead of showing a static sleep screen.

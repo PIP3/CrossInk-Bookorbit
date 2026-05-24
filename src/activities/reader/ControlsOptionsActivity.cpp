@@ -50,7 +50,12 @@ void ControlsOptionsActivity::rebuildSettingsList() {
   const bool hasTiltPageTurnSetting = std::any_of(allSettings.begin(), allSettings.end(), [](const auto& setting) {
     return setting.nameId == StrId::STR_TILT_PAGE_TURN;
   });
-  const size_t expectedControlsSettingsCount = hasTiltPageTurnSetting ? 15 : 13;
+  const bool hasTiltPageTurnDirectionSetting =
+      std::any_of(allSettings.begin(), allSettings.end(),
+                  [](const auto& setting) { return setting.nameId == StrId::STR_TILT_PAGE_TURN_DIRECTION; });
+  const bool hasTiltSettings = hasTiltPageTurnSetting || hasTiltPageTurnDirectionSetting;
+  const size_t expectedControlsSettingsCount = 13 + (hasTiltSettings ? 1u : 0u) + (hasTiltPageTurnSetting ? 1u : 0u) +
+                                               (hasTiltPageTurnDirectionSetting ? 1u : 0u);
   settings.reserve(expectedControlsSettingsCount);
 
   settings.push_back(SettingInfo::SectionHeader(StrId::STR_POWER_BUTTON));
@@ -67,9 +72,10 @@ void ControlsOptionsActivity::rebuildSettingsList() {
   addControlSetting(StrId::STR_SIDE_BTN_LAYOUT);
   addControlSettingByKey("sideButtonOrientationAware");
   addControlSetting(StrId::STR_SIDE_BTN_LONG_PRESS);
-  if (hasTiltPageTurnSetting) {
+  if (hasTiltSettings) {
     settings.push_back(SettingInfo::SectionHeader(StrId::STR_OTHER));
-    addControlSetting(StrId::STR_TILT_PAGE_TURN);
+    if (hasTiltPageTurnSetting) addControlSetting(StrId::STR_TILT_PAGE_TURN);
+    if (hasTiltPageTurnDirectionSetting) addControlSetting(StrId::STR_TILT_PAGE_TURN_DIRECTION);
   }
 
   settingsCount = static_cast<int>(settings.size());

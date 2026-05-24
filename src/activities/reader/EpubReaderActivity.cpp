@@ -1213,7 +1213,7 @@ void EpubReaderActivity::executeReaderQuickAction(CrossPointSettings::LONG_PRESS
       break;
     case CrossPointSettings::LONG_MENU_TOGGLE_TILT_PAGE_TURN:
       if (halTiltSensor.isAvailable()) {
-        SETTINGS.tiltPageTurn = SETTINGS.tiltPageTurn == CrossPointSettings::TILT_OFF ? CrossPointSettings::TILT_NORMAL
+        SETTINGS.tiltPageTurn = SETTINGS.tiltPageTurn == CrossPointSettings::TILT_OFF ? CrossPointSettings::TILT_ON
                                                                                       : CrossPointSettings::TILT_OFF;
         SETTINGS.saveToFile();
         halTiltSensor.clearPendingEvents();
