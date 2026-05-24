@@ -174,7 +174,7 @@ Map the **Power** or **Menu** button short/long-press action to one of the follo
 - Mark as Finished (marks book as finished)
 - Reading Stats (displays reading stats)
 - Take Screenshot (takes a screenshot)
-- Auto Page Turn (cycles through the page turn intervals: **Off → 5s → 10s → 15s → 20s → 30s → 45s → 60s → Off →**)
+- Auto Page Turn Interval (opens the selection for auto page turn interval)
 - File Transfer (opens the File Transfer menu)
 - Tilt Page Turn (turns tilt-based page turning on/off on supported devices)
 
@@ -189,18 +189,6 @@ Some simple per-book reading stats are tracked automatically and displayed in tw
 - Pages turned
 - Average session time
 - All time reading stats including total number of books read
-
-To include all-time totals from other CrossInk devices, create or sync a
-`.crosspoint/synced_stats/` folder between devices. When that folder exists,
-each reader writes its own `device_<mac>.bin` contribution file and ignores that
-file while summing the folder, so any device can display the aggregate total
-without becoming the main device. If the folder is not present, the reader only
-uses its local `global_stats.bin`.
-
-**Home screen book card (Lyra theme only):**
-
-- Total reading time
-- Average session time
 
 ### Finished books / Read folder
 
@@ -379,7 +367,7 @@ The structure is roughly:
 .crosspoint/
 ├── global_stats.bin        # All-time reading stats, including total books read
 ├── global_stats.bin.bak    # Backup used if the main global stats file is corrupt
-├── synced_stats/           # One per-device stats contribution file for aggregate all-time totals
+├── synced_stats/           # Stats snapshots received from other readers
 ├── settings.bin            # Device settings
 ├── state.bin               # Last-opened book and sleep/session state
 ├── recent.bin              # Recent books list
