@@ -97,12 +97,6 @@ std::string localSyncedStatsFileName() {
   return name;
 }
 
-std::string localSyncedStatsPath() {
-  const std::string fileName = localSyncedStatsFileName();
-  if (fileName.empty()) return {};
-  return std::string(SYNCED_STATS_DIR) + "/" + fileName;
-}
-
 bool saveToFile(const GlobalReadingStats& stats, const char* path, const char* backupPath) {
   if (backupPath != nullptr && Storage.exists(path)) {
     Storage.remove(backupPath);
@@ -183,6 +177,8 @@ GlobalReadingStats GlobalReadingStats::loadAggregated(const GlobalReadingStats& 
     const bool isDirectory = file.isDirectory();
     const size_t nameLen = file.getName(name, sizeof(name));
 
+    // Older firmware or manual copies may leave this device's own file here.
+    // Skip it because local stats are already included from global_stats.bin.
     if (!isDirectory && nameLen > 0 && (localFileName.empty() || strcmp(name, localFileName.c_str()) != 0)) {
       GlobalReadingStats syncedStats;
       if (loadFromOpenFile(file, syncedStats)) {
@@ -209,12 +205,5 @@ void GlobalReadingStats::save() const {
   // Preserve previous file as .bak before truncating — openFileForWrite uses
   // O_TRUNC, so a power failure mid-write would corrupt the primary file
   // without this fallback.
-  if (!saveToFile(*this, GLOBAL_STATS_PATH, GLOBAL_STATS_BAK_PATH)) return;
-
-  if (!Storage.exists(SYNCED_STATS_DIR)) return;
-
-  const std::string contributionPath = localSyncedStatsPath();
-  if (!contributionPath.empty()) {
-    saveToFile(*this, contributionPath.c_str(), nullptr);
-  }
+  saveToFile(*this, GLOBAL_STATS_PATH, GLOBAL_STATS_BAK_PATH);
 }

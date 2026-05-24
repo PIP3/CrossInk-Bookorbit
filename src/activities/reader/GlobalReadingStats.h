@@ -14,7 +14,7 @@ struct GlobalReadingStats {
   static GlobalReadingStats load();
 
   // Loads this device's local stats plus one synced stats file per other device
-  // from /.crosspoint/synced_stats/. This device's own contribution file is
+  // from /.crosspoint/synced_stats/. A stale file matching this device's MAC is
   // skipped to avoid double counting.
   static GlobalReadingStats loadAggregated();
 
@@ -22,7 +22,6 @@ struct GlobalReadingStats {
   // when the local stats may include in-memory changes that are not saved yet.
   static GlobalReadingStats loadAggregated(const GlobalReadingStats& localStats);
 
-  // Saves stats to /.crosspoint/global_stats.bin. If /.crosspoint/synced_stats/
-  // already exists, also mirrors this device's contribution there.
+  // Saves stats to /.crosspoint/global_stats.bin.
   void save() const;
 };

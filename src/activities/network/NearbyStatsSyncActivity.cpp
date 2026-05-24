@@ -259,8 +259,7 @@ bool NearbyStatsSyncActivity::prepareLocalStats() {
     return false;
   }
 
-  // Creating synced_stats is the opt-in signal; mirror local stats only after
-  // the user starts or accepts this workflow.
+  // Ensure a valid local stats payload exists before exchanging stats.
   GlobalReadingStats::load().save();
 
   if (!readSmallFile(GLOBAL_STATS_PATH, localStats_, localStatsSize_)) {
