@@ -586,7 +586,10 @@ void SleepActivity::renderCoverSleepScreen() const {
 
 void SleepActivity::renderReadingStatsSleepScreen() const {
   BookReadingStats bookStats;
-  GlobalReadingStats globalStats = GlobalReadingStats::loadAggregated();
+  GlobalReadingStats globalStats = GlobalReadingStats::load();
+  const bool showAllDevicesStats = GlobalReadingStats::hasSyncedStats();
+  const GlobalReadingStats allDevicesStats =
+      showAllDevicesStats ? GlobalReadingStats::loadAggregated(globalStats) : globalStats;
   std::string bookTitle = tr(STR_READING_STATS);
 
   const std::string& path = APP_STATE.openEpubPath;
@@ -597,7 +600,8 @@ void SleepActivity::renderReadingStatsSleepScreen() const {
     bookStats = loadBookStatsForPath(path);
   }
 
-  renderBookStatsView(renderer, nullptr, bookTitle, bookStats, globalStats, false);
+  renderBookStatsView(renderer, nullptr, bookTitle, bookStats, globalStats,
+                      showAllDevicesStats ? &allDevicesStats : nullptr, false);
   renderer.displayBuffer(HalDisplay::HALF_REFRESH, TURN_OFF_SCREEN_AFTER_SLEEP_REFRESH);
 }
 

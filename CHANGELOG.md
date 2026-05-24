@@ -5,6 +5,7 @@
 ### Added
 - Added an adjustable reader line-height setting with percent-based spacing for EPUB and TXT books.
 - Added nearby Reading Stats sync between CrossInk readers using direct ESP-NOW device-to-device messages.
+- Reading Stats now separates this device's totals from all-device totals when synced stats are available.
 - Auto Page Turn interval now remembers the last selected interval per book when it is turned on again.
 - EPUB bookmarks now save a paragraph anchor and preview snippet when available, so they reopen closer to the original text after font, margin, or spacing changes and are easier to recognize in the bookmark list.
 

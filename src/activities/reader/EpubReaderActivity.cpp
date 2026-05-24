@@ -983,10 +983,18 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       // Include elapsed time from the current session in the display stats.
       BookReadingStats displayStats = stats;
       displayStats.totalReadingSeconds += static_cast<uint32_t>((millis() - sessionStartMs) / 1000UL);
-      GlobalReadingStats displayGlobalStats = GlobalReadingStats::loadAggregated(globalStats);
-      startActivityForResult(std::make_unique<BookStatsActivity>(renderer, mappedInput, epub->getTitle(), displayStats,
-                                                                 displayGlobalStats),
-                             [this](const ActivityResult&) { requestUpdate(); });
+      const bool hasSyncedStats = GlobalReadingStats::hasSyncedStats();
+      const GlobalReadingStats displayAllDevicesStats =
+          hasSyncedStats ? GlobalReadingStats::loadAggregated(globalStats) : GlobalReadingStats{};
+      if (hasSyncedStats) {
+        startActivityForResult(std::make_unique<BookStatsActivity>(renderer, mappedInput, epub->getTitle(),
+                                                                   displayStats, globalStats, displayAllDevicesStats),
+                               [this](const ActivityResult&) { requestUpdate(); });
+      } else {
+        startActivityForResult(
+            std::make_unique<BookStatsActivity>(renderer, mappedInput, epub->getTitle(), displayStats, globalStats),
+            [this](const ActivityResult&) { requestUpdate(); });
+      }
       break;
     }
     case EpubReaderMenuActivity::MenuAction::TOGGLE_COMPLETED: {
