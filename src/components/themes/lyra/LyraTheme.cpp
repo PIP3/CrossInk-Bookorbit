@@ -379,13 +379,13 @@ void LyraTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
                                 const char* btn4, const bool allowInvertedText) const {
   const GfxRenderer::Orientation orig_orientation = renderer.getOrientation();
   const bool invertText = allowInvertedText && orig_orientation == GfxRenderer::Orientation::PortraitInverted;
-  renderer.setOrientation(invertText ? GfxRenderer::Orientation::PortraitInverted : GfxRenderer::Orientation::Portrait);
+  renderer.setOrientation(GfxRenderer::Orientation::Portrait);
 
   const int pageHeight = renderer.getScreenHeight();
   constexpr int buttonWidth = 80;
   constexpr int smallButtonHeight = 15;
   constexpr int buttonHeight = LyraMetrics::values.buttonHintsHeight;
-  const int buttonY = invertText ? pageHeight : LyraMetrics::values.buttonHintsHeight;
+  constexpr int buttonY = LyraMetrics::values.buttonHintsHeight;
   constexpr int textYOffset = 7;  // Distance from top of button to text baseline
   // X3 has wider screen in portrait (528 vs 480), use more spacing
   constexpr int x4ButtonPositions[] = {58, 146, 254, 342};
@@ -394,21 +394,30 @@ void LyraTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
   const char* labels[] = {btn1, btn2, btn3, btn4};
 
   for (int i = 0; i < 4; i++) {
-    const int x = buttonPositions[invertText ? 3 - i : i];
+    const int x = buttonPositions[i];
     if (labels[i] != nullptr && labels[i][0] != '\0') {
       // Draw the filled background and border for a FULL-sized button
       renderer.fillRoundedRect(x, pageHeight - buttonY, buttonWidth, buttonHeight, cornerRadius, Color::White);
       renderer.drawRoundedRect(x, pageHeight - buttonY, buttonWidth, buttonHeight, 1, cornerRadius, true, true, false,
                                false, true);
-      const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, labels[i]);
-      const int textX = x + (buttonWidth - 1 - textWidth) / 2;
-      renderer.drawText(SMALL_FONT_ID, textX, pageHeight - buttonY + textYOffset, labels[i]);
     } else {
       // Draw the filled background and border for a SMALL-sized button
-      const int smallButtonY = invertText ? 0 : pageHeight - smallButtonHeight;
+      const int smallButtonY = pageHeight - smallButtonHeight;
       renderer.fillRoundedRect(x, smallButtonY, buttonWidth, smallButtonHeight, cornerRadius, Color::White);
       renderer.drawRoundedRect(x, smallButtonY, buttonWidth, smallButtonHeight, 1, cornerRadius, true, true, false,
                                false, true);
+    }
+  }
+
+  renderer.setOrientation(invertText ? GfxRenderer::Orientation::PortraitInverted : GfxRenderer::Orientation::Portrait);
+  const int textY = invertText ? textYOffset : pageHeight - buttonY + textYOffset;
+
+  for (int i = 0; i < 4; i++) {
+    if (labels[i] != nullptr && labels[i][0] != '\0') {
+      const int x = buttonPositions[invertText ? 3 - i : i];
+      const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, labels[i]);
+      const int textX = x + (buttonWidth - 1 - textWidth) / 2;
+      renderer.drawText(SMALL_FONT_ID, textX, textY, labels[i]);
     }
   }
 
