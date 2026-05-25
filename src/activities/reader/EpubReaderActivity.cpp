@@ -83,10 +83,8 @@ int clampPercent(int percent) {
 
 bool isSnippetWhitespace(const std::string& word) {
   if (word.empty()) return true;
-  for (const char c : word) {
-    if (c != ' ' && c != '\r' && c != '\n' && c != '\t') return false;
-  }
-  return true;
+  return std::all_of(word.begin(), word.end(),
+                     [](const char c) { return c == ' ' || c == '\r' || c == '\n' || c == '\t'; });
 }
 
 void buildBookmarkSnippet(const Page& page, char* out, const size_t outSize) {

@@ -40,7 +40,7 @@ void renderBookStatsView(GfxRenderer& renderer, const MappedInputManager* mapped
 
   const int screenHeight = renderer.getScreenHeight();
   const int buttonHintsReserve = showButtonHints ? metrics.buttonHintsHeight : 0;
-  const int cardGap = compactLayout ? metrics.verticalSpacing : metrics.verticalSpacing;
+  const int cardGap = metrics.verticalSpacing;
   int cardTitleH = 40;
   int cellH = 90;
   if (compactLayout) {
