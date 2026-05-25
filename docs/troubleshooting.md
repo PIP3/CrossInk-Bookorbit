@@ -219,7 +219,7 @@ For nearby stats sync behavior and manual cleanup of `/.crosspoint/synced_stats/
 
 If a file downloads fully but validation fails, that is different from a WiFi problem. The release asset or installed build variant may not match what the device expects.
 
-## When to Report a Bug
+## When Reporting a Bug
 
 Please include:
 

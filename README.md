@@ -23,30 +23,28 @@ My goal with this fork was to maintain the core Crosspoint firmware while integr
 
 ### Highlights
 
-- New reader fonts: ChareInk, Lexend Deca, and Bitter
-- Unicode emoji and miscellaneous symbols support (a limited subset)
+- New reader fonts: ChareInk, Lexend Deca, and Bitter.
+- Unicode emoji and miscellaneous symbols support (a limited subset).
 - Adjusted font sizes: Teensy (8pt), Itty Bitty (9pt), Tiny (10pt), Small (12pt), Medium (14pt), Large (16pt), Extra Large (18pt), Huge (20pt). See [Font Sizes](#font-sizes) for more details.
-- Added ~~strikethrough~~ support
-- Made <u>underlines</u> thicker for better visibility
+- Added ~~strikethrough~~ support.
+- Made <u>underlines</u> thicker for better visibility.
 - Added a custom `Minimal` theme and sleep screen option for the minimalists out there.
-- Added support for `<hr>` section breaks
-- Added support for "redaction" style rendering
-- Added improved support for tables with simple markup
-- Added ability to add bookmarks
-- Added ability to remap front buttons that only applies in the reader
-- Added Bionic Reading and Guide Dots as optional reader modes
-- Added Force Paragraph Indents for books that render as one giant wall of text
-- Added ability to pin a sleep image as a favorite. The favorited image will always be displayed when your sleep settings are set to `Custom` or `Cover + Custom` (when no cover is available). Do this from the file browser and long-press the menu button to access the option.
-- Added more in-reader control remapping options for side buttons, short power button clicks, and long-press menu actions
+- Added support for `<hr>` section breaks.
+- Added support for "redaction" style rendering.
+- Added improved support for tables with simple markup.
+- Added ability to add bookmarks.
+- Added ability to remap front buttons that only applies in the reader.
+- Added Bionic Reading and Guide Dots as optional reader modes.
+- Added Force Paragraph Indents for books that render as one giant wall of text.
+- Added ability to pin a sleep image as a favorite. The favorited image will always be displayed when your sleep settings are set to `Custom` or `Cover + Custom` (when no cover is available).
+- Added more in-reader control remapping options for side buttons, short power button clicks, and long-press menu actions.
 - Added ability to mark a book as finished from the in-book menu. A pop-up will also display once 99% of the book is reached. This status allows tracking of total books read.
-- Added ability to move finished books to "Read" folder
-  - To turn this on, go to Settings > System > Move finished books to Read folder. Once a book is marked as finished, the book will be moved to the folder when the book is closed.
-- In-book menu to quickly adjust reader options without having to exit the book
+- Added ability to move finished books to "Read" folder.
+- In-book menu to quickly adjust reader options without having to exit the book.
 - Reading stats: total books read, total reading time, number of sessions, pages turned, average session time, pages turned per minute. You can also set your reading stats as your sleep screen.
-- Added customizable Auto Page Turn Interval (anything between 5-120 seconds)
-- Added ability to view Recent Books as a 3x3 grid view
-- Added ability to install custom fonts on the SD card
-- Device simulator during development
+- Reading stats [syncing](./docs/reading-stats-sync.md) between two devices.
+- Added customizable Auto Page Turn Interval (anything between 5-120 seconds).
+- Added ability to view Recent Books as a 3x3 grid view.
 - To view a more detailed list for each version, visit the [releases](https://github.com/uxjulia/CrossInk/releases) page to read release notes.
 
 ---
@@ -123,8 +121,6 @@ Reader settings (font, size, line spacing, margins, alignment, etc.) are now acc
 
 This feature will bold the initial letters or parts of words, creating "artificial fixation points" that can make it easier to let your brain fill in the rest of the word without having to focus on every letter. You can toggle it from **Reader settings**.
 
-This was merged from [CrossPoint PR 1670](https://github.com/crosspoint-reader/crosspoint-reader/pull/1670).
-
 ### Guide Dots
 
 This feature adds small dots between every word. The idea comes from the book [Speed Reading: Learn to Read a 200+ Page Book in 1 Hour](https://amzn.to/4mOPSJo): by focusing on the space between words instead of the words themselves, your peripheral vision can pick up more of the text. You can toggle it from **Reader settings**.
@@ -199,7 +195,7 @@ Some simple per-book reading stats are tracked automatically and displayed in tw
 
 ### Language Support
 
-- Added language support for Vietnamese. This addresses [issue #34](https://github.com/uxjulia/CrossInk/issues/34).
+- Added language support for Vietnamese.
 
 ---
 
