@@ -2,6 +2,7 @@
 
 #include <Print.h>
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -29,13 +30,18 @@ class Epub {
   std::unique_ptr<CssParser> cssParser;
   // CSS files
   std::vector<std::string> cssFiles;
+  enum class CssParseStatus : uint8_t {
+    Failed,
+    Partial,
+    Complete,
+  };
 
   void migrateLegacyCachePath(const std::string& cacheDir) const;
   bool findContentOpfFile(std::string* contentOpfFile) const;
   bool parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, bool writeSpineEntries = true);
   bool parseTocNcxFile() const;
   bool parseTocNavFile() const;
-  bool parseCssFiles(bool forceRebuild = false) const;
+  CssParseStatus parseCssFiles(bool forceRebuild = false) const;
 
  public:
   explicit Epub(std::string filepath, const std::string& cacheDir);

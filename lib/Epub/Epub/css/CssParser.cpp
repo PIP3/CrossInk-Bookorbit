@@ -923,39 +923,42 @@ bool CssParser::saveToCache(const bool complete) const {
     return false;
   }
 
+  bool writeOk = true;
+  auto writeBytes = [&file, &writeOk](const void* data, const size_t len) -> bool {
+    if (!writeOk) return false;
+    if (len == 0) return true;
+    if (file.write(reinterpret_cast<const uint8_t*>(data), len) != len) {
+      writeOk = false;
+    }
+    return writeOk;
+  };
+  auto writeByte = [&writeBytes](const uint8_t value) -> bool { return writeBytes(&value, sizeof(value)); };
+
   // Write header
   const uint32_t magic = CssParser::CSS_CACHE_MAGIC;
-  file.write(reinterpret_cast<const uint8_t*>(&magic), sizeof(magic));
-  file.write(CssParser::CSS_CACHE_VERSION);
-  file.write(static_cast<uint8_t>(complete ? 0 : CSS_CACHE_FLAG_PARTIAL));
+  writeBytes(&magic, sizeof(magic));
+  writeByte(CssParser::CSS_CACHE_VERSION);
+  writeByte(static_cast<uint8_t>(complete ? 0 : CSS_CACHE_FLAG_PARTIAL));
 
   // Write rule count
   const auto ruleCount = static_cast<uint16_t>(rulesBySelector_.size());
-  file.write(reinterpret_cast<const uint8_t*>(&ruleCount), sizeof(ruleCount));
+  writeBytes(&ruleCount, sizeof(ruleCount));
 
-  auto writeLength = [&file](const CssLength& len) {
-    file.write(reinterpret_cast<const uint8_t*>(&len.value), sizeof(len.value));
-    file.write(static_cast<uint8_t>(len.unit));
+  auto writeLength = [&writeBytes, &writeByte](const CssLength& len) -> bool {
+    return writeBytes(&len.value, sizeof(len.value)) && writeByte(static_cast<uint8_t>(len.unit));
   };
 
-  auto writeStyle = [&](const CssStyle& style) {
-    file.write(static_cast<uint8_t>(style.textAlign));
-    file.write(static_cast<uint8_t>(style.fontStyle));
-    file.write(static_cast<uint8_t>(style.fontWeight));
-    file.write(static_cast<uint8_t>(style.textDecoration));
-    writeLength(style.textIndent);
-    writeLength(style.marginTop);
-    writeLength(style.marginBottom);
-    writeLength(style.marginLeft);
-    writeLength(style.marginRight);
-    writeLength(style.paddingTop);
-    writeLength(style.paddingBottom);
-    writeLength(style.paddingLeft);
-    writeLength(style.paddingRight);
-    writeLength(style.imageHeight);
-    writeLength(style.imageWidth);
-    file.write(static_cast<uint8_t>(style.display));
-    file.write(static_cast<uint8_t>(style.backgroundBlack ? 1 : 0));
+  auto writeStyle = [&](const CssStyle& style) -> bool {
+    if (!writeByte(static_cast<uint8_t>(style.textAlign)) || !writeByte(static_cast<uint8_t>(style.fontStyle)) ||
+        !writeByte(static_cast<uint8_t>(style.fontWeight)) || !writeByte(static_cast<uint8_t>(style.textDecoration)) ||
+        !writeLength(style.textIndent) || !writeLength(style.marginTop) || !writeLength(style.marginBottom) ||
+        !writeLength(style.marginLeft) || !writeLength(style.marginRight) || !writeLength(style.paddingTop) ||
+        !writeLength(style.paddingBottom) || !writeLength(style.paddingLeft) || !writeLength(style.paddingRight) ||
+        !writeLength(style.imageHeight) || !writeLength(style.imageWidth) ||
+        !writeByte(static_cast<uint8_t>(style.display)) ||
+        !writeByte(static_cast<uint8_t>(style.backgroundBlack ? 1 : 0))) {
+      return false;
+    }
     uint32_t definedBits = 0;
     if (style.defined.textAlign) definedBits |= 1 << 0;
     if (style.defined.fontStyle) definedBits |= 1 << 1;
@@ -974,28 +977,38 @@ bool CssParser::saveToCache(const bool complete) const {
     if (style.defined.imageWidth) definedBits |= 1 << 14;
     if (style.defined.display) definedBits |= 1 << 15;
     if (style.defined.backgroundBlack) definedBits |= 1 << 16;
-    file.write(reinterpret_cast<const uint8_t*>(&definedBits), sizeof(definedBits));
+    return writeBytes(&definedBits, sizeof(definedBits));
   };
 
   // Write each simple rule: selector string + CssStyle fields
   for (const auto& pair : rulesBySelector_) {
     const auto selectorLen = static_cast<uint16_t>(pair.first.size());
-    file.write(reinterpret_cast<const uint8_t*>(&selectorLen), sizeof(selectorLen));
-    file.write(reinterpret_cast<const uint8_t*>(pair.first.data()), selectorLen);
-    writeStyle(pair.second);
+    if (!writeBytes(&selectorLen, sizeof(selectorLen)) || !writeBytes(pair.first.data(), selectorLen) ||
+        !writeStyle(pair.second)) {
+      break;
+    }
   }
 
   // Write descendant rules: count, then (ancestorSelector, subjectSelector, CssStyle) per entry
   const auto descendantCount = static_cast<uint16_t>(descendantRules_.size());
-  file.write(reinterpret_cast<const uint8_t*>(&descendantCount), sizeof(descendantCount));
+  writeBytes(&descendantCount, sizeof(descendantCount));
   for (const auto& rule : descendantRules_) {
     const auto ancLen = static_cast<uint16_t>(rule.ancestorSelector.size());
-    file.write(reinterpret_cast<const uint8_t*>(&ancLen), sizeof(ancLen));
-    file.write(reinterpret_cast<const uint8_t*>(rule.ancestorSelector.data()), ancLen);
+    if (!writeBytes(&ancLen, sizeof(ancLen)) || !writeBytes(rule.ancestorSelector.data(), ancLen)) {
+      break;
+    }
     const auto subLen = static_cast<uint16_t>(rule.subjectSelector.size());
-    file.write(reinterpret_cast<const uint8_t*>(&subLen), sizeof(subLen));
-    file.write(reinterpret_cast<const uint8_t*>(rule.subjectSelector.data()), subLen);
-    writeStyle(rule.style);
+    if (!writeBytes(&subLen, sizeof(subLen)) || !writeBytes(rule.subjectSelector.data(), subLen) ||
+        !writeStyle(rule.style)) {
+      break;
+    }
+  }
+
+  if (!writeOk) {
+    LOG_ERR("CSS", "Failed to write temporary CSS cache");
+    file.close();
+    Storage.remove(tmpPath.c_str());
+    return false;
   }
 
   file.close();
