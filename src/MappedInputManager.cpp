@@ -8,16 +8,21 @@
 
 namespace {
 using ButtonIndex = uint8_t;
+constexpr ButtonIndex kNoButton = UINT8_MAX;
 
 struct SideLayoutMap {
-  ButtonIndex pageBack;
-  ButtonIndex pageForward;
+  ButtonIndex pageBackPrimary;
+  ButtonIndex pageBackSecondary;
+  ButtonIndex pageForwardPrimary;
+  ButtonIndex pageForwardSecondary;
 };
 
 // Order matches CrossPointSettings::SIDE_BUTTON_LAYOUT.
 constexpr SideLayoutMap kSideLayouts[] = {
-    {HalGPIO::BTN_UP, HalGPIO::BTN_DOWN},
-    {HalGPIO::BTN_DOWN, HalGPIO::BTN_UP},
+    {HalGPIO::BTN_UP, kNoButton, HalGPIO::BTN_DOWN, kNoButton},
+    {HalGPIO::BTN_DOWN, kNoButton, HalGPIO::BTN_UP, kNoButton},
+    {kNoButton, kNoButton, kNoButton, kNoButton},
+    {kNoButton, kNoButton, HalGPIO::BTN_UP, HalGPIO::BTN_DOWN},
 };
 
 bool isReaderLandscapeOrientation() {
@@ -78,9 +83,19 @@ ButtonIndex mapFrontButtonForReaderOrientation(const ButtonIndex button, const B
 
 SideLayoutMap mapSideLayoutForReaderOrientation(SideLayoutMap side, const bool readerMode) {
   if (readerMode && SETTINGS.sideButtonOrientationAware && isReaderLandscapeOrientation()) {
-    std::swap(side.pageBack, side.pageForward);
+    const bool hasPageBack = side.pageBackPrimary != kNoButton || side.pageBackSecondary != kNoButton;
+    const bool hasPageForward = side.pageForwardPrimary != kNoButton || side.pageForwardSecondary != kNoButton;
+    if (hasPageBack && hasPageForward) {
+      std::swap(side.pageBackPrimary, side.pageForwardPrimary);
+      std::swap(side.pageBackSecondary, side.pageForwardSecondary);
+    }
   }
   return side;
+}
+
+bool readMappedSideButtons(const HalGPIO& gpio, bool (HalGPIO::*fn)(uint8_t) const, const ButtonIndex primary,
+                           const ButtonIndex secondary) {
+  return (primary != kNoButton && (gpio.*fn)(primary)) || (secondary != kNoButton && (gpio.*fn)(secondary));
 }
 
 #ifdef SIMULATOR
@@ -123,10 +138,10 @@ bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint
       return (gpio.*fn)(HalGPIO::BTN_POWER);
     case Button::PageBack:
       // Reader page navigation uses side buttons and can be swapped via settings.
-      return (gpio.*fn)(side.pageBack);
+      return readMappedSideButtons(gpio, fn, side.pageBackPrimary, side.pageBackSecondary);
     case Button::PageForward:
       // Reader page navigation uses side buttons and can be swapped via settings.
-      return (gpio.*fn)(side.pageForward);
+      return readMappedSideButtons(gpio, fn, side.pageForwardPrimary, side.pageForwardSecondary);
   }
 
   return false;
