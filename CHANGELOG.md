@@ -9,6 +9,7 @@
 - Auto Page Turn interval now remembers the last selected interval per book when it is turned on again.
 - EPUB bookmarks now save a paragraph anchor and preview snippet when available, so they reopen closer to the original text after font, margin, or spacing changes and are easier to recognize in the bookmark list.
 - Added a separate tilt-to-turn direction setting with left-right and forward-back gesture options.
+- Added a per-server OPDS filename setting so downloaded books can be saved as either Author - Title or Title - Author.
 
 ### Fixed
 - Fixed inverted reader menus so front-button hint outlines keep the normal portrait shape while the labels stay readable in the inverted orientation.
