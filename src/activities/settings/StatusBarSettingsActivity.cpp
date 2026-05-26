@@ -4,6 +4,7 @@
 #include <HalClock.h>
 #include <I18n.h>
 
+#include <algorithm>
 #include <cstring>
 #include <memory>
 
@@ -220,12 +221,16 @@ void StatusBarSettingsActivity::render(RenderLock&&) {
   const int contentWidth = pageWidth - hintGutterWidth;
 
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
+  const int previewLabelLineHeight = renderer.getLineHeight(UI_10_FONT_ID);
+  const int previewStatusBarHeight = std::max(UITheme::getStatusBarHeight(), metrics.statusBarVerticalMargin);
+  const int previewSectionHeight =
+      previewLabelLineHeight * 3 + previewStatusBarHeight * 2 + metrics.verticalSpacing * 2;
+  const int contentHeight =
+      pageHeight - contentTop - metrics.buttonHintsHeight - previewSectionHeight - metrics.verticalSpacing * 2;
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_TOGGLE), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
 
-  int verticalPreviewPadding = 50;
-  int verticalPreviewTextPadding = 40;
+  int bottomPreviewPadding = metrics.buttonHintsHeight + metrics.verticalSpacing;
 
   GUI.drawHeader(renderer, Rect{contentX, metrics.topPadding, contentWidth, metrics.headerHeight},
                  tr(STR_CUSTOMISE_STATUS_BAR));
@@ -278,17 +283,23 @@ void StatusBarSettingsActivity::render(RenderLock&&) {
   }
 
   if (isLandscapeCw || isLandscapeCcw || isInverted) {
-    verticalPreviewPadding = 0;
+    bottomPreviewPadding = 0;
   }
 
   const char* timeLeftPreview =
       SETTINGS.statusBarTimeLeft != CrossPointSettings::STATUS_BAR_TIME_LEFT::TIME_LEFT_HIDE ? "1h 20m" : nullptr;
-  GUI.drawStatusBar(renderer, 75, 8, 32, title, verticalPreviewPadding, 0, false, timeLeftPreview);
+  const int previewX = contentX + metrics.contentSidePadding;
+  const int bottomPreviewTop = pageHeight - UITheme::getStatusBarHeight() - bottomPreviewPadding;
+  const int bottomLabelY = bottomPreviewTop - previewLabelLineHeight - 10;
+  const int topPreviewTop = bottomLabelY - previewStatusBarHeight - metrics.verticalSpacing;
+  const int topLabelY = topPreviewTop - previewLabelLineHeight - 5;
+  const int previewLabelY = topLabelY - previewLabelLineHeight - 5;
 
-  renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding,
-                    renderer.getScreenHeight() - UITheme::getInstance().getStatusBarHeight() - verticalPreviewPadding -
-                        verticalPreviewTextPadding,
-                    tr(STR_PREVIEW));
+  renderer.drawText(UI_10_FONT_ID, previewX, previewLabelY, tr(STR_PREVIEW));
+  renderer.drawText(UI_10_FONT_ID, previewX, topLabelY, tr(STR_TOP), true, EpdFontFamily::BOLD);
+  GUI.drawTopStatusBarClock(renderer, topPreviewTop, SETTINGS.clockFormat == 1 ? "12:34 PM" : "12:34");
+  renderer.drawText(UI_10_FONT_ID, previewX, bottomLabelY, tr(STR_BOTTOM), true, EpdFontFamily::BOLD);
+  GUI.drawStatusBar(renderer, 75, 8, 32, title, bottomPreviewPadding, 0, false, timeLeftPreview);
 
   renderer.displayBuffer();
 }

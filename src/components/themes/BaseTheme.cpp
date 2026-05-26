@@ -852,14 +852,21 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
   }
 }
 
-void BaseTheme::drawTopStatusBarClock(GfxRenderer& renderer) const {
-  if (!SETTINGS.statusBarClock || !halClock.isAvailable()) {
+void BaseTheme::drawTopStatusBarClock(GfxRenderer& renderer, int topY, const char* previewTime) const {
+  if (!SETTINGS.statusBarClock) {
     return;
   }
 
   char timeBuf[9];
-  if (!halClock.formatTime(timeBuf, sizeof(timeBuf), SETTINGS.clockUtcOffsetQ, SETTINGS.clockFormat == 1)) {
-    return;
+  const char* timeText = previewTime;
+  if (timeText == nullptr) {
+    if (!halClock.isAvailable()) {
+      return;
+    }
+    if (!halClock.formatTime(timeBuf, sizeof(timeBuf), SETTINGS.clockUtcOffsetQ, SETTINGS.clockFormat == 1)) {
+      return;
+    }
+    timeText = timeBuf;
   }
 
   const auto& metrics = UITheme::getInstance().getMetrics();
@@ -875,11 +882,11 @@ void BaseTheme::drawTopStatusBarClock(GfxRenderer& renderer) const {
   (void)orientedMarginBottom;
   (void)orientedMarginLeft;
 
-  const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, timeBuf);
+  const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, timeText);
   const int lineHeight = renderer.getLineHeight(SMALL_FONT_ID);
   const int textX = (renderer.getScreenWidth() - textWidth) / 2;
-  const int textY = orientedMarginTop + (statusBarHeight - lineHeight) / 2;
-  renderer.drawText(SMALL_FONT_ID, textX, textY, timeBuf);
+  const int textY = (topY >= 0 ? topY : orientedMarginTop) + (statusBarHeight - lineHeight) / 2;
+  renderer.drawText(SMALL_FONT_ID, textX, textY, timeText);
 }
 
 void BaseTheme::drawHelpText(const GfxRenderer& renderer, Rect rect, const char* label) const {

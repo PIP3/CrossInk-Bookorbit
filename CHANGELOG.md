@@ -16,6 +16,7 @@
 
 ### Changed
 - Moved the X3 reader clock from the bottom status bar into a new top-centered status bar.
+- Updated the Customise Status Bar preview to show separate top and bottom status bar examples.
 - Improved OPDS and font download responsiveness by reducing progress-update overhead and temporarily disabling WiFi power saving during transfers.
 - Book selection now shows a loading popup before EPUB indexing or cache loading begins.
 
