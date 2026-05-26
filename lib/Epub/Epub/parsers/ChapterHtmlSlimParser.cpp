@@ -10,6 +10,7 @@
 #include <XmlParserUtils.h>
 #include <expat.h>
 
+#include <algorithm>
 #include <cstdlib>
 #include <iterator>
 #include <new>
@@ -29,6 +30,9 @@ constexpr uint32_t MIN_MAX_ALLOC_FOR_TEXT_LAYOUT = 32 * 1024;
 constexpr uint32_t MIN_FREE_HEAP_FOR_TABLE_BUFFERING = 64 * 1024;
 constexpr uint32_t MIN_MAX_ALLOC_FOR_TABLE_BUFFERING = 40 * 1024;
 constexpr size_t MAX_BUFFERED_WORDS_BEFORE_LAYOUT = 350;
+constexpr uint8_t INITIAL_PAGE_ELEMENT_RESERVE = 8;
+constexpr uint8_t INITIAL_TABLE_FRAGMENT_ROW_RESERVE = 8;
+constexpr uint32_t PAGE_ELEMENT_RESERVE_MIN_MAX_ALLOC = 1024;
 
 static constexpr const char* const HEADER_TAGS[] = {"h1", "h2", "h3", "h4", "h5", "h6"};
 static constexpr const char* const BLOCK_TAGS[] = {"p", "li", "div", "br", "blockquote"};
@@ -133,6 +137,23 @@ bool ChapterHtmlSlimParser::shouldAbortForLowMemory(const char* stage) {
   LOG_ERR("EHP", "Low heap during %s (%u free, %u max alloc); aborting section build", stage, heap.freeHeap,
           heap.maxAllocHeap);
   lowMemoryAbort = true;
+  return true;
+}
+
+bool ChapterHtmlSlimParser::startNewPage(const char* reason) {
+  currentPage.reset(new (std::nothrow) Page());
+  if (!currentPage) {
+    const auto heap = MemoryBudget::snapshot();
+    LOG_ERR("EHP", "Failed to create page during %s (%u free, %u max alloc)", reason, heap.freeHeap, heap.maxAllocHeap);
+    lowMemoryAbort = true;
+    return false;
+  }
+
+  const auto heap = MemoryBudget::snapshot();
+  if (heap.freeHeap >= MIN_FREE_HEAP_FOR_TEXT_LAYOUT && heap.maxAllocHeap >= PAGE_ELEMENT_RESERVE_MIN_MAX_ALLOC) {
+    currentPage->elements.reserve(INITIAL_PAGE_ELEMENT_RESERVE);
+  }
+  currentPageNextY = 0;
   return true;
 }
 
@@ -284,12 +305,9 @@ void ChapterHtmlSlimParser::emitHorizontalRule(const BlockStyle& blockStyle) {
   }
 
   if (!currentPage) {
-    currentPage.reset(new (std::nothrow) Page());
-    if (!currentPage) {
-      LOG_ERR("EHP", "Failed to create page for horizontal rule");
+    if (!startNewPage("horizontal rule")) {
       return;
     }
-    currentPageNextY = 0;
   }
 
   const int16_t lineHeight = static_cast<int16_t>(renderer.getLineHeight(fontId) * lineCompression + 0.5f);
@@ -310,12 +328,9 @@ void ChapterHtmlSlimParser::emitHorizontalRule(const BlockStyle& blockStyle) {
   if (!currentPage->elements.empty() && currentPageNextY + totalHeight > viewportHeight) {
     completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex);
     completedPageCount++;
-    currentPage.reset(new (std::nothrow) Page());
-    if (!currentPage) {
-      LOG_ERR("EHP", "Failed to create page after horizontal-rule page break");
+    if (!startNewPage("horizontal-rule page break")) {
       return;
     }
-    currentPageNextY = 0;
   }
 
   currentPageNextY += topSpacing;
@@ -337,8 +352,9 @@ void ChapterHtmlSlimParser::emitHorizontalRule(const BlockStyle& blockStyle) {
 
 void ChapterHtmlSlimParser::emitBufferedTableAsParagraphs(BufferedTable& table) {
   if (!currentPage) {
-    currentPage.reset(new Page());
-    currentPageNextY = 0;
+    if (!startNewPage("table paragraph fallback")) {
+      return;
+    }
   }
 
   if (table.blockStyle.marginTop > 0) {
@@ -399,8 +415,9 @@ void ChapterHtmlSlimParser::emitBufferedTableAsFragments(BufferedTable& table) {
   };
 
   if (!currentPage) {
-    currentPage.reset(new Page());
-    currentPageNextY = 0;
+    if (!startNewPage("table fragments")) {
+      return;
+    }
   }
 
   const int horizontalInset = table.blockStyle.totalHorizontalInset();
@@ -516,12 +533,14 @@ void ChapterHtmlSlimParser::emitBufferedTableAsFragments(BufferedTable& table) {
     size_t nextRowIndex = 0;
     while (nextRowIndex < segment.rows.size()) {
       if (!currentPage) {
-        currentPage.reset(new Page());
-        currentPageNextY = 0;
+        if (!startNewPage("table fragment continuation")) {
+          return;
+        }
       }
 
       std::vector<TableFragmentRow> fragmentRows;
       std::vector<FootnoteEntry> fragmentFootnotes;
+      fragmentRows.reserve(std::min<size_t>(segment.rows.size() - nextRowIndex, INITIAL_TABLE_FRAGMENT_ROW_RESERVE));
       uint16_t fragmentHeight = 1;  // Bottom border.
 
       while (nextRowIndex < segment.rows.size()) {
@@ -533,8 +552,9 @@ void ChapterHtmlSlimParser::emitBufferedTableAsFragments(BufferedTable& table) {
         if (fragmentRows.empty() && currentPageNextY + nextHeight > viewportHeight && !currentPage->elements.empty()) {
           completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex);
           completedPageCount++;
-          currentPage.reset(new Page());
-          currentPageNextY = 0;
+          if (!startNewPage("table fragment page break")) {
+            return;
+          }
           continue;
         }
 
@@ -564,8 +584,9 @@ void ChapterHtmlSlimParser::emitBufferedTableAsFragments(BufferedTable& table) {
       if (nextRowIndex < segment.rows.size()) {
         completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex);
         completedPageCount++;
-        currentPage.reset(new Page());
-        currentPageNextY = 0;
+        if (!startNewPage("table fragment split")) {
+          return;
+        }
       }
     }
   }
@@ -1072,19 +1093,13 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                     self->completePageFn(std::move(self->currentPage), self->xpathParagraphIndex,
                                          self->xpathListItemIndex);
                     self->completedPageCount++;
-                    self->currentPage.reset(new (std::nothrow) Page());
-                    if (!self->currentPage) {
-                      LOG_ERR("EHP", "Failed to create new page");
+                    if (!self->startNewPage("image page break")) {
                       return;
                     }
-                    self->currentPageNextY = 0;
                   } else if (!self->currentPage) {
-                    self->currentPage.reset(new (std::nothrow) Page());
-                    if (!self->currentPage) {
-                      LOG_ERR("EHP", "Failed to create initial page");
+                    if (!self->startNewPage("image page")) {
                       return;
                     }
-                    self->currentPageNextY = 0;
                   }
 
                   self->currentPageNextY += imageMarginTop;
@@ -1948,18 +1963,24 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
 }
 
 void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
+  if (lowMemoryAbort) {
+    return;
+  }
+
   const int lineHeight = renderer.getLineHeight(fontId) * lineCompression;
 
   if (!currentPage) {
-    currentPage.reset(new Page());
-    currentPageNextY = 0;
+    if (!startNewPage("line layout")) {
+      return;
+    }
   }
 
   if (currentPageNextY + lineHeight > viewportHeight) {
     completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex);
     completedPageCount++;
-    currentPage.reset(new Page());
-    currentPageNextY = 0;
+    if (!startNewPage("line page break")) {
+      return;
+    }
   }
 
   // Track cumulative words to assign footnotes to the page containing their anchor
@@ -1988,8 +2009,9 @@ void ChapterHtmlSlimParser::makePages() {
   }
 
   if (!currentPage) {
-    currentPage.reset(new Page());
-    currentPageNextY = 0;
+    if (!startNewPage("page layout")) {
+      return;
+    }
   }
 
   const int lineHeight = renderer.getLineHeight(fontId) * lineCompression;
@@ -2011,6 +2033,9 @@ void ChapterHtmlSlimParser::makePages() {
   currentTextBlock->layoutAndExtractLines(
       renderer, fontId, effectiveWidth,
       [this](const std::shared_ptr<TextBlock>& textBlock) { addLineToPage(textBlock); });
+  if (lowMemoryAbort) {
+    return;
+  }
 
   // Fallback: transfer any remaining pending footnotes to current page.
   // Normally addLineToPage handles this via word-index tracking, but this catches

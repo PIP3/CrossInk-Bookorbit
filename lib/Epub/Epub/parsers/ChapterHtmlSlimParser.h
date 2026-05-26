@@ -132,6 +132,7 @@ class ChapterHtmlSlimParser {
 
   void updateEffectiveInlineStyle();
   bool shouldAbortForLowMemory(const char* stage);
+  bool startNewPage(const char* reason);
   void startNewTextBlock(const BlockStyle& blockStyle);
   void flushPartWordBuffer();
   void makePages();

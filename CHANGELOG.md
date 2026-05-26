@@ -7,6 +7,7 @@
 - Added nearby Reading Stats sync between CrossInk readers using direct ESP-NOW device-to-device messages.
 - Reading Stats now separates this device's totals from all-device totals when synced stats are available.
 - Auto Page Turn interval now remembers the last selected interval per book when it is turned on again.
+- Added EPUB render heap diagnostics that include the largest allocatable block, not just total free heap.
 - EPUB bookmarks now save a paragraph anchor and preview snippet when available, so they reopen closer to the original text after font, margin, or spacing changes and are easier to recognize in the bookmark list.
 - Added a separate tilt-to-turn direction setting with left-right and forward-back gesture options.
 - Added a per-server OPDS filename setting so downloaded books can be saved as either Author - Title or Title - Author.
@@ -27,6 +28,7 @@
 - Fixed EPUB table fallback rendering so temporary table-layout data is released before low-memory text layout aborts.
 - Reduced EPUB memory pressure with SD-card fonts by skipping silent next-chapter indexing and releasing optional font caches after chapter indexing.
 - EPUB chapters that run out of memory with an SD-card font now retry with the selected built-in font instead of failing to open.
+- Reduced EPUB pagination heap churn and made page allocation failures stop cleanly instead of risking a reboot.
 
 ### Changed
 

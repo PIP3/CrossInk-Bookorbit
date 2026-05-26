@@ -10,7 +10,6 @@
 #include <I18n.h>
 #include <Logging.h>
 #include <MemoryBudget.h>
-#include <esp_system.h>
 
 #include <algorithm>
 #include <cstring>
@@ -53,6 +52,13 @@ constexpr int MAX_PAGE_LOAD_RETRIES = 3;
 constexpr uint8_t READER_SETTINGS_FILE_VERSION = 1;
 constexpr char READER_SETTINGS_FILE_NAME[] = "/reader_settings.bin";
 constexpr char FALLBACK_FONT_SECTION_CACHE_SUFFIX[] = "_fallback_font";
+
+uint8_t largestBlockPercent(const MemoryBudget::HeapSnapshot& heap) {
+  if (heap.freeHeap == 0) {
+    return 0;
+  }
+  return static_cast<uint8_t>(std::min<uint32_t>(100, (heap.maxAllocHeap * 100U) / heap.freeHeap));
+}
 
 void drawToastBuffer(const GfxRenderer& renderer, const char* msg) {
   constexpr int toastPadX = 20;
@@ -1893,18 +1899,21 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int fo
   // Font prewarm: scan pass accumulates text, then prewarm, then real render
   auto* fcm = renderer.getFontCacheManager();
   fcm->resetStats();
-  const uint32_t heapBefore = esp_get_free_heap_size();
+  const auto heapBefore = MemoryBudget::snapshot();
   auto scope = fcm->createPrewarmScope();
   page->renderText(renderer, fontId, orientedMarginLeft, orientedMarginTop);  // scan pass
   scope.endScanAndPrewarm();
-  const uint32_t heapAfter = esp_get_free_heap_size();
+  const auto heapAfter = MemoryBudget::snapshot();
   fcm->logStats("prewarm");
   const auto tPrewarm = millis();
 
-  LOG_DBG("ERS", "Heap: before=%lu after=%lu delta=%ld", heapBefore, heapAfter,
-          (int32_t)heapAfter - (int32_t)heapBefore);
-  (void)heapBefore;
-  (void)heapAfter;
+  LOG_DBG(
+      "ERS", "Heap prewarm: free=%u->%u delta=%ld maxAlloc=%u->%u delta=%ld largestPct=%u->%u", heapBefore.freeHeap,
+      heapAfter.freeHeap,
+      static_cast<long>(static_cast<int32_t>(heapAfter.freeHeap) - static_cast<int32_t>(heapBefore.freeHeap)),
+      heapBefore.maxAllocHeap, heapAfter.maxAllocHeap,
+      static_cast<long>(static_cast<int32_t>(heapAfter.maxAllocHeap) - static_cast<int32_t>(heapBefore.maxAllocHeap)),
+      largestBlockPercent(heapBefore), largestBlockPercent(heapAfter));
 
   const bool pageHasImages = page->hasImages();
   const bool needsImageGrayscale = pageHasImages;
@@ -1976,12 +1985,10 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int fo
   const auto tDisplay = millis();
 
   // Save bw buffer to reset buffer state after grayscale data sync
-  const uint32_t bwStoreHeapBefore = esp_get_free_heap_size();
+  const auto bwStoreHeapBefore = MemoryBudget::snapshot();
   const bool storedBwBuffer = renderer.storeBwBuffer();
-  const uint32_t bwStoreHeapAfter = esp_get_free_heap_size();
+  const auto bwStoreHeapAfter = MemoryBudget::snapshot();
   const auto tBwStore = millis();
-  (void)bwStoreHeapBefore;
-  (void)bwStoreHeapAfter;
   const bool canApplyGrayscale = needsAnyGrayscale && storedBwBuffer;
   if (needsAnyGrayscale && !storedBwBuffer) {
     LOG_ERR("ERS", "Skipping grayscale enhancement: failed to store BW backup");
@@ -2021,11 +2028,17 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int fo
     const auto tEnd = millis();
     LOG_DBG("ERS",
             "Page render: prewarm=%lums bw_render=%lums display=%lums bw_store=%lums bw_store_ok=%d "
-            "bw_store_heap_before=%lu bw_store_heap_after=%lu bw_store_heap_delta=%ld "
+            "bw_store_free=%u->%u delta=%ld bw_store_maxAlloc=%u->%u delta=%ld bw_store_largestPct=%u->%u "
             "gray_lsb=%lums gray_msb=%lums gray_display=%lums bw_restore=%lums total=%lums",
             tPrewarm - t0, tBwRender - tPrewarm, tDisplay - tBwRender, tBwStore - tDisplay, storedBwBuffer,
-            bwStoreHeapBefore, bwStoreHeapAfter, (int32_t)bwStoreHeapAfter - (int32_t)bwStoreHeapBefore,
-            tGrayLsb - tBwStore, tGrayMsb - tGrayLsb, tGrayDisplay - tGrayMsb, tBwRestore - tGrayDisplay, tEnd - t0);
+            bwStoreHeapBefore.freeHeap, bwStoreHeapAfter.freeHeap,
+            static_cast<long>(static_cast<int32_t>(bwStoreHeapAfter.freeHeap) -
+                              static_cast<int32_t>(bwStoreHeapBefore.freeHeap)),
+            bwStoreHeapBefore.maxAllocHeap, bwStoreHeapAfter.maxAllocHeap,
+            static_cast<long>(static_cast<int32_t>(bwStoreHeapAfter.maxAllocHeap) -
+                              static_cast<int32_t>(bwStoreHeapBefore.maxAllocHeap)),
+            largestBlockPercent(bwStoreHeapBefore), largestBlockPercent(bwStoreHeapAfter), tGrayLsb - tBwStore,
+            tGrayMsb - tGrayLsb, tGrayDisplay - tGrayMsb, tBwRestore - tGrayDisplay, tEnd - t0);
   } else {
     if (storedBwBuffer) {
       // Restore the BW data when we skipped grayscale entirely.
@@ -2036,11 +2049,17 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int fo
     const auto tEnd = millis();
     LOG_DBG("ERS",
             "Page render: prewarm=%lums bw_render=%lums display=%lums bw_store=%lums bw_store_ok=%d "
-            "bw_store_heap_before=%lu bw_store_heap_after=%lu bw_store_heap_delta=%ld "
+            "bw_store_free=%u->%u delta=%ld bw_store_maxAlloc=%u->%u delta=%ld bw_store_largestPct=%u->%u "
             "bw_restore=%lums total=%lums",
             tPrewarm - t0, tBwRender - tPrewarm, tDisplay - tBwRender, tBwStore - tDisplay, storedBwBuffer,
-            bwStoreHeapBefore, bwStoreHeapAfter, (int32_t)bwStoreHeapAfter - (int32_t)bwStoreHeapBefore,
-            tBwRestore - tBwStore, tEnd - t0);
+            bwStoreHeapBefore.freeHeap, bwStoreHeapAfter.freeHeap,
+            static_cast<long>(static_cast<int32_t>(bwStoreHeapAfter.freeHeap) -
+                              static_cast<int32_t>(bwStoreHeapBefore.freeHeap)),
+            bwStoreHeapBefore.maxAllocHeap, bwStoreHeapAfter.maxAllocHeap,
+            static_cast<long>(static_cast<int32_t>(bwStoreHeapAfter.maxAllocHeap) -
+                              static_cast<int32_t>(bwStoreHeapBefore.maxAllocHeap)),
+            largestBlockPercent(bwStoreHeapBefore), largestBlockPercent(bwStoreHeapAfter), tBwRestore - tBwStore,
+            tEnd - t0);
   }
 }
 
