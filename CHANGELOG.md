@@ -11,6 +11,7 @@
 - Separate tilt-to-turn direction setting with left-right and forward-back gesture options.
 - Per-server OPDS filename setting so downloaded books can be saved as either Author - Title or Title - Author.
 - Optional EPUB chapter and book time-left estimates using a persisted per-book reading pace.
+- EPUB superscript and subscript rendering for `<sup>`, `<sub>`, and CSS `vertical-align: super/sub`.
 
 ### Changed
 - Moved the X3 reader clock from the bottom status bar into a new top-centered status bar.

@@ -73,6 +73,10 @@ Version 1 files are still readable. They are 13 bytes long and do not include
 
 ## `book.bin`
 
+### Version 9
+
+Keeps the Crossink-owned cache magic and aligns with the upstream metadata cache invalidation level. No binary layout fields changed from version 6.
+
 ### Version 6
 
 Adds a Crossink-owned cache magic before the version byte so `book.bin` files written by upstream CrossPoint or other forks are rejected and rebuilt instead of being parsed as compatible Crossink metadata caches.
@@ -86,7 +90,7 @@ import std.core;
 
 // === Configuration ===
 #define EXPECTED_MAGIC 0x425843FF
-#define EXPECTED_VERSION 6
+#define EXPECTED_VERSION 9
 #define MAX_STRING_LENGTH 65535
 
 // === String Structure ===
@@ -197,6 +201,10 @@ Binary layout:
 
 ## `section.bin`
 
+### Version 38
+
+Invalidates cached EPUB section files after adding superscript and subscript rendering. No binary layout fields changed from version 37; cached pages need rebuilding so affected words carry the new style bits and layout widths.
+
 ### Version 36
 
 Adds a per-`TextBlock` Guide Dots metadata flag before the guide-dot offset vector. When no word in the block has a guide dot, the guide-dot offset vector is omitted; background bytes remain per-word.
@@ -262,7 +270,7 @@ import std.core;
 
 // === Configuration ===
 #define EXPECTED_MAGIC 0x535843FF
-#define EXPECTED_VERSION 37
+#define EXPECTED_VERSION 38
 #define MAX_STRING_LENGTH 65535
 #define MAX_WORD_STRING_LENGTH 4096
 #define FOOTNOTE_NUMBER_LEN 32
@@ -513,6 +521,10 @@ if (parsedSize != fileSize) {
 ```
 
 ## `css_rules.cache`
+
+### Version 10
+
+Adds cached `vertical-align` support for CSS superscript and subscript rules. Style payloads now store both `backgroundBlack` and `verticalAlign` values, with defined flags using bit 16 for `backgroundBlack` and bit 17 for `verticalAlign`.
 
 ### Version 9
 

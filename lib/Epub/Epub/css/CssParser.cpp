@@ -435,6 +435,15 @@ void CssParser::parseDeclarationIntoStyle(const std::string& decl, CssStyle& sty
       style.backgroundBlack = backgroundBlack;
       style.defined.backgroundBlack = 1;
     }
+  } else if (propNameBuf == "vertical-align") {
+    const std::string v = normalized(propValueBuf);
+    if (v == "super") {
+      style.verticalAlign = CssVerticalAlign::Super;
+      style.defined.verticalAlign = 1;
+    } else if (v == "sub") {
+      style.verticalAlign = CssVerticalAlign::Sub;
+      style.defined.verticalAlign = 1;
+    }
   }
 }
 
@@ -956,7 +965,8 @@ bool CssParser::saveToCache(const bool complete) const {
         !writeLength(style.paddingBottom) || !writeLength(style.paddingLeft) || !writeLength(style.paddingRight) ||
         !writeLength(style.imageHeight) || !writeLength(style.imageWidth) ||
         !writeByte(static_cast<uint8_t>(style.display)) ||
-        !writeByte(static_cast<uint8_t>(style.backgroundBlack ? 1 : 0))) {
+        !writeByte(static_cast<uint8_t>(style.backgroundBlack ? 1 : 0)) ||
+        !writeByte(static_cast<uint8_t>(style.verticalAlign))) {
       return false;
     }
     uint32_t definedBits = 0;
@@ -977,6 +987,7 @@ bool CssParser::saveToCache(const bool complete) const {
     if (style.defined.imageWidth) definedBits |= 1 << 14;
     if (style.defined.display) definedBits |= 1 << 15;
     if (style.defined.backgroundBlack) definedBits |= 1 << 16;
+    if (style.defined.verticalAlign) definedBits |= 1 << 17;
     return writeBytes(&definedBits, sizeof(definedBits));
   };
 
@@ -1114,7 +1125,7 @@ bool CssParser::loadFromCache() {
   constexpr size_t CSS_LENGTH_FIELD_COUNT = 11;
   constexpr size_t CSS_LENGTH_BYTES = sizeof(float) + sizeof(uint8_t);
   constexpr size_t CSS_FIXED_STYLE_BYTES =
-      4 * sizeof(uint8_t) + (CSS_LENGTH_FIELD_COUNT * CSS_LENGTH_BYTES) + 2 * sizeof(uint8_t) + sizeof(uint32_t);
+      4 * sizeof(uint8_t) + (CSS_LENGTH_FIELD_COUNT * CSS_LENGTH_BYTES) + 3 * sizeof(uint8_t) + sizeof(uint32_t);
 
   auto readLength = [&file](CssLength& len) -> bool {
     if (file.read(&len.value, sizeof(len.value)) != sizeof(len.value)) return false;
@@ -1146,6 +1157,10 @@ bool CssParser::loadFromCache() {
     uint8_t backgroundBlackVal = 0;
     if (file.read(&backgroundBlackVal, 1) != 1) return false;
     style.backgroundBlack = backgroundBlackVal != 0;
+    uint8_t verticalAlignVal = 0;
+    if (file.read(&verticalAlignVal, 1) != 1) return false;
+    style.verticalAlign = static_cast<CssVerticalAlign>(verticalAlignVal);
+
     uint32_t definedBits = 0;
     if (file.read(&definedBits, sizeof(definedBits)) != sizeof(definedBits)) return false;
     style.defined.textAlign = (definedBits & 1 << 0) != 0;
@@ -1165,6 +1180,7 @@ bool CssParser::loadFromCache() {
     style.defined.imageWidth = (definedBits & 1 << 14) != 0;
     style.defined.display = (definedBits & 1 << 15) != 0;
     style.defined.backgroundBlack = (definedBits & 1 << 16) != 0;
+    style.defined.verticalAlign = (definedBits & 1 << 17) != 0;
     return true;
   };
 
