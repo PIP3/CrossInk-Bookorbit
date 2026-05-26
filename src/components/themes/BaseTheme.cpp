@@ -809,12 +809,11 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
   }
 
   const bool hasTimeLeftLabel = timeLeftLabel != nullptr && timeLeftLabel[0] != '\0';
-  int timeLeftWidth = 0;
   if (hasTimeLeftLabel) {
     const bool hasLeftItem = leftClusterWidth > 0;
     const int timeLeftX = leftClusterX + leftClusterWidth + (hasLeftItem ? statusItemGap : 0);
     renderer.drawText(SMALL_FONT_ID, timeLeftX, textY, timeLeftLabel);
-    timeLeftWidth = renderer.getTextWidth(SMALL_FONT_ID, timeLeftLabel);
+    const int timeLeftWidth = renderer.getTextWidth(SMALL_FONT_ID, timeLeftLabel);
     leftClusterWidth += (hasLeftItem ? statusItemGap : 0) + timeLeftWidth;
   }
 

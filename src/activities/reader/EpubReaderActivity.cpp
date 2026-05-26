@@ -80,19 +80,23 @@ void drawToast(const GfxRenderer& renderer, const char* msg) {
   renderer.displayBuffer();
 }
 
-bool releaseReaderSdFontCachesForLowMemory(GfxRenderer& renderer, const char* tag, const char* reason) {
+bool releaseReaderSdFontCachesForLowMemory(const GfxRenderer& renderer, const char* tag, const char* reason) {
   const int fontId = SETTINGS.getReaderFontId();
   if (!renderer.isSdCardFont(fontId)) {
     return false;
   }
 
+#if defined(ENABLE_SERIAL_LOG) && LOG_LEVEL >= 2
   const auto before = MemoryBudget::snapshot();
+#endif
   if (!renderer.releaseSdCardFontForLowMemory(fontId)) {
     return false;
   }
+#if defined(ENABLE_SERIAL_LOG) && LOG_LEVEL >= 2
   const auto after = MemoryBudget::snapshot();
   LOG_DBG(tag, "Released SD font caches after %s: free=%u->%u maxAlloc=%u->%u", reason, before.freeHeap, after.freeHeap,
           before.maxAllocHeap, after.maxAllocHeap);
+#endif
   return true;
 }
 
