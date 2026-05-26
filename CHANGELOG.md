@@ -14,6 +14,7 @@
 
 ### Fixed
 - Fixed inverted reader menus so front-button hint outlines keep the normal portrait shape while the labels stay readable in the inverted orientation.
+- Fixed web file uploads so replacing a book refreshes render/cache files without wiping that book's saved progress, per-book stats, or reader settings.
 - Fixed Lyra Carousel popup rendering so loading, indexing, and sleep-entry popups appear in the right place again.
 - Fixed settings rows so longer option values like "Forward-Back Inverted" are no longer cut off.
 - Fixed EPUB progress saves so KOReader Sync writes complete resume data without truncating the existing progress file first.

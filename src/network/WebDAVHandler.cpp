@@ -388,7 +388,7 @@ void WebDAVHandler::handlePut(WebServer& s) {
     return;
   }
 
-  clearBookCache(path.c_str());
+  clearBookCachePreservingUserState(path.c_str());
   s.send(_putExisted ? 204 : 201);
   LOG_DBG("DAV", "PUT complete: %s", path.c_str());
 }
