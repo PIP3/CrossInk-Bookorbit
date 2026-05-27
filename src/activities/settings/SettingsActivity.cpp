@@ -11,6 +11,8 @@
 #include "AppVersion.h"
 #include "ButtonRemapActivity.h"
 #include "ClearCacheActivity.h"
+#include "ClockOffsetActivity.h"
+#include "ClockSyncActivity.h"
 #include "CrossPointSettings.h"
 #include "FontDownloadActivity.h"
 #include "FontSelectionActivity.h"
@@ -65,6 +67,16 @@ void drawCenteredTextLine(const GfxRenderer& renderer, const int pageWidth, cons
 
 bool isVersionBreakChar(const char c) { return c == ' ' || c == '-' || c == '+' || c == '.' || c == '_'; }
 
+std::string formatUtcOffset(uint8_t biasedQ) {
+  if (biasedQ > 104) biasedQ = 48;
+  const int totalMinutes = (static_cast<int>(biasedQ) - 48) * 15;
+  const bool neg = totalMinutes < 0;
+  const int absMinutes = neg ? -totalMinutes : totalMinutes;
+  char buf[16];
+  snprintf(buf, sizeof(buf), "UTC%c%d:%02d", neg ? '-' : '+', absMinutes / 60, absMinutes % 60);
+  return buf;
+}
+
 void drawSystemVersionFooter(const GfxRenderer& renderer, const int pageWidth, const int pageHeight,
                              const ThemeMetrics& metrics) {
   const std::string label = "CrossInk " CROSSINK_VERSION;
@@ -114,120 +126,150 @@ std::string formatSettingValue(const SettingInfo& setting) {
   if (setting.valuePtr == &CrossPointSettings::lineHeightPercent) {
     return std::to_string(SETTINGS.*(setting.valuePtr)) + "%";
   }
+  if (setting.valuePtr == &CrossPointSettings::clockUtcOffsetQ) {
+    return formatUtcOffset(SETTINGS.*(setting.valuePtr));
+  }
   return std::to_string(SETTINGS.*(setting.valuePtr));
 }
 }  // namespace
 
 void SettingsActivity::rebuildSettingsLists() {
   displaySettings.clear();
+  displaySleepSettings.clear();
   readerSettings.clear();
+  readerFontSettings.clear();
+  readerPageLayoutSettings.clear();
   controlsSettings.clear();
+  controlsPowerSettings.clear();
+  controlsFrontButtonSettings.clear();
+  controlsSideButtonSettings.clear();
   systemSettings.clear();
+  systemDeviceSettings.clear();
+  systemFilesCacheSettings.clear();
 
   // Pick up any fonts uploaded/deleted over the web server since the last
   // reader activity ran — otherwise the font-family picker shows stale list.
   sdFontSystem.refreshIfDirty();
 
   const auto allSettings = getSettingsList(&sdFontSystem.registry());
-  auto addControlSetting = [&](StrId nameId) {
-    const auto it = std::find_if(allSettings.begin(), allSettings.end(),
-                                 [nameId](const auto& setting) { return setting.nameId == nameId; });
-    if (it != allSettings.end()) {
-      controlsSettings.push_back(*it);
-      return;
-    }
-    LOG_ERR("SET", "Missing control setting definition for nameId=%d", static_cast<int>(nameId));
-  };
-  auto addControlSettingByKey = [&](const char* key) {
-    const auto it = std::find_if(allSettings.begin(), allSettings.end(), [key](const auto& setting) {
-      return setting.key && std::strcmp(setting.key, key) == 0;
-    });
-    if (it != allSettings.end()) {
-      controlsSettings.push_back(*it);
-      return;
-    }
-    LOG_ERR("SET", "Missing control setting definition for key=%s", key);
-  };
+  displaySettings = buildGroupedDisplaySettingsList(allSettings);
+  displaySleepSettings = buildDisplaySleepSettingsList(allSettings);
+  readerSettings = buildReaderSettingsParentList(allSettings);
+  readerFontSettings = buildReaderFontSettingsList(allSettings);
+  readerPageLayoutSettings = buildReaderPageLayoutSettingsList(allSettings);
+  systemSettings = buildSystemSettingsParentList();
+  systemDeviceSettings = buildSystemDeviceSettingsList(allSettings);
+  systemFilesCacheSettings = buildSystemFilesCacheSettingsList(allSettings);
+  controlsSettings = buildControlsSettingsParentList(allSettings);
+  controlsPowerSettings = buildControlsPowerSettingsList(allSettings);
+  controlsFrontButtonSettings = buildControlsFrontButtonSettingsList(allSettings);
+  controlsSideButtonSettings = buildControlsSideButtonSettingsList(allSettings);
 
-  for (const auto& setting : allSettings) {
-    if (setting.category == StrId::STR_NONE_OPT || setting.category == StrId::STR_CAT_CONTROLS) continue;
-    if (setting.category == StrId::STR_CAT_DISPLAY) {
-      displaySettings.push_back(setting);
-    } else if (setting.category == StrId::STR_CAT_READER) {
-      readerSettings.push_back(setting);
-    } else if (setting.category == StrId::STR_CAT_SYSTEM) {
-      systemSettings.push_back(setting);
-    }
+  if (controlsPowerSettings.size() != 2 || controlsFrontButtonSettings.size() != 5 ||
+      controlsSideButtonSettings.size() != 3) {
+    LOG_ERR("SET", "Unexpected controls submenu counts: power=%u front=%u side=%u",
+            static_cast<uint32_t>(controlsPowerSettings.size()),
+            static_cast<uint32_t>(controlsFrontButtonSettings.size()),
+            static_cast<uint32_t>(controlsSideButtonSettings.size()));
   }
 
-  // Append device-only ACTION items
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_WIFI_NETWORKS, SettingAction::Network));
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_KOREADER_SYNC, SettingAction::KOReaderSync));
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_OPDS_SERVERS, SettingAction::OPDSBrowser));
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache));
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates));
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_SD_FIRMWARE_UPDATE, SettingAction::SdFirmwareUpdate));
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_LANGUAGE, SettingAction::Language));
-  const auto fontSizeSetting = std::find_if(readerSettings.begin(), readerSettings.end(),
-                                            [](const auto& setting) { return setting.nameId == StrId::STR_FONT_SIZE; });
-  const auto manageFontsSetting = SettingInfo::Action(StrId::STR_MANAGE_FONTS, SettingAction::DownloadFonts);
-  readerSettings.insert(fontSizeSetting == readerSettings.end() ? readerSettings.end() : fontSizeSetting + 1,
-                        manageFontsSetting);
-  readerSettings.push_back(SettingInfo::Action(StrId::STR_CUSTOMISE_STATUS_BAR, SettingAction::CustomiseStatusBar));
+  setCurrentSettingsForCategory();
+}
 
-  const bool hasTiltPageTurnSetting = std::any_of(allSettings.begin(), allSettings.end(), [](const auto& setting) {
-    return setting.nameId == StrId::STR_TILT_PAGE_TURN;
-  });
-  const bool hasTiltPageTurnDirectionSetting =
-      std::any_of(allSettings.begin(), allSettings.end(),
-                  [](const auto& setting) { return setting.nameId == StrId::STR_TILT_PAGE_TURN_DIRECTION; });
-
-  // Build controls settings with section headers in desired display order
-  const bool hasTiltSettings = hasTiltPageTurnSetting || hasTiltPageTurnDirectionSetting;
-  const size_t expectedControlsSettingsCount = 13 + (hasTiltSettings ? 1u : 0u) + (hasTiltPageTurnSetting ? 1u : 0u) +
-                                               (hasTiltPageTurnDirectionSetting ? 1u : 0u);
-  controlsSettings.reserve(expectedControlsSettingsCount);
-  controlsSettings.push_back(SettingInfo::SectionHeader(StrId::STR_POWER_BUTTON));
-  addControlSetting(StrId::STR_SHORT_PWR_BTN);
-  addControlSetting(StrId::STR_LONG_PRESS_ACTION);
-  controlsSettings.push_back(SettingInfo::SectionHeader(StrId::STR_FRONT_BUTTONS));
-  controlsSettings.push_back(SettingInfo::Action(StrId::STR_REMAP_FRONT_BUTTONS, SettingAction::RemapFrontButtons));
-  controlsSettings.push_back(
-      SettingInfo::Action(StrId::STR_REMAP_FRONT_BUTTONS_READER, SettingAction::RemapFrontButtonsReader));
-  addControlSettingByKey("frontButtonOrientationAware");
-  addControlSetting(StrId::STR_LONG_PRESS_BEHAVIOR);
-  addControlSetting(StrId::STR_LONG_PRESS_MENU_ACTION);
-  controlsSettings.push_back(SettingInfo::SectionHeader(StrId::STR_SIDE_BUTTONS));
-  addControlSetting(StrId::STR_SIDE_BTN_LAYOUT);
-  addControlSettingByKey("sideButtonOrientationAware");
-  addControlSetting(StrId::STR_SIDE_BTN_LONG_PRESS);
-  if (hasTiltSettings) {
-    controlsSettings.push_back(SettingInfo::SectionHeader(StrId::STR_OTHER));
-    if (hasTiltPageTurnSetting) addControlSetting(StrId::STR_TILT_PAGE_TURN);
-    if (hasTiltPageTurnDirectionSetting) addControlSetting(StrId::STR_TILT_PAGE_TURN_DIRECTION);
-  }
-
-  if (controlsSettings.size() != expectedControlsSettingsCount) {
-    LOG_ERR("SET", "Unexpected controls settings count: %u (expected %u)",
-            static_cast<uint32_t>(controlsSettings.size()), static_cast<uint32_t>(expectedControlsSettingsCount));
-  }
-
-  // Update currentSettings pointer and count for the active category
+void SettingsActivity::setCurrentSettingsForCategory() {
   switch (selectedCategoryIndex) {
     case 0:
-      currentSettings = &displaySettings;
+      currentSettings = activeSubmenu == SettingAction::DisplaySleepScreen ? &displaySleepSettings : &displaySettings;
       break;
     case 1:
-      currentSettings = &readerSettings;
+      switch (activeSubmenu) {
+        case SettingAction::ReaderFontOptions:
+          currentSettings = &readerFontSettings;
+          break;
+        case SettingAction::ReaderPageLayout:
+          currentSettings = &readerPageLayoutSettings;
+          break;
+        default:
+          currentSettings = &readerSettings;
+          break;
+      }
       break;
     case 2:
-      currentSettings = &controlsSettings;
+      switch (activeSubmenu) {
+        case SettingAction::ControlsPowerButton:
+          currentSettings = &controlsPowerSettings;
+          break;
+        case SettingAction::ControlsFrontButtons:
+          currentSettings = &controlsFrontButtonSettings;
+          break;
+        case SettingAction::ControlsSideButtons:
+          currentSettings = &controlsSideButtonSettings;
+          break;
+        default:
+          currentSettings = &controlsSettings;
+          break;
+      }
       break;
     case 3:
-      currentSettings = &systemSettings;
+      switch (activeSubmenu) {
+        case SettingAction::SystemDevice:
+          currentSettings = &systemDeviceSettings;
+          break;
+        case SettingAction::SystemFilesCache:
+          currentSettings = &systemFilesCacheSettings;
+          break;
+        default:
+          currentSettings = &systemSettings;
+          break;
+      }
       break;
   }
   settingsCount = static_cast<int>(currentSettings->size());
+}
+
+void SettingsActivity::enterCategory(int categoryIndex) {
+  selectedCategoryIndex = categoryIndex;
+  activeSubmenu = SettingAction::None;
+  setCurrentSettingsForCategory();
+}
+
+StrId SettingsActivity::activeSubmenuTitleId() const {
+  switch (activeSubmenu) {
+    case SettingAction::DisplaySleepScreen:
+      return StrId::STR_DISPLAY_SLEEP_SCREEN;
+    case SettingAction::ReaderFontOptions:
+      return StrId::STR_READER_FONT_OPTIONS;
+    case SettingAction::ReaderPageLayout:
+      return StrId::STR_READER_PAGE_LAYOUT;
+    case SettingAction::ControlsPowerButton:
+      return StrId::STR_POWER_BUTTON;
+    case SettingAction::ControlsFrontButtons:
+      return StrId::STR_FRONT_BUTTONS;
+    case SettingAction::ControlsSideButtons:
+      return StrId::STR_SIDE_BUTTONS;
+    case SettingAction::SystemDevice:
+      return StrId::STR_SYSTEM_DEVICE;
+    case SettingAction::SystemFilesCache:
+      return StrId::STR_SYSTEM_FILES_CACHE;
+    default:
+      return StrId::STR_NONE_OPT;
+  }
+}
+
+void SettingsActivity::openSubmenu(SettingAction action) {
+  activeSubmenu = action;
+  setCurrentSettingsForCategory();
+  selectedSettingIndex = 1;
+  while (selectedSettingIndex > 0 && selectedSettingIndex <= settingsCount &&
+         (*currentSettings)[selectedSettingIndex - 1].type == SettingType::SECTION_HEADER) {
+    selectedSettingIndex = ButtonNavigator::nextIndex(selectedSettingIndex, settingsCount + 1);
+  }
+}
+
+void SettingsActivity::closeSubmenu() {
+  activeSubmenu = SettingAction::None;
+  setCurrentSettingsForCategory();
+  selectedSettingIndex = 1;
 }
 
 void SettingsActivity::onEnter() {
@@ -236,6 +278,7 @@ void SettingsActivity::onEnter() {
   // Reset selection to first category
   selectedCategoryIndex = 0;
   selectedSettingIndex = 0;
+  activeSubmenu = SettingAction::None;
   preserveQuickResumeTimeoutOn =
       SETTINGS.quickResumeSleepScreen == CrossPointSettings::QUICK_RESUME_SLEEP_SCREEN::QUICK_RESUME_AFTER_TIMEOUT;
   quickResumeTimeoutAutoEnabled = false;
@@ -259,7 +302,7 @@ void SettingsActivity::loop() {
   // Handle actions with early return
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (selectedSettingIndex == 0) {
-      selectedCategoryIndex = (selectedCategoryIndex < categoryCount - 1) ? (selectedCategoryIndex + 1) : 0;
+      enterCategory((selectedCategoryIndex < categoryCount - 1) ? (selectedCategoryIndex + 1) : 0);
       hasChangedCategory = true;
       requestUpdate();
     } else {
@@ -270,6 +313,11 @@ void SettingsActivity::loop() {
   }
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+    if (activeSubmenu != SettingAction::None) {
+      closeSubmenu();
+      requestUpdate();
+      return;
+    }
     if (selectedSettingIndex > 0) {
       selectedSettingIndex = 0;
       requestUpdate();
@@ -301,33 +349,19 @@ void SettingsActivity::loop() {
 
   buttonNavigator.onNextContinuous([this, &hasChangedCategory] {
     hasChangedCategory = true;
-    selectedCategoryIndex = ButtonNavigator::nextIndex(selectedCategoryIndex, categoryCount);
+    enterCategory(ButtonNavigator::nextIndex(selectedCategoryIndex, categoryCount));
     requestUpdate();
   });
 
   buttonNavigator.onPreviousContinuous([this, &hasChangedCategory] {
     hasChangedCategory = true;
-    selectedCategoryIndex = ButtonNavigator::previousIndex(selectedCategoryIndex, categoryCount);
+    enterCategory(ButtonNavigator::previousIndex(selectedCategoryIndex, categoryCount));
     requestUpdate();
   });
 
   if (hasChangedCategory) {
     selectedSettingIndex = (selectedSettingIndex == 0) ? 0 : 1;
-    switch (selectedCategoryIndex) {
-      case 0:
-        currentSettings = &displaySettings;
-        break;
-      case 1:
-        currentSettings = &readerSettings;
-        break;
-      case 2:
-        currentSettings = &controlsSettings;
-        break;
-      case 3:
-        currentSettings = &systemSettings;
-        break;
-    }
-    settingsCount = static_cast<int>(currentSettings->size());
+    setCurrentSettingsForCategory();
     // Advance past any leading section headers
     while (selectedSettingIndex > 0 && selectedSettingIndex <= settingsCount &&
            (*currentSettings)[selectedSettingIndex - 1].type == SettingType::SECTION_HEADER) {
@@ -357,6 +391,13 @@ void SettingsActivity::toggleCurrentSetting() {
   }
   if (setting.valuePtr == &CrossPointSettings::lineHeightPercent) {
     openLineHeightPicker();
+    return;
+  }
+  if (setting.valuePtr == &CrossPointSettings::clockUtcOffsetQ) {
+    startActivityForResult(std::make_unique<ClockOffsetActivity>(renderer, mappedInput), [this](const ActivityResult&) {
+      SETTINGS.saveToFile();
+      requestUpdate();
+    });
     return;
   }
 
@@ -434,11 +475,25 @@ void SettingsActivity::toggleCurrentSetting() {
       case SettingAction::Language:
         startActivityForResult(std::make_unique<LanguageSelectActivity>(renderer, mappedInput), resultHandler);
         break;
+      case SettingAction::ClockSync:
+        startActivityForResult(std::make_unique<ClockSyncActivity>(renderer, mappedInput), resultHandler);
+        break;
+      case SettingAction::ReaderFontOptions:
+      case SettingAction::ReaderPageLayout:
+      case SettingAction::ControlsPowerButton:
+      case SettingAction::ControlsFrontButtons:
+      case SettingAction::ControlsSideButtons:
+      case SettingAction::SystemDevice:
+      case SettingAction::SystemFilesCache:
+      case SettingAction::DisplaySleepScreen:
       case SettingAction::None:
         // Do nothing
         break;
     }
     return;  // Results will be handled in the result handler, so we can return early here
+  } else if (setting.type == SettingType::SUBMENU) {
+    openSubmenu(setting.action);
+    return;
   } else {
     return;
   }
@@ -521,17 +576,32 @@ void SettingsActivity::render(RenderLock&&) {
                  selectedSettingIndex == 0);
 
   const auto& settings = *currentSettings;
+  Rect listRect{0, metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing,
+                pageWidth,
+                pageHeight - (metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight +
+                              metrics.buttonHintsHeight + metrics.verticalSpacing * 2)};
+  const StrId submenuTitleId = activeSubmenuTitleId();
+  if (submenuTitleId != StrId::STR_NONE_OPT) {
+    constexpr int submenuHeaderFontId = UI_10_FONT_ID;
+    const int headerLineHeight = renderer.getLineHeight(submenuHeaderFontId);
+    const int headerOffset = headerLineHeight + metrics.verticalSpacing;
+    const int headerMaxWidth = listRect.width - metrics.contentSidePadding * 2;
+    const auto headerLabel =
+        renderer.truncatedText(submenuHeaderFontId, I18N.get(submenuTitleId), headerMaxWidth, EpdFontFamily::BOLD);
+    renderer.drawText(submenuHeaderFontId, listRect.x + metrics.contentSidePadding, listRect.y, headerLabel.c_str(),
+                      true, EpdFontFamily::BOLD);
+    listRect.y += headerOffset;
+    listRect.height = std::max(0, listRect.height - headerOffset);
+  }
   GUI.drawList(
-      renderer,
-      Rect{0, metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing, pageWidth,
-           pageHeight - (metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.buttonHintsHeight +
-                         metrics.verticalSpacing * 2)},
-      settingsCount, selectedSettingIndex - 1,
+      renderer, listRect, settingsCount, selectedSettingIndex - 1,
       [&settings](int index) { return std::string(I18N.get(settings[index].nameId)); }, nullptr, nullptr,
       [&settings](int i) {
         const auto& setting = settings[i];
         std::string valueText = "";
-        if (setting.type == SettingType::TOGGLE && setting.valuePtr != nullptr) {
+        if (settingShowsNavigationCaret(setting)) {
+          valueText = ">";
+        } else if (setting.type == SettingType::TOGGLE && setting.valuePtr != nullptr) {
           const bool value = SETTINGS.*(setting.valuePtr);
           valueText = value ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
         } else if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
@@ -560,7 +630,9 @@ void SettingsActivity::render(RenderLock&&) {
       (selectedSettingIndex == 0)
           ? I18N.get(categoryNames[(selectedCategoryIndex + 1) % categoryCount])
           : (selectedSettingIndex > 0 &&
-                     ((*currentSettings)[selectedSettingIndex - 1].nameId == StrId::STR_TIME_TO_SLEEP ||
+                     ((*currentSettings)[selectedSettingIndex - 1].type == SettingType::SUBMENU ||
+                      (*currentSettings)[selectedSettingIndex - 1].type == SettingType::ACTION ||
+                      (*currentSettings)[selectedSettingIndex - 1].nameId == StrId::STR_TIME_TO_SLEEP ||
                       (*currentSettings)[selectedSettingIndex - 1].valuePtr == &CrossPointSettings::lineHeightPercent)
                  ? tr(STR_SELECT)
                  : tr(STR_TOGGLE));

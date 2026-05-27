@@ -36,7 +36,7 @@ inline void applyOrientation(GfxRenderer& renderer, const uint8_t orientation) {
   renderer.setOrientation(toRendererOrientation(orientation));
 }
 
-inline bool shouldShowTopClockStatusBar() { return SETTINGS.statusBarClock && halClock.isAvailable(); }
+inline bool shouldShowTopClockStatusBar() { return halClock.isAvailable() && SETTINGS.shouldShowClockInReader(); }
 
 inline int getTopClockStatusBarHeight() {
   if (!shouldShowTopClockStatusBar()) {

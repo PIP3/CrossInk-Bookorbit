@@ -73,6 +73,13 @@ class CrossPointSettings {
     XTC_STATUS_BAR_TOP = 2,
     XTC_STATUS_BAR_MODE_COUNT
   };
+  enum STATUS_BAR_CLOCK_MODE {
+    CLOCK_NEVER = 0,
+    // Value 1 intentionally matches the legacy Show Clock toggle's "on" value.
+    CLOCK_IN_READER = 1,
+    CLOCK_ALWAYS = 2,
+    STATUS_BAR_CLOCK_MODE_COUNT
+  };
 
   enum ORIENTATION {
     PORTRAIT = 0,       // 480x800 logical coordinates (current default)
@@ -286,7 +293,7 @@ class CrossPointSettings {
   uint8_t statusBarTimeLeft = TIME_LEFT_HIDE;
   uint8_t statusBarBattery = 1;
   uint8_t xtcStatusBarMode = XTC_STATUS_BAR_HIDE;
-  // Clock display in status bar (X3 only, requires DS3231 RTC)
+  // Clock display mode (X3 only, requires DS3231 RTC)
   uint8_t statusBarClock = 0;
   // Clock UTC offset in quarter-hour steps, biased by 48 so it fits in uint8_t.
   // Value 48 = UTC+0, 0 = UTC-12:00, 104 = UTC+14:00.
@@ -409,6 +416,9 @@ class CrossPointSettings {
     return (shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP) ? POWER_BUTTON_WAKE_SHORT_MS
                                                                     : POWER_BUTTON_LONG_PRESS_MS;
   }
+
+  bool shouldShowClockInReader() const { return statusBarClock == CLOCK_IN_READER || statusBarClock == CLOCK_ALWAYS; }
+  bool shouldShowClockOutsideReader() const { return statusBarClock == CLOCK_ALWAYS; }
 
   // Callback to resolve SD card font IDs. Set by SdCardFontSystem::begin().
   // Returns font ID or 0 if not found.

@@ -278,6 +278,11 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     add(SettingInfo::Enum(StrId::STR_HIDE_BATTERY, &CrossPointSettings::hideBatteryPercentage,
                           {StrId::STR_NEVER, StrId::STR_IN_READER, StrId::STR_ALWAYS}, "hideBatteryPercentage",
                           StrId::STR_CAT_DISPLAY));
+    add(SettingInfo::Enum(StrId::STR_CLOCK, &CrossPointSettings::statusBarClock,
+                          {StrId::STR_ALWAYS, StrId::STR_NEVER, StrId::STR_IN_READER}, "statusBarClock",
+                          StrId::STR_CAT_DISPLAY)
+            .withEnumRawValues({CrossPointSettings::CLOCK_ALWAYS, CrossPointSettings::CLOCK_NEVER,
+                                CrossPointSettings::CLOCK_IN_READER}));
     add(SettingInfo::Enum(
         StrId::STR_REFRESH_FREQ, &CrossPointSettings::refreshFrequency,
         {StrId::STR_PAGES_1, StrId::STR_PAGES_5, StrId::STR_PAGES_10, StrId::STR_PAGES_15, StrId::STR_PAGES_30},
@@ -441,19 +446,17 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     add(SettingInfo::Enum(StrId::STR_XTC_STATUS_BAR, &CrossPointSettings::xtcStatusBarMode,
                           {StrId::STR_HIDE, StrId::STR_BOTTOM, StrId::STR_TOP}, "xtcStatusBarMode",
                           StrId::STR_CUSTOMISE_STATUS_BAR));
-    // Clock entries (web settings only; device UI uses ClockOffsetActivity for the offset).
+    // Clock detail entries live under System > Device in the device UI.
     // Range 0..104 = quarter-hour steps from UTC-12:00 to UTC+14:00, biased by 48.
-    add(SettingInfo::Toggle(StrId::STR_CLOCK, &CrossPointSettings::statusBarClock, "statusBarClock",
-                            StrId::STR_CUSTOMISE_STATUS_BAR));
     add(SettingInfo::Value(StrId::STR_CLOCK_UTC_OFFSET, &CrossPointSettings::clockUtcOffsetQ, {0, 104, 1},
-                           "clockUtcOffsetQ", StrId::STR_CUSTOMISE_STATUS_BAR));
+                           "clockUtcOffsetQ", StrId::STR_CAT_SYSTEM));
     add(SettingInfo::Enum(StrId::STR_CLOCK_FORMAT, &CrossPointSettings::clockFormat,
                           {StrId::STR_CLOCK_FORMAT_24H, StrId::STR_CLOCK_FORMAT_12H}, "clockFormat",
-                          StrId::STR_CUSTOMISE_STATUS_BAR));
+                          StrId::STR_CAT_SYSTEM));
     // Persistence flag for NTP debounce. Resetting from the web UI forces a re-sync
     // on next WiFi connect, which is useful when crossing time zones.
     add(SettingInfo::Toggle(StrId::STR_CLOCK_SYNCED, &CrossPointSettings::clockHasBeenSynced, "clockHasBeenSynced",
-                            StrId::STR_CUSTOMISE_STATUS_BAR));
+                            StrId::STR_CAT_SYSTEM));
     // Only show tilt page turn setting when the QMI8658 IMU is present (X3).
     if (halTiltSensor.isAvailable()) {
       for (auto& setting : v) {
@@ -492,4 +495,231 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     }
   }
   return v;
+}
+
+inline std::vector<SettingInfo> buildGroupedReaderSettingsList(const std::vector<SettingInfo>& allSettings) {
+  std::vector<SettingInfo> readerSettings;
+  readerSettings.reserve(22);
+
+  auto addReaderSetting = [&](StrId nameId) {
+    const auto it = std::find_if(allSettings.begin(), allSettings.end(),
+                                 [nameId](const auto& setting) { return setting.nameId == nameId; });
+    if (it != allSettings.end()) {
+      readerSettings.push_back(*it);
+    }
+  };
+
+  readerSettings.push_back(SettingInfo::SectionHeader(StrId::STR_READER_FONT_OPTIONS));
+  addReaderSetting(StrId::STR_FONT_FAMILY);
+  addReaderSetting(StrId::STR_FONT_SIZE);
+  readerSettings.push_back(SettingInfo::Action(StrId::STR_MANAGE_FONTS, SettingAction::DownloadFonts));
+  addReaderSetting(StrId::STR_SD_FONT_SIZE_RANGE);
+
+  readerSettings.push_back(SettingInfo::SectionHeader(StrId::STR_READER_PAGE_LAYOUT));
+  addReaderSetting(StrId::STR_LINE_SPACING);
+  addReaderSetting(StrId::STR_SCREEN_MARGIN);
+  addReaderSetting(StrId::STR_PARA_ALIGNMENT);
+  addReaderSetting(StrId::STR_EXTRA_SPACING);
+  addReaderSetting(StrId::STR_FORCE_PARAGRAPH_INDENTS);
+
+  readerSettings.push_back(SettingInfo::SectionHeader(StrId::STR_READER_BOOK_STYLING));
+  addReaderSetting(StrId::STR_EMBEDDED_STYLE);
+  addReaderSetting(StrId::STR_HYPHENATION);
+  addReaderSetting(StrId::STR_TEXT_AA);
+  addReaderSetting(StrId::STR_IMAGES);
+
+  readerSettings.push_back(SettingInfo::SectionHeader(StrId::STR_READER_READING_AIDS));
+  addReaderSetting(StrId::STR_BIONIC_READING);
+  addReaderSetting(StrId::STR_GUIDE_READING);
+
+  readerSettings.push_back(SettingInfo::SectionHeader(StrId::STR_READER_UI));
+  addReaderSetting(StrId::STR_ORIENTATION);
+  readerSettings.push_back(SettingInfo::Action(StrId::STR_CUSTOMISE_STATUS_BAR, SettingAction::CustomiseStatusBar));
+
+  return readerSettings;
+}
+
+inline void addSettingByName(std::vector<SettingInfo>& target, const std::vector<SettingInfo>& allSettings,
+                             StrId nameId) {
+  const auto it = std::find_if(allSettings.begin(), allSettings.end(),
+                               [nameId](const auto& setting) { return setting.nameId == nameId; });
+  if (it != allSettings.end()) {
+    target.push_back(*it);
+  }
+}
+
+inline std::vector<SettingInfo> buildReaderSettingsParentList(const std::vector<SettingInfo>& allSettings) {
+  std::vector<SettingInfo> readerSettings;
+  readerSettings.reserve(7);
+  readerSettings.push_back(SettingInfo::Submenu(StrId::STR_READER_FONT_OPTIONS, SettingAction::ReaderFontOptions));
+  readerSettings.push_back(SettingInfo::Submenu(StrId::STR_READER_PAGE_LAYOUT, SettingAction::ReaderPageLayout));
+  readerSettings.push_back(SettingInfo::Action(StrId::STR_CUSTOMISE_STATUS_BAR, SettingAction::CustomiseStatusBar));
+  addSettingByName(readerSettings, allSettings, StrId::STR_EMBEDDED_STYLE);
+  addSettingByName(readerSettings, allSettings, StrId::STR_IMAGES);
+  addSettingByName(readerSettings, allSettings, StrId::STR_BIONIC_READING);
+  addSettingByName(readerSettings, allSettings, StrId::STR_GUIDE_READING);
+  return readerSettings;
+}
+
+inline std::vector<SettingInfo> buildReaderFontSettingsList(const std::vector<SettingInfo>& allSettings) {
+  std::vector<SettingInfo> settings;
+  settings.reserve(5);
+  addSettingByName(settings, allSettings, StrId::STR_FONT_FAMILY);
+  addSettingByName(settings, allSettings, StrId::STR_FONT_SIZE);
+  addSettingByName(settings, allSettings, StrId::STR_LINE_SPACING);
+  settings.push_back(SettingInfo::Action(StrId::STR_MANAGE_FONTS, SettingAction::DownloadFonts));
+  addSettingByName(settings, allSettings, StrId::STR_SD_FONT_SIZE_RANGE);
+  addSettingByName(settings, allSettings, StrId::STR_TEXT_AA);
+  return settings;
+}
+
+inline std::vector<SettingInfo> buildReaderPageLayoutSettingsList(const std::vector<SettingInfo>& allSettings) {
+  std::vector<SettingInfo> settings;
+  settings.reserve(6);
+  addSettingByName(settings, allSettings, StrId::STR_ORIENTATION);
+  addSettingByName(settings, allSettings, StrId::STR_SCREEN_MARGIN);
+  addSettingByName(settings, allSettings, StrId::STR_PARA_ALIGNMENT);
+  addSettingByName(settings, allSettings, StrId::STR_HYPHENATION);
+  addSettingByName(settings, allSettings, StrId::STR_EXTRA_SPACING);
+  addSettingByName(settings, allSettings, StrId::STR_FORCE_PARAGRAPH_INDENTS);
+  return settings;
+}
+
+inline void addSettingByKey(std::vector<SettingInfo>& target, const std::vector<SettingInfo>& allSettings,
+                            const char* key) {
+  const auto it = std::find_if(allSettings.begin(), allSettings.end(), [key](const auto& setting) {
+    return setting.key && std::strcmp(setting.key, key) == 0;
+  });
+  if (it != allSettings.end()) {
+    target.push_back(*it);
+  }
+}
+
+inline bool hasSettingByName(const std::vector<SettingInfo>& allSettings, StrId nameId) {
+  return std::any_of(allSettings.begin(), allSettings.end(),
+                     [nameId](const auto& setting) { return setting.nameId == nameId; });
+}
+
+inline std::vector<SettingInfo> buildControlsSettingsParentList(const std::vector<SettingInfo>& allSettings) {
+  const bool hasTiltPageTurnSetting = hasSettingByName(allSettings, StrId::STR_TILT_PAGE_TURN);
+  const bool hasTiltPageTurnDirectionSetting = hasSettingByName(allSettings, StrId::STR_TILT_PAGE_TURN_DIRECTION);
+
+  std::vector<SettingInfo> settings;
+  settings.reserve(3 + (hasTiltPageTurnSetting ? 1u : 0u) + (hasTiltPageTurnDirectionSetting ? 1u : 0u));
+  settings.push_back(SettingInfo::Submenu(StrId::STR_POWER_BUTTON, SettingAction::ControlsPowerButton));
+  settings.push_back(SettingInfo::Submenu(StrId::STR_FRONT_BUTTONS, SettingAction::ControlsFrontButtons));
+  settings.push_back(SettingInfo::Submenu(StrId::STR_SIDE_BUTTONS, SettingAction::ControlsSideButtons));
+  if (hasTiltPageTurnSetting) addSettingByName(settings, allSettings, StrId::STR_TILT_PAGE_TURN);
+  if (hasTiltPageTurnDirectionSetting) addSettingByName(settings, allSettings, StrId::STR_TILT_PAGE_TURN_DIRECTION);
+  return settings;
+}
+
+inline std::vector<SettingInfo> buildControlsPowerSettingsList(const std::vector<SettingInfo>& allSettings) {
+  std::vector<SettingInfo> settings;
+  settings.reserve(2);
+  addSettingByName(settings, allSettings, StrId::STR_SHORT_PWR_BTN);
+  addSettingByName(settings, allSettings, StrId::STR_LONG_PRESS_ACTION);
+  return settings;
+}
+
+inline std::vector<SettingInfo> buildControlsFrontButtonSettingsList(const std::vector<SettingInfo>& allSettings) {
+  std::vector<SettingInfo> settings;
+  settings.reserve(5);
+  settings.push_back(SettingInfo::Action(StrId::STR_REMAP_FRONT_BUTTONS, SettingAction::RemapFrontButtons));
+  settings.push_back(
+      SettingInfo::Action(StrId::STR_REMAP_FRONT_BUTTONS_READER, SettingAction::RemapFrontButtonsReader));
+  addSettingByKey(settings, allSettings, "frontButtonOrientationAware");
+  addSettingByName(settings, allSettings, StrId::STR_LONG_PRESS_BEHAVIOR);
+  addSettingByName(settings, allSettings, StrId::STR_LONG_PRESS_MENU_ACTION);
+  return settings;
+}
+
+inline std::vector<SettingInfo> buildControlsSideButtonSettingsList(const std::vector<SettingInfo>& allSettings) {
+  std::vector<SettingInfo> settings;
+  settings.reserve(3);
+  addSettingByName(settings, allSettings, StrId::STR_SIDE_BTN_LAYOUT);
+  addSettingByKey(settings, allSettings, "sideButtonOrientationAware");
+  addSettingByName(settings, allSettings, StrId::STR_SIDE_BTN_LONG_PRESS);
+  return settings;
+}
+
+inline std::vector<SettingInfo> buildGroupedDisplaySettingsList(const std::vector<SettingInfo>& allSettings) {
+  std::vector<SettingInfo> displaySettings;
+  displaySettings.reserve(7);
+
+  auto addDisplaySetting = [&](StrId nameId) {
+    const auto it = std::find_if(allSettings.begin(), allSettings.end(),
+                                 [nameId](const auto& setting) { return setting.nameId == nameId; });
+    if (it != allSettings.end()) {
+      displaySettings.push_back(*it);
+    }
+  };
+
+  displaySettings.push_back(SettingInfo::Submenu(StrId::STR_DISPLAY_SLEEP_SCREEN, SettingAction::DisplaySleepScreen));
+  addDisplaySetting(StrId::STR_HIDE_BATTERY);
+  if (halClock.isAvailable()) {
+    addDisplaySetting(StrId::STR_CLOCK);
+  }
+  addDisplaySetting(StrId::STR_REFRESH_FREQ);
+  addDisplaySetting(StrId::STR_UI_THEME);
+  addDisplaySetting(StrId::STR_RECENT_BOOKS_VIEW);
+  addDisplaySetting(StrId::STR_SUNLIGHT_FADING_FIX);
+
+  return displaySettings;
+}
+
+inline std::vector<SettingInfo> buildDisplaySleepSettingsList(const std::vector<SettingInfo>& allSettings) {
+  std::vector<SettingInfo> sleepSettings;
+  sleepSettings.reserve(4);
+
+  auto addSleepSetting = [&](StrId nameId, StrId displayNameId) {
+    const auto it = std::find_if(allSettings.begin(), allSettings.end(),
+                                 [nameId](const auto& setting) { return setting.nameId == nameId; });
+    if (it != allSettings.end()) {
+      sleepSettings.push_back(*it);
+      sleepSettings.back().nameId = displayNameId;
+    }
+  };
+
+  addSleepSetting(StrId::STR_SLEEP_SCREEN, StrId::STR_SLEEP_SCREEN_WALLPAPER);
+  addSleepSetting(StrId::STR_SLEEP_COVER_MODE, StrId::STR_SLEEP_COVER_MODE_SHORT);
+  addSleepSetting(StrId::STR_SLEEP_COVER_FILTER, StrId::STR_SLEEP_COVER_FILTER_SHORT);
+  addSleepSetting(StrId::STR_QUICK_RESUME_TIMEOUT, StrId::STR_QUICK_RESUME_TIMEOUT);
+
+  return sleepSettings;
+}
+
+inline std::vector<SettingInfo> buildSystemSettingsParentList() {
+  std::vector<SettingInfo> systemSettings;
+  systemSettings.reserve(7);
+  systemSettings.push_back(SettingInfo::Submenu(StrId::STR_SYSTEM_DEVICE, SettingAction::SystemDevice));
+  systemSettings.push_back(SettingInfo::Submenu(StrId::STR_SYSTEM_FILES_CACHE, SettingAction::SystemFilesCache));
+  systemSettings.push_back(SettingInfo::Action(StrId::STR_WIFI_NETWORKS, SettingAction::Network));
+  systemSettings.push_back(SettingInfo::Action(StrId::STR_KOREADER_SYNC, SettingAction::KOReaderSync));
+  systemSettings.push_back(SettingInfo::Action(StrId::STR_OPDS_SERVERS, SettingAction::OPDSBrowser));
+  systemSettings.push_back(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates));
+  systemSettings.push_back(SettingInfo::Action(StrId::STR_SD_FIRMWARE_UPDATE, SettingAction::SdFirmwareUpdate));
+  return systemSettings;
+}
+
+inline std::vector<SettingInfo> buildSystemDeviceSettingsList(const std::vector<SettingInfo>& allSettings) {
+  std::vector<SettingInfo> settings;
+  settings.reserve(6);
+  addSettingByName(settings, allSettings, StrId::STR_TIME_TO_SLEEP);
+  settings.push_back(SettingInfo::Action(StrId::STR_LANGUAGE, SettingAction::Language));
+  if (halClock.isAvailable()) {
+    addSettingByName(settings, allSettings, StrId::STR_CLOCK_FORMAT);
+    addSettingByName(settings, allSettings, StrId::STR_CLOCK_UTC_OFFSET);
+    settings.push_back(SettingInfo::Action(StrId::STR_CLOCK_SYNC_NOW, SettingAction::ClockSync));
+  }
+  return settings;
+}
+
+inline std::vector<SettingInfo> buildSystemFilesCacheSettingsList(const std::vector<SettingInfo>& allSettings) {
+  std::vector<SettingInfo> settings;
+  settings.reserve(3);
+  addSettingByName(settings, allSettings, StrId::STR_SHOW_HIDDEN_FILES);
+  addSettingByName(settings, allSettings, StrId::STR_MOVE_FINISHED_TO_READ);
+  settings.push_back(SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache));
+  return settings;
 }

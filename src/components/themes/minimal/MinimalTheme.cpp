@@ -268,6 +268,8 @@ void MinimalTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char
                       truncatedTitle.c_str(), true, EpdFontFamily::BOLD);
     renderer.drawLine(rect.x, rect.y + rect.height - 3, rect.x + rect.width - 1, rect.y + rect.height - 3, 3, true);
   }
+
+  drawTopStatusBarClock(renderer, rect.y, nullptr, false);
 }
 
 void MinimalTheme::drawTabBar(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs,

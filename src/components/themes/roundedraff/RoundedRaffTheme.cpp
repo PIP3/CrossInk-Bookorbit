@@ -56,6 +56,7 @@ void RoundedRaffTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const 
   (void)subtitle;
   // Home screen header is custom-rendered in drawRecentBookCover.
   if (title == nullptr) {
+    drawTopStatusBarClock(renderer, rect.y, nullptr, false);
     return;
   }
   const int sidePadding = RoundedRaffMetrics::values.contentSidePadding;
@@ -85,6 +86,7 @@ void RoundedRaffTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const 
                    Rect{batteryIconX, rect.y + 14, RoundedRaffMetrics::values.batteryWidth,
                         RoundedRaffMetrics::values.batteryHeight},
                    showBatteryPercentage);
+  drawTopStatusBarClock(renderer, rect.y, nullptr, false);
 }
 
 void RoundedRaffTheme::drawTabBar(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs,

@@ -161,6 +161,8 @@ void LyraTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
                       rect.x + rect.width - LyraMetrics::values.contentSidePadding - truncatedSubtitleWidth,
                       rect.y + 50, truncatedSubtitle.c_str(), true);
   }
+
+  drawTopStatusBarClock(renderer, rect.y, nullptr, false);
 }
 
 void LyraTheme::drawSubHeader(const GfxRenderer& renderer, Rect rect, const char* label, const char* rightLabel) const {

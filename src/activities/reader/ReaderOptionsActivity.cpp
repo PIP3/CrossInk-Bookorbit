@@ -51,33 +51,80 @@ std::string formatSettingValue(const SettingInfo& setting) {
 void ReaderOptionsActivity::onEnter() {
   Activity::onEnter();
 
+  activeSubmenu = SettingAction::None;
   rebuildSettingsList();
   requestUpdate();
 }
 
 void ReaderOptionsActivity::rebuildSettingsList() {
   settings.clear();
+  fontSettings.clear();
+  pageLayoutSettings.clear();
   sdFontSystem.refreshIfDirty();
   const auto allSettings = getSettingsList(&sdFontSystem.registry());
-  settings.reserve(allSettings.size() + 2);
-  std::copy_if(allSettings.begin(), allSettings.end(), std::back_inserter(settings),
-               [](const auto& s) { return s.category == StrId::STR_CAT_READER; });
+  settings = buildReaderSettingsParentList(allSettings);
+  fontSettings = buildReaderFontSettingsList(allSettings);
+  pageLayoutSettings = buildReaderPageLayoutSettingsList(allSettings);
 
-  const auto fontSizeSetting = std::find_if(settings.begin(), settings.end(),
-                                            [](const auto& setting) { return setting.nameId == StrId::STR_FONT_SIZE; });
-  const auto manageFontsSetting = SettingInfo::Action(StrId::STR_MANAGE_FONTS, SettingAction::DownloadFonts);
-  settings.insert(fontSizeSetting == settings.end() ? settings.end() : fontSizeSetting + 1, manageFontsSetting);
-  settings.push_back(SettingInfo::Action(StrId::STR_CUSTOMISE_STATUS_BAR, SettingAction::CustomiseStatusBar));
+  setCurrentSettings();
+  selectedIndex = 0;
+}
 
-  settingsCount = static_cast<int>(settings.size());
+void ReaderOptionsActivity::setCurrentSettings() {
+  switch (activeSubmenu) {
+    case SettingAction::ReaderFontOptions:
+      currentSettings = &fontSettings;
+      break;
+    case SettingAction::ReaderPageLayout:
+      currentSettings = &pageLayoutSettings;
+      break;
+    default:
+      currentSettings = &settings;
+      break;
+  }
+  settingsCount = static_cast<int>(currentSettings->size());
+}
+
+StrId ReaderOptionsActivity::activeSubmenuTitleId() const {
+  switch (activeSubmenu) {
+    case SettingAction::ReaderFontOptions:
+      return StrId::STR_READER_FONT_OPTIONS;
+    case SettingAction::ReaderPageLayout:
+      return StrId::STR_READER_PAGE_LAYOUT;
+    default:
+      return StrId::STR_NONE_OPT;
+  }
+}
+
+void ReaderOptionsActivity::openSubmenu(SettingAction action) {
+  activeSubmenu = action;
+  setCurrentSettings();
+  selectedIndex = 0;
+}
+
+void ReaderOptionsActivity::closeSubmenu() {
+  activeSubmenu = SettingAction::None;
+  setCurrentSettings();
   selectedIndex = 0;
 }
 
 void ReaderOptionsActivity::onExit() { Activity::onExit(); }
 
+void ReaderOptionsActivity::moveSelection(bool forward) {
+  if (settingsCount <= 0) return;
+
+  for (int i = 0; i < settingsCount; i++) {
+    selectedIndex = forward ? ButtonNavigator::nextIndex(selectedIndex, settingsCount)
+                            : ButtonNavigator::previousIndex(selectedIndex, settingsCount);
+    if ((*currentSettings)[selectedIndex].type != SettingType::SECTION_HEADER) {
+      break;
+    }
+  }
+}
+
 void ReaderOptionsActivity::toggleCurrentSetting() {
   if (selectedIndex < 0 || selectedIndex >= settingsCount) return;
-  const auto& setting = settings[selectedIndex];
+  const auto& setting = (*currentSettings)[selectedIndex];
 
   if (setting.type == SettingType::TOGGLE && setting.valuePtr != nullptr) {
     const bool cur = SETTINGS.*(setting.valuePtr);
@@ -132,6 +179,9 @@ void ReaderOptionsActivity::toggleCurrentSetting() {
                              [](const ActivityResult&) { SETTINGS.saveToFile(); });
       return;
     }
+  } else if (setting.type == SettingType::SUBMENU) {
+    openSubmenu(setting.action);
+    return;
   }
 }
 
@@ -154,12 +204,12 @@ void ReaderOptionsActivity::openLineHeightPicker() {
 
 void ReaderOptionsActivity::loop() {
   buttonNavigator.onNextRelease([this] {
-    selectedIndex = ButtonNavigator::nextIndex(selectedIndex, settingsCount);
+    moveSelection(true);
     requestUpdate();
   });
 
   buttonNavigator.onPreviousRelease([this] {
-    selectedIndex = ButtonNavigator::previousIndex(selectedIndex, settingsCount);
+    moveSelection(false);
     requestUpdate();
   });
 
@@ -170,6 +220,11 @@ void ReaderOptionsActivity::loop() {
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    if (activeSubmenu != SettingAction::None) {
+      closeSubmenu();
+      requestUpdate();
+      return;
+    }
     SETTINGS.saveToFile();
     finish();
     return;
@@ -193,17 +248,33 @@ void ReaderOptionsActivity::render(RenderLock&&) {
   GUI.drawHeader(renderer, Rect{contentX, metrics.topPadding, contentWidth, metrics.headerHeight},
                  tr(STR_READER_OPTIONS), nullptr);
 
+  const auto& visibleSettings = *currentSettings;
+  Rect listRect{contentX, metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing, contentWidth,
+                pageHeight - (metrics.topPadding + metrics.headerHeight + metrics.buttonHintsHeight +
+                              metrics.verticalSpacing * 2)};
+  const StrId submenuTitleId = activeSubmenuTitleId();
+  if (submenuTitleId != StrId::STR_NONE_OPT) {
+    constexpr int submenuHeaderFontId = UI_10_FONT_ID;
+    const int headerLineHeight = renderer.getLineHeight(submenuHeaderFontId);
+    const int headerOffset = headerLineHeight + metrics.verticalSpacing;
+    const int headerMaxWidth = listRect.width - metrics.contentSidePadding * 2;
+    const auto headerLabel =
+        renderer.truncatedText(submenuHeaderFontId, I18N.get(submenuTitleId), headerMaxWidth, EpdFontFamily::BOLD);
+    renderer.drawText(submenuHeaderFontId, listRect.x + metrics.contentSidePadding, listRect.y, headerLabel.c_str(),
+                      true, EpdFontFamily::BOLD);
+    listRect.y += headerOffset;
+    listRect.height = std::max(0, listRect.height - headerOffset);
+  }
+
   GUI.drawList(
-      renderer,
-      Rect{contentX, metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing, contentWidth,
-           pageHeight -
-               (metrics.topPadding + metrics.headerHeight + metrics.buttonHintsHeight + metrics.verticalSpacing * 2)},
-      settingsCount, selectedIndex, [this](int i) { return std::string(I18N.get(settings[i].nameId)); }, nullptr,
-      nullptr,
-      [this](int i) {
-        const auto& setting = settings[i];
+      renderer, listRect, settingsCount, selectedIndex,
+      [&visibleSettings](int i) { return std::string(I18N.get(visibleSettings[i].nameId)); }, nullptr, nullptr,
+      [&visibleSettings](int i) {
+        const auto& setting = visibleSettings[i];
         std::string valueText;
-        if (setting.type == SettingType::TOGGLE && setting.valuePtr != nullptr) {
+        if (settingShowsNavigationCaret(setting)) {
+          valueText = ">";
+        } else if (setting.type == SettingType::TOGGLE && setting.valuePtr != nullptr) {
           valueText = SETTINGS.*(setting.valuePtr) ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
         } else if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
           const uint8_t value = SETTINGS.*(setting.valuePtr);
@@ -219,12 +290,16 @@ void ReaderOptionsActivity::render(RenderLock&&) {
         }
         return valueText;
       },
-      true);
+      true, nullptr, [&visibleSettings](int i) { return visibleSettings[i].type == SettingType::SECTION_HEADER; });
 
+  const bool currentIsAction = selectedIndex >= 0 && selectedIndex < settingsCount &&
+                               ((*currentSettings)[selectedIndex].type == SettingType::ACTION ||
+                                (*currentSettings)[selectedIndex].type == SettingType::SUBMENU);
   const bool selectedLineHeight = selectedIndex >= 0 && selectedIndex < settingsCount &&
-                                  settings[selectedIndex].valuePtr == &CrossPointSettings::lineHeightPercent;
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), selectedLineHeight ? tr(STR_SELECT) : tr(STR_TOGGLE),
-                                            tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+                                  (*currentSettings)[selectedIndex].valuePtr == &CrossPointSettings::lineHeightPercent;
+  const auto labels =
+      mappedInput.mapLabels(tr(STR_BACK), (currentIsAction || selectedLineHeight) ? tr(STR_SELECT) : tr(STR_TOGGLE),
+                            tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4, true);
 
   renderer.displayBuffer();

@@ -376,7 +376,12 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
     auto truncatedTitle = renderer.truncatedText(UI_12_FONT_ID, title,
                                                  rect.width - padding * 2 - BaseMetrics::values.contentSidePadding * 2,
                                                  EpdFontFamily::BOLD);
-    renderer.drawCenteredText(UI_12_FONT_ID, rect.y + 5, truncatedTitle.c_str(), true, EpdFontFamily::BOLD);
+    if (SETTINGS.shouldShowClockOutsideReader() && halClock.isAvailable()) {
+      renderer.drawText(UI_12_FONT_ID, rect.x + BaseMetrics::values.contentSidePadding, rect.y + 5,
+                        truncatedTitle.c_str(), true, EpdFontFamily::BOLD);
+    } else {
+      renderer.drawCenteredText(UI_12_FONT_ID, rect.y + 5, truncatedTitle.c_str(), true, EpdFontFamily::BOLD);
+    }
   }
 
   if (subtitle) {
@@ -387,6 +392,8 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
                       rect.x + rect.width - BaseMetrics::values.contentSidePadding - truncatedSubtitleWidth, subtitleY,
                       truncatedSubtitle.c_str(), true);
   }
+
+  drawTopStatusBarClock(renderer, rect.y, nullptr, false);
 }
 
 void BaseTheme::drawSubHeader(const GfxRenderer& renderer, Rect rect, const char* label, const char* rightLabel) const {
@@ -852,8 +859,9 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
   }
 }
 
-void BaseTheme::drawTopStatusBarClock(GfxRenderer& renderer, int topY, const char* previewTime) const {
-  if (!SETTINGS.statusBarClock) {
+void BaseTheme::drawTopStatusBarClock(const GfxRenderer& renderer, int topY, const char* previewTime,
+                                      const bool readerContext) const {
+  if (!(readerContext ? SETTINGS.shouldShowClockInReader() : SETTINGS.shouldShowClockOutsideReader())) {
     return;
   }
 

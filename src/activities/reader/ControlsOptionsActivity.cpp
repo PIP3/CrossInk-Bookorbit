@@ -2,10 +2,9 @@
 
 #include <GfxRenderer.h>
 #include <I18n.h>
-#include <Logging.h>
 
 #include <algorithm>
-#include <cstring>
+#include <iterator>
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
@@ -14,9 +13,34 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
+namespace {
+uint8_t enumDisplayIndexForRawValue(const SettingInfo& setting, uint8_t rawValue) {
+  if (setting.enumRawValues.empty()) {
+    return rawValue;
+  }
+
+  auto it = std::find(setting.enumRawValues.begin(), setting.enumRawValues.end(), rawValue);
+  if (it == setting.enumRawValues.end()) {
+    return 0;
+  }
+  return static_cast<uint8_t>(std::distance(setting.enumRawValues.begin(), it));
+}
+
+uint8_t enumRawValueForDisplayIndex(const SettingInfo& setting, uint8_t displayIndex) {
+  if (setting.enumRawValues.empty()) {
+    return displayIndex;
+  }
+  if (displayIndex >= setting.enumRawValues.size()) {
+    return setting.enumRawValues.front();
+  }
+  return setting.enumRawValues[displayIndex];
+}
+}  // namespace
+
 void ControlsOptionsActivity::onEnter() {
   Activity::onEnter();
 
+  activeSubmenu = SettingAction::None;
   rebuildSettingsList();
   requestUpdate();
 }
@@ -25,67 +49,61 @@ void ControlsOptionsActivity::onExit() { Activity::onExit(); }
 
 void ControlsOptionsActivity::rebuildSettingsList() {
   settings.clear();
+  powerSettings.clear();
+  frontButtonSettings.clear();
+  sideButtonSettings.clear();
 
   const auto allSettings = getSettingsList();
-  auto addControlSetting = [&](StrId nameId) {
-    const auto it = std::find_if(allSettings.begin(), allSettings.end(),
-                                 [nameId](const auto& setting) { return setting.nameId == nameId; });
-    if (it != allSettings.end()) {
-      settings.push_back(*it);
-      return;
-    }
-    LOG_ERR("CTRL", "Missing control setting definition for nameId=%d", static_cast<int>(nameId));
-  };
-  auto addControlSettingByKey = [&](const char* key) {
-    const auto it = std::find_if(allSettings.begin(), allSettings.end(), [key](const auto& setting) {
-      return setting.key && std::strcmp(setting.key, key) == 0;
-    });
-    if (it != allSettings.end()) {
-      settings.push_back(*it);
-      return;
-    }
-    LOG_ERR("CTRL", "Missing control setting definition for key=%s", key);
-  };
+  settings = buildControlsSettingsParentList(allSettings);
+  powerSettings = buildControlsPowerSettingsList(allSettings);
+  frontButtonSettings = buildControlsFrontButtonSettingsList(allSettings);
+  sideButtonSettings = buildControlsSideButtonSettingsList(allSettings);
 
-  const bool hasTiltPageTurnSetting = std::any_of(allSettings.begin(), allSettings.end(), [](const auto& setting) {
-    return setting.nameId == StrId::STR_TILT_PAGE_TURN;
-  });
-  const bool hasTiltPageTurnDirectionSetting =
-      std::any_of(allSettings.begin(), allSettings.end(),
-                  [](const auto& setting) { return setting.nameId == StrId::STR_TILT_PAGE_TURN_DIRECTION; });
-  const bool hasTiltSettings = hasTiltPageTurnSetting || hasTiltPageTurnDirectionSetting;
-  const size_t expectedControlsSettingsCount = 13 + (hasTiltSettings ? 1u : 0u) + (hasTiltPageTurnSetting ? 1u : 0u) +
-                                               (hasTiltPageTurnDirectionSetting ? 1u : 0u);
-  settings.reserve(expectedControlsSettingsCount);
-
-  settings.push_back(SettingInfo::SectionHeader(StrId::STR_POWER_BUTTON));
-  addControlSetting(StrId::STR_SHORT_PWR_BTN);
-  addControlSetting(StrId::STR_LONG_PRESS_ACTION);
-  settings.push_back(SettingInfo::SectionHeader(StrId::STR_FRONT_BUTTONS));
-  settings.push_back(SettingInfo::Action(StrId::STR_REMAP_FRONT_BUTTONS, SettingAction::RemapFrontButtons));
-  settings.push_back(
-      SettingInfo::Action(StrId::STR_REMAP_FRONT_BUTTONS_READER, SettingAction::RemapFrontButtonsReader));
-  addControlSettingByKey("frontButtonOrientationAware");
-  addControlSetting(StrId::STR_LONG_PRESS_BEHAVIOR);
-  addControlSetting(StrId::STR_LONG_PRESS_MENU_ACTION);
-  settings.push_back(SettingInfo::SectionHeader(StrId::STR_SIDE_BUTTONS));
-  addControlSetting(StrId::STR_SIDE_BTN_LAYOUT);
-  addControlSettingByKey("sideButtonOrientationAware");
-  addControlSetting(StrId::STR_SIDE_BTN_LONG_PRESS);
-  if (hasTiltSettings) {
-    settings.push_back(SettingInfo::SectionHeader(StrId::STR_OTHER));
-    if (hasTiltPageTurnSetting) addControlSetting(StrId::STR_TILT_PAGE_TURN);
-    if (hasTiltPageTurnDirectionSetting) addControlSetting(StrId::STR_TILT_PAGE_TURN_DIRECTION);
-  }
-
-  settingsCount = static_cast<int>(settings.size());
+  setCurrentSettings();
   selectedIndex = 0;
-  while (selectedIndex < settingsCount && settings[selectedIndex].type == SettingType::SECTION_HEADER) {
-    selectedIndex++;
+}
+
+void ControlsOptionsActivity::setCurrentSettings() {
+  switch (activeSubmenu) {
+    case SettingAction::ControlsPowerButton:
+      currentSettings = &powerSettings;
+      break;
+    case SettingAction::ControlsFrontButtons:
+      currentSettings = &frontButtonSettings;
+      break;
+    case SettingAction::ControlsSideButtons:
+      currentSettings = &sideButtonSettings;
+      break;
+    default:
+      currentSettings = &settings;
+      break;
   }
-  if (selectedIndex >= settingsCount) {
-    selectedIndex = 0;
+  settingsCount = static_cast<int>(currentSettings->size());
+}
+
+StrId ControlsOptionsActivity::activeSubmenuTitleId() const {
+  switch (activeSubmenu) {
+    case SettingAction::ControlsPowerButton:
+      return StrId::STR_POWER_BUTTON;
+    case SettingAction::ControlsFrontButtons:
+      return StrId::STR_FRONT_BUTTONS;
+    case SettingAction::ControlsSideButtons:
+      return StrId::STR_SIDE_BUTTONS;
+    default:
+      return StrId::STR_NONE_OPT;
   }
+}
+
+void ControlsOptionsActivity::openSubmenu(SettingAction action) {
+  activeSubmenu = action;
+  setCurrentSettings();
+  selectedIndex = 0;
+}
+
+void ControlsOptionsActivity::closeSubmenu() {
+  activeSubmenu = SettingAction::None;
+  setCurrentSettings();
+  selectedIndex = 0;
 }
 
 void ControlsOptionsActivity::moveSelection(bool forward) {
@@ -94,7 +112,7 @@ void ControlsOptionsActivity::moveSelection(bool forward) {
   for (int i = 0; i < settingsCount; i++) {
     selectedIndex = forward ? ButtonNavigator::nextIndex(selectedIndex, settingsCount)
                             : ButtonNavigator::previousIndex(selectedIndex, settingsCount);
-    if (settings[selectedIndex].type != SettingType::SECTION_HEADER) {
+    if ((*currentSettings)[selectedIndex].type != SettingType::SECTION_HEADER) {
       break;
     }
   }
@@ -102,7 +120,7 @@ void ControlsOptionsActivity::moveSelection(bool forward) {
 
 void ControlsOptionsActivity::toggleCurrentSetting() {
   if (selectedIndex < 0 || selectedIndex >= settingsCount) return;
-  const auto& setting = settings[selectedIndex];
+  const auto& setting = (*currentSettings)[selectedIndex];
 
   if (setting.type == SettingType::TOGGLE && setting.valuePtr != nullptr) {
     const bool cur = SETTINGS.*(setting.valuePtr);
@@ -110,7 +128,11 @@ void ControlsOptionsActivity::toggleCurrentSetting() {
     SETTINGS.saveToFile();
   } else if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
     const uint8_t cur = SETTINGS.*(setting.valuePtr);
-    SETTINGS.*(setting.valuePtr) = (cur + 1) % static_cast<uint8_t>(setting.enumValues.size());
+    const uint8_t currentIndex = enumDisplayIndexForRawValue(setting, cur);
+    const size_t optionCount = settingEnumOptionCount(setting);
+    if (optionCount == 0) return;
+    const uint8_t nextIndex = (currentIndex + 1) % static_cast<uint8_t>(optionCount);
+    SETTINGS.*(setting.valuePtr) = enumRawValueForDisplayIndex(setting, nextIndex);
     SETTINGS.saveToFile();
   } else if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
     const int8_t cur = SETTINGS.*(setting.valuePtr);
@@ -131,6 +153,9 @@ void ControlsOptionsActivity::toggleCurrentSetting() {
                              [](const ActivityResult&) { SETTINGS.saveToFile(); });
       return;
     }
+  } else if (setting.type == SettingType::SUBMENU) {
+    openSubmenu(setting.action);
+    return;
   }
 }
 
@@ -152,6 +177,11 @@ void ControlsOptionsActivity::loop() {
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    if (activeSubmenu != SettingAction::None) {
+      closeSubmenu();
+      requestUpdate();
+      return;
+    }
     SETTINGS.saveToFile();
     finish();
     return;
@@ -175,31 +205,50 @@ void ControlsOptionsActivity::render(RenderLock&&) {
   GUI.drawHeader(renderer, Rect{contentX, metrics.topPadding, contentWidth, metrics.headerHeight}, tr(STR_CAT_CONTROLS),
                  nullptr);
 
+  const auto& visibleSettings = *currentSettings;
+  Rect listRect{contentX, metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing, contentWidth,
+                pageHeight - (metrics.topPadding + metrics.headerHeight + metrics.buttonHintsHeight +
+                              metrics.verticalSpacing * 2)};
+  const StrId submenuTitleId = activeSubmenuTitleId();
+  if (submenuTitleId != StrId::STR_NONE_OPT) {
+    constexpr int submenuHeaderFontId = UI_10_FONT_ID;
+    const int headerLineHeight = renderer.getLineHeight(submenuHeaderFontId);
+    const int headerOffset = headerLineHeight + metrics.verticalSpacing;
+    const int headerMaxWidth = listRect.width - metrics.contentSidePadding * 2;
+    const auto headerLabel =
+        renderer.truncatedText(submenuHeaderFontId, I18N.get(submenuTitleId), headerMaxWidth, EpdFontFamily::BOLD);
+    renderer.drawText(submenuHeaderFontId, listRect.x + metrics.contentSidePadding, listRect.y, headerLabel.c_str(),
+                      true, EpdFontFamily::BOLD);
+    listRect.y += headerOffset;
+    listRect.height = std::max(0, listRect.height - headerOffset);
+  }
+
   GUI.drawList(
-      renderer,
-      Rect{contentX, metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing, contentWidth,
-           pageHeight -
-               (metrics.topPadding + metrics.headerHeight + metrics.buttonHintsHeight + metrics.verticalSpacing * 2)},
-      settingsCount, selectedIndex, [this](int i) { return std::string(I18N.get(settings[i].nameId)); }, nullptr,
-      nullptr,
-      [this](int i) {
-        const auto& setting = settings[i];
+      renderer, listRect, settingsCount, selectedIndex,
+      [&visibleSettings](int i) { return std::string(I18N.get(visibleSettings[i].nameId)); }, nullptr, nullptr,
+      [&visibleSettings](int i) {
+        const auto& setting = visibleSettings[i];
         std::string valueText;
-        if (setting.type == SettingType::TOGGLE && setting.valuePtr != nullptr) {
+        if (setting.type == SettingType::SUBMENU) {
+          valueText = ">";
+        } else if (setting.type == SettingType::TOGGLE && setting.valuePtr != nullptr) {
           valueText = SETTINGS.*(setting.valuePtr) ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
         } else if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
           const uint8_t value = SETTINGS.*(setting.valuePtr);
-          const uint8_t safeValue = value < setting.enumValues.size() ? value : 0;
-          valueText = I18N.get(setting.enumValues[safeValue]);
+          const uint8_t displayValue = enumDisplayIndexForRawValue(setting, value);
+          const size_t optionCount = settingEnumOptionCount(setting);
+          const uint8_t safeValue = displayValue < optionCount ? displayValue : 0;
+          valueText = settingEnumOptionLabel(setting, safeValue);
         } else if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
           valueText = std::to_string(SETTINGS.*(setting.valuePtr));
         }
         return valueText;
       },
-      true, nullptr, [this](int i) { return settings[i].type == SettingType::SECTION_HEADER; });
+      true, nullptr, [&visibleSettings](int i) { return visibleSettings[i].type == SettingType::SECTION_HEADER; });
 
-  const bool currentIsAction =
-      selectedIndex >= 0 && selectedIndex < settingsCount && settings[selectedIndex].type == SettingType::ACTION;
+  const bool currentIsAction = selectedIndex >= 0 && selectedIndex < settingsCount &&
+                               ((*currentSettings)[selectedIndex].type == SettingType::ACTION ||
+                                (*currentSettings)[selectedIndex].type == SettingType::SUBMENU);
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), currentIsAction ? tr(STR_SELECT) : tr(STR_TOGGLE),
                                             tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4, true);

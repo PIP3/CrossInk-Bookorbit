@@ -16,9 +16,10 @@
 
 ### Changed
 - Moved the X3 reader clock from the bottom status bar into a new top-centered status bar.
-- Updated the Customise Status Bar preview to show separate top and bottom status bar examples.
+- Moved clock settings from Customise Status Bar into Settings > System > Device.
 - Improved OPDS and font download responsiveness by reducing progress-update overhead and temporarily disabling WiFi power saving during transfers.
 - Book selection now shows a loading popup before EPUB indexing or cache loading begins.
+- Changed Display, Reader, Controls, in-reader Reader Options and Controls, and larger System settings groups so related options open as submenus instead of appearing as section headers.
 
 ### Fixed
 - Fixed inverted reader menus so front-button hint outlines keep the normal portrait shape while the labels stay readable in the inverted orientation.

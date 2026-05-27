@@ -9,7 +9,7 @@
 #include "activities/Activity.h"
 #include "util/ButtonNavigator.h"
 
-enum class SettingType { TOGGLE, ENUM, ACTION, VALUE, STRING, SECTION_HEADER };
+enum class SettingType { TOGGLE, ENUM, ACTION, VALUE, STRING, SECTION_HEADER, SUBMENU };
 
 enum class SettingAction {
   None,
@@ -18,12 +18,21 @@ enum class SettingAction {
   CustomiseStatusBar,
   KOReaderSync,
   OPDSBrowser,
+  DisplaySleepScreen,
+  ReaderFontOptions,
+  ReaderPageLayout,
+  ControlsPowerButton,
+  ControlsFrontButtons,
+  ControlsSideButtons,
+  SystemDevice,
+  SystemFilesCache,
   Network,
   ClearCache,
   CheckForUpdates,
   SdFirmwareUpdate,
   Language,
   DownloadFonts,
+  ClockSync,
 };
 
 struct SettingInfo {
@@ -93,6 +102,14 @@ struct SettingInfo {
     SettingInfo s;
     s.nameId = nameId;
     s.type = SettingType::ACTION;
+    s.action = action;
+    return s;
+  }
+
+  static SettingInfo Submenu(StrId nameId, SettingAction action) {
+    SettingInfo s;
+    s.nameId = nameId;
+    s.type = SettingType::SUBMENU;
     s.action = action;
     return s;
   }
@@ -168,6 +185,10 @@ inline std::string settingEnumOptionLabel(const SettingInfo& setting, const uint
                                                   : std::string();
 }
 
+inline bool settingShowsNavigationCaret(const SettingInfo& setting) {
+  return setting.type == SettingType::SUBMENU || setting.action == SettingAction::CustomiseStatusBar;
+}
+
 class SettingsActivity final : public Activity {
   ButtonNavigator buttonNavigator;
 
@@ -177,18 +198,31 @@ class SettingsActivity final : public Activity {
 
   // Per-category settings derived from shared list + device-only actions
   std::vector<SettingInfo> displaySettings;
+  std::vector<SettingInfo> displaySleepSettings;
   std::vector<SettingInfo> readerSettings;
+  std::vector<SettingInfo> readerFontSettings;
+  std::vector<SettingInfo> readerPageLayoutSettings;
   std::vector<SettingInfo> controlsSettings;
+  std::vector<SettingInfo> controlsPowerSettings;
+  std::vector<SettingInfo> controlsFrontButtonSettings;
+  std::vector<SettingInfo> controlsSideButtonSettings;
   std::vector<SettingInfo> systemSettings;
+  std::vector<SettingInfo> systemDeviceSettings;
+  std::vector<SettingInfo> systemFilesCacheSettings;
   const std::vector<SettingInfo>* currentSettings = nullptr;
 
   bool preserveQuickResumeTimeoutOn = false;
   bool quickResumeTimeoutAutoEnabled = false;
+  SettingAction activeSubmenu = SettingAction::None;
 
   static constexpr int categoryCount = 4;
   static const StrId categoryNames[categoryCount];
 
   void enterCategory(int categoryIndex);
+  void setCurrentSettingsForCategory();
+  StrId activeSubmenuTitleId() const;
+  void openSubmenu(SettingAction action);
+  void closeSubmenu();
   void toggleCurrentSetting();
   void openSleepTimeoutPicker();
   void openLineHeightPicker();

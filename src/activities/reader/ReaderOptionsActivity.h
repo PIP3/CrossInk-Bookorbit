@@ -12,8 +12,17 @@ class ReaderOptionsActivity final : public Activity {
   int selectedIndex = 0;
   int settingsCount = 0;
   std::vector<SettingInfo> settings;
+  std::vector<SettingInfo> fontSettings;
+  std::vector<SettingInfo> pageLayoutSettings;
+  const std::vector<SettingInfo>* currentSettings = nullptr;
+  SettingAction activeSubmenu = SettingAction::None;
 
   void rebuildSettingsList();
+  void setCurrentSettings();
+  StrId activeSubmenuTitleId() const;
+  void openSubmenu(SettingAction action);
+  void closeSubmenu();
+  void moveSelection(bool forward);
   void toggleCurrentSetting();
   void openLineHeightPicker();
 
