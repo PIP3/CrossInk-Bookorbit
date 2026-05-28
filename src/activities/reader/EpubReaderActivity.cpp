@@ -2098,12 +2098,12 @@ void EpubReaderActivity::render(RenderLock&& lock) {
 }
 
 void EpubReaderActivity::silentIndexNextChapterIfNeeded(const uint16_t viewportWidth, const uint16_t viewportHeight) {
-  if (!epub || !section || section->pageCount < 2) {
+  if (!epub || !section || section->pageCount < 3) {
     return;
   }
 
   // Build the next chapter cache while the penultimate page is on screen.
-  if (section->currentPage != section->pageCount - 2) {
+  if (section->currentPage != section->pageCount - 3) {
     return;
   }
 
@@ -2118,12 +2118,6 @@ void EpubReaderActivity::silentIndexNextChapterIfNeeded(const uint16_t viewportW
                                   SETTINGS.paragraphAlignment, viewportWidth, viewportHeight,
                                   SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle, SETTINGS.imageRendering,
                                   SETTINGS.bionicReadingEnabled, SETTINGS.guideReadingEnabled)) {
-    return;
-  }
-
-  if (renderer.isSdCardFont(SETTINGS.getReaderFontId())) {
-    LOG_DBG("ERS", "Skipping silent next-chapter indexing for SD font: chapter=%d free=%u maxAlloc=%u", nextSpineIndex,
-            ESP.getFreeHeap(), ESP.getMaxAllocHeap());
     return;
   }
 
