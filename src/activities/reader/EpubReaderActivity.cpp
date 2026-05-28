@@ -54,6 +54,8 @@ constexpr char READER_SETTINGS_FILE_NAME[] = "/reader_settings.bin";
 constexpr char FALLBACK_FONT_SECTION_CACHE_SUFFIX[] = "_fallback_font";
 constexpr uint32_t MIN_READING_PACE_SAMPLE_SECONDS = 2;
 constexpr uint32_t MAX_READING_PACE_SAMPLE_SECONDS = 10 * 60;
+constexpr uint32_t MIN_BOOK_PROGRESS_READING_SECONDS = 2 * 60;
+constexpr float MIN_BOOK_PROGRESS_FOR_TIME_LEFT = 0.01f;
 
 uint8_t largestBlockPercent(const MemoryBudget::HeapSnapshot& heap) {
   if (heap.freeHeap == 0) {
@@ -308,6 +310,52 @@ void EpubReaderActivity::recordForwardPagePaceSample() {
   stats.recordForwardPageRead(seconds);
 }
 
+bool EpubReaderActivity::estimateBookTimeLeftSecondsFromProgress(uint32_t& seconds) const {
+  seconds = 0;
+  if (!epub || !section || section->pageCount == 0) {
+    return false;
+  }
+
+  const size_t bookSize = epub->getBookSize();
+  if (bookSize == 0) {
+    return false;
+  }
+
+  const size_t prevChapterSize = currentSpineIndex >= 1 ? epub->getCumulativeSpineItemSize(currentSpineIndex - 1) : 0;
+  const size_t cumulativeSize = epub->getCumulativeSpineItemSize(currentSpineIndex);
+  if (cumulativeSize <= prevChapterSize) {
+    return false;
+  }
+
+  const float chapterSize = static_cast<float>(cumulativeSize - prevChapterSize);
+  const float completedCurrentChapter =
+      (static_cast<float>(section->currentPage + 1) / static_cast<float>(section->pageCount)) * chapterSize;
+  const float completedBookSize = static_cast<float>(prevChapterSize) + completedCurrentChapter;
+  if (completedBookSize <= 0.0f || completedBookSize >= static_cast<float>(bookSize)) {
+    return false;
+  }
+
+  const float bookProgress = completedBookSize / static_cast<float>(bookSize);
+  if (bookProgress < MIN_BOOK_PROGRESS_FOR_TIME_LEFT || bookProgress >= 1.0f) {
+    return false;
+  }
+
+  uint32_t elapsedSeconds = stats.totalReadingSeconds;
+  if (sessionStartMs != 0UL) {
+    elapsedSeconds += static_cast<uint32_t>((millis() - sessionStartMs) / 1000UL);
+  }
+  if (elapsedSeconds < MIN_BOOK_PROGRESS_READING_SECONDS) {
+    return false;
+  }
+
+  const float estimatedSeconds = (static_cast<float>(elapsedSeconds) * (1.0f - bookProgress)) / bookProgress;
+  if (estimatedSeconds <= 0.0f) {
+    return false;
+  }
+  seconds = static_cast<uint32_t>(std::min(estimatedSeconds + 0.5f, static_cast<float>(UINT32_MAX)));
+  return seconds > 0;
+}
+
 bool EpubReaderActivity::estimateRemainingTimeLeftPages(const bool bookEstimate, float& remainingPages) const {
   remainingPages = 0.0f;
   if (!epub || !section || section->pageCount == 0) {
@@ -333,15 +381,15 @@ bool EpubReaderActivity::estimateRemainingTimeLeftPages(const bool bookEstimate,
     }
 
     const float chapterSize = static_cast<float>(cumulativeSize - prevChapterSize);
-    const float bytesPerPage = chapterSize / static_cast<float>(section->pageCount);
-    if (bytesPerPage <= 0.0f) {
-      return false;
-    }
-
     const float completedCurrentChapter =
         (static_cast<float>(section->currentPage + 1) / static_cast<float>(section->pageCount)) * chapterSize;
     const float completedBookSize = static_cast<float>(prevChapterSize) + completedCurrentChapter;
     if (completedBookSize >= static_cast<float>(bookSize)) {
+      return false;
+    }
+
+    const float bytesPerPage = chapterSize / static_cast<float>(section->pageCount);
+    if (bytesPerPage <= 0.0f) {
       return false;
     }
     remainingPages = (static_cast<float>(bookSize) - completedBookSize) / bytesPerPage;
@@ -352,6 +400,10 @@ bool EpubReaderActivity::estimateRemainingTimeLeftPages(const bool bookEstimate,
 
 bool EpubReaderActivity::estimateTimeLeftSeconds(const bool bookEstimate, uint32_t& seconds) const {
   seconds = 0;
+  if (bookEstimate && estimateBookTimeLeftSecondsFromProgress(seconds)) {
+    return true;
+  }
+
   if (stats.avgSecondsPerForwardPage == 0 || stats.paceSampleCount == 0) {
     return false;
   }
@@ -375,6 +427,12 @@ bool EpubReaderActivity::formatTimeLeftLabel(char* buf, const size_t len) const 
   }
 
   const bool bookEstimate = SETTINGS.statusBarTimeLeft == CrossPointSettings::STATUS_BAR_TIME_LEFT::TIME_LEFT_BOOK;
+  uint32_t seconds = 0;
+  if (estimateTimeLeftSeconds(bookEstimate, seconds)) {
+    formatCompactTimeLeft(seconds, buf, len);
+    return true;
+  }
+
   if (stats.avgSecondsPerForwardPage == 0 || stats.paceSampleCount == 0) {
     float remainingPages = 0.0f;
     if (!estimateRemainingTimeLeftPages(bookEstimate, remainingPages)) {
@@ -384,13 +442,7 @@ bool EpubReaderActivity::formatTimeLeftLabel(char* buf, const size_t len) const 
     return true;
   }
 
-  uint32_t seconds = 0;
-  if (!estimateTimeLeftSeconds(bookEstimate, seconds)) {
-    return false;
-  }
-
-  formatCompactTimeLeft(seconds, buf, len);
-  return true;
+  return false;
 }
 
 void EpubReaderActivity::initializeCompletionPromptTrigger() {
