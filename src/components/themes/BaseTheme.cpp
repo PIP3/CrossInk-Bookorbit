@@ -110,6 +110,13 @@ void BaseTheme::drawBatteryRight(const GfxRenderer& renderer, Rect rect, const b
   fillBatteryIcon(renderer, iconRect, percentage);
 }
 
+int BaseTheme::homeHeaderClockTextYOffset(const GfxRenderer& renderer) {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const int statusBarHeight = std::max(UITheme::getStatusBarHeight(), metrics.statusBarVerticalMargin);
+  const int centeredClockY = (statusBarHeight - renderer.getLineHeight(SMALL_FONT_ID)) / 2;
+  return homeHeaderTopInset - centeredClockY;
+}
+
 void BaseTheme::drawProgressBar(const GfxRenderer& renderer, Rect rect, const size_t current,
                                 const size_t total) const {
   if (total == 0) {
@@ -367,8 +374,9 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
       SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS;
   // Position icon at right edge, drawBatteryRight will place text to the left
   const int batteryX = rect.x + rect.width - 12 - BaseMetrics::values.batteryWidth;
+  const int batteryY = rect.y + (title == nullptr ? homeHeaderTopInset : 5);
   drawBatteryRight(renderer,
-                   Rect{batteryX, rect.y + 5, BaseMetrics::values.batteryWidth, BaseMetrics::values.batteryHeight},
+                   Rect{batteryX, batteryY, BaseMetrics::values.batteryWidth, BaseMetrics::values.batteryHeight},
                    showBatteryPercentage);
 
   if (title) {
@@ -393,7 +401,7 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
                       truncatedSubtitle.c_str(), true);
   }
 
-  drawTopStatusBarClock(renderer, rect.y, nullptr, false);
+  drawTopStatusBarClock(renderer, rect.y, nullptr, false, title == nullptr ? homeHeaderClockTextYOffset(renderer) : 0);
 }
 
 void BaseTheme::drawSubHeader(const GfxRenderer& renderer, Rect rect, const char* label, const char* rightLabel) const {
@@ -860,7 +868,7 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
 }
 
 void BaseTheme::drawTopStatusBarClock(const GfxRenderer& renderer, int topY, const char* previewTime,
-                                      const bool readerContext) const {
+                                      const bool readerContext, const int textYOffset) const {
   if (!(readerContext ? SETTINGS.shouldShowClockInReader() : SETTINGS.shouldShowClockOutsideReader())) {
     return;
   }
@@ -893,7 +901,7 @@ void BaseTheme::drawTopStatusBarClock(const GfxRenderer& renderer, int topY, con
   const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, timeText);
   const int lineHeight = renderer.getLineHeight(SMALL_FONT_ID);
   const int textX = (renderer.getScreenWidth() - textWidth) / 2;
-  const int textY = (topY >= 0 ? topY : orientedMarginTop) + (statusBarHeight - lineHeight) / 2;
+  const int textY = (topY >= 0 ? topY : orientedMarginTop) + (statusBarHeight - lineHeight) / 2 + textYOffset;
   renderer.drawText(SMALL_FONT_ID, textX, textY, timeText);
 }
 

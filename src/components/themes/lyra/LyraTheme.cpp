@@ -120,8 +120,9 @@ void LyraTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
       SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS;
   // Position icon at right edge, drawBatteryRight will place text to the left
   const int batteryX = rect.x + rect.width - 12 - LyraMetrics::values.batteryWidth;
+  const int batteryY = rect.y + (title == nullptr ? homeHeaderTopInset : 5);
   drawBatteryRight(renderer,
-                   Rect{batteryX, rect.y + 5, LyraMetrics::values.batteryWidth, LyraMetrics::values.batteryHeight},
+                   Rect{batteryX, batteryY, LyraMetrics::values.batteryWidth, LyraMetrics::values.batteryHeight},
                    showBatteryPercentage);
 
   int maxTitleWidth = title != nullptr ? renderer.getTextWidth(UI_12_FONT_ID, title, EpdFontFamily::BOLD) : 0;
@@ -162,7 +163,7 @@ void LyraTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
                       rect.y + 50, truncatedSubtitle.c_str(), true);
   }
 
-  drawTopStatusBarClock(renderer, rect.y, nullptr, false);
+  drawTopStatusBarClock(renderer, rect.y, nullptr, false, title == nullptr ? homeHeaderClockTextYOffset(renderer) : 0);
 }
 
 void LyraTheme::drawSubHeader(const GfxRenderer& renderer, Rect rect, const char* label, const char* rightLabel) const {

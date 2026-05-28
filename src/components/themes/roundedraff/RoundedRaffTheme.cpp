@@ -56,7 +56,7 @@ void RoundedRaffTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const 
   (void)subtitle;
   // Home screen header is custom-rendered in drawRecentBookCover.
   if (title == nullptr) {
-    drawTopStatusBarClock(renderer, rect.y, nullptr, false);
+    drawTopStatusBarClock(renderer, rect.y, nullptr, false, homeHeaderClockTextYOffset(renderer));
     return;
   }
   const int sidePadding = RoundedRaffMetrics::values.contentSidePadding;

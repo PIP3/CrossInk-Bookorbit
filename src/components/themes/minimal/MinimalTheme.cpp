@@ -256,9 +256,10 @@ void MinimalTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char
   const bool showBatteryPercentage =
       SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS;
   const int batteryX = rect.x + rect.width - 12 - MinimalMetrics::values.batteryWidth;
-  drawBatteryRight(
-      renderer, Rect{batteryX, rect.y + 5, MinimalMetrics::values.batteryWidth, MinimalMetrics::values.batteryHeight},
-      showBatteryPercentage);
+  const int batteryY = rect.y + (title == nullptr ? homeHeaderTopInset : 5);
+  drawBatteryRight(renderer,
+                   Rect{batteryX, batteryY, MinimalMetrics::values.batteryWidth, MinimalMetrics::values.batteryHeight},
+                   showBatteryPercentage);
 
   if (title) {
     constexpr int titleInsetX = 12;
@@ -269,7 +270,7 @@ void MinimalTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char
     renderer.drawLine(rect.x, rect.y + rect.height - 3, rect.x + rect.width - 1, rect.y + rect.height - 3, 3, true);
   }
 
-  drawTopStatusBarClock(renderer, rect.y, nullptr, false);
+  drawTopStatusBarClock(renderer, rect.y, nullptr, false, title == nullptr ? homeHeaderClockTextYOffset(renderer) : 0);
 }
 
 void MinimalTheme::drawTabBar(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs,
