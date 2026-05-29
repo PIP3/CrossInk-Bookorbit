@@ -10,6 +10,7 @@
 - Exposed upstream Crosspoint's functionality to disable side buttons that got lost in the last merge.
 - Fixed the X3 clock UTC offset picker so editable sign, hour, and minute fields are more clear.
 - Reduced Home menu heap churn and skipped Lyra Carousel frame caching when heap is low to avoid crash risk on memory-constrained builds.
+- Fixed Vietnamese settings labels showing replacement diamonds after one over-escaped translation shifted generated string offsets.
 
 ## [v1.3.1] - 2026-05-28
 
