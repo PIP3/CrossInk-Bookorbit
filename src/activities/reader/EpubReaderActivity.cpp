@@ -114,7 +114,7 @@ void drawPublisherPageMarkers(const GfxRenderer& renderer, const Page& page, con
       if (*p <= ' ') {
         continue;
       }
-      char ch[2] = {static_cast<char>(*p), '\0'};
+      const char ch[2] = {static_cast<char>(*p), '\0'};
       maxCharWidth = std::max(maxCharWidth, renderer.getTextWidth(SMALL_FONT_ID, ch));
       labelLen++;
     }
@@ -142,7 +142,7 @@ void drawPublisherPageMarkers(const GfxRenderer& renderer, const Page& page, con
       if (static_cast<unsigned char>(*p) <= ' ') {
         continue;
       }
-      char ch[2] = {*p, '\0'};
+      const char ch[2] = {*p, '\0'};
       const int charWidth = renderer.getTextWidth(SMALL_FONT_ID, ch);
       renderer.drawText(SMALL_FONT_ID, x + (maxCharWidth - charWidth) / 2, y + row * lineStep, ch);
       row++;
