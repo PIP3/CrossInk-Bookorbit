@@ -1,12 +1,12 @@
 name: Bug Report
 description: Report an issue or unexpected behavior
 title: "Short, descriptive title of the issue"
-labels: ["bug", "triage"]
+labels: ["bug"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for taking the time to report this bug! Please fill out the details below.
+        Thanks for taking the time to report this bug! Please fill out the details below. If you have a feature request, please use the [Discussions](https://github.com/uxjulia/CrossInk/discussions/categories/ideas) feature.
 
   - type: dropdown
     id: device-type
