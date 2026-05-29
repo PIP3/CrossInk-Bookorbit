@@ -144,6 +144,7 @@ class ChapterHtmlSlimParser {
 
   void updateEffectiveInlineStyle();
   void skipCurrentElement();
+  void skipDescendantsOfCurrentElement();
   bool shouldAbortForLowMemory(const char* stage);
   bool startNewPage(const char* reason);
   void startNewTextBlock(const BlockStyle& blockStyle);

@@ -117,6 +117,11 @@ void ChapterHtmlSlimParser::skipCurrentElement() {
   depth += 1;
 }
 
+void ChapterHtmlSlimParser::skipDescendantsOfCurrentElement() {
+  skipUntilDepth = depth - 1;
+  skipEndElementStateUntilDepth = depth;
+}
+
 // Update effective bold/italic/underline based on block style and inline style stack
 void ChapterHtmlSlimParser::updateEffectiveInlineStyle() {
   // Start with block-level styles
@@ -1277,8 +1282,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         self->ancestorStack_.push_back({self->depth, std::string(name), classAttr});
         self->depth += 1;
         self->characterData(userData, alt.c_str(), alt.length());
-        // Skip any child content (skip until parent as we pre-advanced depth above)
-        self->skipUntilDepth = self->depth - 1;
+        self->skipDescendantsOfCurrentElement();
         return;
       }
 
@@ -1909,6 +1913,7 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
   // Leaving skip
   if (self->skipUntilDepth == self->depth) {
     self->skipUntilDepth = INT_MAX;
+    self->skipEndElementStateUntilDepth = INT_MAX;
   }
 
   if (self->tableDepth == 1 && (strcmp(name, "td") == 0 || strcmp(name, "th") == 0)) {
