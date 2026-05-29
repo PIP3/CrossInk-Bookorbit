@@ -1,5 +1,30 @@
 # Changelog
 
+## [v1.3.1] - 2026-05-28
+
+### Added
+- Added reader display and navigation options for line height, publisher page numbers, superscript/subscript text, tilt direction, and side-button page turns.
+- Added EPUB reading-position improvements, including bookmark anchors, bookmark preview snippets, and optional chapter/book time-left estimates.
+- Added nearby Reading Stats sync with separate totals for this device and all synced CrossInk readers.
+- Added per-server OPDS filename settings so downloaded books can use either Author - Title or Title - Author.
+- Added EPUB render heap diagnostics that include the largest allocatable block, not just total free heap.
+
+### Changed
+- Moved the X3 reader clock into a new top-centered status bar and moved clock settings to Settings > System > Device.
+- Reworked Display, Reader, Controls, in-reader options, and larger System settings groups so related options open as submenus.
+- Improved OPDS and font download responsiveness by reducing progress-update overhead and temporarily disabling WiFi power saving during transfers.
+- Book selection now shows a loading popup before EPUB indexing or cache loading begins.
+- Delayed the automatic finished-book prompt until the reader leaves the chapter where they reach 99%.
+
+### Fixed
+- Fixed the WiFi settings screen so the displayed MAC address stays consistent and matches the router-visible WiFi address.
+- Fixed reader UI issues with inverted menu button hints, Lyra Carousel popups, and Auto Page Turn interval persistence.
+- Fixed web uploads and KOReader Sync progress saves so refreshed book files keep their progress, stats, settings, and valid resume data.
+- Fixed OPDS low-memory handling so parser-buffer failures show a specific memory message and SD-card fonts release memory before catalog loading.
+- Fixed EPUB cache, CSS, table, SD-card font, and allocation failure paths so low-memory chapters recover, retry, or stop cleanly instead of opening unstyled pages, failing unnecessarily, or risking a reboot.
+- Fixed EPUB text with invisible word-joiner characters so missing font glyphs no longer show replacement diamonds.
+- Clarified the low-memory EPUB image warning so it says some or all images may be missing.
+
 ## [v1.3.0] - 2026-05-21
 
 ### Added

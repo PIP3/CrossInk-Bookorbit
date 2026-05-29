@@ -32,14 +32,14 @@ void EpubReaderChapterSelectionActivity::loop() {
   const int totalItems = getTotalItems();
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    const auto newSpineIndex = epub->getSpineIndexForTocIndex(selectorIndex);
-    if (newSpineIndex == -1) {
+    const auto tocItem = epub->getTocItem(selectorIndex);
+    if (tocItem.spineIndex == -1) {
       ActivityResult result;
       result.isCancelled = true;
       setResult(std::move(result));
       finish();
     } else {
-      setResult(ChapterResult{newSpineIndex});
+      setResult(ChapterResult{tocItem.spineIndex, tocItem.anchor});
       finish();
     }
   } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
@@ -77,7 +77,7 @@ void EpubReaderChapterSelectionActivity::render(RenderLock&&) {
   Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
 
   GUI.drawHeader(renderer, Rect{screen.x, screen.y + metrics.topPadding, screen.width, metrics.headerHeight},
-                 tr(STR_SELECT_CHAPTER));
+                 tr(STR_SELECT_CHAPTER), nullptr, true);
 
   const int contentTop = screen.y + metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int contentHeight = screen.height - contentTop - metrics.verticalSpacing;

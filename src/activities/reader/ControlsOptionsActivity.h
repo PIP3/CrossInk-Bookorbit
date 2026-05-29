@@ -12,8 +12,17 @@ class ControlsOptionsActivity final : public Activity {
   int selectedIndex = 0;
   int settingsCount = 0;
   std::vector<SettingInfo> settings;
+  std::vector<SettingInfo> powerSettings;
+  std::vector<SettingInfo> frontButtonSettings;
+  std::vector<SettingInfo> sideButtonSettings;
+  const std::vector<SettingInfo>* currentSettings = nullptr;
+  SettingAction activeSubmenu = SettingAction::None;
 
   void rebuildSettingsList();
+  void setCurrentSettings();
+  StrId activeSubmenuTitleId() const;
+  void openSubmenu(SettingAction action);
+  void closeSubmenu();
   void moveSelection(bool forward);
   void toggleCurrentSetting();
 

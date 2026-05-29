@@ -34,6 +34,7 @@ class ChapterHtmlSlimParser {
   std::function<void()> popupFn;  // Popup callback
   int depth = 0;
   int skipUntilDepth = INT_MAX;
+  int skipEndElementStateUntilDepth = INT_MAX;
   int boldUntilDepth = INT_MAX;
   int italicUntilDepth = INT_MAX;
   int underlineUntilDepth = INT_MAX;
@@ -64,6 +65,7 @@ class ChapterHtmlSlimParser {
   int imageCounter = 0;
   bool lowMemoryImageFallback = false;
   bool lowMemoryAbort = false;
+  bool attemptedTextLayoutFontCacheRelease = false;
 
   // Style tracking (replaces depth-based approach)
   struct StyleStackEntry {
@@ -73,6 +75,8 @@ class ChapterHtmlSlimParser {
     bool hasUnderline = false, underline = false;
     bool hasStrikethrough = false, strikethrough = false;
     bool hasBackgroundBlack = false, backgroundBlack = false;
+    bool hasSup = false, sup = false;
+    bool hasSub = false, sub = false;
   };
   std::vector<StyleStackEntry> inlineStyleStack;
   std::vector<BlockStyle> blockStyleStack;  // accumulated block styles from open ancestor elements
@@ -82,6 +86,8 @@ class ChapterHtmlSlimParser {
   bool effectiveUnderline = false;
   bool effectiveStrikethrough = false;
   bool effectiveBackgroundBlack = false;
+  bool effectiveSup = false;
+  bool effectiveSub = false;
 
   struct BufferedTableCell {
     std::unique_ptr<ParsedText> text;
@@ -117,7 +123,8 @@ class ChapterHtmlSlimParser {
   // Anchor-to-page mapping: tracks which page each HTML id attribute lands on
   int completedPageCount = 0;
   std::vector<std::pair<std::string, uint16_t>> anchorData;
-  std::string pendingAnchorId;  // deferred until after previous text block is flushed
+  std::string pendingAnchorId;          // deferred until after previous text block is flushed
+  std::vector<std::string> tocAnchors;  // the list of anchors that are TOC chapter boundaries
   uint16_t xpathParagraphIndex = 0;
   uint16_t xpathListItemIndex = 0;
 
@@ -129,9 +136,20 @@ class ChapterHtmlSlimParser {
   std::vector<std::pair<int, FootnoteEntry>> pendingFootnotes;  // <wordIndex, entry>
   int wordsExtractedInBlock = 0;
 
+  struct PendingPublisherPageMarker {
+    int wordIndex = 0;
+    char label[16] = {};
+  };
+  std::vector<PendingPublisherPageMarker> pendingPublisherPageMarkers;
+
   void updateEffectiveInlineStyle();
+  void skipCurrentElement();
   bool shouldAbortForLowMemory(const char* stage);
+  bool startNewPage(const char* reason);
   void startNewTextBlock(const BlockStyle& blockStyle);
+  void flushPendingAnchor();
+  void addPendingPublisherPageMarker(const char* label);
+  void attachPendingPublisherPageMarkers(int yPos);
   void flushPartWordBuffer();
   void makePages();
   void emitHorizontalRule(const BlockStyle& blockStyle);
@@ -157,6 +175,7 @@ class ChapterHtmlSlimParser {
                                  const std::function<void(std::unique_ptr<Page>, uint16_t, uint16_t)>& completePageFn,
                                  const bool embeddedStyle, const std::string& contentBase,
                                  const std::string& imageBasePath, const uint8_t imageRendering = 0,
+                                 std::vector<std::string> tocAnchors = {},
                                  const std::function<void()>& popupFn = nullptr, const CssParser* cssParser = nullptr)
 
       : epub(epub),
@@ -178,7 +197,8 @@ class ChapterHtmlSlimParser {
         embeddedStyle(embeddedStyle),
         imageRendering(imageRendering),
         contentBase(contentBase),
-        imageBasePath(imageBasePath) {}
+        imageBasePath(imageBasePath),
+        tocAnchors(std::move(tocAnchors)) {}
 
   ~ChapterHtmlSlimParser() = default;
   bool parseAndBuildPages();

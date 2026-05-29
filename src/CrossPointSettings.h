@@ -61,11 +61,24 @@ class CrossPointSettings {
     STATUS_BAR_PROGRESS_BAR_THICKNESS_COUNT
   };
   enum STATUS_BAR_TITLE { BOOK_TITLE = 0, CHAPTER_TITLE = 1, HIDE_TITLE = 2, STATUS_BAR_TITLE_COUNT };
+  enum STATUS_BAR_TIME_LEFT {
+    TIME_LEFT_HIDE = 0,
+    TIME_LEFT_CHAPTER = 1,
+    TIME_LEFT_BOOK = 2,
+    STATUS_BAR_TIME_LEFT_COUNT
+  };
   enum XTC_STATUS_BAR_MODE {
     XTC_STATUS_BAR_HIDE = 0,
     XTC_STATUS_BAR_BOTTOM = 1,
     XTC_STATUS_BAR_TOP = 2,
     XTC_STATUS_BAR_MODE_COUNT
+  };
+  enum STATUS_BAR_CLOCK_MODE {
+    CLOCK_NEVER = 0,
+    // Value 1 intentionally matches the legacy Show Clock toggle's "on" value.
+    CLOCK_IN_READER = 1,
+    CLOCK_ALWAYS = 2,
+    STATUS_BAR_CLOCK_MODE_COUNT
   };
 
   enum ORIENTATION {
@@ -97,9 +110,14 @@ class CrossPointSettings {
   };
 
   // Side button layout options
-  // Default: Previous, Next
-  // Swapped: Next, Previous
-  enum SIDE_BUTTON_LAYOUT { PREV_NEXT = 0, NEXT_PREV = 1, SIDE_BUTTON_LAYOUT_COUNT };
+  // Default: Up = Previous, Down = Next
+  enum SIDE_BUTTON_LAYOUT {
+    PREV_NEXT = 0,
+    NEXT_PREV = 1,
+    SIDE_BUTTONS_DISABLED = 2,
+    NEXT_NEXT = 3,
+    SIDE_BUTTON_LAYOUT_COUNT
+  };
 
   enum FRONT_BUTTON_ORIENTATION_AWARE {
     FRONT_ORIENTATION_AWARE_OFF = 0,
@@ -140,6 +158,7 @@ class CrossPointSettings {
     SD_FONT_RANGE_ALL = 4,
     SD_FONT_SIZE_RANGE_COUNT
   };
+  // Legacy persisted values for the old Tight / Normal / Wide line-spacing setting.
   enum LINE_COMPRESSION { TIGHT = 0, NORMAL = 1, WIDE = 2, LINE_COMPRESSION_COUNT };
   enum PARAGRAPH_ALIGNMENT {
     JUSTIFIED = 0,
@@ -153,11 +172,11 @@ class CrossPointSettings {
   // Auto-sleep timeout options (in minutes)
   enum SLEEP_TIMEOUT {
     SLEEP_1_MIN = 0,
-    SLEEP_5_MIN = 1,
-    SLEEP_10_MIN = 2,
-    SLEEP_15_MIN = 3,
-    SLEEP_30_MIN = 4,
-    SLEEP_3_MIN = 5,
+    SLEEP_3_MIN = 1,
+    SLEEP_5_MIN = 2,
+    SLEEP_10_MIN = 3,
+    SLEEP_15_MIN = 4,
+    SLEEP_30_MIN = 5,
     SLEEP_TIMEOUT_COUNT
   };
 
@@ -217,7 +236,14 @@ class CrossPointSettings {
   // Image rendering in EPUB reader
   enum IMAGE_RENDERING { IMAGES_DISPLAY = 0, IMAGES_PLACEHOLDER = 1, IMAGES_SUPPRESS = 2, IMAGE_RENDERING_COUNT };
 
-  enum TILT_PAGE_TURN { TILT_OFF = 0, TILT_NORMAL = 1, TILT_INVERTED = 2, TILT_PAGE_TURN_COUNT };
+  enum TILT_PAGE_TURN { TILT_OFF = 0, TILT_ON = 1, TILT_PAGE_TURN_COUNT };
+  enum TILT_PAGE_TURN_DIRECTION {
+    TILT_LEFT_RIGHT = 0,
+    TILT_LEFT_RIGHT_INVERTED = 1,
+    TILT_FORWARD_BACK = 2,
+    TILT_FORWARD_BACK_INVERTED = 3,
+    TILT_PAGE_TURN_DIRECTION_COUNT
+  };
 
   // Long-press Confirm (menu button) quick action in reader
   enum LONG_PRESS_MENU_ACTION {
@@ -264,9 +290,10 @@ class CrossPointSettings {
   uint8_t statusBarProgressBar = HIDE_PROGRESS;
   uint8_t statusBarProgressBarThickness = PROGRESS_BAR_NORMAL;
   uint8_t statusBarTitle = CHAPTER_TITLE;
+  uint8_t statusBarTimeLeft = TIME_LEFT_HIDE;
   uint8_t statusBarBattery = 1;
   uint8_t xtcStatusBarMode = XTC_STATUS_BAR_HIDE;
-  // Clock display in status bar (X3 only, requires DS3231 RTC)
+  // Clock display mode (X3 only, requires DS3231 RTC)
   uint8_t statusBarClock = 0;
   // Clock UTC offset in quarter-hour steps, biased by 48 so it fits in uint8_t.
   // Value 48 = UTC+0, 0 = UTC-12:00, 104 = UTC+14:00.
@@ -320,7 +347,8 @@ class CrossPointSettings {
 #else
   uint8_t sdFontSizeRange = SD_FONT_RANGE_TINY;
 #endif
-  uint8_t lineSpacing = NORMAL;
+  uint8_t lineSpacing = NORMAL;  // migration only; new saves use lineHeightPercent
+  uint8_t lineHeightPercent = 100;
   uint8_t paragraphAlignment = JUSTIFIED;
   // Auto-sleep timeout setting (default 10 minutes). Legacy sleepTimeout enum values are migration-only.
   uint8_t sleepTimeoutMinutes = 10;
@@ -330,6 +358,8 @@ class CrossPointSettings {
 
   // Reader screen margin settings
   uint8_t screenMargin = 5;
+  // Show EPUB publisher pagebreak labels in the reader margin when present.
+  uint8_t publisherPageNumbers = 0;
   // OPDS browser settings
   char opdsServerUrl[128] = "";
   char opdsUsername[64] = "";
@@ -364,6 +394,7 @@ class CrossPointSettings {
   uint8_t longPressMenuAction = LONG_MENU_OFF;
   // Tilt-based page turning (X3 only — requires QMI8658 IMU)
   uint8_t tiltPageTurn = TILT_OFF;
+  uint8_t tiltPageTurnDirection = TILT_LEFT_RIGHT;
   // Language setting (Language enum index, default 0 = EN)
   uint8_t language = 0;
   // Quick Resume: keep current content visible with moon icon instead of showing a static sleep screen.
@@ -379,11 +410,17 @@ class CrossPointSettings {
   static constexpr uint8_t MIN_SLEEP_TIMEOUT_MINUTES = 1;
   static constexpr uint8_t MAX_SLEEP_TIMEOUT_MINUTES = 30;
   static constexpr uint8_t SD_FONT_MAX_SIZE_STEPS = 8;
+  static constexpr uint8_t MIN_LINE_HEIGHT_PERCENT = 70;
+  static constexpr uint8_t MAX_LINE_HEIGHT_PERCENT = 200;
+  static constexpr uint8_t LINE_HEIGHT_PERCENT_STEP = 1;
 
   uint16_t getPowerButtonWakeDuration() const {
     return (shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP) ? POWER_BUTTON_WAKE_SHORT_MS
                                                                     : POWER_BUTTON_LONG_PRESS_MS;
   }
+
+  bool shouldShowClockInReader() const { return statusBarClock == CLOCK_IN_READER || statusBarClock == CLOCK_ALWAYS; }
+  bool shouldShowClockOutsideReader() const { return statusBarClock == CLOCK_ALWAYS; }
 
   // Callback to resolve SD card font IDs. Set by SdCardFontSystem::begin().
   // Returns font ID or 0 if not found.
@@ -402,9 +439,10 @@ class CrossPointSettings {
   uint8_t getSdFontTargetPointSize() const;
   bool changeReaderFontSize(bool larger);
   int getReaderFontId() const;
+  int getBuiltInReaderFontId() const;
 
   // If count_only is true, returns the number of settings items that would be written.
-  uint8_t writeSettings(FsFile& file, bool count_only = false) const;
+  uint8_t writeSettings(HalFile& file, bool count_only = false) const;
 
   bool saveToFile() const;
   bool loadFromFile();
@@ -414,6 +452,8 @@ class CrossPointSettings {
   static uint8_t sleepTimeoutEnumToMinutes(uint8_t legacyValue);
   static uint8_t sleepScreenStorageToMode(uint8_t storedValue);
   static uint8_t sleepScreenModeToStorage(uint8_t mode);
+  static uint8_t legacyLineSpacingToPercent(uint8_t legacyValue, uint8_t fontFamily, bool sdFontSelected);
+  static uint8_t clampedLineHeightPercent(uint8_t value);
 #ifdef SIMULATOR
   static bool verifySleepTimeoutMigrationContract();
   static bool verifySleepScreenMigrationContract();

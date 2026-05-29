@@ -10,6 +10,7 @@
 #include <XmlParserUtils.h>
 #include <expat.h>
 
+#include <algorithm>
 #include <cstdlib>
 #include <iterator>
 #include <new>
@@ -29,6 +30,9 @@ constexpr uint32_t MIN_MAX_ALLOC_FOR_TEXT_LAYOUT = 32 * 1024;
 constexpr uint32_t MIN_FREE_HEAP_FOR_TABLE_BUFFERING = 64 * 1024;
 constexpr uint32_t MIN_MAX_ALLOC_FOR_TABLE_BUFFERING = 40 * 1024;
 constexpr size_t MAX_BUFFERED_WORDS_BEFORE_LAYOUT = 350;
+constexpr uint8_t INITIAL_PAGE_ELEMENT_RESERVE = 8;
+constexpr uint8_t INITIAL_TABLE_FRAGMENT_ROW_RESERVE = 8;
+constexpr uint32_t PAGE_ELEMENT_RESERVE_MIN_MAX_ALLOC = 1024;
 
 static constexpr const char* const HEADER_TAGS[] = {"h1", "h2", "h3", "h4", "h5", "h6"};
 static constexpr const char* const BLOCK_TAGS[] = {"p", "li", "div", "br", "blockquote"};
@@ -40,6 +44,15 @@ static constexpr const char* const IMAGE_TAGS[] = {"img"};
 static constexpr const char* const SKIP_TAGS[] = {"head"};
 
 bool isWhitespace(const char c) { return c == ' ' || c == '\r' || c == '\n' || c == '\t'; }
+
+static char asciiLower(const char c) { return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c; }
+
+static bool tokenEqualsIgnoreCase(const char* value, const char* token, const size_t tokenLen) {
+  for (size_t i = 0; i < tokenLen; ++i) {
+    if (asciiLower(value[i]) != asciiLower(token[i])) return false;
+  }
+  return true;
+}
 
 bool matches(const char* tag_name, const char* const* possible_tags, size_t count) {
   for (size_t i = 0; i < count; i++) {
@@ -68,12 +81,40 @@ bool isInternalEpubLink(const char* href) {
   return true;
 }
 
+bool attributeContainsToken(const char* value, const char* token) {
+  if (!value || !token || token[0] == '\0') return false;
+
+  const size_t tokenLen = strlen(token);
+  const char* pos = value;
+  while (*pos != '\0') {
+    while (isWhitespace(*pos)) {
+      pos++;
+    }
+    const char* end = pos;
+    while (*end != '\0' && !isWhitespace(*end)) {
+      end++;
+    }
+    if (static_cast<size_t>(end - pos) == tokenLen && tokenEqualsIgnoreCase(pos, token, tokenLen)) {
+      return true;
+    }
+    pos = end;
+  }
+
+  return false;
+}
+
 bool isHeaderOrBlock(const char* name) {
   return matches(name, HEADER_TAGS, std::size(HEADER_TAGS)) || matches(name, BLOCK_TAGS, std::size(BLOCK_TAGS));
 }
 
 bool isTableStructuralTag(const char* name) {
   return strcmp(name, "table") == 0 || strcmp(name, "tr") == 0 || strcmp(name, "td") == 0 || strcmp(name, "th") == 0;
+}
+
+void ChapterHtmlSlimParser::skipCurrentElement() {
+  skipUntilDepth = depth;
+  skipEndElementStateUntilDepth = depth;
+  depth += 1;
 }
 
 // Update effective bold/italic/underline based on block style and inline style stack
@@ -86,6 +127,8 @@ void ChapterHtmlSlimParser::updateEffectiveInlineStyle() {
   effectiveStrikethrough =
       currentCssStyle.hasTextDecoration() && currentCssStyle.textDecoration == CssTextDecoration::LineThrough;
   effectiveBackgroundBlack = currentCssStyle.hasBackgroundBlack() && currentCssStyle.backgroundBlack;
+  effectiveSup = currentCssStyle.hasVerticalAlign() && currentCssStyle.verticalAlign == CssVerticalAlign::Super;
+  effectiveSub = currentCssStyle.hasVerticalAlign() && currentCssStyle.verticalAlign == CssVerticalAlign::Sub;
 
   // Apply inline style stack in order
   for (const auto& entry : inlineStyleStack) {
@@ -104,6 +147,14 @@ void ChapterHtmlSlimParser::updateEffectiveInlineStyle() {
     if (entry.hasBackgroundBlack) {
       effectiveBackgroundBlack = entry.backgroundBlack;
     }
+    if (entry.hasSup) {
+      effectiveSup = entry.sup;
+      if (entry.sup) effectiveSub = false;
+    }
+    if (entry.hasSub) {
+      effectiveSub = entry.sub;
+      if (entry.sub) effectiveSup = false;
+    }
   }
 }
 
@@ -112,15 +163,94 @@ bool ChapterHtmlSlimParser::shouldAbortForLowMemory(const char* stage) {
     return true;
   }
 
-  const auto heap = MemoryBudget::snapshot();
+  auto heap = MemoryBudget::snapshot();
   if (heap.freeHeap >= MIN_FREE_HEAP_FOR_TEXT_LAYOUT && heap.maxAllocHeap >= MIN_MAX_ALLOC_FOR_TEXT_LAYOUT) {
     return false;
+  }
+
+  if (!attemptedTextLayoutFontCacheRelease) {
+    attemptedTextLayoutFontCacheRelease = true;
+    if (renderer.releaseSdCardFontForLowMemory(fontId)) {
+      const auto afterRelease = MemoryBudget::snapshot();
+      LOG_DBG("EHP", "Released SD font caches before %s: free=%u->%u maxAlloc=%u->%u", stage, heap.freeHeap,
+              afterRelease.freeHeap, heap.maxAllocHeap, afterRelease.maxAllocHeap);
+      heap = afterRelease;
+      if (heap.freeHeap >= MIN_FREE_HEAP_FOR_TEXT_LAYOUT && heap.maxAllocHeap >= MIN_MAX_ALLOC_FOR_TEXT_LAYOUT) {
+        return false;
+      }
+    }
   }
 
   LOG_ERR("EHP", "Low heap during %s (%u free, %u max alloc); aborting section build", stage, heap.freeHeap,
           heap.maxAllocHeap);
   lowMemoryAbort = true;
   return true;
+}
+
+bool ChapterHtmlSlimParser::startNewPage(const char* reason) {
+  currentPage.reset(new (std::nothrow) Page());
+  if (!currentPage) {
+    const auto heap = MemoryBudget::snapshot();
+    LOG_ERR("EHP", "Failed to create page during %s (%u free, %u max alloc)", reason, heap.freeHeap, heap.maxAllocHeap);
+    lowMemoryAbort = true;
+    return false;
+  }
+
+  const auto heap = MemoryBudget::snapshot();
+  if (heap.freeHeap >= MIN_FREE_HEAP_FOR_TEXT_LAYOUT && heap.maxAllocHeap >= PAGE_ELEMENT_RESERVE_MIN_MAX_ALLOC) {
+    currentPage->elements.reserve(INITIAL_PAGE_ELEMENT_RESERVE);
+  }
+  currentPageNextY = 0;
+  return true;
+}
+
+void ChapterHtmlSlimParser::flushPendingAnchor() {
+  if (pendingAnchorId.empty()) return;
+
+  // If the pending anchor is a TOC chapter boundary, force a page break after the previous
+  // block is flushed so the chapter starts on a fresh page.
+  if (std::find(tocAnchors.begin(), tocAnchors.end(), pendingAnchorId) != tocAnchors.end()) {
+    if (currentPage && !currentPage->elements.empty()) {
+      completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex);
+      completedPageCount++;
+      if (!startNewPage("TOC anchor page break")) {
+        return;
+      }
+    }
+  }
+
+  // Record deferred anchor after previous block is flushed (and any TOC page break)
+  anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
+  pendingAnchorId.clear();
+}
+
+void ChapterHtmlSlimParser::addPendingPublisherPageMarker(const char* label) {
+  if (!label || label[0] == '\0' || tableDepth > 0) {
+    return;
+  }
+
+  if (partWordBufferIndex > 0) {
+    flushPartWordBuffer();
+  }
+
+  PendingPublisherPageMarker marker;
+  marker.wordIndex = wordsExtractedInBlock + (currentTextBlock ? static_cast<int>(currentTextBlock->size()) : 0);
+  strncpy(marker.label, label, sizeof(marker.label) - 1);
+  marker.label[sizeof(marker.label) - 1] = '\0';
+  pendingPublisherPageMarkers.push_back(marker);
+}
+
+void ChapterHtmlSlimParser::attachPendingPublisherPageMarkers(const int yPos) {
+  if (!currentPage || pendingPublisherPageMarkers.empty()) {
+    return;
+  }
+
+  auto markerIt = pendingPublisherPageMarkers.begin();
+  while (markerIt != pendingPublisherPageMarkers.end() && markerIt->wordIndex <= wordsExtractedInBlock) {
+    currentPage->addPublisherPageMarker(markerIt->label, yPos);
+    ++markerIt;
+  }
+  pendingPublisherPageMarkers.erase(pendingPublisherPageMarkers.begin(), markerIt);
 }
 
 // flush the contents of partWordBuffer to currentTextBlock
@@ -150,6 +280,11 @@ void ChapterHtmlSlimParser::flushPartWordBuffer() {
   }
   if (isStrikethrough) {
     fontStyle = static_cast<EpdFontFamily::Style>(fontStyle | EpdFontFamily::STRIKETHROUGH);
+  }
+  if (effectiveSup) {
+    fontStyle = static_cast<EpdFontFamily::Style>(fontStyle | EpdFontFamily::SUP);
+  } else if (effectiveSub) {
+    fontStyle = static_cast<EpdFontFamily::Style>(fontStyle | EpdFontFamily::SUB);
   }
 
   // flush the buffer
@@ -186,22 +321,23 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
       combinedStyle.fromBrElement = incoming.fromBrElement;
       currentTextBlock->setBlockStyle(combinedStyle);
 
-      if (!pendingAnchorId.empty()) {
-        anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
-        pendingAnchorId.clear();
-      }
+      flushPendingAnchor();
       return;
     }
 
     makePages();
   }
-  // Record deferred anchor after previous block is flushed
-  if (!pendingAnchorId.empty()) {
-    anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
-    pendingAnchorId.clear();
+  // If the pending anchor is a TOC chapter boundary, force a page break after the previous
+  // block is flushed so the chapter starts on a fresh page.
+  flushPendingAnchor();
+  currentTextBlock.reset(new (std::nothrow) ParsedText(extraParagraphSpacing, forceParagraphIndents, hyphenationEnabled,
+                                                       bionicReadingEnabled, guideReadingEnabled, blockStyle));
+  if (!currentTextBlock) {
+    const auto heap = MemoryBudget::snapshot();
+    LOG_ERR("EHP", "Failed to create text block (%u free, %u max alloc)", heap.freeHeap, heap.maxAllocHeap);
+    lowMemoryAbort = true;
+    return;
   }
-  currentTextBlock.reset(new ParsedText(extraParagraphSpacing, forceParagraphIndents, hyphenationEnabled,
-                                        bionicReadingEnabled, guideReadingEnabled, blockStyle));
   wordsExtractedInBlock = 0;
 }
 
@@ -265,18 +401,15 @@ void ChapterHtmlSlimParser::emitHorizontalRule(const BlockStyle& blockStyle) {
     flushPartWordBuffer();
   }
 
-  if (currentTextBlock && !currentTextBlock->isEmpty()) {
+  if (currentTextBlock) {
     const BlockStyle parentBlockStyle = currentTextBlock->getBlockStyle();
     startNewTextBlock(parentBlockStyle);
   }
 
   if (!currentPage) {
-    currentPage.reset(new (std::nothrow) Page());
-    if (!currentPage) {
-      LOG_ERR("EHP", "Failed to create page for horizontal rule");
+    if (!startNewPage("horizontal rule")) {
       return;
     }
-    currentPageNextY = 0;
   }
 
   const int16_t lineHeight = static_cast<int16_t>(renderer.getLineHeight(fontId) * lineCompression + 0.5f);
@@ -297,15 +430,13 @@ void ChapterHtmlSlimParser::emitHorizontalRule(const BlockStyle& blockStyle) {
   if (!currentPage->elements.empty() && currentPageNextY + totalHeight > viewportHeight) {
     completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex);
     completedPageCount++;
-    currentPage.reset(new (std::nothrow) Page());
-    if (!currentPage) {
-      LOG_ERR("EHP", "Failed to create page after horizontal-rule page break");
+    if (!startNewPage("horizontal-rule page break")) {
       return;
     }
-    currentPageNextY = 0;
   }
 
   currentPageNextY += topSpacing;
+  attachPendingPublisherPageMarkers(currentPageNextY);
 
   auto pageRule = std::shared_ptr<PageHorizontalRule>(
       new (std::nothrow) PageHorizontalRule(width, ruleThickness, xPos, currentPageNextY));
@@ -324,8 +455,9 @@ void ChapterHtmlSlimParser::emitHorizontalRule(const BlockStyle& blockStyle) {
 
 void ChapterHtmlSlimParser::emitBufferedTableAsParagraphs(BufferedTable& table) {
   if (!currentPage) {
-    currentPage.reset(new Page());
-    currentPageNextY = 0;
+    if (!startNewPage("table paragraph fallback")) {
+      return;
+    }
   }
 
   if (table.blockStyle.marginTop > 0) {
@@ -346,7 +478,19 @@ void ChapterHtmlSlimParser::emitBufferedTableAsParagraphs(BufferedTable& table) 
       wordsExtractedInBlock = 0;
       makePages();
       currentTextBlock.reset();
+      pendingFootnotes.clear();
+      if (lowMemoryAbort) {
+        break;
+      }
     }
+    std::vector<BufferedTableCell>().swap(row.cells);
+    if (lowMemoryAbort) {
+      break;
+    }
+  }
+  std::vector<BufferedTableRow>().swap(table.rows);
+  if (lowMemoryAbort) {
+    return;
   }
 
   if (table.blockStyle.marginBottom > 0) {
@@ -374,8 +518,9 @@ void ChapterHtmlSlimParser::emitBufferedTableAsFragments(BufferedTable& table) {
   };
 
   if (!currentPage) {
-    currentPage.reset(new Page());
-    currentPageNextY = 0;
+    if (!startNewPage("table fragments")) {
+      return;
+    }
   }
 
   const int horizontalInset = table.blockStyle.totalHorizontalInset();
@@ -384,6 +529,17 @@ void ChapterHtmlSlimParser::emitBufferedTableAsFragments(BufferedTable& table) {
   const uint16_t lineHeight = renderer.getLineHeight(fontId) * lineCompression;
   std::vector<PreparedSegment> preparedSegments;
   preparedSegments.reserve(table.rows.size());
+
+  auto releasePreparedSegments = [&preparedSegments]() {
+    for (auto& segment : preparedSegments) {
+      for (auto& row : segment.rows) {
+        std::vector<TableFragmentCell>().swap(row.fragmentRow.cells);
+        std::vector<FootnoteEntry>().swap(row.footnotes);
+      }
+      std::vector<PreparedRow>().swap(segment.rows);
+    }
+    std::vector<PreparedSegment>().swap(preparedSegments);
+  };
 
   auto prepareRow = [&](const BufferedTableRow& row, const uint8_t columnCount, PreparedSegment& segment) -> bool {
     const uint16_t baseColumnWidth = columnCount > 0 ? tableWidth / columnCount : 0;
@@ -451,6 +607,7 @@ void ChapterHtmlSlimParser::emitBufferedTableAsFragments(BufferedTable& table) {
 
     if (rowHasMergedCells && !isFullWidthSingleCellRow) {
       LOG_DBG("EHP", "Table layout fallback: unsupported colspan structure");
+      releasePreparedSegments();
       emitBufferedTableAsParagraphs(table);
       return;
     }
@@ -463,6 +620,7 @@ void ChapterHtmlSlimParser::emitBufferedTableAsFragments(BufferedTable& table) {
     }
 
     if (!prepareRow(row, segmentColumnCount, preparedSegments.back())) {
+      releasePreparedSegments();
       emitBufferedTableAsParagraphs(table);
       return;
     }
@@ -478,12 +636,14 @@ void ChapterHtmlSlimParser::emitBufferedTableAsFragments(BufferedTable& table) {
     size_t nextRowIndex = 0;
     while (nextRowIndex < segment.rows.size()) {
       if (!currentPage) {
-        currentPage.reset(new Page());
-        currentPageNextY = 0;
+        if (!startNewPage("table fragment continuation")) {
+          return;
+        }
       }
 
       std::vector<TableFragmentRow> fragmentRows;
       std::vector<FootnoteEntry> fragmentFootnotes;
+      fragmentRows.reserve(std::min<size_t>(segment.rows.size() - nextRowIndex, INITIAL_TABLE_FRAGMENT_ROW_RESERVE));
       uint16_t fragmentHeight = 1;  // Bottom border.
 
       while (nextRowIndex < segment.rows.size()) {
@@ -495,8 +655,9 @@ void ChapterHtmlSlimParser::emitBufferedTableAsFragments(BufferedTable& table) {
         if (fragmentRows.empty() && currentPageNextY + nextHeight > viewportHeight && !currentPage->elements.empty()) {
           completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex);
           completedPageCount++;
-          currentPage.reset(new Page());
-          currentPageNextY = 0;
+          if (!startNewPage("table fragment page break")) {
+            return;
+          }
           continue;
         }
 
@@ -526,8 +687,9 @@ void ChapterHtmlSlimParser::emitBufferedTableAsFragments(BufferedTable& table) {
       if (nextRowIndex < segment.rows.size()) {
         completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex);
         completedPageCount++;
-        currentPage.reset(new Page());
-        currentPageNextY = 0;
+        if (!startNewPage("table fragment split")) {
+          return;
+        }
       }
     }
   }
@@ -639,7 +801,8 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       } else if (strcmp(atts[i], "style") == 0) {
         styleAttr = atts[i + 1];
       } else if (strcmp(atts[i], "id") == 0) {
-        // Defer recording until startNewTextBlock, after previous block is flushed to pages
+        // Defer both anchor recording and TOC page breaks until startNewTextBlock,
+        // after the previous block is flushed to pages via makePages().
         self->pendingAnchorId = atts[i + 1];
       }
     }
@@ -663,10 +826,23 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     }
   }
 
+  const char* roleAttr = getAttribute(atts, "role");
+  const char* epubTypeAttr = getAttribute(atts, "epub:type");
+  const bool isPublisherPageBreak =
+      attributeContainsToken(roleAttr, "doc-pagebreak") || attributeContainsToken(epubTypeAttr, "pagebreak");
+  if (isPublisherPageBreak) {
+    const char* markerLabel = getAttribute(atts, "title");
+    if (!markerLabel || markerLabel[0] == '\0') {
+      markerLabel = getAttribute(atts, "aria-label");
+    }
+    self->addPendingPublisherPageMarker(markerLabel);
+    self->skipCurrentElement();
+    return;
+  }
+
   // Skip elements with display:none before all fast paths (tables, links, etc.).
   if (cssStyle.hasDisplay() && cssStyle.display == CssDisplay::None) {
-    self->skipUntilDepth = self->depth;
-    self->depth += 1;
+    self->skipCurrentElement();
     return;
   }
 
@@ -793,8 +969,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       }
       self->nextWordContinues = false;
     }
-    self->skipUntilDepth = self->depth;
-    self->depth += 1;
+    self->skipCurrentElement();
     return;
   }
 
@@ -825,13 +1000,13 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       // Skip low-res Kindle fallback images (not intended for modern readers)
       if (amznM8Removed) {
         LOG_DBG("EHP", "Skipping Kindle M8 low-res fallback image");
+        self->skipCurrentElement();
         return;
       }
 
       // imageRendering: 0=display, 1=placeholder (alt text only), 2=suppress entirely
       if (self->imageRendering == 2) {
-        self->skipUntilDepth = self->depth;
-        self->depth += 1;
+        self->skipCurrentElement();
         return;
       }
 
@@ -842,8 +1017,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
           imgDisplayStyle.applyOver(CssParser::parseInlineStyle(styleAttr));
         }
         if (imgDisplayStyle.hasDisplay() && imgDisplayStyle.display == CssDisplay::None) {
-          self->skipUntilDepth = self->depth;
-          self->depth += 1;
+          self->skipCurrentElement();
           return;
         }
       }
@@ -869,8 +1043,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
           }
 
           if (self->lowMemoryImageFallback) {
-            self->skipUntilDepth = self->depth;
-            self->depth += 1;
+            self->skipCurrentElement();
             return;
           } else {
             // Resolve the image path relative to the HTML file
@@ -908,8 +1081,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                   if (!MemoryBudget::hasHeapForEpubInlineImage("EHP", cachedImagePath.c_str())) {
                     self->lowMemoryImageFallback = true;
                     Storage.remove(cachedImagePath.c_str());
-                    self->skipUntilDepth = self->depth;
-                    self->depth += 1;
+                    self->skipCurrentElement();
                     return;
                   }
 
@@ -1034,22 +1206,17 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                     self->completePageFn(std::move(self->currentPage), self->xpathParagraphIndex,
                                          self->xpathListItemIndex);
                     self->completedPageCount++;
-                    self->currentPage.reset(new (std::nothrow) Page());
-                    if (!self->currentPage) {
-                      LOG_ERR("EHP", "Failed to create new page");
+                    if (!self->startNewPage("image page break")) {
                       return;
                     }
-                    self->currentPageNextY = 0;
                   } else if (!self->currentPage) {
-                    self->currentPage.reset(new (std::nothrow) Page());
-                    if (!self->currentPage) {
-                      LOG_ERR("EHP", "Failed to create initial page");
+                    if (!self->startNewPage("image page")) {
                       return;
                     }
-                    self->currentPageNextY = 0;
                   }
 
                   self->currentPageNextY += imageMarginTop;
+                  self->attachPendingPublisherPageMarkers(self->currentPageNextY);
 
                   // Create ImageBlock and add to page
                   auto imageBlock = std::shared_ptr<ImageBlock>(
@@ -1116,29 +1283,15 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       }
 
       // No alt text, skip
-      self->skipUntilDepth = self->depth;
-      self->depth += 1;
+      self->skipCurrentElement();
       return;
     }
   }
 
   if (matches(name, SKIP_TAGS, std::size(SKIP_TAGS))) {
     // start skip
-    self->skipUntilDepth = self->depth;
-    self->depth += 1;
+    self->skipCurrentElement();
     return;
-  }
-
-  // Skip blocks with role="doc-pagebreak" and epub:type="pagebreak"
-  if (atts != nullptr) {
-    for (int i = 0; atts[i]; i += 2) {
-      if (strcmp(atts[i], "role") == 0 && strcmp(atts[i + 1], "doc-pagebreak") == 0 ||
-          strcmp(atts[i], "epub:type") == 0 && strcmp(atts[i + 1], "pagebreak") == 0) {
-        self->skipUntilDepth = self->depth;
-        self->depth += 1;
-        return;
-      }
-    }
   }
 
   // Detect internal <a href="..."> links (footnotes, cross-references)
@@ -1421,9 +1574,26 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     }
     self->inlineStyleStack.push_back(entry);
     self->updateEffectiveInlineStyle();
+  } else if (strcmp(name, "sup") == 0 || strcmp(name, "sub") == 0) {
+    if (self->partWordBufferIndex > 0) {
+      self->flushPartWordBuffer();
+      self->nextWordContinues = true;
+    }
+    StyleStackEntry entry;
+    entry.depth = self->depth;
+    if (strcmp(name, "sup") == 0) {
+      entry.hasSup = true;
+      entry.sup = true;
+    } else {
+      entry.hasSub = true;
+      entry.sub = true;
+    }
+    self->inlineStyleStack.push_back(entry);
+    self->updateEffectiveInlineStyle();
   } else if (strcmp(name, "span") == 0 || !isHeaderOrBlock(name)) {
+    // Handle span and other inline elements for CSS styling
     if (cssStyle.hasFontWeight() || cssStyle.hasFontStyle() || cssStyle.hasTextDecoration() ||
-        cssStyle.hasBackgroundBlack()) {
+        cssStyle.hasBackgroundBlack() || cssStyle.hasVerticalAlign()) {
       // Flush buffer before style change so preceding text gets current style
       if (self->partWordBufferIndex > 0) {
         self->flushPartWordBuffer();
@@ -1448,6 +1618,15 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       if (cssStyle.hasBackgroundBlack()) {
         entry.hasBackgroundBlack = true;
         entry.backgroundBlack = cssStyle.backgroundBlack;
+      }
+      if (cssStyle.hasVerticalAlign()) {
+        if (cssStyle.verticalAlign == CssVerticalAlign::Super) {
+          entry.hasSup = true;
+          entry.sup = true;
+        } else if (cssStyle.verticalAlign == CssVerticalAlign::Sub) {
+          entry.hasSub = true;
+          entry.sub = true;
+        }
       }
       self->inlineStyleStack.push_back(entry);
       self->updateEffectiveInlineStyle();
@@ -1650,6 +1829,15 @@ void XMLCALL ChapterHtmlSlimParser::defaultHandlerExpand(void* userData, const X
 void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* name) {
   auto* self = static_cast<ChapterHtmlSlimParser*>(userData);
   if (self->lowMemoryAbort) {
+    return;
+  }
+
+  if (self->skipEndElementStateUntilDepth < self->depth) {
+    self->depth -= 1;
+    if (self->skipUntilDepth == self->depth) {
+      self->skipUntilDepth = INT_MAX;
+      self->skipEndElementStateUntilDepth = INT_MAX;
+    }
     return;
   }
 
@@ -1910,18 +2098,24 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
 }
 
 void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
+  if (lowMemoryAbort) {
+    return;
+  }
+
   const int lineHeight = renderer.getLineHeight(fontId) * lineCompression;
 
   if (!currentPage) {
-    currentPage.reset(new Page());
-    currentPageNextY = 0;
+    if (!startNewPage("line layout")) {
+      return;
+    }
   }
 
   if (currentPageNextY + lineHeight > viewportHeight) {
     completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex);
     completedPageCount++;
-    currentPage.reset(new Page());
-    currentPageNextY = 0;
+    if (!startNewPage("line page break")) {
+      return;
+    }
   }
 
   // Track cumulative words to assign footnotes to the page containing their anchor
@@ -1932,6 +2126,7 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
     ++footnoteIt;
   }
   pendingFootnotes.erase(pendingFootnotes.begin(), footnoteIt);
+  attachPendingPublisherPageMarkers(currentPageNextY);
 
   // Apply horizontal left inset (margin + padding) as x position offset
   const int16_t xOffset = line->getBlockStyle().leftInset();
@@ -1950,8 +2145,9 @@ void ChapterHtmlSlimParser::makePages() {
   }
 
   if (!currentPage) {
-    currentPage.reset(new Page());
-    currentPageNextY = 0;
+    if (!startNewPage("page layout")) {
+      return;
+    }
   }
 
   const int lineHeight = renderer.getLineHeight(fontId) * lineCompression;
@@ -1973,6 +2169,9 @@ void ChapterHtmlSlimParser::makePages() {
   currentTextBlock->layoutAndExtractLines(
       renderer, fontId, effectiveWidth,
       [this](const std::shared_ptr<TextBlock>& textBlock) { addLineToPage(textBlock); });
+  if (lowMemoryAbort) {
+    return;
+  }
 
   // Fallback: transfer any remaining pending footnotes to current page.
   // Normally addLineToPage handles this via word-index tracking, but this catches
@@ -1983,6 +2182,7 @@ void ChapterHtmlSlimParser::makePages() {
     }
     pendingFootnotes.clear();
   }
+  attachPendingPublisherPageMarkers(currentPageNextY);
 
   // Apply bottom spacing after the paragraph (stored in pixels)
   if (blockStyle.marginBottom > 0) {

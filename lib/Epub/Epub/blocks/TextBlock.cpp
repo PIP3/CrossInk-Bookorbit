@@ -101,6 +101,7 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
     return;
   }
 
+  const int ascender = renderer.getFontAscenderSize(fontId);
   for (size_t i = 0; i < words.size(); i++) {
     const int wordX = wordXpos[i] + x;
     const EpdFontFamily::Style currentStyle = wordStyles[i];
@@ -113,6 +114,15 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
       }
     }
 
+    // SUP/SUB shift the baseline passed to drawText; the glyph is also scaled 50% inside
+    // drawText, so these offsets are chosen relative to the full-size ascender.
+    int wordY = y;
+    if ((currentStyle & EpdFontFamily::SUP) != 0) {
+      wordY -= ascender * 2 / 5;
+    } else if ((currentStyle & EpdFontFamily::SUB) != 0) {
+      wordY += ascender / 4;
+    }
+
     if (boundary > 0) {
       // Bionic split: draw bold prefix (max 9 codepoints = 36 UTF-8 bytes + null).
       // suffixX is pre-computed at cache creation time to avoid font metric lookups at render time.
@@ -121,11 +131,11 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
       const size_t boldLen = std::min<size_t>({static_cast<size_t>(boundary), words[i].size(), sizeof(boldBuf) - 1});
       memcpy(boldBuf, words[i].c_str(), boldLen);
       boldBuf[boldLen] = '\0';
-      renderer.drawText(fontId, wordX, y, boldBuf, true, boldStyle);
+      renderer.drawText(fontId, wordX, wordY, boldBuf, true, boldStyle);
       const int suffixX = wordX + wordBionicSuffixX[i];
-      renderer.drawText(fontId, suffixX, y, words[i].c_str() + boldLen, true, currentStyle);
+      renderer.drawText(fontId, suffixX, wordY, words[i].c_str() + boldLen, true, currentStyle);
     } else {
-      renderer.drawText(fontId, wordX, y, words[i].c_str(), true, currentStyle);
+      renderer.drawText(fontId, wordX, wordY, words[i].c_str(), true, currentStyle);
     }
 
     if (hasGuideDots && wordGuideDotXOffset[i] > 0) {
@@ -136,7 +146,7 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
       const std::string& w = words[i];
       const int fullWordWidth = renderer.getTextWidth(fontId, w.c_str(), currentStyle);
       // y is the top of the text line; add ascender to reach baseline, then offset 2px below
-      const int underlineY = y + renderer.getFontAscenderSize(fontId) + 2;
+      const int underlineY = wordY + ascender + 2;
 
       int startX = wordX;
       int underlineWidth = fullWordWidth;

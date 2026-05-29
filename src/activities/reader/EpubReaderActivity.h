@@ -19,6 +19,8 @@ class EpubReaderActivity final : public Activity {
   std::unique_ptr<Section> section = nullptr;
   int currentSpineIndex = 0;
   int nextPageNumber = 0;
+  int activeSectionFontId = 0;
+  bool activeSectionUsesFallbackFont = false;
   std::optional<uint16_t> pendingPageJump;
   // Set when navigating to a footnote href with a fragment (e.g. #note1).
   // Cleared on the next render after the new section loads and resolves it to a page.
@@ -28,6 +30,8 @@ class EpubReaderActivity final : public Activity {
   int cachedChapterTotalPageCount = 0;
   unsigned long lastPageTurnTime = 0UL;
   unsigned long pageTurnDuration = 0UL;
+  unsigned long pageShownAtMs = 0UL;
+  uint16_t lastAutoPageTurnIntervalSeconds = 0;
   BookReadingStats stats;
   GlobalReadingStats globalStats;
   unsigned long sessionStartMs = 0UL;
@@ -36,6 +40,7 @@ class EpubReaderActivity final : public Activity {
   bool pendingPercentJump = false;
   // Normalized 0.0-1.0 progress within the target spine item, computed from book percentage.
   float pendingSpineProgress = 0.0f;
+  uint16_t pendingBookmarkParagraphIndex = UINT16_MAX;
   bool pendingScreenshot = false;
   bool pendingSyncSaveError = false;
   bool skipNextButtonCheck = false;  // Skip button processing for one frame after subactivity exit
@@ -64,6 +69,7 @@ class EpubReaderActivity final : public Activity {
   bool completionPromptQueued = false;
   bool completionPromptShown = false;
   bool completionTriggerSeenBelow = false;
+  bool completionTriggerCrossed = false;
   bool lastAtOrPastCompletionTrigger = false;
 
   // Tracks whether this book is currently removed from Recent Books by the
@@ -83,11 +89,18 @@ class EpubReaderActivity final : public Activity {
   SavedPosition savedPositions[MAX_FOOTNOTE_DEPTH] = {};
   int footnoteDepth = 0;
 
-  void renderContents(std::unique_ptr<Page> page, int orientedMarginTop, int orientedMarginRight,
+  void renderContents(std::unique_ptr<Page> page, int fontId, int orientedMarginTop, int orientedMarginRight,
                       int orientedMarginBottom, int orientedMarginLeft);
   void renderStatusBar() const;
   void silentIndexNextChapterIfNeeded(uint16_t viewportWidth, uint16_t viewportHeight);
   bool saveProgress(int spineIndex, int currentPage, int pageCount);
+  void pauseReadingPaceTimer();
+  void resumeReadingPaceTimer();
+  void recordForwardPagePaceSample();
+  bool estimateBookTimeLeftSecondsFromProgress(uint32_t& seconds) const;
+  bool estimateRemainingTimeLeftPages(bool bookEstimate, float& remainingPages) const;
+  bool estimateTimeLeftSeconds(bool bookEstimate, uint32_t& seconds) const;
+  bool formatTimeLeftLabel(char* buf, size_t len) const;
   void openFileTransfer();
   void openAutoPageTurnIntervalPicker(bool ignoreInitialConfirmRelease = false);
   // Jump to a percentage of the book (0-100), mapping it to spine and page.
@@ -105,6 +118,7 @@ class EpubReaderActivity final : public Activity {
   float getCurrentBookProgressPercent() const;
   void initializeCompletionPromptTrigger();
   bool isAtOrPastCompletionTrigger() const;
+  bool shouldQueueCompletionPromptOnChapterExit() const;
   void queueCompletionPromptIfNeeded();
   void setBookCompleted(bool isCompleted);
   void showCompletedFeedback(bool isCompleted);

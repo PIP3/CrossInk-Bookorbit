@@ -3,7 +3,18 @@
 
 class EpdFontFamily {
  public:
-  enum Style : uint8_t { REGULAR = 0, BOLD = 1, ITALIC = 2, BOLD_ITALIC = 3, UNDERLINE = 4, STRIKETHROUGH = 8 };
+  // Bitmask of text style flags carried per-word through layout and serialized in page cache.
+  // Bits 0-1 select the font variant; higher bits are render-time overlays.
+  enum Style : uint8_t {
+    REGULAR = 0,
+    BOLD = 1,
+    ITALIC = 2,
+    BOLD_ITALIC = 3,
+    UNDERLINE = 4,
+    STRIKETHROUGH = 8,
+    SUP = 16,
+    SUB = 32,
+  };
   struct GlyphData {
     const EpdFontData* fontData;
     const EpdGlyph* glyph;

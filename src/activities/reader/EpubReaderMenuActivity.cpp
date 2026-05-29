@@ -16,9 +16,10 @@ struct ReaderLayoutSettingsSnapshot {
   uint8_t fontFamily;
   uint8_t fontSize;
   uint8_t sdFontSizeRange;
-  uint8_t lineSpacing;
+  uint8_t lineHeightPercent;
   uint8_t orientation;
   uint8_t screenMargin;
+  uint8_t publisherPageNumbers;
   uint8_t paragraphAlignment;
   uint8_t embeddedStyle;
   uint8_t hyphenationEnabled;
@@ -31,7 +32,8 @@ struct ReaderLayoutSettingsSnapshot {
 
   bool operator==(const ReaderLayoutSettingsSnapshot& other) const {
     return fontFamily == other.fontFamily && fontSize == other.fontSize && sdFontSizeRange == other.sdFontSizeRange &&
-           lineSpacing == other.lineSpacing && orientation == other.orientation && screenMargin == other.screenMargin &&
+           lineHeightPercent == other.lineHeightPercent && orientation == other.orientation &&
+           screenMargin == other.screenMargin && publisherPageNumbers == other.publisherPageNumbers &&
            paragraphAlignment == other.paragraphAlignment && embeddedStyle == other.embeddedStyle &&
            hyphenationEnabled == other.hyphenationEnabled && imageRendering == other.imageRendering &&
            extraParagraphSpacing == other.extraParagraphSpacing &&
@@ -47,9 +49,10 @@ ReaderLayoutSettingsSnapshot captureReaderLayoutSettings() {
       SETTINGS.fontFamily,
       SETTINGS.fontSize,
       SETTINGS.sdFontSizeRange,
-      SETTINGS.lineSpacing,
+      SETTINGS.lineHeightPercent,
       SETTINGS.orientation,
       SETTINGS.screenMargin,
+      SETTINGS.publisherPageNumbers,
       SETTINGS.paragraphAlignment,
       SETTINGS.embeddedStyle,
       SETTINGS.hyphenationEnabled,
@@ -192,7 +195,7 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
   Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
 
   GUI.drawHeader(renderer, Rect{screen.x, screen.y + metrics.topPadding, screen.width, metrics.headerHeight},
-                 title.c_str());
+                 title.c_str(), nullptr, true);
 
   // Progress summary
   std::string progressLine;

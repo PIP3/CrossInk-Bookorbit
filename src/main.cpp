@@ -73,6 +73,7 @@ inline esp_sleep_wakeup_cause_t esp_sleep_get_wakeup_cause() { return ESP_SLEEP_
 #include "SdCardFontSystem.h"
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
+#include "activities/reader/EpubReaderUtils.h"
 #include "activities/reader/KOReaderSyncActivity.h"
 #include "activities/settings/KOReaderSettingsActivity.h"
 #include "activities/settings/SdFirmwareUpdateActivity.h"
@@ -467,21 +468,13 @@ bool startGlobalSyncProgress() {
   int spineIndex = 0;
   int pageNumber = 0;
   int totalPagesInSpine = 1;
-  FsFile progressFile;
-  if (Storage.openFileForRead("MAIN", epub->getCachePath() + "/progress.bin", progressFile)) {
-    uint8_t data[6];
-    const int dataSize = progressFile.read(data, sizeof(data));
-    if (dataSize >= 4) {
-      spineIndex = data[0] | (data[1] << 8);
-      pageNumber = data[2] | (data[3] << 8);
-      if (pageNumber == UINT16_MAX) {
-        pageNumber = 0;
-      }
+  EpubReaderUtils::Progress progress;
+  if (EpubReaderUtils::loadProgress(*epub, progress, "MAIN")) {
+    spineIndex = progress.spineIndex;
+    pageNumber = progress.pageNumber;
+    if (progress.hasPageCount) {
+      totalPagesInSpine = std::max(1, progress.pageCount);
     }
-    if (dataSize >= 6) {
-      totalPagesInSpine = std::max(1, static_cast<int>(data[4] | (data[5] << 8)));
-    }
-    progressFile.close();
   }
 
   if (spineIndex < 0 || spineIndex >= epub->getSpineItemsCount()) {
@@ -591,14 +584,14 @@ void putTiltSensorToSleepForDeepSleep() {
 constexpr char SLEEP_FRAME_FILE[] = "/.crosspoint/sleep_frame.bin";
 
 static void saveSleepFrameBuffer() {
-  FsFile file;
+  HalFile file;
   if (!Storage.openFileForWrite("SLP", SLEEP_FRAME_FILE, file)) return;
   file.write(renderer.getFrameBuffer(), renderer.getBufferSize());
   file.close();
 }
 
 static bool loadSleepFrameBuffer() {
-  FsFile file;
+  HalFile file;
   if (!Storage.openFileForRead("SLP", SLEEP_FRAME_FILE, file)) return false;
   const size_t bufferSize = display.getBufferSize();
   const size_t bytesRead = file.read(display.getFrameBuffer(), bufferSize);
@@ -943,7 +936,8 @@ void loop() {
   static unsigned long lastMemPrint = 0;
 
   gpio.update();
-  halTiltSensor.update(SETTINGS.tiltPageTurn, SETTINGS.orientation, activityManager.isReaderActivity());
+  halTiltSensor.update(SETTINGS.tiltPageTurn, SETTINGS.tiltPageTurnDirection, SETTINGS.orientation,
+                       activityManager.isReaderActivity());
 
   renderer.setFadingFix(SETTINGS.fadingFix);
 

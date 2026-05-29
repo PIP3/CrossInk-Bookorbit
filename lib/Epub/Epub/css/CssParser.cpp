@@ -435,6 +435,15 @@ void CssParser::parseDeclarationIntoStyle(const std::string& decl, CssStyle& sty
       style.backgroundBlack = backgroundBlack;
       style.defined.backgroundBlack = 1;
     }
+  } else if (propNameBuf == "vertical-align") {
+    const std::string v = normalized(propValueBuf);
+    if (v == "super") {
+      style.verticalAlign = CssVerticalAlign::Super;
+      style.defined.verticalAlign = 1;
+    } else if (v == "sub") {
+      style.verticalAlign = CssVerticalAlign::Sub;
+      style.defined.verticalAlign = 1;
+    }
   }
 }
 
@@ -896,55 +905,70 @@ CssStyle CssParser::parseInlineStyle(const std::string& styleValue) { return par
 
 // Cache file name (magic + version identify Crossink-owned CSS rule caches)
 constexpr char rulesCache[] = "/css_rules.cache";
+constexpr char rulesCacheTmp[] = "/css_rules.cache.tmp";
+constexpr char rulesCacheBackup[] = "/css_rules.cache.bak";
 
 bool CssParser::hasCache() const { return Storage.exists((cachePath + rulesCache).c_str()); }
 
 void CssParser::deleteCache() const {
   if (hasCache()) Storage.remove((cachePath + rulesCache).c_str());
+  Storage.remove((cachePath + rulesCacheTmp).c_str());
+  Storage.remove((cachePath + rulesCacheBackup).c_str());
 }
 
-bool CssParser::saveToCache() const {
+bool CssParser::saveToCache(const bool complete) const {
   if (cachePath.empty()) {
     return false;
   }
 
+  const std::string finalPath = cachePath + rulesCache;
+  const std::string tmpPath = cachePath + rulesCacheTmp;
+  const std::string backupPath = cachePath + rulesCacheBackup;
+
+  Storage.remove(tmpPath.c_str());
+
   FsFile file;
-  if (!Storage.openFileForWrite("CSS", cachePath + rulesCache, file)) {
+  if (!Storage.openFileForWrite("CSS", tmpPath, file)) {
     return false;
   }
 
+  bool writeOk = true;
+  auto writeBytes = [&file, &writeOk](const void* data, const size_t len) -> bool {
+    if (!writeOk) return false;
+    if (len == 0) return true;
+    if (file.write(reinterpret_cast<const uint8_t*>(data), len) != len) {
+      writeOk = false;
+    }
+    return writeOk;
+  };
+  auto writeByte = [&writeBytes](const uint8_t value) -> bool { return writeBytes(&value, sizeof(value)); };
+
   // Write header
   const uint32_t magic = CssParser::CSS_CACHE_MAGIC;
-  file.write(reinterpret_cast<const uint8_t*>(&magic), sizeof(magic));
-  file.write(CssParser::CSS_CACHE_VERSION);
+  writeBytes(&magic, sizeof(magic));
+  writeByte(CssParser::CSS_CACHE_VERSION);
+  writeByte(static_cast<uint8_t>(complete ? 0 : CSS_CACHE_FLAG_PARTIAL));
 
   // Write rule count
   const auto ruleCount = static_cast<uint16_t>(rulesBySelector_.size());
-  file.write(reinterpret_cast<const uint8_t*>(&ruleCount), sizeof(ruleCount));
+  writeBytes(&ruleCount, sizeof(ruleCount));
 
-  auto writeLength = [&file](const CssLength& len) {
-    file.write(reinterpret_cast<const uint8_t*>(&len.value), sizeof(len.value));
-    file.write(static_cast<uint8_t>(len.unit));
+  auto writeLength = [&writeBytes, &writeByte](const CssLength& len) -> bool {
+    return writeBytes(&len.value, sizeof(len.value)) && writeByte(static_cast<uint8_t>(len.unit));
   };
 
-  auto writeStyle = [&](const CssStyle& style) {
-    file.write(static_cast<uint8_t>(style.textAlign));
-    file.write(static_cast<uint8_t>(style.fontStyle));
-    file.write(static_cast<uint8_t>(style.fontWeight));
-    file.write(static_cast<uint8_t>(style.textDecoration));
-    writeLength(style.textIndent);
-    writeLength(style.marginTop);
-    writeLength(style.marginBottom);
-    writeLength(style.marginLeft);
-    writeLength(style.marginRight);
-    writeLength(style.paddingTop);
-    writeLength(style.paddingBottom);
-    writeLength(style.paddingLeft);
-    writeLength(style.paddingRight);
-    writeLength(style.imageHeight);
-    writeLength(style.imageWidth);
-    file.write(static_cast<uint8_t>(style.display));
-    file.write(static_cast<uint8_t>(style.backgroundBlack ? 1 : 0));
+  auto writeStyle = [&](const CssStyle& style) -> bool {
+    if (!writeByte(static_cast<uint8_t>(style.textAlign)) || !writeByte(static_cast<uint8_t>(style.fontStyle)) ||
+        !writeByte(static_cast<uint8_t>(style.fontWeight)) || !writeByte(static_cast<uint8_t>(style.textDecoration)) ||
+        !writeLength(style.textIndent) || !writeLength(style.marginTop) || !writeLength(style.marginBottom) ||
+        !writeLength(style.marginLeft) || !writeLength(style.marginRight) || !writeLength(style.paddingTop) ||
+        !writeLength(style.paddingBottom) || !writeLength(style.paddingLeft) || !writeLength(style.paddingRight) ||
+        !writeLength(style.imageHeight) || !writeLength(style.imageWidth) ||
+        !writeByte(static_cast<uint8_t>(style.display)) ||
+        !writeByte(static_cast<uint8_t>(style.backgroundBlack ? 1 : 0)) ||
+        !writeByte(static_cast<uint8_t>(style.verticalAlign))) {
+      return false;
+    }
     uint32_t definedBits = 0;
     if (style.defined.textAlign) definedBits |= 1 << 0;
     if (style.defined.fontStyle) definedBits |= 1 << 1;
@@ -963,31 +987,66 @@ bool CssParser::saveToCache() const {
     if (style.defined.imageWidth) definedBits |= 1 << 14;
     if (style.defined.display) definedBits |= 1 << 15;
     if (style.defined.backgroundBlack) definedBits |= 1 << 16;
-    file.write(reinterpret_cast<const uint8_t*>(&definedBits), sizeof(definedBits));
+    if (style.defined.verticalAlign) definedBits |= 1 << 17;
+    return writeBytes(&definedBits, sizeof(definedBits));
   };
 
   // Write each simple rule: selector string + CssStyle fields
   for (const auto& pair : rulesBySelector_) {
     const auto selectorLen = static_cast<uint16_t>(pair.first.size());
-    file.write(reinterpret_cast<const uint8_t*>(&selectorLen), sizeof(selectorLen));
-    file.write(reinterpret_cast<const uint8_t*>(pair.first.data()), selectorLen);
-    writeStyle(pair.second);
+    if (!writeBytes(&selectorLen, sizeof(selectorLen)) || !writeBytes(pair.first.data(), selectorLen) ||
+        !writeStyle(pair.second)) {
+      break;
+    }
   }
 
   // Write descendant rules: count, then (ancestorSelector, subjectSelector, CssStyle) per entry
   const auto descendantCount = static_cast<uint16_t>(descendantRules_.size());
-  file.write(reinterpret_cast<const uint8_t*>(&descendantCount), sizeof(descendantCount));
+  writeBytes(&descendantCount, sizeof(descendantCount));
   for (const auto& rule : descendantRules_) {
     const auto ancLen = static_cast<uint16_t>(rule.ancestorSelector.size());
-    file.write(reinterpret_cast<const uint8_t*>(&ancLen), sizeof(ancLen));
-    file.write(reinterpret_cast<const uint8_t*>(rule.ancestorSelector.data()), ancLen);
+    if (!writeBytes(&ancLen, sizeof(ancLen)) || !writeBytes(rule.ancestorSelector.data(), ancLen)) {
+      break;
+    }
     const auto subLen = static_cast<uint16_t>(rule.subjectSelector.size());
-    file.write(reinterpret_cast<const uint8_t*>(&subLen), sizeof(subLen));
-    file.write(reinterpret_cast<const uint8_t*>(rule.subjectSelector.data()), subLen);
-    writeStyle(rule.style);
+    if (!writeBytes(&subLen, sizeof(subLen)) || !writeBytes(rule.subjectSelector.data(), subLen) ||
+        !writeStyle(rule.style)) {
+      break;
+    }
   }
 
-  LOG_DBG("CSS", "Saved %u rules + %u descendant rules to cache", ruleCount, descendantCount);
+  if (!writeOk) {
+    LOG_ERR("CSS", "Failed to write temporary CSS cache");
+    file.close();
+    Storage.remove(tmpPath.c_str());
+    return false;
+  }
+
+  file.close();
+
+  Storage.remove(backupPath.c_str());
+  const bool hadExistingCache = Storage.exists(finalPath.c_str());
+  if (hadExistingCache && !Storage.rename(finalPath.c_str(), backupPath.c_str())) {
+    LOG_ERR("CSS", "Failed to backup existing CSS cache before replace");
+    Storage.remove(tmpPath.c_str());
+    return false;
+  }
+
+  if (!Storage.rename(tmpPath.c_str(), finalPath.c_str())) {
+    LOG_ERR("CSS", "Failed to promote temporary CSS cache");
+    Storage.remove(tmpPath.c_str());
+    if (hadExistingCache) {
+      Storage.rename(backupPath.c_str(), finalPath.c_str());
+    }
+    return false;
+  }
+
+  if (hadExistingCache) {
+    Storage.remove(backupPath.c_str());
+  }
+
+  LOG_DBG("CSS", "Saved %u rules + %u descendant rules to %s cache", ruleCount, descendantCount,
+          complete ? "complete" : "partial");
   return true;
 }
 
@@ -1011,6 +1070,7 @@ bool CssParser::loadFromCache() {
 
   // Clear existing rules
   clear();
+  cachePartial_ = false;
 
   // Read and verify header
   uint32_t magic = 0;
@@ -1031,6 +1091,21 @@ bool CssParser::loadFromCache() {
     return false;
   }
 
+  uint8_t flags = 0;
+  if (file.read(&flags, 1) != 1) {
+    LOG_DBG("CSS", "Cache flags missing, removing stale cache for rebuild");
+    file.close();
+    Storage.remove((cachePath + rulesCache).c_str());
+    return false;
+  }
+  if ((flags & ~CSS_CACHE_FLAG_PARTIAL) != 0) {
+    LOG_DBG("CSS", "Unsupported CSS cache flags 0x%02X, removing stale cache for rebuild", flags);
+    file.close();
+    Storage.remove((cachePath + rulesCache).c_str());
+    return false;
+  }
+  cachePartial_ = (flags & CSS_CACHE_FLAG_PARTIAL) != 0;
+
   // Read rule count
   uint16_t ruleCount = 0;
   if (file.read(&ruleCount, sizeof(ruleCount)) != sizeof(ruleCount)) {
@@ -1050,7 +1125,7 @@ bool CssParser::loadFromCache() {
   constexpr size_t CSS_LENGTH_FIELD_COUNT = 11;
   constexpr size_t CSS_LENGTH_BYTES = sizeof(float) + sizeof(uint8_t);
   constexpr size_t CSS_FIXED_STYLE_BYTES =
-      4 * sizeof(uint8_t) + (CSS_LENGTH_FIELD_COUNT * CSS_LENGTH_BYTES) + 2 * sizeof(uint8_t) + sizeof(uint32_t);
+      4 * sizeof(uint8_t) + (CSS_LENGTH_FIELD_COUNT * CSS_LENGTH_BYTES) + 3 * sizeof(uint8_t) + sizeof(uint32_t);
 
   auto readLength = [&file](CssLength& len) -> bool {
     if (file.read(&len.value, sizeof(len.value)) != sizeof(len.value)) return false;
@@ -1082,6 +1157,10 @@ bool CssParser::loadFromCache() {
     uint8_t backgroundBlackVal = 0;
     if (file.read(&backgroundBlackVal, 1) != 1) return false;
     style.backgroundBlack = backgroundBlackVal != 0;
+    uint8_t verticalAlignVal = 0;
+    if (file.read(&verticalAlignVal, 1) != 1) return false;
+    style.verticalAlign = static_cast<CssVerticalAlign>(verticalAlignVal);
+
     uint32_t definedBits = 0;
     if (file.read(&definedBits, sizeof(definedBits)) != sizeof(definedBits)) return false;
     style.defined.textAlign = (definedBits & 1 << 0) != 0;
@@ -1101,6 +1180,7 @@ bool CssParser::loadFromCache() {
     style.defined.imageWidth = (definedBits & 1 << 14) != 0;
     style.defined.display = (definedBits & 1 << 15) != 0;
     style.defined.backgroundBlack = (definedBits & 1 << 16) != 0;
+    style.defined.verticalAlign = (definedBits & 1 << 17) != 0;
     return true;
   };
 
@@ -1187,6 +1267,7 @@ bool CssParser::loadFromCache() {
     }
   }
 
-  LOG_DBG("CSS", "Loaded %zu rules + %u descendant rules from cache", rulesBySelector_.size(), descendantCount);
+  LOG_DBG("CSS", "Loaded %zu rules + %u descendant rules from %s cache", rulesBySelector_.size(), descendantCount,
+          cachePartial_ ? "partial" : "complete");
   return true;
 }

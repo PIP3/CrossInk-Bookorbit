@@ -249,16 +249,18 @@ void drawBookCover(const GfxRenderer& renderer, const Rect& coverRect, const Rec
 }
 }  // namespace
 
-void MinimalTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle) const {
+void MinimalTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle,
+                              const bool readerContext) const {
   (void)subtitle;
 
   renderer.fillRect(rect.x, rect.y, rect.width, rect.height, false);
   const bool showBatteryPercentage =
       SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS;
   const int batteryX = rect.x + rect.width - 12 - MinimalMetrics::values.batteryWidth;
-  drawBatteryRight(
-      renderer, Rect{batteryX, rect.y + 5, MinimalMetrics::values.batteryWidth, MinimalMetrics::values.batteryHeight},
-      showBatteryPercentage);
+  const int batteryY = rect.y + (title == nullptr ? homeHeaderTopInset : 5);
+  drawBatteryRight(renderer,
+                   Rect{batteryX, batteryY, MinimalMetrics::values.batteryWidth, MinimalMetrics::values.batteryHeight},
+                   showBatteryPercentage);
 
   if (title) {
     constexpr int titleInsetX = 12;
@@ -268,6 +270,9 @@ void MinimalTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char
                       truncatedTitle.c_str(), true, EpdFontFamily::BOLD);
     renderer.drawLine(rect.x, rect.y + rect.height - 3, rect.x + rect.width - 1, rect.y + rect.height - 3, 3, true);
   }
+
+  drawTopStatusBarClock(renderer, rect.y, nullptr, readerContext,
+                        title == nullptr && !readerContext ? homeHeaderClockTextYOffset(renderer) : 0);
 }
 
 void MinimalTheme::drawTabBar(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs,
@@ -433,14 +438,14 @@ void MinimalTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, cons
                                    const char* btn4, const bool allowInvertedText) const {
   const GfxRenderer::Orientation origOrientation = renderer.getOrientation();
   const bool invertText = allowInvertedText && origOrientation == GfxRenderer::Orientation::PortraitInverted;
-  renderer.setOrientation(invertText ? GfxRenderer::Orientation::PortraitInverted : GfxRenderer::Orientation::Portrait);
+  renderer.setOrientation(GfxRenderer::Orientation::Portrait);
 
   const int pageHeight = renderer.getScreenHeight();
   const int screenWidth = renderer.getScreenWidth();
   constexpr int buttonWidth = 80;
   constexpr int smallButtonHeight = 15;
   constexpr int buttonHeight = MinimalMetrics::values.buttonHintsHeight;
-  const int buttonY = invertText ? pageHeight : MinimalMetrics::values.buttonHintsHeight;
+  constexpr int buttonY = MinimalMetrics::values.buttonHintsHeight;
   constexpr int textYOffset = 7;
   constexpr int x4ButtonPositions[] = {58, 146, 254, 342};
   constexpr int x3ButtonPositions[] = {65, 157, 291, 383};
@@ -450,21 +455,30 @@ void MinimalTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, cons
   homeButtonHintSelection = -1;
 
   for (int i = 0; i < 4; i++) {
-    const int x = buttonPositions[invertText ? 3 - i : i];
+    const int x = buttonPositions[i];
     const bool hasLabel = labels[i] != nullptr && labels[i][0] != '\0';
     if (hasLabel) {
       const Color background = i == selectedIndex ? Color::LightGray : Color::White;
       renderer.fillRoundedRect(x, pageHeight - buttonY, buttonWidth, buttonHeight, kButtonCornerRadius, background);
       renderer.drawRoundedRect(x, pageHeight - buttonY, buttonWidth, buttonHeight, 1, kButtonCornerRadius, true, true,
                                false, false, true);
-      const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, labels[i]);
-      const int textX = x + (buttonWidth - 1 - textWidth) / 2;
-      renderer.drawText(SMALL_FONT_ID, textX, pageHeight - buttonY + textYOffset, labels[i]);
     } else {
-      const int smallButtonY = invertText ? 0 : pageHeight - smallButtonHeight;
+      const int smallButtonY = pageHeight - smallButtonHeight;
       renderer.fillRoundedRect(x, smallButtonY, buttonWidth, smallButtonHeight, kButtonCornerRadius, Color::White);
       renderer.drawRoundedRect(x, smallButtonY, buttonWidth, smallButtonHeight, 1, kButtonCornerRadius, true, true,
                                false, false, true);
+    }
+  }
+
+  renderer.setOrientation(invertText ? GfxRenderer::Orientation::PortraitInverted : GfxRenderer::Orientation::Portrait);
+  const int textY = invertText ? textYOffset : pageHeight - buttonY + textYOffset;
+
+  for (int i = 0; i < 4; i++) {
+    if (labels[i] != nullptr && labels[i][0] != '\0') {
+      const int x = buttonPositions[invertText ? 3 - i : i];
+      const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, labels[i]);
+      const int textX = x + (buttonWidth - 1 - textWidth) / 2;
+      renderer.drawText(SMALL_FONT_ID, textX, textY, labels[i]);
     }
   }
 

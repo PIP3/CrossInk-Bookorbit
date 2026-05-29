@@ -12,7 +12,26 @@ OpdsServerStore OpdsServerStore::instance;
 
 namespace {
 constexpr char OPDS_FILE_JSON[] = "/.crosspoint/opds.json";
+constexpr char FILENAME_FORMAT_AUTHOR_TITLE[] = "author_title";
+constexpr char FILENAME_FORMAT_TITLE_AUTHOR[] = "title_author";
 }  // namespace
+
+const char* opdsFilenameFormatToJson(const OpdsFilenameFormat format) {
+  switch (format) {
+    case OpdsFilenameFormat::TITLE_AUTHOR:
+      return FILENAME_FORMAT_TITLE_AUTHOR;
+    case OpdsFilenameFormat::AUTHOR_TITLE:
+    default:
+      return FILENAME_FORMAT_AUTHOR_TITLE;
+  }
+}
+
+OpdsFilenameFormat opdsFilenameFormatFromJson(const char* value) {
+  if (value && strcmp(value, FILENAME_FORMAT_TITLE_AUTHOR) == 0) {
+    return OpdsFilenameFormat::TITLE_AUTHOR;
+  }
+  return OpdsFilenameFormat::AUTHOR_TITLE;
+}
 
 bool OpdsServerStore::saveToFile() const {
   Storage.mkdir("/.crosspoint");

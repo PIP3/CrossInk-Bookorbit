@@ -316,6 +316,37 @@ void appendCarouselCoverStateToKey(std::string& key, const RecentBook& book) {
   }
 }
 
+void appendSyncedStatsStateToKey(std::string& key) {
+  FsFile dir = Storage.open("/.crosspoint/synced_stats");
+  if (!dir) {
+    key += "no-synced-stats";
+    key += '\0';
+    return;
+  }
+
+  if (!dir.isDirectory()) {
+    dir.close();
+    key += "synced-stats-not-dir";
+    key += '\0';
+    return;
+  }
+
+  char name[128];
+  for (FsFile file = dir.openNextFile(); file; file = dir.openNextFile()) {
+    const bool isDirectory = file.isDirectory();
+    const size_t nameLen = file.getName(name, sizeof(name));
+    if (!isDirectory && nameLen > 0) {
+      key += name;
+      key += '\0';
+      file.close();
+      appendHashedFileStateToKey(key, std::string("/.crosspoint/synced_stats/") + name);
+      continue;
+    }
+    file.close();
+  }
+  dir.close();
+}
+
 void buildCarouselCacheKey(const std::vector<RecentBook>& recentBooks, std::string& key, uint64_t& keyHash) {
   key.clear();
   key.reserve(512);
@@ -323,6 +354,7 @@ void buildCarouselCacheKey(const std::vector<RecentBook>& recentBooks, std::stri
     appendCarouselCoverStateToKey(key, book);
   }
   appendHashedFileStateToKey(key, "/.crosspoint/global_stats.bin");
+  appendSyncedStatsStateToKey(key);
   keyHash = fnvHash64(key);
 }
 
@@ -694,6 +726,8 @@ void HomeActivity::onEnter() {
   }
 
   globalStats = GlobalReadingStats::load();
+  showAllDevicesStats = GlobalReadingStats::hasSyncedStats();
+  allDevicesGlobalStats = showAllDevicesStats ? GlobalReadingStats::loadAggregated(globalStats) : globalStats;
   if (isCarouselTheme) {
     loadAllBookStats();
   }
@@ -749,7 +783,8 @@ void HomeActivity::updateHighlightedBookContext() {
     }
   }
 
-  hasReadingStats = hasAnyBookStats(currentBookStats) || hasAnyGlobalStats(globalStats);
+  hasReadingStats = hasAnyBookStats(currentBookStats) || hasAnyGlobalStats(globalStats) ||
+                    (showAllDevicesStats && hasAnyGlobalStats(allDevicesGlobalStats));
   LOG_DBG("HOME", "updateHighlightedBookContext idx=%d cached=%s took %lums", idx, useCachedStats ? "yes" : "no",
           millis() - start);
 }
@@ -876,7 +911,8 @@ void HomeActivity::renderCarouselFrameToCurrentBuffer(int bookIdx, BookReadingSt
       renderer, Rect{0, metrics.homeTopPadding, pageWidth, metrics.homeCoverTileHeight}, recentBooks, bookCount, dummy1,
       dummy2, dummy3, []() { return true; }, frameStatsPtr, frameProgressPercent);
 
-  const bool frameHasReadingStats = hasAnyBookStats(frameStats) || hasAnyGlobalStats(globalStats);
+  const bool frameHasReadingStats = hasAnyBookStats(frameStats) || hasAnyGlobalStats(globalStats) ||
+                                    (showAllDevicesStats && hasAnyGlobalStats(allDevicesGlobalStats));
   const auto menuItems = buildHomeMenuItems(hasOpdsServers, frameHasReadingStats, hasBookmarks);
   GUI.drawButtonMenu(
       renderer,
@@ -1593,9 +1629,15 @@ void HomeActivity::onReadingStatsOpen() {
   const int highlightedBookIdx = getHighlightedBookIndex();
   const std::string bookTitle =
       highlightedBookIdx >= 0 ? recentBooks[highlightedBookIdx].title : std::string(tr(STR_READING_STATS));
-  startActivityForResult(
-      std::make_unique<BookStatsActivity>(renderer, mappedInput, bookTitle, currentBookStats, globalStats),
-      [this](const ActivityResult&) { requestUpdate(); });
+  if (showAllDevicesStats) {
+    startActivityForResult(std::make_unique<BookStatsActivity>(renderer, mappedInput, bookTitle, currentBookStats,
+                                                               globalStats, allDevicesGlobalStats),
+                           [this](const ActivityResult&) { requestUpdate(); });
+  } else {
+    startActivityForResult(
+        std::make_unique<BookStatsActivity>(renderer, mappedInput, bookTitle, currentBookStats, globalStats),
+        [this](const ActivityResult&) { requestUpdate(); });
+  }
 }
 
 void HomeActivity::onBookmarksOpen() {

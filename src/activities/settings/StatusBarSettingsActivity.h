@@ -9,8 +9,8 @@
 // Reader status bar configuration activity
 class StatusBarSettingsActivity final : public Activity {
  public:
-  explicit StatusBarSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : Activity("StatusBarSettings", renderer, mappedInput) {}
+  explicit StatusBarSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, bool readerContext = false)
+      : Activity("StatusBarSettings", renderer, mappedInput), readerContext(readerContext) {}
 
   void onEnter() override;
   void onExit() override;
@@ -21,8 +21,8 @@ class StatusBarSettingsActivity final : public Activity {
   ButtonNavigator buttonNavigator;
 
   int selectedIndex = 0;
-  // Decided in onEnter() based on halClock.isAvailable() so clock entries are hidden on X4.
   int visibleItemCount = 0;
+  bool readerContext = false;
 
   void handleSelection();
 };

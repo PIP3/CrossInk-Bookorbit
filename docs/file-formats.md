@@ -5,6 +5,72 @@ nav_order: 8
 
 # File Formats
 
+## EPUB `stats.bin`
+
+`/.crosspoint/epub_<hash>/stats.bin` stores per-book reading stats.
+
+### Version 3
+
+Adds the per-book forward-page reading pace used for time-left estimates.
+
+```text
+[0]      version (= 3)
+[1-2]    sessionCount              uint16 little-endian
+[3-6]    totalReadingSeconds       uint32 little-endian
+[7-10]   totalPagesTurned          uint32 little-endian
+[11]     isCompleted               uint8
+[12-13]  avgSecondsPerForwardPage  uint16 little-endian
+[14-15]  paceSampleCount           uint16 little-endian
+```
+
+### Version 2
+
+Adds `isCompleted` after the original counters.
+
+```text
+[0]      version (= 2)
+[1-2]    sessionCount        uint16 little-endian
+[3-6]    totalReadingSeconds uint32 little-endian
+[7-10]   totalPagesTurned    uint32 little-endian
+[11]     isCompleted         uint8
+```
+
+### Version 1
+
+Version 1 files are still readable. They are 11 bytes long and do not include
+`isCompleted` or reading-pace fields, so the reader treats those values as zero.
+
+## `global_stats.bin`
+
+`/.crosspoint/global_stats.bin` stores this device's all-time reading counters.
+This is the source of truth for the current reader.
+
+The `/.crosspoint/synced_stats/` directory stores snapshots received from other
+readers. Display-only Reading Stats views add valid peer files from that folder
+to this device's local `global_stats.bin`. A stale file matching this device's
+own `device_<mac>.bin` name is skipped while aggregating so local stats are not
+counted twice.
+
+For user-facing sync behavior, folder layout, and manual cleanup instructions,
+see [Reading Stats Sync](./reading-stats-sync.md).
+
+### Version 2
+
+Adds `completedBooks` after the original counters.
+
+```text
+[0]      version (= 2)
+[1-4]    totalSessions       uint32 little-endian
+[5-8]    totalReadingSeconds uint32 little-endian
+[9-12]   totalPagesTurned    uint32 little-endian
+[13-16]  completedBooks      uint32 little-endian
+```
+
+### Version 1
+
+Version 1 files are still readable. They are 13 bytes long and do not include
+`completedBooks`, so the reader treats that value as zero.
+
 ## `book.bin`
 
 ### Version 6
@@ -116,7 +182,28 @@ if (parsedSize != fileSize) {
 }
 ```
 
+## `reader_settings.bin`
+
+### Version 1
+
+Stores per-book reader preferences that should survive reopening a book without changing EPUB layout caches.
+
+Binary layout:
+
+```text
+[0]    version (= 1)
+[1-2]  lastAutoPageTurnIntervalSeconds uint16_t LE
+```
+
 ## `section.bin`
+
+### Version 39
+
+Adds optional publisher page markers to serialized `Page` records. These markers store the EPUB `pagebreak` label and rendered y-position so print-edition page numbers can be drawn in the reader margin without changing EPUB text layout.
+
+### Version 38
+
+Invalidates cached EPUB section files after adding superscript and subscript rendering. No binary layout fields changed from version 37; cached pages need rebuilding so affected words carry the new style bits and layout widths.
 
 ### Version 36
 
@@ -183,7 +270,7 @@ import std.core;
 
 // === Configuration ===
 #define EXPECTED_MAGIC 0x535843FF
-#define EXPECTED_VERSION 37
+#define EXPECTED_VERSION 39
 #define MAX_STRING_LENGTH 65535
 #define MAX_WORD_STRING_LENGTH 4096
 #define FOOTNOTE_NUMBER_LEN 32
@@ -230,7 +317,9 @@ enum WordStyle : u8 {
     ITALIC = 2,
     BOLD_ITALIC = 3,
     UNDERLINE = 4,
-    STRIKETHROUGH = 8
+    STRIKETHROUGH = 8,
+    SUP = 16,
+    SUB = 32
 };
 
 enum BlockStyle : u8 {
@@ -323,6 +412,11 @@ struct FootnoteEntry {
     char href[FOOTNOTE_HREF_LEN];
 };
 
+struct PublisherPageMarker {
+    s16 yPos;
+    char label[16];
+};
+
 struct PageElement {
     u8 pageElementType;
     if (pageElementType == 1) {
@@ -343,6 +437,8 @@ struct Page {
     PageElement elements[elementCount] [[inline]];
     u16 footnoteCount;
     FootnoteEntry footnotes[footnoteCount] [[inline]];
+    u8 publisherPageMarkerCount;
+    PublisherPageMarker publisherPageMarkers[publisherPageMarkerCount] [[inline]];
 };
 
 struct AnchorEntry {
@@ -434,6 +530,14 @@ if (parsedSize != fileSize) {
 ```
 
 ## `css_rules.cache`
+
+### Version 10
+
+Adds cached `vertical-align` support for CSS superscript and subscript rules. Style payloads now store both `backgroundBlack` and `verticalAlign` values, with defined flags using bit 16 for `backgroundBlack` and bit 17 for `verticalAlign`.
+
+### Version 9
+
+Adds one cache-flags byte after the version byte. Bit 0 marks a cache as partial: the parser stopped safely before the end of the stylesheet, usually because heap was too fragmented or low to grow the rule table, but the rules already parsed are valid and may be used for section layout. Partial caches are reusable as a fallback and may be replaced by a later complete rebuild.
 
 ### Version 8
 

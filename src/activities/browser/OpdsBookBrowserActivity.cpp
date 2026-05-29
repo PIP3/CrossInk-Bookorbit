@@ -8,6 +8,7 @@
 #include <WiFi.h>
 
 #include "MappedInputManager.h"
+#include "SdCardFontSystem.h"
 #include "SilentRestart.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
@@ -21,10 +22,20 @@
 namespace {
 constexpr int PAGE_ITEMS = 23;
 constexpr size_t OPDS_BROWSER_ENTRY_CAPACITY = MAX_OPDS_FEED_ENTRIES + 2;
+constexpr size_t OPDS_DOWNLOAD_BUFFER_SIZE = 4096;
+
+std::string buildBookFilenameBase(const OpdsEntry& book, const OpdsFilenameFormat format) {
+  if (book.author.empty()) return book.title;
+  if (book.title.empty()) return book.author;
+  if (format == OpdsFilenameFormat::TITLE_AUTHOR) return book.title + " - " + book.author;
+  return book.author + " - " + book.title;
+}
 }  // namespace
 
 void OpdsBookBrowserActivity::onEnter() {
   Activity::onEnter();
+
+  sdFontSystem.releaseLoadedFont(renderer);
 
   state = BrowserState::CHECK_WIFI;
   entryCount = 0;
@@ -250,7 +261,8 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
 
   if (!parser) {
     state = BrowserState::ERROR;
-    errorMessage = tr(STR_PARSE_FEED_FAILED);
+    errorMessage = parser.getErrorReason() == OpdsParserError::BUFFER_MEMORY ? tr(STR_OPDS_FEED_BUFFER_MEMORY_ERROR)
+                                                                             : tr(STR_PARSE_FEED_FAILED);
     requestUpdate();
     return;
   }
@@ -332,7 +344,7 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   const std::string feedUrl = UrlUtils::buildUrl(server.url, currentPath);
   std::string downloadUrl = UrlUtils::buildUrl(feedUrl, book.href);
   std::string filename =
-      "/" + StringUtils::sanitizeFilename((book.author.empty() ? "" : book.author + " - ") + book.title) + ".epub";
+      "/" + StringUtils::sanitizeFilename(buildBookFilenameBase(book, server.filenameFormat)) + ".epub";
   LOG_DBG("OPDS", "Downloading: %s -> %s", downloadUrl.c_str(), filename.c_str());
 
   bool cancelRequested = false;
@@ -350,6 +362,7 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   };
   HttpDownloader::DownloadOptions downloadOptions;
   downloadOptions.shouldCancel = pollCancel;
+  downloadOptions.bufferSize = OPDS_DOWNLOAD_BUFFER_SIZE;
 
   const auto result = HttpDownloader::downloadToFile(
       downloadUrl, filename,

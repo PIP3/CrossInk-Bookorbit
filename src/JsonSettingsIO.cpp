@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cstring>
 #include <string>
+#include <vector>
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
@@ -101,6 +102,7 @@ bool JsonSettingsIO::saveState(const CrossPointState& s, const char* path) {
   doc["lastSleepFromReader"] = s.lastSleepFromReader;
   doc["pendingBookmarkSpine"] = s.pendingBookmarkSpine;
   doc["pendingBookmarkProgress"] = s.pendingBookmarkProgress;
+  doc["pendingBookmarkParagraphIndex"] = s.pendingBookmarkParagraphIndex;
   doc["showBootScreen"] = s.showBootScreen;
 
   String json;
@@ -139,6 +141,7 @@ bool JsonSettingsIO::loadState(CrossPointState& s, const char* json) {
   s.lastSleepFromReader = doc["lastSleepFromReader"] | false;
   s.pendingBookmarkSpine = doc["pendingBookmarkSpine"] | static_cast<uint16_t>(UINT16_MAX);
   s.pendingBookmarkProgress = doc["pendingBookmarkProgress"] | static_cast<float>(-1.0f);
+  s.pendingBookmarkParagraphIndex = doc["pendingBookmarkParagraphIndex"] | static_cast<uint16_t>(UINT16_MAX);
   s.showBootScreen = doc["showBootScreen"] | true;
   return true;
 }
@@ -206,6 +209,8 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
   }
 
   auto clamp = [](uint8_t val, uint8_t maxVal, uint8_t def) -> uint8_t { return val < maxVal ? val : def; };
+  const bool migrateLegacyTiltMode = !doc["tiltPageTurn"].isNull() && doc["tiltPageTurnDirection"].isNull();
+  const uint8_t legacyTiltMode = doc["tiltPageTurn"] | static_cast<uint8_t>(CrossPointSettings::TILT_OFF);
 
   // Legacy migration: if statusBarChapterPageCount is absent this is a pre-refactor settings file.
   // Populate s with migrated values now so the generic loop below picks them up as defaults and clamps them.
@@ -278,6 +283,17 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
     }
   }
 
+  if (migrateLegacyTiltMode) {
+    if (legacyTiltMode == 1 || legacyTiltMode == 2) {
+      s.tiltPageTurn = CrossPointSettings::TILT_ON;
+      s.tiltPageTurnDirection =
+          legacyTiltMode == 2 ? CrossPointSettings::TILT_LEFT_RIGHT_INVERTED : CrossPointSettings::TILT_LEFT_RIGHT;
+      if (needsResave) *needsResave = true;
+    } else {
+      s.tiltPageTurn = CrossPointSettings::TILT_OFF;
+    }
+  }
+
   if (doc["sleepTimeoutMinutes"].isNull() && !doc["sleepTimeout"].isNull()) {
     const uint8_t legacyValue =
         clamp(doc["sleepTimeout"] | (uint8_t)CrossPointSettings::SLEEP_10_MIN, CrossPointSettings::SLEEP_TIMEOUT_COUNT,
@@ -314,6 +330,15 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
   const char* sfn = doc["sdFontFamilyName"] | "";
   strncpy(s.sdFontFamilyName, sfn, sizeof(s.sdFontFamilyName) - 1);
   s.sdFontFamilyName[sizeof(s.sdFontFamilyName) - 1] = '\0';
+
+  if (doc["lineHeightPercent"].isNull() && !doc["lineSpacing"].isNull()) {
+    const uint8_t legacyLineSpacing = clamp(doc["lineSpacing"] | static_cast<uint8_t>(CrossPointSettings::NORMAL),
+                                            static_cast<uint8_t>(CrossPointSettings::LINE_COMPRESSION_COUNT),
+                                            static_cast<uint8_t>(CrossPointSettings::NORMAL));
+    s.lineHeightPercent =
+        CrossPointSettings::legacyLineSpacingToPercent(legacyLineSpacing, s.fontFamily, s.sdFontFamilyName[0] != '\0');
+    if (needsResave) *needsResave = true;
+  }
 
   // Language -- stored as code string for stability across enum reorders.
   if (doc["language"].is<const char*>()) {
@@ -442,6 +467,7 @@ bool JsonSettingsIO::saveOpds(const OpdsServerStore& store, const char* path) {
     obj["url"] = server.url;
     obj["username"] = server.username;
     obj["password_obf"] = obfuscation::obfuscateToBase64(server.password);
+    obj["filenameFormat"] = opdsFilenameFormatToJson(server.filenameFormat);
   }
 
   String json;
@@ -466,6 +492,7 @@ bool JsonSettingsIO::loadOpds(OpdsServerStore& store, const char* json, bool* ne
     server.name = obj["name"] | std::string("");
     server.url = obj["url"] | std::string("");
     server.username = obj["username"] | std::string("");
+    server.filenameFormat = opdsFilenameFormatFromJson(obj["filenameFormat"] | "");
     // Try the obfuscated key first; fall back to plaintext "password" for
     // files written before obfuscation was added (or hand-edited JSON).
     obfuscation::DecodeStatus status = obfuscation::DecodeStatus::INVALID;

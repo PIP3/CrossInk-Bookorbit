@@ -23,40 +23,39 @@ My goal with this fork was to maintain the core Crosspoint firmware while integr
 
 ### Highlights
 
-- New reader fonts: ChareInk, Lexend Deca, and Bitter
-- Unicode emoji and miscellaneous symbols support (a limited subset)
-- Adjusted font sizes: Teensy (8pt), Tiny (10pt), Small (12pt), Medium (14pt), Large (16pt), Extra Large (18pt), Huge (20pt). See [Font Sizes](#font-sizes) for more details.
-- Added ~~strikethrough~~ support
-- Made <u>underlines</u> thicker for better visibility
-- Added support for `<hr>` section breaks
-- Added support for "redaction" style rendering
-- Added improved support for tables with simple markup
-- Added ability to add bookmarks
-- Added ability to remap front buttons that only applies in the reader
-- Added Bionic Reading and Guide Dots as optional reader modes
-- Added Force Paragraph Indents for books that render as one giant wall of text
-- Added ability to pin a sleep image as a favorite. The favorited image will always be displayed when your sleep settings are set to `Custom` or `Cover + Custom` (when no cover is available). Do this from the file browser and long-press the menu button to access the option.
-- Added more in-reader control remapping options for side buttons, short power button clicks, and long-press menu actions
+- New reader fonts: ChareInk, Lexend Deca, and Bitter.
+- Unicode emoji and miscellaneous symbols support (a limited subset).
+- Adjusted font sizes: Teensy (8pt), Itty Bitty (9pt), Tiny (10pt), Small (12pt), Medium (14pt), Large (16pt), Extra Large (18pt), Huge (20pt). See [Font Sizes](#font-sizes) for more details.
+- Added ~~strikethrough~~ support.
+- Made <u>underlines</u> thicker for better visibility.
+- Added a custom `Minimal` theme and sleep screen option for the minimalists out there.
+- Added support for `<hr>` section breaks.
+- Added support for "redaction" style rendering.
+- Added improved support for tables with simple markup.
+- Added ability to add bookmarks.
+- Added ability to remap front buttons that only applies in the reader.
+- Added Bionic Reading and Guide Dots as optional reader modes.
+- Added Force Paragraph Indents for books that render as one giant wall of text.
+- Added ability to pin a sleep image as a favorite. The favorited image will always be displayed when your sleep settings are set to `Custom` or `Cover + Custom` (when no cover is available).
+- Added more in-reader control remapping options for side buttons, short power button clicks, and long-press menu actions.
 - Added ability to mark a book as finished from the in-book menu. A pop-up will also display once 99% of the book is reached. This status allows tracking of total books read.
-- Added ability to move finished books to "Read" folder
-  - To turn this on, go to Settings > System > Move finished books to Read folder. Once a book is marked as finished, the book will be moved to the folder when the book is closed.
-- In-book menu to quickly adjust reader options without having to exit the book
+- Added ability to move finished books to "Read" folder.
+- In-book menu to quickly adjust reader options without having to exit the book.
 - Reading stats: total books read, total reading time, number of sessions, pages turned, average session time, pages turned per minute. You can also set your reading stats as your sleep screen.
-- Added customizable Auto Page Turn Interval (anything between 5-120 seconds)
-- Added ability to view Recent Books as a 3x3 grid view
-- Added ability to install custom fonts on the SD card
-- Device simulator during development
+- Reading stats [syncing](./docs/reading-stats-sync.md) between two devices.
+- Added customizable Auto Page Turn Interval (anything between 5-120 seconds).
+- Added ability to view Recent Books as a 3x3 grid view.
 - To view a more detailed list for each version, visit the [releases](https://github.com/uxjulia/CrossInk/releases) page to read release notes.
 
 ---
 
 ### Reader Fonts
 
-The default fonts have been replaced with ChareInk, Lexend Deca, and Bitter. These fonts have been chosen specifically to improve reading fluency and e-ink performance. These 'sturdier' typefaces feature uniform stroke weights and open geometries, allowing the X4 to render crisp, high-contrast text with font-aliasing on while significantly reducing ghosting and artifacts.
+The default fonts have been replaced with ChareInk, Lexend Deca, and Bitter. These fonts have been chosen specifically to improve reading fluency and e-ink performance. These 'sturdier' typefaces feature uniform stroke weights and open geometries, allowing the X4/X3 to render crisp, high-contrast text with font-aliasing on while significantly reducing ghosting and artifacts.
 
 - [ChareInk](https://www.mobileread.com/forums/showthread.php?t=184056) - A cult favorite among the e-reading community for over a decade based off of the typeface [Charis](https://software.sil.org/charis/). It is specially designed to make long texts pleasant and easy to read.
 - [Lexend Deca](https://fonts.google.com/specimen/Lexend+Deca) - A research-backed sans-serif typeface designed to improve reading fluency. Lexend was engineered based on the theory that reading issues are often a design problem (visual crowding) rather than a cognitive one.
-- [Bitter](https://fonts.google.com/specimen/Bitter) - A "contemporary" slab serif typeface for text, it is specially designed for comfortably reading on digital screens. The consistent stroke weight of Bitter helps it render particularly well on e-ink devices. The medium weight has been chosen specifically for improved rendering on the X4.
+- [Bitter](https://fonts.google.com/specimen/Bitter) - A "contemporary" slab serif typeface for text, it is specially designed for comfortably reading on digital screens. The consistent stroke weight of Bitter helps it render particularly well on e-ink devices. The medium weight has been chosen specifically for improved rendering on the X4/X3.
 
 The UI now uses [Inter](https://fonts.google.com/specimen/Inter) as the display font which has improved readability at smaller sizes.
 
@@ -68,7 +67,7 @@ The UI now uses [Inter](https://fonts.google.com/specimen/Inter) as the display 
 
 ### Font Sizes
 
-There are 3 available build variants to choose from due to build size constraints: tiny, xlarge, and no_emoji
+There are 4 available build variants to choose from due to build size constraints: tiny, xlarge, and no_emoji
 
 **teensy**
 > Only the small sized fonts.
@@ -122,8 +121,6 @@ Reader settings (font, size, line spacing, margins, alignment, etc.) are now acc
 
 This feature will bold the initial letters or parts of words, creating "artificial fixation points" that can make it easier to let your brain fill in the rest of the word without having to focus on every letter. You can toggle it from **Reader settings**.
 
-This was merged from [CrossPoint PR 1670](https://github.com/crosspoint-reader/crosspoint-reader/pull/1670).
-
 ### Guide Dots
 
 This feature adds small dots between every word. The idea comes from the book [Speed Reading: Learn to Read a 200+ Page Book in 1 Hour](https://amzn.to/4mOPSJo): by focusing on the space between words instead of the words themselves, your peripheral vision can pick up more of the text. You can toggle it from **Reader settings**.
@@ -173,7 +170,7 @@ Map the **Power** or **Menu** button short/long-press action to one of the follo
 - Mark as Finished (marks book as finished)
 - Reading Stats (displays reading stats)
 - Take Screenshot (takes a screenshot)
-- Auto Page Turn (cycles through the page turn intervals: **Off → 5s → 10s → 15s → 20s → 30s → 45s → 60s → Off →**)
+- Auto Page Turn Interval (opens the selection for auto page turn interval)
 - File Transfer (opens the File Transfer menu)
 - Tilt Page Turn (turns tilt-based page turning on/off on supported devices)
 
@@ -189,11 +186,6 @@ Some simple per-book reading stats are tracked automatically and displayed in tw
 - Average session time
 - All time reading stats including total number of books read
 
-**Home screen book card (Lyra theme only):**
-
-- Total reading time
-- Average session time
-
 ### Finished books / Read folder
 
 - You can manually mark a book as finished from the in-book menu
@@ -203,7 +195,7 @@ Some simple per-book reading stats are tracked automatically and displayed in tw
 
 ### Language Support
 
-- Added language support for Vietnamese. This addresses [issue #34](https://github.com/uxjulia/CrossInk/issues/34).
+- Added language support for Vietnamese.
 
 ---
 
@@ -371,6 +363,7 @@ The structure is roughly:
 .crosspoint/
 ├── global_stats.bin        # All-time reading stats, including total books read
 ├── global_stats.bin.bak    # Backup used if the main global stats file is corrupt
+├── synced_stats/           # Stats snapshots received from other readers
 ├── settings.bin            # Device settings
 ├── state.bin               # Last-opened book and sleep/session state
 ├── recent.bin              # Recent books list

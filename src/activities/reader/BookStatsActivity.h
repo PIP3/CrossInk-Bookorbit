@@ -9,10 +9,15 @@ class BookStatsActivity final : public Activity {
   std::string bookTitle;
   BookReadingStats stats;
   GlobalReadingStats globalStats;
+  GlobalReadingStats allDevicesStats;
+  bool showAllDevicesStats = false;
 
  public:
   BookStatsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,
                     const BookReadingStats& stats, const GlobalReadingStats& globalStats);
+  BookStatsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,
+                    const BookReadingStats& stats, const GlobalReadingStats& globalStats,
+                    const GlobalReadingStats& allDevicesStats);
 
   void onEnter() override;
   void loop() override;

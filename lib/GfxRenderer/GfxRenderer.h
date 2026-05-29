@@ -139,12 +139,7 @@ class GfxRenderer {
   bool releaseSdCardFontForLowMemory(int fontId) const;
 
   // Orientation control (affects logical width/height and coordinate transforms)
-  void setOrientation(const Orientation o) {
-    orientation = o;
-#ifdef SIMULATOR
-    display.setSimulatorOrientation(static_cast<int>(o));
-#endif
-  }
+  void setOrientation(const Orientation o) { orientation = o; }
   Orientation getOrientation() const { return orientation; }
 
   // Fading fix control
