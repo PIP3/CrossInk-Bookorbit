@@ -86,7 +86,7 @@ import std.core;
 
 // === Configuration ===
 #define EXPECTED_MAGIC 0x425843FF
-#define EXPECTED_VERSION 9
+#define EXPECTED_VERSION 6
 #define MAX_STRING_LENGTH 65535
 
 // === String Structure ===
@@ -270,7 +270,7 @@ import std.core;
 
 // === Configuration ===
 #define EXPECTED_MAGIC 0x535843FF
-#define EXPECTED_VERSION 38
+#define EXPECTED_VERSION 39
 #define MAX_STRING_LENGTH 65535
 #define MAX_WORD_STRING_LENGTH 4096
 #define FOOTNOTE_NUMBER_LEN 32
@@ -317,7 +317,9 @@ enum WordStyle : u8 {
     ITALIC = 2,
     BOLD_ITALIC = 3,
     UNDERLINE = 4,
-    STRIKETHROUGH = 8
+    STRIKETHROUGH = 8,
+    SUP = 16,
+    SUB = 32
 };
 
 enum BlockStyle : u8 {
@@ -410,6 +412,11 @@ struct FootnoteEntry {
     char href[FOOTNOTE_HREF_LEN];
 };
 
+struct PublisherPageMarker {
+    s16 yPos;
+    char label[16];
+};
+
 struct PageElement {
     u8 pageElementType;
     if (pageElementType == 1) {
@@ -430,6 +437,8 @@ struct Page {
     PageElement elements[elementCount] [[inline]];
     u16 footnoteCount;
     FootnoteEntry footnotes[footnoteCount] [[inline]];
+    u8 publisherPageMarkerCount;
+    PublisherPageMarker publisherPageMarkers[publisherPageMarkerCount] [[inline]];
 };
 
 struct AnchorEntry {
