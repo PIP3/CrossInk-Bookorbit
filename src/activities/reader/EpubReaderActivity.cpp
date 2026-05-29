@@ -2263,23 +2263,22 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int fo
   const bool needsAnyGrayscale = needsTextGrayscale || needsImageGrayscale;
   const int contentBottom = renderer.getScreenHeight() - orientedMarginBottom;
 
-  const auto composeBuffer = [&](const auto& renderContent) {
-    renderContent();
+  const auto finalizeBufferComposition = [&]() {
     drawPublisherPageMarkers(renderer, *page, orientedMarginTop, contentBottom);
   };
 
   const auto composePageBuffer = [&]() {
-    composeBuffer([&]() { page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop); });
+    page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);
+    finalizeBufferComposition();
   };
 
   const auto composeGrayscaleBuffer = [&]() {
-    composeBuffer([&]() {
-      if (needsTextGrayscale) {
-        page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);
-      } else {
-        page->renderImages(renderer, fontId, orientedMarginLeft, orientedMarginTop);
-      }
-    });
+    if (needsTextGrayscale) {
+      page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);
+    } else {
+      page->renderImages(renderer, fontId, orientedMarginLeft, orientedMarginTop);
+    }
+    finalizeBufferComposition();
   };
 
   composePageBuffer();
