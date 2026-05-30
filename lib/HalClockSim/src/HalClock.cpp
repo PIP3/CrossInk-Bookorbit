@@ -15,3 +15,10 @@ bool HalClock::formatTime(char* buf, size_t bufSize, uint8_t utcOffsetQuarterHou
   (void)use12Hour;
   return false;
 }
+
+bool HalClock::formatDate(char* buf, size_t bufSize, uint8_t utcOffsetQuarterHoursBiased) const {
+  (void)buf;
+  (void)bufSize;
+  (void)utcOffsetQuarterHoursBiased;
+  return false;
+}

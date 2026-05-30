@@ -394,6 +394,10 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                             "removeReadBooksFromRecents", StrId::STR_CAT_SYSTEM));
     add(SettingInfo::Toggle(StrId::STR_MOVE_FINISHED_TO_READ, &CrossPointSettings::moveFinishedToReadFolder,
                             "moveFinishedToReadFolder", StrId::STR_CAT_SYSTEM));
+#ifdef CROSSINK_ENABLE_READING_STATS_TOGGLE
+    add(SettingInfo::Toggle(StrId::STR_TRACK_READING_STATS, &CrossPointSettings::trackReadingStats, "trackReadingStats",
+                            StrId::STR_CAT_SYSTEM));
+#endif
 
     // --- KOReader Sync (web-only, uses KOReaderCredentialStore) ---
     add(SettingInfo::DynamicString(
@@ -693,11 +697,12 @@ inline std::vector<SettingInfo> buildDisplaySleepSettingsList(const std::vector<
   return sleepSettings;
 }
 
-inline std::vector<SettingInfo> buildSystemSettingsParentList() {
+inline std::vector<SettingInfo> buildSystemSettingsParentList(const std::vector<SettingInfo>& allSettings) {
   std::vector<SettingInfo> systemSettings;
-  systemSettings.reserve(7);
+  systemSettings.reserve(8);
   systemSettings.push_back(SettingInfo::Submenu(StrId::STR_SYSTEM_DEVICE, SettingAction::SystemDevice));
   systemSettings.push_back(SettingInfo::Submenu(StrId::STR_SYSTEM_FILES_CACHE, SettingAction::SystemFilesCache));
+  addSettingByName(systemSettings, allSettings, StrId::STR_TRACK_READING_STATS);
   systemSettings.push_back(SettingInfo::Action(StrId::STR_WIFI_NETWORKS, SettingAction::Network));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_KOREADER_SYNC, SettingAction::KOReaderSync));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_OPDS_SERVERS, SettingAction::OPDSBrowser));

@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- Added the current date to the top-right Settings header on X3 devices with an RTC.
 
 ### Changed
 - Moved EPUB silent next-chapter indexing to the second-to-last page so short final pages are less likely to expose visible indexing.

@@ -1,6 +1,8 @@
 #include "SettingsActivity.h"
 
 #include <GfxRenderer.h>
+#include <HalClock.h>
+#include <HalGPIO.h>
 #include <Logging.h>
 
 #include <algorithm>
@@ -36,6 +38,8 @@ const StrId SettingsActivity::categoryNames[categoryCount] = {StrId::STR_CAT_DIS
 namespace {
 constexpr int systemVersionFooterSideMargin = 20;
 constexpr int systemVersionFooterBottomInset = 15;
+constexpr int settingsDateRightInset = 12;
+constexpr int settingsDateBottomGap = 10;
 
 uint8_t enumDisplayIndexForRawValue(const SettingInfo& setting, uint8_t rawValue) {
   if (setting.enumRawValues.empty()) {
@@ -114,6 +118,21 @@ void drawSystemVersionFooter(const GfxRenderer& renderer, const int pageWidth, c
   const int lineHeight = renderer.getLineHeight(SMALL_FONT_ID);
   drawCenteredTextLine(renderer, pageWidth, bottomLineY - lineHeight, firstLine);
   drawCenteredTextLine(renderer, pageWidth, bottomLineY, secondLine);
+}
+
+void drawSettingsHeaderDate(const GfxRenderer& renderer, const int pageWidth, const ThemeMetrics& metrics) {
+  if (!gpio.deviceIsX3()) return;
+  if (!SETTINGS.clockDateHasBeenSynced) return;
+
+  char dateBuf[13];
+  if (!halClock.formatDate(dateBuf, sizeof(dateBuf), SETTINGS.clockUtcOffsetQ)) return;
+
+  constexpr int dateFontId = UI_10_FONT_ID;
+  const int textWidth = renderer.getTextWidth(dateFontId, dateBuf);
+  const int dateX = pageWidth - settingsDateRightInset - textWidth;
+  const int dateY =
+      metrics.topPadding + metrics.headerHeight - renderer.getLineHeight(dateFontId) - settingsDateBottomGap;
+  renderer.drawText(dateFontId, std::max(0, dateX), std::max(metrics.topPadding, dateY), dateBuf);
 }
 
 std::string formatSettingValue(const SettingInfo& setting) {
@@ -566,6 +585,7 @@ void SettingsActivity::render(RenderLock&&) {
   const auto& metrics = UITheme::getInstance().getMetrics();
 
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_SETTINGS_TITLE));
+  drawSettingsHeaderDate(renderer, pageWidth, metrics);
 
   std::vector<TabInfo> tabs;
   tabs.reserve(categoryCount);
