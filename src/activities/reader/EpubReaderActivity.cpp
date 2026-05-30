@@ -1809,6 +1809,8 @@ void EpubReaderActivity::pageTurn(bool isForwardTurn) {
         section.reset();
       }
     }
+    stats.totalPagesTurned++;
+    globalStats.totalPagesTurned++;
   } else {
     if (section->currentPage > 0) {
       section->currentPage--;
@@ -1823,8 +1825,6 @@ void EpubReaderActivity::pageTurn(bool isForwardTurn) {
       }
     }
   }
-  stats.totalPagesTurned++;
-  globalStats.totalPagesTurned++;
   lastPageTurnTime = millis();
   requestUpdate();
 }
@@ -2189,19 +2189,39 @@ void EpubReaderActivity::render(RenderLock&& lock) {
 }
 
 void EpubReaderActivity::silentIndexNextChapterIfNeeded(const uint16_t viewportWidth, const uint16_t viewportHeight) {
-  if (!epub || !section || section->pageCount < 3) {
+  if (!epub || !section) {
     return;
   }
 
-  // Build the next chapter cache while the penultimate page is on screen.
-  if (section->currentPage != section->pageCount - 3) {
+  if (section->pageCount < 2) {
+    LOG_DBG("ERS",
+            "Skipping silent next-chapter indexing: chapter too short (spine=%d page=%d pages=%u free=%u maxAlloc=%u)",
+            currentSpineIndex, section->currentPage, section->pageCount, ESP.getFreeHeap(), ESP.getMaxAllocHeap());
+    return;
+  }
+
+  // Build the next chapter cache while the second-to-last page is on screen.
+  const int triggerPage = section->pageCount - 2;
+  if (section->currentPage != triggerPage) {
+    if (section->currentPage >= triggerPage - 1) {
+      LOG_DBG("ERS",
+              "Silent next-chapter indexing not triggered: spine=%d page=%d target=%d pages=%u free=%u maxAlloc=%u",
+              currentSpineIndex, section->currentPage, triggerPage, section->pageCount, ESP.getFreeHeap(),
+              ESP.getMaxAllocHeap());
+    }
     return;
   }
 
   const int nextSpineIndex = currentSpineIndex + 1;
   if (nextSpineIndex < 0 || nextSpineIndex >= epub->getSpineItemsCount()) {
+    LOG_DBG("ERS", "Skipping silent next-chapter indexing: no next chapter (spine=%d page=%d pages=%u)",
+            currentSpineIndex, section->currentPage, section->pageCount);
     return;
   }
+
+  LOG_DBG("ERS", "Silent next-chapter indexing check: spine=%d page=%d target=%d pages=%u next=%d free=%u maxAlloc=%u",
+          currentSpineIndex, section->currentPage, triggerPage, section->pageCount, nextSpineIndex, ESP.getFreeHeap(),
+          ESP.getMaxAllocHeap());
 
   Section nextSection(epub, nextSpineIndex, renderer);
   if (nextSection.loadSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
@@ -2209,10 +2229,15 @@ void EpubReaderActivity::silentIndexNextChapterIfNeeded(const uint16_t viewportW
                                   SETTINGS.paragraphAlignment, viewportWidth, viewportHeight,
                                   SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle, SETTINGS.imageRendering,
                                   SETTINGS.bionicReadingEnabled, SETTINGS.guideReadingEnabled)) {
+    LOG_DBG("ERS",
+            "Skipping silent next-chapter indexing: cache already exists (chapter=%d pages=%u free=%u maxAlloc=%u)",
+            nextSpineIndex, nextSection.pageCount, ESP.getFreeHeap(), ESP.getMaxAllocHeap());
     return;
   }
 
   if (!MemoryBudget::hasHeapForOptionalEpubRebuild("ERS", "silent next-chapter indexing", nextSpineIndex)) {
+    LOG_DBG("ERS", "Silent next-chapter indexing skipped by heap guard: spine=%d page=%d pages=%u next=%d",
+            currentSpineIndex, section->currentPage, section->pageCount, nextSpineIndex);
     return;
   }
 

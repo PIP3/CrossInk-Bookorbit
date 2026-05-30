@@ -6,7 +6,7 @@
 struct BookReadingStats {
   uint16_t sessionCount = 0;              // Total times this book was opened
   uint32_t totalReadingSeconds = 0;       // Accumulated reading time in seconds
-  uint32_t totalPagesTurned = 0;          // Total page-turn actions (forward + backward)
+  uint32_t totalPagesTurned = 0;          // Total forward page-turn actions
   bool isCompleted = false;               // Whether the user manually marked this book as finished
   uint16_t avgSecondsPerForwardPage = 0;  // Rolling average pace for time-left estimates
   uint16_t paceSampleCount = 0;           // Number of forward-page pace samples included in the average

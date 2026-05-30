@@ -5,9 +5,12 @@
 ### Added
 
 ### Changed
+- Moved EPUB silent next-chapter indexing to the second-to-last page so short final pages are less likely to expose visible indexing.
+- Added EPUB silent next-chapter indexing diagnostics to show trigger timing, existing caches, and low-memory skips.
 
 ### Fixed
 - Exposed upstream Crosspoint's functionality to disable side buttons that got lost in the last merge.
+- Changed Reading Stats page counts so backward page turns no longer increase book or global totals.
 - Fixed the X3 clock UTC offset picker so editable sign, hour, and minute fields are more clear.
 - Fixed `Sync Clock Now` so it now tries to connect to saved WiFi automatically otherwise opens the normal WiFi picker instead of stopping with a "connect first" message.
 - Reduced Home menu heap churn and skipped Lyra Carousel frame caching when heap is low to avoid crash risk on memory-constrained builds.
