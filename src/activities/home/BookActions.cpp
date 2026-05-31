@@ -120,6 +120,8 @@ bool toggleEpubCompleted(const std::string& fullPath, const std::string& display
   if (completed && SETTINGS.moveFinishedToReadFolder && fullPath.rfind("/Read/", 0) != 0) {
     const std::string oldCachePath = epub.getCachePath();
     const std::string dstPath = buildReadFolderDestination(fullPath);
+    const std::string title = epub.getTitle();
+    const std::string author = epub.getAuthor();
     LOG_INF("BookActions", "Moving completed epub: %s -> %s", fullPath.c_str(), dstPath.c_str());
     if (!Storage.rename(fullPath.c_str(), dstPath.c_str())) {
       LOG_ERR("BookActions", "Failed to move book to 'Read' folder");
@@ -138,6 +140,9 @@ bool toggleEpubCompleted(const std::string& fullPath, const std::string& display
         LOG_ERR("BookActions", "Failed to rename cache dir %s -> %s (non-fatal)", oldCachePath.c_str(),
                 newCachePath.c_str());
       }
+    }
+    if (!BookmarkStore::migrateForFilePath(fullPath, dstPath, title, author, "epub")) {
+      LOG_ERR("BookActions", "Failed to migrate bookmarks for moved book %s -> %s", fullPath.c_str(), dstPath.c_str());
     }
 
     RECENT_BOOKS.updatePath(fullPath, dstPath, oldCachePath, newCachePath);

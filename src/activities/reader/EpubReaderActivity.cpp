@@ -322,7 +322,8 @@ std::string buildReadFolderDestination(const std::string& srcPath) {
 // Relocate a finished book and its cache dir into /Read/, keep it in recents by
 // repointing its entry to the new path, and repoint the resume pointer too.
 void moveFinishedBookToReadFolder(const std::string& srcPath, const std::string& dstPath,
-                                  const std::string& oldCachePath, const std::string& title) {
+                                  const std::string& oldCachePath, const std::string& title,
+                                  const std::string& author) {
   LOG_INF("ERS", "Moving finished epub: %s -> %s", srcPath.c_str(), dstPath.c_str());
   if (!Storage.rename(srcPath.c_str(), dstPath.c_str())) {
     LOG_ERR("ERS", "Failed to move finished book to '/Read' folder");
@@ -340,6 +341,9 @@ void moveFinishedBookToReadFolder(const std::string& srcPath, const std::string&
     if (!Storage.rename(oldCachePath.c_str(), newCachePath.c_str())) {
       LOG_ERR("ERS", "Failed to rename cache dir %s -> %s (non-fatal)", oldCachePath.c_str(), newCachePath.c_str());
     }
+  }
+  if (!BookmarkStore::migrateForFilePath(srcPath, dstPath, title, author, "epub")) {
+    LOG_ERR("ERS", "Failed to migrate bookmarks for moved book %s -> %s", srcPath.c_str(), dstPath.c_str());
   }
 
   // Keep the book in recents (crossink behavior): repoint the entry to its new
@@ -739,9 +743,10 @@ void EpubReaderActivity::onExit() {
     const std::string srcPath = epub->getPath();
     const std::string oldCachePath = epub->getCachePath();
     const std::string title = epub->getTitle();
+    const std::string author = epub->getAuthor();
     const std::string dstPath = buildReadFolderDestination(srcPath);
     epub.reset();  // release the Epub (and any open handles) before renaming on the SD card
-    moveFinishedBookToReadFolder(srcPath, dstPath, oldCachePath, title);
+    moveFinishedBookToReadFolder(srcPath, dstPath, oldCachePath, title, author);
   } else {
     epub.reset();
   }

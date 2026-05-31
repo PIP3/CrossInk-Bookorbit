@@ -61,6 +61,11 @@ class BookmarkStore {
   // bookType must be "epub", "xtc", or "txt".
   static void deleteForFilePath(const std::string& filePath, const std::string& bookType);
 
+  // Rewrite bookmark storage to follow a file move/rename while preserving existing bookmarks.
+  // oldFilePath and newFilePath must refer to the same logical book.
+  static bool migrateForFilePath(const std::string& oldFilePath, const std::string& newFilePath,
+                                 const std::string& title, const std::string& author, const std::string& bookType);
+
   // Scan /.crosspoint/bookmarks/ and populate `out` with one entry per book that has bookmarks.
   // Reads only the file header (does not load full bookmark records).
   // Caller should reserve `out` before calling.
@@ -77,6 +82,7 @@ class BookmarkStore {
   bool dirty = false;
 
   bool readFromFile();
+  bool readFromFile(const std::string& path, std::vector<Bookmark>& out, bool& needsRewrite) const;
   bool writeToFile() const;
 };
 
