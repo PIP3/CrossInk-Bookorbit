@@ -12,6 +12,7 @@
 ### Fixed
 - Exposed upstream Crosspoint's functionality to disable side buttons that got lost in the last merge.
 - Changed Reading Stats page counts so backward turns and rapid forward navigation no longer increase totals.
+- Stabilized EPUB book time-left estimates so rapid forward paging and non-linear jumps fall back to pace-based ETA until a qualified forward read is recorded again.
 - Fixed the X3 clock UTC offset picker so editable sign, hour, and minute fields are more clear.
 - Fixed `Sync Clock Now` so it now tries to connect to saved WiFi automatically otherwise opens the normal WiFi picker instead of stopping with a "connect first" message.
 - Reduced Home menu heap churn and skipped Lyra Carousel frame caching when heap is low to avoid crash risk on memory-constrained builds.

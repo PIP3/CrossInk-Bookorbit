@@ -376,6 +376,10 @@ void EpubReaderActivity::resumeReadingPaceTimer() {
   }
 }
 
+void EpubReaderActivity::suppressBookProgressTimeLeftEstimate() { suppressBookProgressTimeLeft = true; }
+
+void EpubReaderActivity::resumeBookProgressTimeLeftEstimate() { suppressBookProgressTimeLeft = false; }
+
 bool EpubReaderActivity::forwardPageReadElapsed(uint32_t& seconds) const {
   seconds = 0;
   if (!SETTINGS.shouldTrackReadingStats() || pageShownAtMs == 0UL) {
@@ -401,7 +405,7 @@ void EpubReaderActivity::recordForwardPagePaceSample(uint32_t seconds) {
 
 bool EpubReaderActivity::estimateBookTimeLeftSecondsFromProgress(uint32_t& seconds) const {
   seconds = 0;
-  if (!epub || !section || section->pageCount == 0) {
+  if (suppressBookProgressTimeLeft || !epub || !section || section->pageCount == 0) {
     return false;
   }
 
@@ -1031,6 +1035,7 @@ void EpubReaderActivity::loop() {
             currentSpineIndex = epub->getSpineItemsCount() - 1;
             nextPageNumber = 0;
             pendingPageJump = std::numeric_limits<uint16_t>::max();
+            suppressBookProgressTimeLeftEstimate();
             requestUpdate();
           }
           return;
@@ -1042,6 +1047,7 @@ void EpubReaderActivity::loop() {
           currentSpineIndex = nextLongPressed ? currentSpineIndex + 1 : currentSpineIndex - 1;
           section.reset();
         }
+        suppressBookProgressTimeLeftEstimate();
         requestUpdate();
         return;
       }
@@ -1073,6 +1079,7 @@ void EpubReaderActivity::loop() {
       currentSpineIndex = epub->getSpineItemsCount() - 1;
       nextPageNumber = 0;
       pendingPageJump = std::numeric_limits<uint16_t>::max();
+      suppressBookProgressTimeLeftEstimate();
       requestUpdate();
     }
     return;
@@ -1097,6 +1104,7 @@ void EpubReaderActivity::loop() {
       currentSpineIndex = nextTriggered ? currentSpineIndex + 1 : currentSpineIndex - 1;
       section.reset();
     }
+    suppressBookProgressTimeLeftEstimate();
     requestUpdate();
     return;
   }
@@ -1130,6 +1138,7 @@ void EpubReaderActivity::jumpToPercent(int percent) {
   if (!epub) {
     return;
   }
+  suppressBookProgressTimeLeftEstimate();
 
   // BookMetadataCache uses a shared seek-based FsFile for spine metadata lookups.
   // Hold the render/file mutex for the full jump calculation so menu-driven jumps
@@ -1211,6 +1220,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
               nextPageNumber = 0;
 
               section.reset();
+              suppressBookProgressTimeLeftEstimate();
               pauseReadingPaceTimer();
             } else {
               resumeReadingPaceTimer();
@@ -1451,6 +1461,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
               pendingBookmarkParagraphIndex = bm.paragraphIndex;
               pendingPercentJump = true;
               section.reset();
+              suppressBookProgressTimeLeftEstimate();
               pauseReadingPaceTimer();
             } else {
               resumeReadingPaceTimer();
@@ -1831,9 +1842,12 @@ void EpubReaderActivity::pageTurn(bool isForwardTurn) {
       }
     }
     if (shouldRecordForwardRead) {
+      resumeBookProgressTimeLeftEstimate();
       recordForwardPagePaceSample(forwardReadSeconds);
       stats.totalPagesTurned++;
       globalStats.totalPagesTurned++;
+    } else {
+      suppressBookProgressTimeLeftEstimate();
     }
   } else {
     if (section->currentPage > 0) {
@@ -2547,6 +2561,7 @@ void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool s
     nextPageNumber = 0;
     section.reset();
   }
+  suppressBookProgressTimeLeftEstimate();
   requestUpdate();
   LOG_DBG("ERS", "Navigated to spine %d for href: %s", targetSpineIndex, hrefStr.c_str());
 }
@@ -2564,6 +2579,7 @@ void EpubReaderActivity::restoreSavedPosition() {
     nextPageNumber = pos.pageNumber;
     section.reset();
   }
+  suppressBookProgressTimeLeftEstimate();
   requestUpdate();
 }
 bool EpubReaderActivity::drawCurrentPageToBuffer(const std::string& filePath, GfxRenderer& renderer) {
