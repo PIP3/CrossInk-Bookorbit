@@ -48,6 +48,23 @@ int centeredRowY(const int rowY, const int rowHeight, const int contentHeight) {
   return rowY + std::max(0, rowHeight - contentHeight) / 2;
 }
 
+int mainMenuIconYOffset(const UIIcon icon) {
+  switch (icon) {
+    case UIIcon::Chart:
+      return -7;
+    case UIIcon::Folder:
+      return -4;
+    case UIIcon::Recent:
+      return -3;
+    case UIIcon::Transfer:
+      return -2;
+    case UIIcon::Settings:
+      return -2;
+    default:
+      return 0;
+  }
+}
+
 }  // namespace
 
 const uint8_t* LyraTheme::iconForName(UIIcon icon, uint32_t size) {
@@ -684,7 +701,8 @@ void LyraTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
       } else {
         const uint8_t* iconBitmap = iconForName(icon, mainMenuIconSize);
         if (iconBitmap != nullptr) {
-          renderer.drawIcon(iconBitmap, textX, textY + 3, mainMenuIconSize, mainMenuIconSize);
+          renderer.drawIcon(iconBitmap, textX, textY + 3 + mainMenuIconYOffset(icon), mainMenuIconSize,
+                            mainMenuIconSize);
           textX += mainMenuIconSize + hPaddingInSelection + 2;
         }
       }
