@@ -37,6 +37,10 @@ struct IntervalResult {
   uint32_t value = 0;
 };
 
+struct OptionSelectionResult {
+  uint8_t index = 0;
+};
+
 struct PageResult {
   uint32_t page = 0;
 };
@@ -81,8 +85,8 @@ struct ReadingStatsResult {
 
 using ResultVariant =
     std::variant<std::monostate, WifiResult, KeyboardResult, MenuResult, ChapterResult, PercentResult, IntervalResult,
-                 PageResult, ProgressChangeResult, SyncResult, NetworkModeResult, FootnoteResult, BookmarkResult,
-                 FileBrowserActionResult, FilePathResult, ReadingStatsResult>;
+                 OptionSelectionResult, PageResult, ProgressChangeResult, SyncResult, NetworkModeResult, FootnoteResult,
+                 BookmarkResult, FileBrowserActionResult, FilePathResult, ReadingStatsResult>;
 
 struct ActivityResult {
   bool isCancelled = false;

@@ -24,6 +24,8 @@ class ControlsOptionsActivity final : public Activity {
   void openSubmenu(SettingAction action);
   void closeSubmenu();
   void moveSelection(bool forward);
+  bool currentSettingUsesOptionMenu(const SettingInfo& setting) const;
+  void openEnumOptionPicker(const SettingInfo& setting);
   void toggleCurrentSetting();
 
  public:

@@ -28,6 +28,7 @@
 #include "StatusBarSettingsActivity.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/util/IntervalSelectionActivity.h"
+#include "activities/util/OptionSelectionActivity.h"
 #include "components/HeaderDate.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -277,6 +278,56 @@ void SettingsActivity::closeSubmenu() {
   selectedSettingIndex = 1;
 }
 
+bool SettingsActivity::currentSettingUsesOptionMenu(const SettingInfo& setting) const {
+  return selectedCategoryIndex == 2 && setting.type == SettingType::ENUM && settingEnumOptionCount(setting) > 2 &&
+         (setting.valuePtr != nullptr || (setting.valueGetter && setting.valueSetter));
+}
+
+void SettingsActivity::openEnumOptionPicker(const SettingInfo& setting) {
+  const size_t optionCount = settingEnumOptionCount(setting);
+  if (optionCount == 0) return;
+
+  std::vector<std::string> options;
+  options.reserve(optionCount);
+  for (uint8_t i = 0; i < optionCount; i++) {
+    options.push_back(settingEnumOptionLabel(setting, i));
+  }
+
+  uint8_t currentIndex = 0;
+  if (setting.valuePtr != nullptr) {
+    currentIndex = enumDisplayIndexForRawValue(setting, SETTINGS.*(setting.valuePtr));
+  } else if (setting.valueGetter) {
+    currentIndex = setting.valueGetter();
+  }
+  if (currentIndex >= optionCount) currentIndex = 0;
+
+  const SettingInfo selectedSetting = setting;
+  startActivityForResult(std::make_unique<OptionSelectionActivity>(renderer, mappedInput, "SettingsOptionSelect",
+                                                                   setting.nameId, std::move(options), currentIndex),
+                         [this, selectedSetting](const ActivityResult& result) {
+                           if (result.isCancelled) {
+                             requestUpdate();
+                             return;
+                           }
+
+                           const auto* selection = std::get_if<OptionSelectionResult>(&result.data);
+                           if (selection == nullptr) {
+                             requestUpdate();
+                             return;
+                           }
+
+                           if (selectedSetting.valuePtr != nullptr) {
+                             SETTINGS.*(selectedSetting.valuePtr) =
+                                 enumRawValueForDisplayIndex(selectedSetting, selection->index);
+                           } else if (selectedSetting.valueSetter) {
+                             selectedSetting.valueSetter(selection->index);
+                           }
+
+                           SETTINGS.saveToFile();
+                           requestUpdate();
+                         });
+}
+
 void SettingsActivity::onEnter() {
   Activity::onEnter();
 
@@ -403,6 +454,11 @@ void SettingsActivity::toggleCurrentSetting() {
       SETTINGS.saveToFile();
       requestUpdate();
     });
+    return;
+  }
+
+  if (currentSettingUsesOptionMenu(setting)) {
+    openEnumOptionPicker(setting);
     return;
   }
 
@@ -607,7 +663,7 @@ void SettingsActivity::render(RenderLock&&) {
   GUI.drawList(
       renderer, listRect, settingsCount, selectedSettingIndex - 1,
       [&settings](int index) { return std::string(I18N.get(settings[index].nameId)); }, nullptr, nullptr,
-      [&settings](int i) {
+      [this, &settings](int i) {
         const auto& setting = settings[i];
         std::string valueText = "";
         if (settingShowsNavigationCaret(setting)) {
@@ -641,7 +697,8 @@ void SettingsActivity::render(RenderLock&&) {
       (selectedSettingIndex == 0)
           ? I18N.get(categoryNames[(selectedCategoryIndex + 1) % categoryCount])
           : (selectedSettingIndex > 0 &&
-                     ((*currentSettings)[selectedSettingIndex - 1].type == SettingType::SUBMENU ||
+                     (currentSettingUsesOptionMenu((*currentSettings)[selectedSettingIndex - 1]) ||
+                      (*currentSettings)[selectedSettingIndex - 1].type == SettingType::SUBMENU ||
                       (*currentSettings)[selectedSettingIndex - 1].type == SettingType::ACTION ||
                       (*currentSettings)[selectedSettingIndex - 1].nameId == StrId::STR_TIME_TO_SLEEP ||
                       (*currentSettings)[selectedSettingIndex - 1].valuePtr == &CrossPointSettings::lineHeightPercent)

@@ -89,6 +89,21 @@ inline SettingInfo buildSdFontSizeSetting(const SdCardFontFamilyInfo& family) {
   return s;
 }
 
+inline void insertEnumOptionAfter(SettingInfo& setting, const StrId after, const StrId option, const uint8_t rawValue) {
+  const auto it = std::find(setting.enumValues.begin(), setting.enumValues.end(), after);
+  if (it == setting.enumValues.end()) {
+    setting.enumValues.push_back(option);
+    if (!setting.enumRawValues.empty()) setting.enumRawValues.push_back(rawValue);
+    return;
+  }
+
+  const auto insertIndex = static_cast<size_t>(std::distance(setting.enumValues.begin(), it) + 1);
+  setting.enumValues.insert(it + 1, option);
+  if (!setting.enumRawValues.empty()) {
+    setting.enumRawValues.insert(setting.enumRawValues.begin() + insertIndex, rawValue);
+  }
+}
+
 inline SettingInfo buildFontSizeSetting(const SdCardFontRegistry* registry) {
   if (registry && SETTINGS.sdFontFamilyName[0] != '\0') {
     const SdCardFontFamilyInfo* family = registry->findFamily(SETTINGS.sdFontFamilyName);
@@ -349,16 +364,19 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
 
     // --- Controls ---
     add(SettingInfo::Enum(StrId::STR_SIDE_BTN_LAYOUT, &CrossPointSettings::sideButtonLayout,
-                          {StrId::STR_PREV_NEXT, StrId::STR_NEXT_PREV, StrId::STR_DISABLED, StrId::STR_NEXT_NEXT},
+                          {StrId::STR_DISABLED, StrId::STR_PREV_NEXT, StrId::STR_NEXT_PREV, StrId::STR_NEXT_NEXT},
                           "sideButtonLayout", StrId::STR_CAT_CONTROLS)
-            .withEnumRawValues({CrossPointSettings::PREV_NEXT, CrossPointSettings::NEXT_PREV,
-                                CrossPointSettings::SIDE_BUTTONS_DISABLED, CrossPointSettings::NEXT_NEXT}));
+            .withEnumRawValues({CrossPointSettings::SIDE_BUTTONS_DISABLED, CrossPointSettings::PREV_NEXT,
+                                CrossPointSettings::NEXT_PREV, CrossPointSettings::NEXT_NEXT}));
     add(SettingInfo::Enum(StrId::STR_ORIENTATION_AWARE, &CrossPointSettings::sideButtonOrientationAware,
                           {StrId::STR_NO, StrId::STR_YES}, "sideButtonOrientationAware", StrId::STR_CAT_CONTROLS));
     add(SettingInfo::Enum(StrId::STR_SIDE_BTN_LONG_PRESS, &CrossPointSettings::sideButtonLongPress,
-                          {StrId::STR_CHAPTER_SKIP_OPT, StrId::STR_CHANGE_FONT_SIZE, StrId::STR_IGNORE,
+                          {StrId::STR_IGNORE, StrId::STR_CHAPTER_SKIP_OPT, StrId::STR_CHANGE_FONT_SIZE,
                            StrId::STR_LONG_PRESS_BEHAVIOR_ORIENTATION},
-                          "sideButtonLongPress", StrId::STR_CAT_CONTROLS));
+                          "sideButtonLongPress", StrId::STR_CAT_CONTROLS)
+            .withEnumRawValues({CrossPointSettings::SIDE_LONG_OFF, CrossPointSettings::SIDE_LONG_CHAPTER_SKIP,
+                                CrossPointSettings::SIDE_LONG_FONT_SIZE,
+                                CrossPointSettings::SIDE_LONG_ORIENTATION_CHANGE}));
     add(SettingInfo::Enum(StrId::STR_ORIENTATION_AWARE, &CrossPointSettings::frontButtonOrientationAware,
                           {StrId::STR_NO, StrId::STR_NAV_BUTTONS, StrId::STR_ALL_BUTTONS},
                           "frontButtonOrientationAware", StrId::STR_CAT_CONTROLS));
@@ -367,25 +385,47 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                            StrId::STR_LONG_PRESS_BEHAVIOR_ORIENTATION},
                           "longPressButtonBehavior", StrId::STR_CAT_CONTROLS));
     add(SettingInfo::Enum(
-        StrId::STR_SHORT_PWR_BTN, &CrossPointSettings::shortPwrBtn,
-        {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH, StrId::STR_CHANGE_FONT,
-         StrId::STR_TOGGLE_GUIDE_DOTS, StrId::STR_TOGGLE_BIONIC_READING, StrId::STR_TOGGLE_BOOKMARK,
-         StrId::STR_SYNC_PROGRESS, StrId::STR_MARK_FINISHED, StrId::STR_READING_STATS, StrId::STR_SCREENSHOT_BUTTON,
-         StrId::STR_CYCLE_PAGE_TURN, StrId::STR_FILE_TRANSFER},
-        "shortPwrBtn", StrId::STR_CAT_CONTROLS));
+            StrId::STR_SHORT_PWR_BTN, &CrossPointSettings::shortPwrBtn,
+            {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_TOGGLE_BOOKMARK,
+             StrId::STR_READING_STATS, StrId::STR_MARK_FINISHED, StrId::STR_FORCE_REFRESH, StrId::STR_CHANGE_FONT,
+             StrId::STR_TOGGLE_GUIDE_DOTS, StrId::STR_TOGGLE_BIONIC_READING, StrId::STR_CYCLE_PAGE_TURN,
+             StrId::STR_SYNC_PROGRESS, StrId::STR_FILE_TRANSFER, StrId::STR_SCREENSHOT_BUTTON},
+            "shortPwrBtn", StrId::STR_CAT_CONTROLS)
+            .withEnumRawValues({CrossPointSettings::IGNORE, CrossPointSettings::SLEEP, CrossPointSettings::PAGE_TURN,
+                                CrossPointSettings::TOGGLE_BOOKMARK, CrossPointSettings::READING_STATS,
+                                CrossPointSettings::MARK_FINISHED, CrossPointSettings::FORCE_REFRESH,
+                                CrossPointSettings::TOGGLE_FONT, CrossPointSettings::TOGGLE_GUIDE_DOTS,
+                                CrossPointSettings::TOGGLE_BIONIC_READING, CrossPointSettings::CYCLE_PAGE_TURN,
+                                CrossPointSettings::SYNC_PROGRESS, CrossPointSettings::FILE_TRANSFER,
+                                CrossPointSettings::SCREENSHOT}));
     add(SettingInfo::Enum(
-        StrId::STR_LONG_PRESS_ACTION, &CrossPointSettings::longPwrBtn,
-        {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH, StrId::STR_CHANGE_FONT,
-         StrId::STR_TOGGLE_GUIDE_DOTS, StrId::STR_TOGGLE_BIONIC_READING, StrId::STR_TOGGLE_BOOKMARK,
-         StrId::STR_SYNC_PROGRESS, StrId::STR_MARK_FINISHED, StrId::STR_READING_STATS, StrId::STR_SCREENSHOT_BUTTON,
-         StrId::STR_CYCLE_PAGE_TURN, StrId::STR_FILE_TRANSFER},
-        "longPwrBtn", StrId::STR_CAT_CONTROLS));
+            StrId::STR_LONG_PRESS_ACTION, &CrossPointSettings::longPwrBtn,
+            {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_TOGGLE_BOOKMARK,
+             StrId::STR_READING_STATS, StrId::STR_MARK_FINISHED, StrId::STR_FORCE_REFRESH, StrId::STR_CHANGE_FONT,
+             StrId::STR_TOGGLE_GUIDE_DOTS, StrId::STR_TOGGLE_BIONIC_READING, StrId::STR_CYCLE_PAGE_TURN,
+             StrId::STR_SYNC_PROGRESS, StrId::STR_FILE_TRANSFER, StrId::STR_SCREENSHOT_BUTTON},
+            "longPwrBtn", StrId::STR_CAT_CONTROLS)
+            .withEnumRawValues({CrossPointSettings::IGNORE, CrossPointSettings::SLEEP, CrossPointSettings::PAGE_TURN,
+                                CrossPointSettings::TOGGLE_BOOKMARK, CrossPointSettings::READING_STATS,
+                                CrossPointSettings::MARK_FINISHED, CrossPointSettings::FORCE_REFRESH,
+                                CrossPointSettings::TOGGLE_FONT, CrossPointSettings::TOGGLE_GUIDE_DOTS,
+                                CrossPointSettings::TOGGLE_BIONIC_READING, CrossPointSettings::CYCLE_PAGE_TURN,
+                                CrossPointSettings::SYNC_PROGRESS, CrossPointSettings::FILE_TRANSFER,
+                                CrossPointSettings::SCREENSHOT}));
     add(SettingInfo::Enum(StrId::STR_LONG_PRESS_MENU_ACTION, &CrossPointSettings::longPressMenuAction,
-                          {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_CHANGE_FONT, StrId::STR_TOGGLE_GUIDE_DOTS,
-                           StrId::STR_TOGGLE_BIONIC_READING, StrId::STR_TOGGLE_BOOKMARK, StrId::STR_FORCE_REFRESH,
-                           StrId::STR_SYNC_PROGRESS, StrId::STR_MARK_FINISHED, StrId::STR_READING_STATS,
-                           StrId::STR_SCREENSHOT_BUTTON, StrId::STR_CYCLE_PAGE_TURN, StrId::STR_FILE_TRANSFER},
-                          "longPressMenuAction", StrId::STR_CAT_CONTROLS));
+                          {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_TOGGLE_BOOKMARK, StrId::STR_READING_STATS,
+                           StrId::STR_MARK_FINISHED, StrId::STR_FORCE_REFRESH, StrId::STR_CHANGE_FONT,
+                           StrId::STR_TOGGLE_GUIDE_DOTS, StrId::STR_TOGGLE_BIONIC_READING, StrId::STR_CYCLE_PAGE_TURN,
+                           StrId::STR_SYNC_PROGRESS, StrId::STR_FILE_TRANSFER, StrId::STR_SCREENSHOT_BUTTON},
+                          "longPressMenuAction", StrId::STR_CAT_CONTROLS)
+            .withEnumRawValues(
+                {CrossPointSettings::LONG_MENU_OFF, CrossPointSettings::LONG_MENU_SLEEP,
+                 CrossPointSettings::LONG_MENU_TOGGLE_BOOKMARK, CrossPointSettings::LONG_MENU_READING_STATS,
+                 CrossPointSettings::LONG_MENU_MARK_FINISHED, CrossPointSettings::LONG_MENU_REFRESH_SCREEN,
+                 CrossPointSettings::LONG_MENU_CHANGE_FONT, CrossPointSettings::LONG_MENU_TOGGLE_GUIDE_DOTS,
+                 CrossPointSettings::LONG_MENU_TOGGLE_BIONIC, CrossPointSettings::LONG_MENU_CYCLE_PAGE_TURN,
+                 CrossPointSettings::LONG_MENU_SYNC_PROGRESS, CrossPointSettings::LONG_MENU_FILE_TRANSFER,
+                 CrossPointSettings::LONG_MENU_SCREENSHOT}));
 
     // --- System ---
     add(SettingInfo::Value(
@@ -474,7 +514,10 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
       for (auto& setting : v) {
         if (setting.nameId == StrId::STR_SHORT_PWR_BTN || setting.nameId == StrId::STR_LONG_PRESS_ACTION ||
             setting.nameId == StrId::STR_LONG_PRESS_MENU_ACTION) {
-          setting.enumValues.push_back(StrId::STR_TILT_PAGE_TURN);
+          const uint8_t rawValue = setting.nameId == StrId::STR_LONG_PRESS_MENU_ACTION
+                                       ? static_cast<uint8_t>(CrossPointSettings::LONG_MENU_TOGGLE_TILT_PAGE_TURN)
+                                       : static_cast<uint8_t>(CrossPointSettings::TOGGLE_TILT_PAGE_TURN);
+          insertEnumOptionAfter(setting, StrId::STR_CYCLE_PAGE_TURN, StrId::STR_TILT_PAGE_TURN, rawValue);
         }
       }
       auto shortPowerButtonIt = std::find_if(
