@@ -23,6 +23,7 @@
 #include "activities/reader/ReadingStatsUtils.h"
 #include "components/UITheme.h"
 #include "components/icons/afternoon.h"
+#include "components/icons/book24.h"
 #include "components/icons/cover.h"
 #include "components/icons/evening.h"
 #include "components/icons/morning.h"
@@ -66,9 +67,7 @@ constexpr int kProgressBarGap = 4;
 constexpr int kProgressLabelGap = 5;
 constexpr int kStatsFooterReaderIconSize = 24;
 constexpr int kStatsFooterStreakIconSize = 24;
-constexpr int kStatsFooterBottomInset = 34;
 constexpr int kStatsFooterSideInset = 48;
-constexpr int kStatsFooterColumnGap = 18;
 int homeButtonHintSelection = -1;
 
 bool dominantReaderTypeBucket(const GlobalReadingStats& globalStats, ReadingTimeBucket& bucketOut) {
@@ -103,27 +102,22 @@ const char* readerTypeLabel(const GlobalReadingStats& globalStats) {
   }
 }
 
-void drawReaderTypeIcon(const GfxRenderer& renderer, const GlobalReadingStats& globalStats, const int x, const int y) {
+const uint8_t* readerTypeIcon(const GlobalReadingStats& globalStats) {
   ReadingTimeBucket bucket = ReadingTimeBucket::Night;
   if (!dominantReaderTypeBucket(globalStats, bucket)) {
-    renderer.drawIconInverted(NightReaderIcon, x, y, kStatsFooterReaderIconSize, kStatsFooterReaderIconSize);
-    return;
+    return Book24Icon;
   }
 
   switch (bucket) {
     case ReadingTimeBucket::Morning:
-      renderer.drawIconInverted(MorningReaderIcon, x, y, kStatsFooterReaderIconSize, kStatsFooterReaderIconSize);
-      return;
+      return MorningReaderIcon;
     case ReadingTimeBucket::Afternoon:
-      renderer.drawIconInverted(AfternoonReaderIcon, x, y, kStatsFooterReaderIconSize, kStatsFooterReaderIconSize);
-      return;
+      return AfternoonReaderIcon;
     case ReadingTimeBucket::Evening:
-      renderer.drawIconInverted(EveningReaderIcon, x, y, kStatsFooterReaderIconSize, kStatsFooterReaderIconSize);
-      return;
+      return EveningReaderIcon;
     case ReadingTimeBucket::Night:
     default:
-      renderer.drawIconInverted(NightReaderIcon, x, y, kStatsFooterReaderIconSize, kStatsFooterReaderIconSize);
-      return;
+      return NightReaderIcon;
   }
 }
 
@@ -143,48 +137,63 @@ void formatStreakStat(const GlobalReadingStats& globalStats, char* buf, const si
   snprintf(buf, len, tr(STR_STATS_DAY_STREAK_FORMAT), static_cast<unsigned>(streak));
 }
 
-void drawStatsFooter(const GfxRenderer& renderer, const GlobalReadingStats& globalStats) {
-  if (!gpio.deviceIsX3()) {
+Rect coverImageRectForFrame(const Rect& coverRect);
+
+void drawCenteredStatsRow(const GfxRenderer& renderer, const uint8_t* icon, const int iconSize, const char* label,
+                          const int regionTop, const int regionBottom) {
+  const int screenWidth = renderer.getScreenWidth();
+  const int regionHeight = regionBottom - regionTop;
+  if (regionHeight <= 0) {
     return;
   }
 
-  const int screenWidth = renderer.getScreenWidth();
-  const int screenHeight = renderer.getScreenHeight();
   const int labelLineHeight = renderer.getLineHeight(UI_10_FONT_ID);
-  const int rowHeight = std::max({labelLineHeight, kStatsFooterStreakIconSize, kStatsFooterReaderIconSize});
-  const int topY = screenHeight - kStatsFooterBottomInset - rowHeight;
-  const int streakIconY = topY + (rowHeight - kStatsFooterStreakIconSize) / 2;
-  const int readerIconY = topY + (rowHeight - kStatsFooterReaderIconSize) / 2;
-  const int textY = topY + (rowHeight - labelLineHeight) / 2;
-  const int availableWidth = screenWidth - kStatsFooterSideInset * 2;
+  const int rowHeight = std::max(labelLineHeight, iconSize);
+  const int topY = regionTop + std::max(0, regionHeight - rowHeight) / 2;
+  const int availableWidth = std::max(1, screenWidth - kStatsFooterSideInset * 2);
   const int iconTextGap = 10;
+  const std::string text = renderer.truncatedText(UI_10_FONT_ID, label, availableWidth - iconSize - iconTextGap);
+  const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, text.c_str());
+  const int blockWidth = iconSize + iconTextGap + textWidth;
+  const int iconX = (screenWidth - blockWidth) / 2;
+  const int iconY = topY + (rowHeight - iconSize) / 2;
+  const int textX = iconX + iconSize + iconTextGap;
+  const int textY = topY + (rowHeight - labelLineHeight) / 2;
+
+  renderer.drawIconInverted(icon, iconX, iconY, iconSize, iconSize);
+  renderer.drawText(UI_10_FONT_ID, textX, textY, text.c_str(), false);
+}
+
+int progressLabelBottomY(const GfxRenderer& renderer, const Rect& coverRect, const float progressPercent) {
+  if (progressPercent < 0.0f) {
+    return coverRect.y + coverRect.height;
+  }
+
+  const int durationY = coverRect.y + coverRect.height + kProgressBlockGap;
+  const int barY = durationY + renderer.getLineHeight(UI_10_FONT_ID) + kProgressBarGap;
+  const int labelY = barY + kProgressBarHeight + kProgressLabelGap;
+  return labelY + renderer.getLineHeight(UI_10_FONT_ID);
+}
+
+void drawStatsOverlay(const GfxRenderer& renderer, const GlobalReadingStats& globalStats, const Rect& coverRect,
+                      const float progressPercent) {
+  if (!gpio.deviceIsX3()) {
+    return;
+  }
 
   char streakBuf[48];
   formatStreakStat(globalStats, streakBuf, sizeof(streakBuf));
   const char* readerLabel = readerTypeLabel(globalStats);
 
-  const std::string streakText =
-      renderer.truncatedText(UI_10_FONT_ID, streakBuf, availableWidth / 2 - (kStatsFooterStreakIconSize + iconTextGap));
-  const std::string readerText = renderer.truncatedText(
-      UI_10_FONT_ID, readerLabel, availableWidth / 2 - (kStatsFooterReaderIconSize + iconTextGap));
+  const int readerRegionTop = 0;
+  const int readerRegionBottom = coverImageRectForFrame(coverRect).y;
+  drawCenteredStatsRow(renderer, readerTypeIcon(globalStats), kStatsFooterReaderIconSize, readerLabel, readerRegionTop,
+                       readerRegionBottom);
 
-  const int streakBlockWidth =
-      kStatsFooterStreakIconSize + iconTextGap + renderer.getTextWidth(UI_10_FONT_ID, streakText.c_str());
-  const int readerBlockWidth =
-      kStatsFooterReaderIconSize + iconTextGap + renderer.getTextWidth(UI_10_FONT_ID, readerText.c_str());
-  const int contentWidth = availableWidth;
-  const int contentLeft = (screenWidth - contentWidth) / 2;
-  const int leftX = contentLeft;
-  const int rightX =
-      std::max(contentLeft + contentWidth - readerBlockWidth, leftX + streakBlockWidth + kStatsFooterColumnGap);
-  const int streakTextX = leftX + kStatsFooterStreakIconSize + iconTextGap;
-  const int readerTextX = rightX + kStatsFooterReaderIconSize + iconTextGap;
-
-  renderer.drawIconInverted(StreakIcon, leftX, streakIconY, kStatsFooterStreakIconSize, kStatsFooterStreakIconSize);
-  renderer.drawText(UI_10_FONT_ID, streakTextX, textY, streakText.c_str(), false);
-
-  drawReaderTypeIcon(renderer, globalStats, rightX, readerIconY);
-  renderer.drawText(UI_10_FONT_ID, readerTextX, textY, readerText.c_str(), false);
+  const int streakRegionTop = progressLabelBottomY(renderer, coverRect, progressPercent);
+  const int streakRegionBottom = renderer.getScreenHeight();
+  drawCenteredStatsRow(renderer, StreakIcon, kStatsFooterStreakIconSize, streakBuf, streakRegionTop,
+                       streakRegionBottom);
 }
 
 Rect coverRectForScreen(const GfxRenderer& renderer, const Rect& rect) {
@@ -670,7 +679,10 @@ void MinimalTheme::drawStatsSleepScreen(const GfxRenderer& renderer, const Recen
                                         const float progressPercent) const {
   drawSleepScreen(renderer, book, stats, progressPercent);
   if (globalStats != nullptr) {
-    drawStatsFooter(renderer, *globalStats);
+    const Rect contentRect{0, MinimalMetrics::values.homeTopPadding, renderer.getScreenWidth(),
+                           MinimalMetrics::values.homeCoverTileHeight};
+    const Rect coverRect = coverRectForScreen(renderer, contentRect);
+    drawStatsOverlay(renderer, *globalStats, coverRect, progressPercent);
   }
 }
 
