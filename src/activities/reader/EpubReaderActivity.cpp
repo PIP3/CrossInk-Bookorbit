@@ -129,14 +129,16 @@ bool runTiledGrayscalePass(GfxRenderer& renderer, const Page& page, const int fo
 void drawToastBuffer(const GfxRenderer& renderer, const char* msg) {
   constexpr int toastPadX = 20;
   constexpr int toastPadY = 12;
+  const bool toastBackgroundBlack = ReaderUtils::readerForegroundBlack();
   const int msgW = renderer.getTextWidth(UI_10_FONT_ID, msg);
   const int msgH = renderer.getLineHeight(UI_10_FONT_ID);
   const int toastW = msgW + toastPadX * 2;
   const int toastH = msgH + toastPadY * 2;
   const int toastX = (renderer.getScreenWidth() - toastW) / 2;
   const int toastY = (renderer.getScreenHeight() - toastH) / 2;
-  renderer.fillRect(toastX, toastY, toastW, toastH, true);
-  renderer.drawText(UI_10_FONT_ID, toastX + toastPadX, toastY + toastPadY, msg, false);
+  renderer.fillRect(toastX, toastY, toastW, toastH, toastBackgroundBlack);
+  renderer.drawRect(toastX, toastY, toastW, toastH, !toastBackgroundBlack);
+  renderer.drawText(UI_10_FONT_ID, toastX + toastPadX, toastY + toastPadY, msg, !toastBackgroundBlack);
 }
 
 void drawToast(const GfxRenderer& renderer, const char* msg) {
