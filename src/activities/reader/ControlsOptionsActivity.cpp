@@ -10,6 +10,7 @@
 #include "MappedInputManager.h"
 #include "SettingsList.h"
 #include "activities/settings/ButtonRemapActivity.h"
+#include "activities/util/OptionSelectionActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -118,6 +119,43 @@ void ControlsOptionsActivity::moveSelection(bool forward) {
   }
 }
 
+bool ControlsOptionsActivity::currentSettingUsesOptionMenu(const SettingInfo& setting) const {
+  return setting.type == SettingType::ENUM && setting.valuePtr != nullptr && settingEnumOptionCount(setting) > 2;
+}
+
+void ControlsOptionsActivity::openEnumOptionPicker(const SettingInfo& setting) {
+  const size_t optionCount = settingEnumOptionCount(setting);
+  if (optionCount == 0) return;
+
+  std::vector<std::string> options;
+  options.reserve(optionCount);
+  for (uint8_t i = 0; i < optionCount; i++) {
+    options.push_back(settingEnumOptionLabel(setting, i));
+  }
+
+  uint8_t currentIndex = 0;
+  if (setting.valuePtr != nullptr) {
+    currentIndex = enumDisplayIndexForRawValue(setting, SETTINGS.*(setting.valuePtr));
+  }
+  if (currentIndex >= optionCount) currentIndex = 0;
+
+  const SettingInfo selectedSetting = setting;
+  startActivityForResult(
+      std::make_unique<OptionSelectionActivity>(renderer, mappedInput, "ControlsOptionSelect", setting.nameId,
+                                                std::move(options), currentIndex, true),
+      [selectedSetting](const ActivityResult& result) {
+        if (result.isCancelled) return;
+
+        const auto* selection = std::get_if<OptionSelectionResult>(&result.data);
+        if (selection == nullptr) return;
+
+        if (selectedSetting.valuePtr != nullptr) {
+          SETTINGS.*(selectedSetting.valuePtr) = enumRawValueForDisplayIndex(selectedSetting, selection->index);
+          SETTINGS.saveToFile();
+        }
+      });
+}
+
 void ControlsOptionsActivity::toggleCurrentSetting() {
   if (selectedIndex < 0 || selectedIndex >= settingsCount) return;
   const auto& setting = (*currentSettings)[selectedIndex];
@@ -127,6 +165,10 @@ void ControlsOptionsActivity::toggleCurrentSetting() {
     SETTINGS.*(setting.valuePtr) = !cur;
     SETTINGS.saveToFile();
   } else if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
+    if (currentSettingUsesOptionMenu(setting)) {
+      openEnumOptionPicker(setting);
+      return;
+    }
     const uint8_t cur = SETTINGS.*(setting.valuePtr);
     const uint8_t currentIndex = enumDisplayIndexForRawValue(setting, cur);
     const size_t optionCount = settingEnumOptionCount(setting);
@@ -248,7 +290,8 @@ void ControlsOptionsActivity::render(RenderLock&&) {
 
   const bool currentIsAction = selectedIndex >= 0 && selectedIndex < settingsCount &&
                                ((*currentSettings)[selectedIndex].type == SettingType::ACTION ||
-                                (*currentSettings)[selectedIndex].type == SettingType::SUBMENU);
+                                (*currentSettings)[selectedIndex].type == SettingType::SUBMENU ||
+                                currentSettingUsesOptionMenu((*currentSettings)[selectedIndex]));
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), currentIsAction ? tr(STR_SELECT) : tr(STR_TOGGLE),
                                             tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4, true);
