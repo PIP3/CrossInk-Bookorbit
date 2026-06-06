@@ -31,9 +31,6 @@ class EpubReaderActivity final : public Activity {
   unsigned long lastPageTurnTime = 0UL;
   unsigned long pageTurnDuration = 0UL;
   unsigned long pageShownAtMs = 0UL;
-  // Suppresses the book-level progress ETA after fast or non-linear navigation
-  // until the user completes another qualified forward read.
-  bool suppressBookProgressTimeLeft = false;
   uint16_t lastAutoPageTurnIntervalSeconds = 0;
   BookReadingStats stats;
   GlobalReadingStats globalStats;
@@ -101,11 +98,8 @@ class EpubReaderActivity final : public Activity {
   bool saveProgress(int spineIndex, int currentPage, int pageCount);
   void pauseReadingPaceTimer();
   void resumeReadingPaceTimer();
-  void suppressBookProgressTimeLeftEstimate();
-  void resumeBookProgressTimeLeftEstimate();
   bool forwardPageReadElapsed(uint32_t& seconds) const;
   void recordForwardPagePaceSample(uint32_t seconds);
-  bool estimateBookTimeLeftSecondsFromProgress(uint32_t& seconds) const;
   bool estimateRemainingTimeLeftPages(bool bookEstimate, float& remainingPages) const;
   bool estimateTimeLeftSeconds(bool bookEstimate, uint32_t& seconds) const;
   bool formatTimeLeftLabel(char* buf, size_t len) const;
