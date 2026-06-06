@@ -67,7 +67,7 @@ The UI now uses [Inter](https://fonts.google.com/specimen/Inter) as the display 
 
 ### Font Sizes
 
-There are 4 available build variants to choose from due to build size constraints: tiny, xlarge, and no_emoji
+There are 4 available build variants to choose from due to build size constraints: teensy, tiny, xlarge, and no_emoji
 
 **teensy**
 > Only the small sized fonts.
@@ -151,11 +151,11 @@ The Controls menu in Settings has been updated to the following
 
 ---
 
-**Side Button Long Press Action** - Use the side buttons to change your font size. Previously, the "Long-press Chapter Skip" applied to both the front and side buttons. I've split this out so now you can change your font size when you long-press them. Press and hold for about 2 seconds: Up to increase font size, Down to decrease font size. Default = Chapter Skip
+- **Side Button Long Press Action** - Use the side buttons to change your font size. Previously, the "Long-press Chapter Skip" applied to both the front and side buttons. I've split this out so now you can change your font size when you long-press them. Press and hold for about 2 seconds: Up to increase font size, Down to decrease font size. Default = Chapter Skip
 
-**Short-press Power Button Action** - Default = Ignore
-**Long-press Power Button Action** - Default = Sleep
-**Long Press Menu Button Action** (This is the Menu/Confirm button when you are in the reader): Default = Ignore
+- **Short-press Power Button Action**: Default = Ignore
+- **Long-press Power Button Action**: Default = Sleep
+- **Long Press Menu Button Action** (This is the Menu/Confirm button when you are in the reader): Default = Ignore
 
 Map the **Power** or **Menu** button short/long-press action to one of the following options:
 - Ignore
@@ -176,9 +176,7 @@ Map the **Power** or **Menu** button short/long-press action to one of the follo
 
 ### Reading stats
 
-Some simple per-book reading stats are tracked automatically and displayed in two places:
-
-**In-book menu → Reading Stats:**
+Some simple per-book reading stats are tracked automatically and aggregated into global stats.
 
 - Total reading time
 - Number of sessions
