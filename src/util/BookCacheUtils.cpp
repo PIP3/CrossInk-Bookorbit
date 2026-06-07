@@ -188,5 +188,5 @@ bool clearBookCachePreservingUserState(const std::string& path) {
   if (clearOk) {
     LOG_DBG("BookCache", "Done checking metadata cache for: %s", path.c_str());
   }
-  return preserveOk && clearOk && restoreOk;
+  return clearOk && restoreOk;
 }
