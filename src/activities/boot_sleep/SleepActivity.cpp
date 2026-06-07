@@ -666,7 +666,11 @@ void SleepActivity::renderMinimalStatsSleepScreen() const {
 
 void SleepActivity::renderLastScreenSleepScreen() const {
   const auto pageHeight = renderer.getScreenHeight();
-  renderer.drawImage(MoonIcon, 0, pageHeight - MOONICON_HEIGHT, MOONICON_WIDTH, MOONICON_HEIGHT);
+  if (ReaderUtils::readerDarkModeEnabled()) {
+    renderer.drawImageInverted(MoonIcon, 0, pageHeight - MOONICON_HEIGHT, MOONICON_WIDTH, MOONICON_HEIGHT);
+  } else {
+    renderer.drawImage(MoonIcon, 0, pageHeight - MOONICON_HEIGHT, MOONICON_WIDTH, MOONICON_HEIGHT);
+  }
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 }
 

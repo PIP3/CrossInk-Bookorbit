@@ -877,7 +877,12 @@ void setup() {
       if (loadSleepFrameBuffer()) {
         // Frame restored: swap the sleep moon for the loading icon.
         const auto pageHeight = renderer.getScreenHeight();
-        renderer.drawImage(LoadingIcon, 0, pageHeight - LOADINGICON_HEIGHT, LOADINGICON_WIDTH, LOADINGICON_HEIGHT);
+        if (SETTINGS.readerDarkMode != 0) {
+          renderer.drawImageInverted(LoadingIcon, 0, pageHeight - LOADINGICON_HEIGHT, LOADINGICON_WIDTH,
+                                     LOADINGICON_HEIGHT);
+        } else {
+          renderer.drawImage(LoadingIcon, 0, pageHeight - LOADINGICON_HEIGHT, LOADINGICON_WIDTH, LOADINGICON_HEIGHT);
+        }
         renderer.displayBuffer(HalDisplay::HALF_REFRESH);
       } else {
         activityManager.goToBoot();  // frame file missing, fall back to the splash
