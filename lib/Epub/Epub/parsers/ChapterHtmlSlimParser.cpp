@@ -1289,11 +1289,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                   self->currentPageNextY += displayHeight + imageMarginBottom;
 
                   if (self->currentTextBlock && self->currentTextBlock->isEmpty()) {
-                    BlockStyle resetStyle;
-                    resetStyle.alignment = (self->paragraphAlignment == static_cast<uint8_t>(CssTextAlign::None))
-                                               ? CssTextAlign::Justify
-                                               : static_cast<CssTextAlign>(self->paragraphAlignment);
-                    self->currentTextBlock->setBlockStyle(resetStyle);
+                    self->currentTextBlock->setBlockStyle(self->blockStyleStack.back().withoutBottom());
                   }
 
                   self->ancestorStack_.push_back({self->depth, std::string(name), classAttr});

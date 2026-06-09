@@ -36,6 +36,7 @@
 - SD-card font downloads now use versioned direct S3-hosted HTTP endpoints with CRC validation, avoiding GitHub release redirects and ESP32-C3 TLS stalls when loading the font catalog.
 - WiFi activities now release the active SD-card font before starting network services, reducing low-memory freezes when many fonts are installed.
 - Cancelled WiFi selection now turns WiFi fully off after deleting scan results so Settings does not keep network memory allocated.
+- EPUB text blocks now keep the book's alignment style when an inline image appears before the text.
 
 ## [v1.3.1] - 2026-05-28
 
