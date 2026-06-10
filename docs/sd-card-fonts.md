@@ -1,11 +1,6 @@
----
-title: SD Card Fonts
-nav_order: 12
----
-
 # SD Card Fonts
 
-CrossInk supports loading additional fonts from the SD card, including fonts
+CrossPoint supports loading additional fonts from the SD card, including fonts
 with extended Unicode coverage (CJK, Cyrillic, Greek, etc.).
 
 ## Installing Fonts
@@ -14,61 +9,22 @@ There are three ways to install fonts:
 
 ### Option 1: Download from device (recommended)
 
-1. Connect your device to WiFi
+1. Connect your CrossPoint reader to Wi-Fi
 2. Go to **Settings > System > Manage Fonts**
 3. Browse available font families and tap to download
 4. Downloaded fonts appear immediately in **Settings > Reader > Font Family**
 
-Before downloading, choose **Settings > Reader > Download Font Size Range**.
-That setting controls which `.cpfont` point sizes are downloaded for each
-family:
-
-- teensy: 8, 9, 10, 12 pt
-- tiny: 10, 12, 14, 16 pt
-- xlarge: 16, 18, 20 pt
-- no_emoji: 10, 12, 14, 16, 18 pt
-- all: 8, 9, 10, 12, 14, 16, 18, 20 pt
-
-Only the files in the selected range are downloaded. For example, if the range
-is `xlarge`, downloading Lexend Deca installs only:
-
-    Lexend Deca_16.cpfont
-    Lexend Deca_18.cpfont
-    Lexend Deca_20.cpfont
-
-Downloaded ranges for the same family are saved into the same installed family
-folder. For example, downloading Lexend Deca with the `teensy` range and then
-again with `xlarge` keeps one **Lexend Deca** family and adds the larger files
-to that same folder.
-
-On the SD card, downloaded fonts are stored under `/.fonts/` by default:
-
-    SD Card Root/
-    └── .fonts/
-        └── Lexend Deca/
-            ├── Lexend Deca_8.cpfont
-            ├── Lexend Deca_9.cpfont
-            ├── Lexend Deca_10.cpfont
-            ├── Lexend Deca_12.cpfont
-            ├── Lexend Deca_16.cpfont
-            ├── Lexend Deca_18.cpfont
-            └── Lexend Deca_20.cpfont
-
-Each folder appears as one option in **Settings > Reader > Font Family**. When
-that family is selected, **Font Size** changes to match every size installed in
-that folder.
-
 ### Option 2: Upload via web browser
 
-1. Open **File Transfer** on your device and choose **Join Network** or **Create Hotspot**
-2. Open the web interface in your browser (shown on the WiFi screen)
+1. Start **File Transfer** and connect through **Join Network** or **Create Hotspot**
+2. Open the web interface URL shown on the reader
 3. Navigate to the **Fonts** tab
 4. Upload `.cpfont` files using the upload form
 
 ### Option 3: Manual SD card copy
 
 1. Download font files from the
-   [crossink-fonts repository](https://github.com/uxjulia/crossink-fonts)
+   [crosspoint-fonts repository](https://github.com/crosspoint-reader/crosspoint-fonts)
 2. Copy font family folders to one of two locations on your SD card:
 
    - `/.fonts/` — hidden directory (preferred; keeps the SD root tidy
@@ -84,27 +40,26 @@ that folder.
 
        SD Card Root/
        ├── .fonts/                     ← Hidden root (preferred)
-       │   └── Literata (tiny)/
-       │       ├── Literata_10.cpfont
+       │   └── Literata/
        │       ├── Literata_12.cpfont
        │       ├── Literata_14.cpfont
-       │       └── Literata_16.cpfont
+       │       ├── Literata_16.cpfont
+       │       └── Literata_18.cpfont
        └── fonts/                      ← Visible root (equally valid)
            └── Merriweather/
                ├── Merriweather_12.cpfont
                └── ...
 
-3. Insert the SD card and power on your device
+3. Insert the SD card and power on your CrossPoint reader
 
 ## Available Pre-Built Fonts
 
 The current list of pre-built fonts is maintained in the
-[crossink-fonts repository](https://github.com/uxjulia/crossink-fonts).
+[crosspoint-fonts repository](https://github.com/crosspoint-reader/crosspoint-fonts).
 
 ## Converting Custom Fonts
-1. Using the official Crosspoint Font tool: https://crosspointreader.com/fonts
 
-2. Convering TrueType/OpenType fonts on your computer:
+To convert your own TrueType/OpenType fonts:
 
 ### Prerequisites
 
@@ -141,6 +96,7 @@ The current list of pre-built fonts is maintained in the
 | `latin-ext` | European languages (Latin + Extended-A/B + punctuation + ligatures) |
 | `greek` | Greek + Extended Greek |
 | `cyrillic` | Cyrillic + Supplement |
+| `hebrew` | Hebrew + Alphabetic Presentation Forms |
 | `georgian` | Georgian + Georgian Supplement |
 | `armenian` | Armenian |
 | `ethiopic` | Ethiopic + Extended |
@@ -152,7 +108,7 @@ The current list of pre-built fonts is maintained in the
 | `tifinagh` | Tifinagh |
 | `symbols` | Math, currency, arrows, box-drawing, misc symbols, dingbats |
 | `reading` | Literary fiction coverage: Latin, Greek, Cyrillic, math/symbol blocks, supplemental punctuation, and CJK quote marks |
-| `builtin` | Matches built-in Bookerly coverage exactly |
+| `builtin` | Matches the firmware's built-in font conversion intervals |
 
 Combine presets with commas: `--intervals latin-ext,greek,cyrillic`
 
@@ -167,11 +123,4 @@ To list all presets with codepoint counts:
 
 `--force-autohint` — force FreeType's auto-hinter instead of the font's native hinting (useful when a font's built-in hints produce poor results at small sizes).
 
-Install custom fonts via WiFi upload or manual SD card copy.
-
-When a custom font family contains multiple `.cpfont` sizes, the reader maps
-font-size steps onto those files from smallest to largest. If the point sizes
-do not exactly match CrossInk's built-in sizes, the firmware still uses a
-best-effort match for the visible **Font Size** labels. For example, a custom
-13 pt file may appear near the built-in **Small** / **Medium** choices instead
-of creating a brand-new named size.
+Install custom fonts via the web interface or manual SD card copy.

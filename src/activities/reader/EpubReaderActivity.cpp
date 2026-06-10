@@ -1905,9 +1905,38 @@ void EpubReaderActivity::executeReaderQuickAction(CrossPointSettings::LONG_PRESS
       SETTINGS.saveToFile();
       requestUpdate();
       break;
+    case CrossPointSettings::LONG_MENU_FOOTNOTES:
+      executeFootnoteQuickAction();
+      break;
     case CrossPointSettings::LONG_MENU_OFF:
     default:
       break;
+  }
+}
+
+void EpubReaderActivity::executeFootnoteQuickAction() {
+  if (footnoteDepth > 0 && SETTINGS.pwrBtnFootnoteBack) {
+    restoreSavedPosition();
+    return;
+  }
+
+  if (currentPageFootnotes.size() == 1) {
+    navigateToHref(currentPageFootnotes[0].href, true);
+    return;
+  }
+
+  if (currentPageFootnotes.size() > 1) {
+    pauseReadingPaceTimer("footnotes");
+    startActivityForResult(std::make_unique<EpubReaderFootnotesActivity>(renderer, mappedInput, currentPageFootnotes),
+                           [this](const ActivityResult& result) {
+                             if (!result.isCancelled) {
+                               const auto& footnoteResult = std::get<FootnoteResult>(result.data);
+                               navigateToHref(footnoteResult.href, true);
+                             } else {
+                               resumeReadingPaceTimer("footnotes_cancel");
+                             }
+                             requestUpdate();
+                           });
   }
 }
 
@@ -1953,6 +1982,9 @@ bool EpubReaderActivity::executeShortPowerButtonAction() {
       return true;
     case CrossPointSettings::SHORT_PWRBTN::TOGGLE_DARK_MODE:
       executeReaderQuickAction(CrossPointSettings::LONG_MENU_TOGGLE_DARK_MODE);
+      return true;
+    case CrossPointSettings::SHORT_PWRBTN::FOOTNOTES:
+      executeFootnoteQuickAction();
       return true;
     default:
       return false;
@@ -2019,6 +2051,9 @@ bool EpubReaderActivity::executeLongPowerButtonAction() {
       return true;
     case CrossPointSettings::SHORT_PWRBTN::TOGGLE_DARK_MODE:
       executeReaderQuickAction(CrossPointSettings::LONG_MENU_TOGGLE_DARK_MODE);
+      return true;
+    case CrossPointSettings::SHORT_PWRBTN::FOOTNOTES:
+      executeFootnoteQuickAction();
       return true;
     default:
       return false;

@@ -213,7 +213,7 @@ void SettingsActivity::rebuildSettingsLists() {
   controlsFrontButtonSettings = buildControlsFrontButtonSettingsList(allSettings);
   controlsSideButtonSettings = buildControlsSideButtonSettingsList(allSettings);
 
-  if (controlsPowerSettings.size() != 2 || controlsFrontButtonSettings.size() != 5 ||
+  if (controlsPowerSettings.size() < 2 || controlsPowerSettings.size() > 3 || controlsFrontButtonSettings.size() != 5 ||
       controlsSideButtonSettings.size() != 3) {
     LOG_ERR("SET", "Unexpected controls submenu counts: power=%u front=%u side=%u",
             static_cast<uint32_t>(controlsPowerSettings.size()),
@@ -384,6 +384,7 @@ void SettingsActivity::openEnumOptionPicker(const SettingInfo& setting) {
         const bool quickResumeTimeoutChanged = selectedSetting.valuePtr == &CrossPointSettings::quickResumeSleepScreen;
         syncQuickResumeTimeoutForSleepScreen(sleepScreenChanged, quickResumeTimeoutChanged);
         SETTINGS.saveToFile();
+        rebuildSettingsLists();
         requestUpdate();
       });
 }

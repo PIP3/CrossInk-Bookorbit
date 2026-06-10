@@ -167,8 +167,25 @@ let allSettings = [];
     return changed;
   }
 
+  function updateSettingsVisibility() {
+    const shortPwrBtnVal = getControlValue('shortPwrBtn');
+    const longPwrBtnVal = getControlValue('longPwrBtn');
+    const longPressMenuActionVal = getControlValue('longPressMenuAction');
+    const pwrBtnFootnoteBackRow = document.getElementById('row-setting-pwrBtnFootnoteBack');
+    if (pwrBtnFootnoteBackRow) {
+      if (shortPwrBtnVal === 16 || longPwrBtnVal === 16 || longPressMenuActionVal === 15) {
+        pwrBtnFootnoteBackRow.style.display = '';
+      } else {
+        pwrBtnFootnoteBackRow.style.display = 'none';
+      }
+    }
+  }
+
   function handleSettingChanged(key) {
     syncQuickResumeTimeoutForSleepScreen(key === 'sleepScreen', key === 'quickResumeSleepScreen');
+    if (key === 'shortPwrBtn' || key === 'longPwrBtn' || key === 'longPressMenuAction') {
+      updateSettingsVisibility();
+    }
     markChanged();
   }
 
@@ -199,7 +216,7 @@ let allSettings = [];
       for (const category in groups) {
         html += '<div class="card"><h2>' + escapeHtml(category) + '</h2>';
         groups[category].forEach(function(s) {
-          html += '<div class="setting-row">' +
+          html += '<div class="setting-row" id="row-setting-' + s.key + '">' +
             '<span class="setting-name">' + escapeHtml(s.name) + '</span>' +
             '<span class="setting-control">' + renderControl(s) + '</span>' +
             '</div>';
@@ -208,6 +225,7 @@ let allSettings = [];
       }
 
       container.innerHTML = html;
+      updateSettingsVisibility();
       document.getElementById('save-container').style.display = '';
       document.getElementById('saveBtn').disabled = true;
       preserveQuickResumeTimeoutOn = getControlValue('quickResumeSleepScreen') === 1;

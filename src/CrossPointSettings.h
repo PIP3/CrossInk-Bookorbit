@@ -208,6 +208,7 @@ class CrossPointSettings {
     FILE_TRANSFER = 13,
     TOGGLE_TILT_PAGE_TURN = 14,
     TOGGLE_DARK_MODE = 15,
+    FOOTNOTES = 16,
     SHORT_PWRBTN_COUNT
   };
 
@@ -263,6 +264,7 @@ class CrossPointSettings {
     LONG_MENU_FILE_TRANSFER = 12,
     LONG_MENU_TOGGLE_TILT_PAGE_TURN = 13,
     LONG_MENU_TOGGLE_DARK_MODE = 14,
+    LONG_MENU_FOOTNOTES = 15,
     LONG_PRESS_MENU_ACTION_COUNT
   };
 
@@ -380,6 +382,8 @@ class CrossPointSettings {
   uint8_t recentBooksView = RECENT_BOOKS_LIST;
   // Sunlight fading compensation
   uint8_t fadingFix = 0;
+  // Quick-return from footnotes when a footnote shortcut is active.
+  uint8_t pwrBtnFootnoteBack = 1;
   // Use book's embedded CSS styles for EPUB rendering (1 = enabled, 0 = disabled)
   uint8_t embeddedStyle = 1;
   // Focus Reading - emphasizes the first part of words with bold

@@ -34,6 +34,8 @@ constexpr size_t MAX_BUFFERED_WORDS_BEFORE_LAYOUT = 350;
 constexpr uint8_t INITIAL_PAGE_ELEMENT_RESERVE = 8;
 constexpr uint8_t INITIAL_TABLE_FRAGMENT_ROW_RESERVE = 8;
 constexpr uint32_t PAGE_ELEMENT_RESERVE_MIN_MAX_ALLOC = 1024;
+// Cap chapter anchors so converter-generated IDs do not grow memory without bound.
+constexpr size_t MAX_ANCHORS_PER_CHAPTER = 1024;
 
 static constexpr const char* const HEADER_TAGS[] = {"h1", "h2", "h3", "h4", "h5", "h6"};
 static constexpr const char* const BLOCK_TAGS[] = {"p", "li", "div", "br", "blockquote"};
@@ -71,6 +73,8 @@ const char* getAttribute(const XML_Char** atts, const char* attrName) {
   }
   return nullptr;
 }
+
+bool isNonNavigableInlineElement(const char* name) { return strcmp(name, "span") == 0; }
 
 bool isInternalEpubLink(const char* href) {
   if (!href || href[0] == '\0') return false;
@@ -834,7 +838,12 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       } else if (strcmp(atts[i], "id") == 0) {
         // Defer both anchor recording and TOC page breaks until startNewTextBlock,
         // after the previous block is flushed to pages via makePages().
-        self->pendingAnchorId = atts[i + 1];
+        const char* idValue = atts[i + 1];
+        const bool isTocAnchor =
+            std::find(self->tocAnchors.begin(), self->tocAnchors.end(), idValue) != self->tocAnchors.end();
+        if (isTocAnchor || (!isNonNavigableInlineElement(name) && self->anchorData.size() < MAX_ANCHORS_PER_CHAPTER)) {
+          self->pendingAnchorId = idValue;
+        }
       } else if (strcmp(atts[i], "dir") == 0) {
         dirAttr = atts[i + 1];
       }

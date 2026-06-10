@@ -384,7 +384,7 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                            StrId::STR_READING_STATS, StrId::STR_MARK_FINISHED, StrId::STR_FORCE_REFRESH,
                            StrId::STR_CHANGE_FONT, StrId::STR_TOGGLE_GUIDE_DOTS, StrId::STR_TOGGLE_BIONIC_READING,
                            StrId::STR_CYCLE_PAGE_TURN, StrId::STR_SYNC_PROGRESS, StrId::STR_FILE_TRANSFER,
-                           StrId::STR_SCREENSHOT_BUTTON, StrId::STR_READER_DARK_MODE},
+                           StrId::STR_SCREENSHOT_BUTTON, StrId::STR_READER_DARK_MODE, StrId::STR_FOOTNOTES},
                           "shortPwrBtn", StrId::STR_CAT_CONTROLS)
             .withEnumRawValues({CrossPointSettings::IGNORE, CrossPointSettings::SLEEP, CrossPointSettings::PAGE_TURN,
                                 CrossPointSettings::TOGGLE_BOOKMARK, CrossPointSettings::READING_STATS,
@@ -392,13 +392,14 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                                 CrossPointSettings::TOGGLE_FONT, CrossPointSettings::TOGGLE_GUIDE_DOTS,
                                 CrossPointSettings::TOGGLE_BIONIC_READING, CrossPointSettings::CYCLE_PAGE_TURN,
                                 CrossPointSettings::SYNC_PROGRESS, CrossPointSettings::FILE_TRANSFER,
-                                CrossPointSettings::SCREENSHOT, CrossPointSettings::TOGGLE_DARK_MODE}));
+                                CrossPointSettings::SCREENSHOT, CrossPointSettings::TOGGLE_DARK_MODE,
+                                CrossPointSettings::FOOTNOTES}));
     add(SettingInfo::Enum(StrId::STR_LONG_PRESS_ACTION, &CrossPointSettings::longPwrBtn,
                           {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_TOGGLE_BOOKMARK,
                            StrId::STR_READING_STATS, StrId::STR_MARK_FINISHED, StrId::STR_FORCE_REFRESH,
                            StrId::STR_CHANGE_FONT, StrId::STR_TOGGLE_GUIDE_DOTS, StrId::STR_TOGGLE_BIONIC_READING,
                            StrId::STR_CYCLE_PAGE_TURN, StrId::STR_SYNC_PROGRESS, StrId::STR_FILE_TRANSFER,
-                           StrId::STR_SCREENSHOT_BUTTON, StrId::STR_READER_DARK_MODE},
+                           StrId::STR_SCREENSHOT_BUTTON, StrId::STR_READER_DARK_MODE, StrId::STR_FOOTNOTES},
                           "longPwrBtn", StrId::STR_CAT_CONTROLS)
             .withEnumRawValues({CrossPointSettings::IGNORE, CrossPointSettings::SLEEP, CrossPointSettings::PAGE_TURN,
                                 CrossPointSettings::TOGGLE_BOOKMARK, CrossPointSettings::READING_STATS,
@@ -406,13 +407,14 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                                 CrossPointSettings::TOGGLE_FONT, CrossPointSettings::TOGGLE_GUIDE_DOTS,
                                 CrossPointSettings::TOGGLE_BIONIC_READING, CrossPointSettings::CYCLE_PAGE_TURN,
                                 CrossPointSettings::SYNC_PROGRESS, CrossPointSettings::FILE_TRANSFER,
-                                CrossPointSettings::SCREENSHOT, CrossPointSettings::TOGGLE_DARK_MODE}));
+                                CrossPointSettings::SCREENSHOT, CrossPointSettings::TOGGLE_DARK_MODE,
+                                CrossPointSettings::FOOTNOTES}));
     add(SettingInfo::Enum(
             StrId::STR_LONG_PRESS_MENU_ACTION, &CrossPointSettings::longPressMenuAction,
             {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_TOGGLE_BOOKMARK, StrId::STR_READING_STATS,
              StrId::STR_MARK_FINISHED, StrId::STR_FORCE_REFRESH, StrId::STR_CHANGE_FONT, StrId::STR_TOGGLE_GUIDE_DOTS,
              StrId::STR_TOGGLE_BIONIC_READING, StrId::STR_CYCLE_PAGE_TURN, StrId::STR_SYNC_PROGRESS,
-             StrId::STR_FILE_TRANSFER, StrId::STR_SCREENSHOT_BUTTON, StrId::STR_READER_DARK_MODE},
+             StrId::STR_FILE_TRANSFER, StrId::STR_SCREENSHOT_BUTTON, StrId::STR_READER_DARK_MODE, StrId::STR_FOOTNOTES},
             "longPressMenuAction", StrId::STR_CAT_CONTROLS)
             .withEnumRawValues(
                 {CrossPointSettings::LONG_MENU_OFF, CrossPointSettings::LONG_MENU_SLEEP,
@@ -421,7 +423,10 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                  CrossPointSettings::LONG_MENU_CHANGE_FONT, CrossPointSettings::LONG_MENU_TOGGLE_GUIDE_DOTS,
                  CrossPointSettings::LONG_MENU_TOGGLE_BIONIC, CrossPointSettings::LONG_MENU_CYCLE_PAGE_TURN,
                  CrossPointSettings::LONG_MENU_SYNC_PROGRESS, CrossPointSettings::LONG_MENU_FILE_TRANSFER,
-                 CrossPointSettings::LONG_MENU_SCREENSHOT, CrossPointSettings::LONG_MENU_TOGGLE_DARK_MODE}));
+                 CrossPointSettings::LONG_MENU_SCREENSHOT, CrossPointSettings::LONG_MENU_TOGGLE_DARK_MODE,
+                 CrossPointSettings::LONG_MENU_FOOTNOTES}));
+    add(SettingInfo::Toggle(StrId::STR_PWR_BTN_FOOTNOTE_BACK, &CrossPointSettings::pwrBtnFootnoteBack,
+                            "pwrBtnFootnoteBack", StrId::STR_CAT_CONTROLS));
 
     // --- System ---
     add(SettingInfo::Value(
@@ -685,9 +690,14 @@ inline std::vector<SettingInfo> buildControlsSettingsParentList(const std::vecto
 
 inline std::vector<SettingInfo> buildControlsPowerSettingsList(const std::vector<SettingInfo>& allSettings) {
   std::vector<SettingInfo> settings;
-  settings.reserve(2);
+  settings.reserve(3);
   addSettingByName(settings, allSettings, StrId::STR_SHORT_PWR_BTN);
   addSettingByName(settings, allSettings, StrId::STR_LONG_PRESS_ACTION);
+  if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::FOOTNOTES ||
+      SETTINGS.longPwrBtn == CrossPointSettings::SHORT_PWRBTN::FOOTNOTES ||
+      SETTINGS.longPressMenuAction == CrossPointSettings::LONG_PRESS_MENU_ACTION::LONG_MENU_FOOTNOTES) {
+    addSettingByName(settings, allSettings, StrId::STR_PWR_BTN_FOOTNOTE_BACK);
+  }
   return settings;
 }
 

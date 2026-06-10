@@ -120,6 +120,7 @@ class EpubReaderActivity final : public Activity {
   void jumpToPercent(int percent);
   void reindexCurrentSection();
   void executeReaderQuickAction(CrossPointSettings::LONG_PRESS_MENU_ACTION action);
+  void executeFootnoteQuickAction();
   bool consumeLongPowerButtonRelease();
   bool consumeLongPowerButtonHold();
   bool executeShortPowerButtonAction();
