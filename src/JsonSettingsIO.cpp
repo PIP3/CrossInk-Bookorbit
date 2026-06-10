@@ -94,6 +94,7 @@ bool JsonSettingsIO::saveState(const CrossPointState& s, const char* path) {
   JsonDocument doc;
   doc["openEpubPath"] = s.openEpubPath;
   doc["favoriteSleepImagePath"] = s.favoriteSleepImagePath;
+  doc["preferredSleepFolderPath"] = s.preferredSleepFolderPath;
   JsonArray recentArr = doc["recentSleepImages"].to<JsonArray>();
   for (int i = 0; i < CrossPointState::SLEEP_RECENT_COUNT; i++) recentArr.add(s.recentSleepImages[i]);
   doc["recentSleepPos"] = s.recentSleepPos;
@@ -120,6 +121,7 @@ bool JsonSettingsIO::loadState(CrossPointState& s, const char* json) {
 
   s.openEpubPath = doc["openEpubPath"] | std::string("");
   s.favoriteSleepImagePath = doc["favoriteSleepImagePath"] | std::string("");
+  s.preferredSleepFolderPath = doc["preferredSleepFolderPath"] | std::string("");
   memset(s.recentSleepImages, 0, sizeof(s.recentSleepImages));
   JsonArrayConst recentArr = doc["recentSleepImages"];
   const int actualCount = recentArr.isNull() ? 0
@@ -193,6 +195,9 @@ bool JsonSettingsIO::saveSettings(const CrossPointSettings& s, const char* path)
   // Language -- managed by LanguageSelectActivity, not in SettingsList.
   // Stored as ISO code string ("EN", "DE", ...) for stability across enum reorders.
   doc["language"] = (s.language < getLanguageCount()) ? LANGUAGE_CODES[s.language] : "EN";
+  // Separate from the legacy clock sync flag because older builds synced time
+  // only, leaving the RTC date registers at their placeholder/default value.
+  doc["clockDateHasBeenSynced"] = s.clockDateHasBeenSynced;
 
   String json;
   serializeJson(doc, json);
@@ -325,11 +330,15 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
   CrossPointSettings::validateReaderFrontButtonMapping(s);
 
   // Font family — uses dynamic getter/setter in SettingsList so the generic loop skips it.
-  s.fontFamily = clamp(doc["fontFamily"] | (uint8_t)0, CrossPointSettings::BUILTIN_FONT_COUNT, 0);
+  const uint8_t storedFontFamily = doc["fontFamily"] | (uint8_t)0;
+  s.fontFamily = clamp(storedFontFamily, CrossPointSettings::BUILTIN_FONT_COUNT, 0);
   // SD card font family name — not in SettingsList, load manually
   const char* sfn = doc["sdFontFamilyName"] | "";
   strncpy(s.sdFontFamilyName, sfn, sizeof(s.sdFontFamilyName) - 1);
   s.sdFontFamilyName[sizeof(s.sdFontFamilyName) - 1] = '\0';
+  if (storedFontFamily >= CrossPointSettings::BUILTIN_FONT_COUNT) {
+    if (needsResave) *needsResave = true;
+  }
 
   if (doc["lineHeightPercent"].isNull() && !doc["lineSpacing"].isNull()) {
     const uint8_t legacyLineSpacing = clamp(doc["lineSpacing"] | static_cast<uint8_t>(CrossPointSettings::NORMAL),
@@ -344,6 +353,7 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
   if (doc["language"].is<const char*>()) {
     s.language = static_cast<uint8_t>(I18n::languageFromCode(doc["language"].as<const char*>()));
   }
+  s.clockDateHasBeenSynced = clamp(doc["clockDateHasBeenSynced"] | (uint8_t)0, (uint8_t)2, (uint8_t)0);
 
   LOG_DBG("CPS", "Settings loaded from file");
 

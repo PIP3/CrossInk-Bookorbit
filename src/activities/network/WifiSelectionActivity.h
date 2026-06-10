@@ -18,7 +18,6 @@ struct WifiNetworkInfo {
   int32_t rssi;
   bool isEncrypted;
   bool hasSavedPassword;  // Whether we have saved credentials for this network
-  std::string ipAddress;  // Populated after connection for display
 };
 
 // WiFi selection states
@@ -74,6 +73,7 @@ class WifiSelectionActivity final : public Activity {
 
   // Whether we are attempting to auto-connect
   bool autoConnecting = false;
+  bool tearDownWifiOnExit = false;
 
   // Save/forget prompt selection (0 = Yes, 1 = No)
   int savePromptSelection = 0;

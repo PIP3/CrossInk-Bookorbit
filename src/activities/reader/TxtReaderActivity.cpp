@@ -1,5 +1,6 @@
 #include "TxtReaderActivity.h"
 
+#include <BidiUtils.h>
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
@@ -137,6 +138,13 @@ void TxtReaderActivity::onExit() {
 }
 
 void TxtReaderActivity::loop() {
+  if (consumeLongPowerButtonRelease()) {
+    return;
+  }
+  if (executeDarkModePowerButtonAction()) {
+    return;
+  }
+
   // Long press BACK (1s+) goes to file selection
   if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= ReaderUtils::GO_HOME_MS) {
     activityManager.goToFileBrowser(txt ? txt->getPath() : "");
@@ -225,6 +233,47 @@ void TxtReaderActivity::loop() {
       onGoHome();
     }
   }
+}
+
+void TxtReaderActivity::toggleDarkMode() {
+  SETTINGS.readerDarkMode = !SETTINGS.readerDarkMode;
+  SETTINGS.saveToFile();
+  requestUpdate();
+}
+
+bool TxtReaderActivity::consumeLongPowerButtonRelease() {
+  if (!mappedInput.wasReleased(MappedInputManager::Button::Power) || !longPowerButtonHandled) {
+    return false;
+  }
+
+  longPowerButtonHandled = false;
+  return true;
+}
+
+bool TxtReaderActivity::consumeLongPowerButtonHold() {
+  if (longPowerButtonHandled || !mappedInput.isPressed(MappedInputManager::Button::Power) ||
+      mappedInput.getHeldTime() < SETTINGS.getPowerButtonLongPressDuration()) {
+    return false;
+  }
+
+  longPowerButtonHandled = true;
+  return true;
+}
+
+bool TxtReaderActivity::executeDarkModePowerButtonAction() {
+  if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::TOGGLE_DARK_MODE &&
+      mappedInput.wasReleased(MappedInputManager::Button::Power) &&
+      mappedInput.getHeldTime() < SETTINGS.getPowerButtonLongPressDuration()) {
+    toggleDarkMode();
+    return true;
+  }
+
+  if (SETTINGS.longPwrBtn == CrossPointSettings::SHORT_PWRBTN::TOGGLE_DARK_MODE && consumeLongPowerButtonHold()) {
+    toggleDarkMode();
+    return true;
+  }
+
+  return false;
 }
 
 void TxtReaderActivity::initializeReader() {
@@ -367,8 +416,9 @@ void TxtReaderActivity::render(RenderLock&&) {
   }
 
   if (pageOffsets.empty()) {
-    renderer.clearScreen();
-    renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_EMPTY_FILE), true, EpdFontFamily::BOLD);
+    renderer.clearScreen(ReaderUtils::readerBackgroundColor());
+    renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_EMPTY_FILE), ReaderUtils::readerForegroundBlack(),
+                              EpdFontFamily::BOLD);
     renderer.displayBuffer();
     return;
   }
@@ -383,7 +433,7 @@ void TxtReaderActivity::render(RenderLock&&) {
   currentPageLines.clear();
   loadPageAtOffset(offset, currentPageLines, nextOffset);
 
-  renderer.clearScreen();
+  renderer.clearScreen(ReaderUtils::readerBackgroundColor());
   renderPage();
 
   // Save progress
@@ -400,20 +450,25 @@ void TxtReaderActivity::renderPage() {
     for (const auto& line : currentPageLines) {
       if (!line.empty()) {
         int x = cachedOrientedMarginLeft;
+        const bool lineIsRtl = BidiUtils::startsWithRtl(line.c_str(), BidiUtils::RTL_PARAGRAPH_PROBE_DEPTH);
+        uint8_t effectiveAlignment = cachedParagraphAlignment;
+        if (lineIsRtl && (effectiveAlignment == CrossPointSettings::LEFT_ALIGN ||
+                          effectiveAlignment == CrossPointSettings::JUSTIFIED)) {
+          effectiveAlignment = CrossPointSettings::RIGHT_ALIGN;
+        }
+        const int textWidth = renderer.getTextAdvanceX(cachedFontId, line.c_str(), EpdFontFamily::REGULAR);
 
         // Apply text alignment
-        switch (cachedParagraphAlignment) {
+        switch (effectiveAlignment) {
           case CrossPointSettings::LEFT_ALIGN:
           default:
             // x already set to left margin
             break;
           case CrossPointSettings::CENTER_ALIGN: {
-            int textWidth = renderer.getTextAdvanceX(cachedFontId, line.c_str(), EpdFontFamily::REGULAR);
             x = cachedOrientedMarginLeft + (contentWidth - textWidth) / 2;
             break;
           }
           case CrossPointSettings::RIGHT_ALIGN: {
-            int textWidth = renderer.getTextAdvanceX(cachedFontId, line.c_str(), EpdFontFamily::REGULAR);
             x = cachedOrientedMarginLeft + contentWidth - textWidth;
             break;
           }
@@ -423,7 +478,7 @@ void TxtReaderActivity::renderPage() {
             break;
         }
 
-        renderer.drawText(cachedFontId, x, y, line.c_str());
+        renderer.drawText(cachedFontId, x, y, line.c_str(), ReaderUtils::readerForegroundBlack());
       }
       y += lineHeight;
     }
@@ -438,11 +493,12 @@ void TxtReaderActivity::renderPage() {
   // BW rendering
   renderLines();
   renderStatusBar();
-  GUI.drawTopStatusBarClock(renderer);
+  GUI.drawTopStatusBarClock(renderer, UITheme::getInstance().getMetrics().topPadding, nullptr, true, 0,
+                            ReaderUtils::readerDarkModeEnabled());
 
   ReaderUtils::displayWithRefreshCycle(renderer, pagesUntilFullRefresh);
 
-  if (SETTINGS.textAntiAliasing) {
+  if (SETTINGS.textAntiAliasing && ReaderUtils::readerForegroundBlack()) {
     ReaderUtils::renderAntiAliased(renderer, [&renderLines]() { renderLines(); });
   }
   // scope destructor clears font cache via FontCacheManager
@@ -454,7 +510,8 @@ void TxtReaderActivity::renderStatusBar() const {
   if (SETTINGS.statusBarTitle != CrossPointSettings::STATUS_BAR_TITLE::HIDE_TITLE) {
     title = txt->getTitle();
   }
-  GUI.drawStatusBar(renderer, progress, currentPage + 1, totalPages, title);
+  GUI.drawStatusBar(renderer, progress, currentPage + 1, totalPages, title, 0, 0, false, nullptr,
+                    ReaderUtils::readerDarkModeEnabled());
 }
 
 void TxtReaderActivity::saveProgress() const {
@@ -771,7 +828,7 @@ bool TxtReaderActivity::drawCurrentPageToBuffer(const std::string& filePath, Gfx
   if (pageLines.empty()) return false;
 
   // Render lines to frame buffer (no displayBuffer call)
-  renderer.clearScreen();
+  renderer.clearScreen(ReaderUtils::readerBackgroundColor());
   int y = marginTop;
   for (const auto& line : pageLines) {
     if (!line.empty()) {
@@ -786,7 +843,7 @@ bool TxtReaderActivity::drawCurrentPageToBuffer(const std::string& filePath, Gfx
         default:
           break;
       }
-      renderer.drawText(fontId, x, y, line.c_str());
+      renderer.drawText(fontId, x, y, line.c_str(), ReaderUtils::readerForegroundBlack());
     }
     y += lineHeight;
   }

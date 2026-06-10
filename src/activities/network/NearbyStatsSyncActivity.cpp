@@ -64,6 +64,7 @@ void NearbyStatsSyncActivity::setState(const State state) {
 #include <string>
 
 #include "MappedInputManager.h"
+#include "SdCardFontSystem.h"
 #include "activities/reader/GlobalReadingStats.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -76,8 +77,8 @@ constexpr const char* GLOBAL_STATS_PATH = "/.crosspoint/global_stats.bin";
 constexpr const char* SYNCED_STATS_DIR = "/.crosspoint/synced_stats";
 constexpr uint8_t ESPNOW_CHANNEL = 1;
 constexpr uint8_t PROTOCOL_VERSION = 1;
-constexpr uint8_t MIN_STATS_BYTES = 13;
-constexpr uint8_t MAX_STATS_BYTES = 17;
+constexpr uint8_t MIN_STATS_BYTES = static_cast<uint8_t>(GlobalReadingStats::MIN_SUPPORTED_FILE_SIZE);
+constexpr uint8_t MAX_STATS_BYTES = static_cast<uint8_t>(GlobalReadingStats::CURRENT_FILE_SIZE);
 constexpr uint8_t PACKET_HEADER_BYTES = 14;
 constexpr uint32_t HELLO_INTERVAL_MS = 750;
 constexpr uint32_t STATS_RETRY_INTERVAL_MS = 750;
@@ -108,7 +109,8 @@ std::string syncedStatsPathForDeviceMac(const std::array<uint8_t, 6>& mac) {
 }
 
 bool isValidStatsPayload(const uint8_t* data, const uint8_t size) {
-  return (size == MIN_STATS_BYTES && data[0] == 1) || (size == MAX_STATS_BYTES && data[0] == 2);
+  return (size == MIN_STATS_BYTES && data[0] == 1) || (size == 17 && data[0] == 2) ||
+         (size == MAX_STATS_BYTES && data[0] == GlobalReadingStats::CURRENT_FILE_VERSION);
 }
 
 bool ensureSyncedStatsDirectory() {
@@ -188,6 +190,7 @@ NearbyStatsSyncActivity::~NearbyStatsSyncActivity() {
 
 void NearbyStatsSyncActivity::onEnter() {
   Activity::onEnter();
+  sdFontSystem.releaseLoadedFont(renderer);
   setState(State::STARTING);
 
   if (esp_efuse_mac_get_default(localDeviceMac_.data()) != ESP_OK) {
@@ -294,21 +297,27 @@ void NearbyStatsSyncActivity::enqueueEspNowPacket(const uint8_t* sourceMac, cons
   if (data[4] != PROTOCOL_VERSION) return;
 
   SyncEvent event;
-  event.type = static_cast<PacketType>(data[5]);
+  const PacketType packetType = static_cast<PacketType>(data[5]);
+  event.type = packetType;
   event.statsSize = data[6];
   std::copy(sourceMac, sourceMac + event.sourceMac.size(), event.sourceMac.begin());
   std::copy(data + 8, data + 14, event.deviceMac.begin());
 
   const int expectedLength = PACKET_HEADER_BYTES + (event.type == PacketType::STATS ? event.statsSize : 0);
-  if (length != expectedLength) return;
-  if (event.type != PacketType::HELLO && event.type != PacketType::STATS && event.type != PacketType::ACK) return;
+  if (packetType != PacketType::HELLO && packetType != PacketType::STATS && packetType != PacketType::ACK) return;
   if (event.deviceMac == localDeviceMac_) return;
-  if (event.type == PacketType::STATS) {
-    if (event.statsSize > event.stats.size() || !isValidStatsPayload(data + PACKET_HEADER_BYTES, event.statsSize))
-      return;
-    std::copy(data + PACKET_HEADER_BYTES, data + PACKET_HEADER_BYTES + event.statsSize, event.stats.begin());
-  } else if (event.statsSize != 0) {
+  if (packetType == PacketType::STATS) {
+    if (length != expectedLength || event.statsSize > event.stats.size() ||
+        !isValidStatsPayload(data + PACKET_HEADER_BYTES, event.statsSize)) {
+      event.type = PacketType::INVALID_STATS;
+      event.statsSize = 0;
+    } else {
+      std::copy(data + PACKET_HEADER_BYTES, data + PACKET_HEADER_BYTES + event.statsSize, event.stats.begin());
+    }
+  } else if (length != expectedLength) {
     return;
+  } else if (packetType == PacketType::HELLO || packetType == PacketType::ACK) {
+    if (event.statsSize != 0) return;
   }
 
   if (xSemaphoreTake(eventMutex_, 0) != pdTRUE) return;
@@ -378,6 +387,11 @@ void NearbyStatsSyncActivity::handleEvent(const SyncEvent& event) {
 
   if (!localStatsReady_ && !prepareLocalStats()) return;
   if (state_ == State::READY || state_ == State::DISCOVERING || state_ == State::SYNCED) setState(State::SYNCING);
+
+  if (event.type == PacketType::INVALID_STATS) {
+    setError(tr(STR_NEARBY_STATS_VERSION_MISMATCH));
+    return;
+  }
 
   if (event.type == PacketType::HELLO) {
     sendLocalStats();
@@ -559,9 +573,7 @@ void NearbyStatsSyncActivity::renderReady(const std::string& primary, const std:
   y += renderer.getLineHeight(SMALL_FONT_ID) + metrics.verticalSpacing;
   if (state_ == State::READY) {
     renderer.drawCenteredText(SMALL_FONT_ID, y, tr(STR_NEARBY_STATS_READY_HINT), true);
-    y += renderer.getLineHeight(SMALL_FONT_ID) + metrics.verticalSpacing;
   }
-  renderer.drawCenteredText(SMALL_FONT_ID, y, tr(STR_NEARBY_STATS_SYNC_BUTTON), true);
 }
 
 #endif

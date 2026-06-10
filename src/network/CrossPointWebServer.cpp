@@ -26,7 +26,9 @@
 #include "html/FilesPageHtml.generated.h"
 #include "html/FontsPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
+#include "html/LogoPng.generated.h"
 #include "html/SettingsPageHtml.generated.h"
+#include "html/StyleCss.generated.h"
 #include "html/js/jszip_minJs.generated.h"
 #include "util/BookCacheUtils.h"
 #include "util/StringUtils.h"
@@ -177,6 +179,8 @@ void CrossPointWebServer::begin() {
   server->on("/", HTTP_GET, [this] { handleRoot(); });
   server->on("/files", HTTP_GET, [this] { handleFileList(); });
   server->on("/js/jszip.min.js", HTTP_GET, [this] { handleJszip(); });
+  server->on("/style.css", HTTP_GET, [this] { handleStyleCss(); });
+  server->on("/logo.png", HTTP_GET, [this] { handleLogo(); });
 
   server->on("/api/status", HTTP_GET, [this] { handleStatus(); });
   server->on("/api/files", HTTP_GET, [this] { handleFileListData(); });
@@ -392,6 +396,22 @@ void CrossPointWebServer::handleJszip() const {
   LOG_DBG("WEB", "Served jszip.min.js");
 }
 
+// Shared stylesheet and logo are referenced with a content-hashed ?v= query,
+// so they can be cached aggressively: a new build changes the URL.
+void CrossPointWebServer::handleStyleCss() const {
+  server->sendHeader("Content-Encoding", "gzip");
+  server->sendHeader("Cache-Control", "public, max-age=31536000, immutable");
+  server->send_P(200, "text/css", StyleCss, StyleCssCompressedSize);
+  LOG_DBG("WEB", "Served style.css");
+}
+
+void CrossPointWebServer::handleLogo() const {
+  // Raw PNG (already compressed); no Content-Encoding.
+  server->sendHeader("Cache-Control", "public, max-age=31536000, immutable");
+  server->send_P(200, "image/png", LogoPng, LogoPngSize);
+  LOG_DBG("WEB", "Served logo.png");
+}
+
 void CrossPointWebServer::handleNotFound() const {
   String message = "404 Not Found\n\n";
   message += "URI: " + server->uri() + "\n";
@@ -403,7 +423,7 @@ void CrossPointWebServer::handleStatus() const {
   const String ipAddr = apMode ? WiFi.softAPIP().toString() : WiFi.localIP().toString();
 
   JsonDocument doc;
-  doc["version"] = CROSSPOINT_VERSION;
+  doc["version"] = CROSSINK_VERSION;
   doc["ip"] = ipAddr;
   doc["mode"] = apMode ? "AP" : "STA";
   doc["rssi"] = apMode ? 0 : WiFi.RSSI();
@@ -1778,6 +1798,9 @@ void CrossPointWebServer::handleFontUploadData() {
     case UPLOAD_FILE_START: {
       esp_task_wdt_reset();
       String family = server->arg("family");
+      fontUpload.file = HalFile();
+      fontUpload.familyName.clear();
+      fontUpload.filePath.clear();
       fontUpload.valid = false;
       fontUpload.magicChecked = false;
       fontUpload.bytesWritten = 0;
@@ -1789,6 +1812,7 @@ void CrossPointWebServer::handleFontUploadData() {
       }
 
       String filename = upload.filename;
+      filename.replace(' ', '_');
       // Validate filename: rejects path traversal (../, /, \) and enforces
       // a .cpfont basename of alphanumeric + hyphen + underscore. Without
       // this an attacker could supply "../../.crosspoint/settings.json" as
@@ -1863,7 +1887,7 @@ void CrossPointWebServer::handleFontUploadData() {
         fontUpload.bytesWritten += fontUpload.bufferPos;
         fontUpload.bufferPos = 0;
       }
-      if (fontUpload.file) {
+      if (fontUpload.file.isOpen()) {
         fontUpload.file.close();
       }
 

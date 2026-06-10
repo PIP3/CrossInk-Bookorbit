@@ -28,6 +28,7 @@ class CrossPointSettings {
     READING_STATS_SLEEP = 7,
     MINIMAL_SLEEP = 8,
     QUICK_RESUME = 9,
+    MINIMAL_STATS_SLEEP = 10,
     SLEEP_SCREEN_MODE_COUNT
   };
   enum SLEEP_SCREEN_COVER_MODE { FIT = 0, CROP = 1, SLEEP_SCREEN_COVER_MODE_COUNT };
@@ -172,11 +173,10 @@ class CrossPointSettings {
   // Auto-sleep timeout options (in minutes)
   enum SLEEP_TIMEOUT {
     SLEEP_1_MIN = 0,
-    SLEEP_3_MIN = 1,
-    SLEEP_5_MIN = 2,
-    SLEEP_10_MIN = 3,
-    SLEEP_15_MIN = 4,
-    SLEEP_30_MIN = 5,
+    SLEEP_5_MIN = 1,
+    SLEEP_10_MIN = 2,
+    SLEEP_15_MIN = 3,
+    SLEEP_30_MIN = 4,
     SLEEP_TIMEOUT_COUNT
   };
 
@@ -207,6 +207,8 @@ class CrossPointSettings {
     CYCLE_PAGE_TURN = 12,
     FILE_TRANSFER = 13,
     TOGGLE_TILT_PAGE_TURN = 14,
+    TOGGLE_DARK_MODE = 15,
+    FOOTNOTES = 16,
     SHORT_PWRBTN_COUNT
   };
 
@@ -261,6 +263,8 @@ class CrossPointSettings {
     LONG_MENU_CYCLE_PAGE_TURN = 11,
     LONG_MENU_FILE_TRANSFER = 12,
     LONG_MENU_TOGGLE_TILT_PAGE_TURN = 13,
+    LONG_MENU_TOGGLE_DARK_MODE = 14,
+    LONG_MENU_FOOTNOTES = 15,
     LONG_PRESS_MENU_ACTION_COUNT
   };
 
@@ -304,10 +308,14 @@ class CrossPointSettings {
   // Set once an NTP sync succeeds. Used to skip re-syncing on every WiFi connect.
   // Resetting to 0 (e.g. via the web UI) forces a re-sync on next WiFi connect.
   uint8_t clockHasBeenSynced = 0;
+  // Set once an NTP sync writes both date and time. Kept separate so older
+  // time-only syncs do not unlock date display with stale RTC date registers.
+  uint8_t clockDateHasBeenSynced = 0;
   // Text rendering settings
   uint8_t extraParagraphSpacing = 1;
   uint8_t forceParagraphIndents = 0;
   uint8_t textAntiAliasing = 1;
+  uint8_t readerDarkMode = 0;
   // Short power button action behaviour
   uint8_t shortPwrBtn = IGNORE;
   // Long power button action behaviour
@@ -374,6 +382,8 @@ class CrossPointSettings {
   uint8_t recentBooksView = RECENT_BOOKS_LIST;
   // Sunlight fading compensation
   uint8_t fadingFix = 0;
+  // Quick-return from footnotes when a footnote shortcut is active.
+  uint8_t pwrBtnFootnoteBack = 1;
   // Use book's embedded CSS styles for EPUB rendering (1 = enabled, 0 = disabled)
   uint8_t embeddedStyle = 1;
   // Focus Reading - emphasizes the first part of words with bold
@@ -388,6 +398,10 @@ class CrossPointSettings {
   uint8_t removeReadBooksFromRecents = 0;
   // Move epub to /Read/ folder on SD card when marked as finished (0 = disabled, 1 = enabled)
   uint8_t moveFinishedToReadFolder = 0;
+  // Automatically write a dated global reading-stats backup on X3 sleep (0 = off, 1 = on).
+  uint8_t autoBackupStats = 1;
+  // Idle threshold for reading stats, stored in 10-second units to fit uint8_t.
+  uint8_t readingIdleTimeThresholdUnits = 30;
   // Image rendering mode in EPUB reader
   uint8_t imageRendering = IMAGES_DISPLAY;
   // Long-press Confirm (menu button) quick action in reader (0 = off)
@@ -399,6 +413,10 @@ class CrossPointSettings {
   uint8_t language = 0;
   // Quick Resume: keep current content visible with moon icon instead of showing a static sleep screen.
   uint8_t quickResumeSleepScreen = QUICK_RESUME_NEVER;
+#ifdef CROSSINK_ENABLE_READING_STATS_TOGGLE
+  // Debug/test builds can disable stat writes so navigation tests do not affect personal reading stats.
+  uint8_t trackReadingStats = 1;
+#endif
 
   ~CrossPointSettings() = default;
 
@@ -408,11 +426,20 @@ class CrossPointSettings {
   static constexpr uint16_t POWER_BUTTON_WAKE_SHORT_MS = 10;
   static constexpr uint16_t POWER_BUTTON_LONG_PRESS_MS = 400;
   static constexpr uint8_t MIN_SLEEP_TIMEOUT_MINUTES = 1;
-  static constexpr uint8_t MAX_SLEEP_TIMEOUT_MINUTES = 30;
+  static constexpr uint8_t SLEEP_TIMEOUT_NEVER_MINUTES = 31;
+  static constexpr uint8_t MAX_SLEEP_TIMEOUT_MINUTES = SLEEP_TIMEOUT_NEVER_MINUTES;
   static constexpr uint8_t SD_FONT_MAX_SIZE_STEPS = 8;
   static constexpr uint8_t MIN_LINE_HEIGHT_PERCENT = 70;
   static constexpr uint8_t MAX_LINE_HEIGHT_PERCENT = 200;
   static constexpr uint8_t LINE_HEIGHT_PERCENT_STEP = 1;
+  static constexpr uint16_t DEFAULT_READING_IDLE_TIME_THRESHOLD_SECONDS = 5 * 60;
+  static constexpr uint16_t MIN_READING_IDLE_TIME_THRESHOLD_SECONDS = 30;
+  static constexpr uint16_t MAX_READING_IDLE_TIME_THRESHOLD_SECONDS = 10 * 60;
+  static constexpr uint8_t READING_IDLE_TIME_THRESHOLD_UNIT_SECONDS = 10;
+  static constexpr uint8_t MIN_READING_IDLE_TIME_THRESHOLD_UNITS =
+      MIN_READING_IDLE_TIME_THRESHOLD_SECONDS / READING_IDLE_TIME_THRESHOLD_UNIT_SECONDS;
+  static constexpr uint8_t MAX_READING_IDLE_TIME_THRESHOLD_UNITS =
+      MAX_READING_IDLE_TIME_THRESHOLD_SECONDS / READING_IDLE_TIME_THRESHOLD_UNIT_SECONDS;
 
   uint16_t getPowerButtonWakeDuration() const {
     return (shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP) ? POWER_BUTTON_WAKE_SHORT_MS
@@ -421,6 +448,14 @@ class CrossPointSettings {
 
   bool shouldShowClockInReader() const { return statusBarClock == CLOCK_IN_READER || statusBarClock == CLOCK_ALWAYS; }
   bool shouldShowClockOutsideReader() const { return statusBarClock == CLOCK_ALWAYS; }
+  bool shouldTrackReadingStats() const {
+#ifdef CROSSINK_ENABLE_READING_STATS_TOGGLE
+    return trackReadingStats != 0;
+#else
+    return true;
+#endif
+  }
+  uint16_t getReadingIdleTimeThresholdSeconds() const;
 
   // Callback to resolve SD card font IDs. Set by SdCardFontSystem::begin().
   // Returns font ID or 0 if not found.
@@ -454,6 +489,8 @@ class CrossPointSettings {
   static uint8_t sleepScreenModeToStorage(uint8_t mode);
   static uint8_t legacyLineSpacingToPercent(uint8_t legacyValue, uint8_t fontFamily, bool sdFontSelected);
   static uint8_t clampedLineHeightPercent(uint8_t value);
+  static uint8_t readingIdleTimeThresholdUnitsForSeconds(uint16_t seconds);
+  static uint16_t readingIdleTimeThresholdSecondsForUnits(uint8_t units);
 #ifdef SIMULATOR
   static bool verifySleepTimeoutMigrationContract();
   static bool verifySleepScreenMigrationContract();

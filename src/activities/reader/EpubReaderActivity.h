@@ -31,10 +31,15 @@ class EpubReaderActivity final : public Activity {
   unsigned long lastPageTurnTime = 0UL;
   unsigned long pageTurnDuration = 0UL;
   unsigned long pageShownAtMs = 0UL;
+  bool paceSampleWarmupPending = true;
+  uint32_t sessionPaceSampleSeconds = 0;
+  uint16_t sessionPaceSampleCount = 0;
+  uint32_t sessionReadingSeconds = 0;
   uint16_t lastAutoPageTurnIntervalSeconds = 0;
   BookReadingStats stats;
   GlobalReadingStats globalStats;
-  unsigned long sessionStartMs = 0UL;
+  ReadingStatsDateTime sessionStartLocalDateTime;
+  bool hasSessionStartLocalDateTime = false;
   // Signals that the next render should reposition within the newly loaded section
   // based on a cross-book percentage jump.
   bool pendingPercentJump = false;
@@ -94,19 +99,28 @@ class EpubReaderActivity final : public Activity {
   void renderStatusBar() const;
   void silentIndexNextChapterIfNeeded(uint16_t viewportWidth, uint16_t viewportHeight);
   bool saveProgress(int spineIndex, int currentPage, int pageCount);
-  void pauseReadingPaceTimer();
-  void resumeReadingPaceTimer();
-  void recordForwardPagePaceSample();
-  bool estimateBookTimeLeftSecondsFromProgress(uint32_t& seconds) const;
+  void pauseReadingPaceTimer(const char* reason = "unknown");
+  void resumeReadingPaceTimer(const char* reason = "unknown");
+  void armReadingPaceWarmup(const char* reason = "unknown");
+  bool forwardPageReadElapsed(uint32_t& seconds, const char* source) const;
+  bool currentPageReadingSecondsForStats(uint32_t& seconds, const char* source) const;
+  void recordCurrentPageReadingTime(const char* source = "unknown");
+  void recordForwardPagePaceSample(uint32_t seconds, const char* source);
+  bool getSessionAveragePaceSeconds(uint16_t& avgSeconds) const;
+  void recoverStoredPaceFromSession(const char* reason = "unknown");
+  bool getTimeLeftPaceSeconds(uint16_t& avgSeconds, const char*& source, uint16_t& sampleCount) const;
   bool estimateRemainingTimeLeftPages(bool bookEstimate, float& remainingPages) const;
+  bool estimateProgressTimeLeftSeconds(uint32_t& seconds) const;
   bool estimateTimeLeftSeconds(bool bookEstimate, uint32_t& seconds) const;
   bool formatTimeLeftLabel(char* buf, size_t len) const;
   void openFileTransfer();
   void openAutoPageTurnIntervalPicker(bool ignoreInitialConfirmRelease = false);
+  void resetReadingPaceData();
   // Jump to a percentage of the book (0-100), mapping it to spine and page.
   void jumpToPercent(int percent);
   void reindexCurrentSection();
   void executeReaderQuickAction(CrossPointSettings::LONG_PRESS_MENU_ACTION action);
+  void executeFootnoteQuickAction();
   bool consumeLongPowerButtonRelease();
   bool consumeLongPowerButtonHold();
   bool executeShortPowerButtonAction();
@@ -114,7 +128,7 @@ class EpubReaderActivity final : public Activity {
   void onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action);
   void applyOrientation(uint8_t orientation);
   void executeLongPressMenuAction();
-  void pageTurn(bool isForwardTurn);
+  void pageTurn(bool isForwardTurn, const char* source = "unknown");
   float getCurrentBookProgressPercent() const;
   void initializeCompletionPromptTrigger();
   bool isAtOrPastCompletionTrigger() const;

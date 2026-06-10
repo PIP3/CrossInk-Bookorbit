@@ -43,6 +43,7 @@ constexpr uint8_t SLEEP_SCREEN_STORAGE_ORDER[] = {
     static_cast<uint8_t>(CrossPointSettings::READING_STATS_SLEEP),
     static_cast<uint8_t>(CrossPointSettings::MINIMAL_SLEEP),
     static_cast<uint8_t>(CrossPointSettings::QUICK_RESUME),
+    static_cast<uint8_t>(CrossPointSettings::MINIMAL_STATS_SLEEP),
 };
 constexpr uint8_t SLEEP_SCREEN_STORAGE_ORDER_COUNT =
     sizeof(SLEEP_SCREEN_STORAGE_ORDER) / sizeof(SLEEP_SCREEN_STORAGE_ORDER[0]);
@@ -269,8 +270,6 @@ uint8_t CrossPointSettings::sleepTimeoutEnumToMinutes(const uint8_t legacyValue)
       return 1;
     case SLEEP_5_MIN:
       return 5;
-    case SLEEP_3_MIN:
-      return 3;
     case SLEEP_15_MIN:
       return 15;
     case SLEEP_30_MIN:
@@ -341,6 +340,23 @@ uint8_t CrossPointSettings::clampedLineHeightPercent(const uint8_t value) {
   if (value < MIN_LINE_HEIGHT_PERCENT) return MIN_LINE_HEIGHT_PERCENT;
   if (value > MAX_LINE_HEIGHT_PERCENT) return MAX_LINE_HEIGHT_PERCENT;
   return value;
+}
+
+uint8_t CrossPointSettings::readingIdleTimeThresholdUnitsForSeconds(const uint16_t seconds) {
+  const uint16_t clampedSeconds =
+      std::clamp(seconds, MIN_READING_IDLE_TIME_THRESHOLD_SECONDS, MAX_READING_IDLE_TIME_THRESHOLD_SECONDS);
+  return static_cast<uint8_t>((clampedSeconds + READING_IDLE_TIME_THRESHOLD_UNIT_SECONDS - 1) /
+                              READING_IDLE_TIME_THRESHOLD_UNIT_SECONDS);
+}
+
+uint16_t CrossPointSettings::readingIdleTimeThresholdSecondsForUnits(const uint8_t units) {
+  const uint8_t clampedUnits =
+      std::clamp(units, MIN_READING_IDLE_TIME_THRESHOLD_UNITS, MAX_READING_IDLE_TIME_THRESHOLD_UNITS);
+  return static_cast<uint16_t>(clampedUnits) * READING_IDLE_TIME_THRESHOLD_UNIT_SECONDS;
+}
+
+uint16_t CrossPointSettings::getReadingIdleTimeThresholdSeconds() const {
+  return readingIdleTimeThresholdSecondsForUnits(readingIdleTimeThresholdUnits);
 }
 
 bool CrossPointSettings::saveToFile() const {
@@ -444,7 +460,13 @@ bool CrossPointSettings::loadFromBinaryFile() {
     if (++settingsRead >= fileSettingsCount) break;
     readAndValidate(inputFile, sideButtonLayout, SIDE_BUTTON_LAYOUT_COUNT);
     if (++settingsRead >= fileSettingsCount) break;
-    readAndValidate(inputFile, fontFamily, FONT_FAMILY_COUNT);
+    {
+      uint8_t legacyFontFamily;
+      serialization::readPod(inputFile, legacyFontFamily);
+      if (legacyFontFamily < BUILTIN_FONT_COUNT) {
+        fontFamily = legacyFontFamily;
+      }
+    }
     if (++settingsRead >= fileSettingsCount) break;
     readAndValidate(inputFile, fontSize, getActiveReaderFontSizeCount());
     if (++settingsRead >= fileSettingsCount) break;
@@ -536,7 +558,9 @@ float CrossPointSettings::getReaderLineCompression() const {
 }
 
 unsigned long CrossPointSettings::getSleepTimeoutMs() const {
-  const uint8_t minutes = std::clamp(sleepTimeoutMinutes, MIN_SLEEP_TIMEOUT_MINUTES, MAX_SLEEP_TIMEOUT_MINUTES);
+  if (sleepTimeoutMinutes >= SLEEP_TIMEOUT_NEVER_MINUTES) return 0UL;
+  const uint8_t minutes =
+      std::clamp(sleepTimeoutMinutes, MIN_SLEEP_TIMEOUT_MINUTES, static_cast<uint8_t>(SLEEP_TIMEOUT_NEVER_MINUTES - 1));
   return static_cast<unsigned long>(minutes) * 60UL * 1000UL;
 }
 
@@ -559,6 +583,7 @@ bool CrossPointSettings::verifySleepScreenMigrationContract() {
   constexpr uint8_t legacyModeCountBeforeMinimal = 8;
   constexpr uint8_t minimalSleepStorageValue = 8;
   constexpr uint8_t quickResumeStorageValue = 9;
+  constexpr uint8_t minimalStatsStorageValue = 10;
   for (uint8_t storedValue = 0; storedValue < legacyModeCountBeforeMinimal; storedValue++) {
     if (sleepScreenStorageToMode(storedValue) != storedValue) {
       return false;
@@ -569,6 +594,8 @@ bool CrossPointSettings::verifySleepScreenMigrationContract() {
          sleepScreenModeToStorage(MINIMAL_SLEEP) == minimalSleepStorageValue &&
          sleepScreenStorageToMode(quickResumeStorageValue) == QUICK_RESUME &&
          sleepScreenModeToStorage(QUICK_RESUME) == quickResumeStorageValue &&
+         sleepScreenStorageToMode(minimalStatsStorageValue) == MINIMAL_STATS_SLEEP &&
+         sleepScreenModeToStorage(MINIMAL_STATS_SLEEP) == minimalStatsStorageValue &&
          sleepScreenStorageToMode(UINT8_MAX) == DARK;
 }
 #endif
@@ -609,6 +636,8 @@ uint8_t CrossPointSettings::getReaderFontPointSize(const FONT_SIZE size) {
   switch (size) {
     case TEENSY:
       return 8;
+    case ITTY_BITTY:
+      return 9;
     case TINY:
       return 10;
     case SMALL:

@@ -1,7 +1,9 @@
 #pragma once
 #include <I18n.h>
 
+#include <algorithm>
 #include <functional>
+#include <iterator>
 #include <string>
 #include <vector>
 
@@ -26,7 +28,11 @@ enum class SettingAction {
   ControlsSideButtons,
   SystemDevice,
   SystemFilesCache,
+  SystemReadingStats,
+  SystemGlobalStats,
   Network,
+  BackupStats,
+  ResetGlobalStats,
   ClearCache,
   CheckForUpdates,
   SdFirmwareUpdate,
@@ -185,6 +191,28 @@ inline std::string settingEnumOptionLabel(const SettingInfo& setting, const uint
                                                   : std::string();
 }
 
+inline uint8_t settingEnumDisplayIndexForRawValue(const SettingInfo& setting, uint8_t rawValue) {
+  if (setting.enumRawValues.empty()) {
+    return rawValue;
+  }
+
+  auto it = std::find(setting.enumRawValues.begin(), setting.enumRawValues.end(), rawValue);
+  if (it == setting.enumRawValues.end()) {
+    return 0;
+  }
+  return static_cast<uint8_t>(std::distance(setting.enumRawValues.begin(), it));
+}
+
+inline uint8_t settingEnumRawValueForDisplayIndex(const SettingInfo& setting, uint8_t displayIndex) {
+  if (setting.enumRawValues.empty()) {
+    return displayIndex;
+  }
+  if (displayIndex >= setting.enumRawValues.size()) {
+    return setting.enumRawValues.front();
+  }
+  return setting.enumRawValues[displayIndex];
+}
+
 inline bool settingShowsNavigationCaret(const SettingInfo& setting) {
   return setting.type == SettingType::SUBMENU || setting.action == SettingAction::CustomiseStatusBar;
 }
@@ -209,11 +237,14 @@ class SettingsActivity final : public Activity {
   std::vector<SettingInfo> systemSettings;
   std::vector<SettingInfo> systemDeviceSettings;
   std::vector<SettingInfo> systemFilesCacheSettings;
+  std::vector<SettingInfo> systemReadingStatsSettings;
+  std::vector<SettingInfo> systemGlobalStatsSettings;
   const std::vector<SettingInfo>* currentSettings = nullptr;
 
   bool preserveQuickResumeTimeoutOn = false;
   bool quickResumeTimeoutAutoEnabled = false;
   SettingAction activeSubmenu = SettingAction::None;
+  SettingAction parentSubmenu = SettingAction::None;
 
   static constexpr int categoryCount = 4;
   static const StrId categoryNames[categoryCount];
@@ -223,6 +254,10 @@ class SettingsActivity final : public Activity {
   StrId activeSubmenuTitleId() const;
   void openSubmenu(SettingAction action);
   void closeSubmenu();
+  bool currentSettingUsesOptionMenu(const SettingInfo& setting) const;
+  void openEnumOptionPicker(const SettingInfo& setting);
+  void openScreenMarginPicker(const SettingInfo& setting);
+  void openIdleTimeThresholdPicker();
   void toggleCurrentSetting();
   void openSleepTimeoutPicker();
   void openLineHeightPicker();

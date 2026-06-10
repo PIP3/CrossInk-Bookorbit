@@ -1,154 +1,148 @@
----
-title: Web Server
-nav_order: 3
----
-
 # Web Server Guide
 
-This guide explains how to use CrossInk's built-in File Transfer web server to manage files, settings, fonts, OPDS servers, and saved WiFi credentials from a browser.
+This guide explains how to use CrossPoint Reader's built-in web server for file
+transfer, device settings, Wi-Fi/OPDS management, and SD-card font management.
 
 ## Overview
 
-CrossInk includes a built-in web server that allows you to:
+The web server is available while the device is in **File Transfer** or
+**Calibre Wireless** mode. It can:
 
-- Upload and download files wirelessly
-- Browse, move, rename, and delete files on the SD card
-- Create folders to organize your library
-- Update supported reader settings from a browser
-- Manage SD-card fonts, saved OPDS servers, and saved WiFi networks
+- Upload, download, rename, move, and delete files on the SD card
+- Create folders
+- Edit many device settings from a browser
+- Manage saved Wi-Fi networks and OPDS servers
+- Upload and delete `.cpfont` SD-card font families
+- Accept WebDAV clients and Calibre wireless uploads
 
-## Prerequisites
+The server does not require authentication. Use it only on trusted private
+networks or in hotspot mode when you control who is connected.
 
-- Your CrossInk device
-- A WiFi network, or a computer/phone that can join the device hotspot
-- A browser on a computer, phone, or tablet
+## Starting File Transfer
 
----
+1. From the Home screen, select **File Transfer**.
+2. Choose one of the available modes:
 
-## Step 1: Open File Transfer
+| Mode | Use when |
+|------|----------|
+| **Join Network** | You want the reader to join an existing Wi-Fi network. |
+| **Calibre Wireless** | You want to receive books from the CrossPoint Calibre plugin workflow. |
+| **Create Hotspot** | You want the reader to create its own open Wi-Fi network. |
 
-1. From the main menu, select **File Transfer**.
-2. Choose a network mode:
-   - **Join Network**: connect CrossInk to an existing WiFi network.
-   - **Create Hotspot**: have CrossInk create its own WiFi hotspot.
-   - **Calibre Wireless**: use Calibre's wireless device connection flow.
+## Join Network Mode
 
-For normal browser uploads, use **Join Network** or **Create Hotspot**.
-
----
-
-## Step 2: Connect to WiFi
-
-### Join Network
-
-After selecting **Join Network**, CrossInk scans for available WiFi networks.
-
-- Signal strength bars (`||||`, `|||`, `||`, `|`) show connection quality.
-- `*` indicates the network is password-protected.
-- `+` indicates saved credentials already exist for that network.
-
-1. Use the navigation buttons to select a network.
-2. Press **Confirm**.
+1. Select **Join Network**.
+2. Pick a 2.4 GHz Wi-Fi network from the scan results.
 3. Enter the password if prompted.
-4. Save credentials if you want CrossInk to reconnect automatically later.
+4. Save credentials if you want the reader to reconnect automatically next time.
 
-Saved WiFi passwords are stored on the device SD card with device-specific obfuscation. They are validated when read, so credentials copied from another device may need to be re-entered.
+After connection, the reader shows:
 
-### Create Hotspot
+- The connected SSID
+- A QR code for the web URL
+- The direct IP URL, for example `http://192.168.1.102/`
+- The mDNS fallback URL, usually `http://crosspoint.local/`
 
-After selecting **Create Hotspot**, connect your computer or phone to the hotspot shown on the device screen, then open the displayed web address. In hotspot mode, the device IP is usually `192.168.4.1`.
+Use either URL from a phone, tablet, or computer on the same network.
 
----
+## Create Hotspot Mode
 
-## Step 3: Open the Web Interface
+1. Select **Create Hotspot**.
+2. Connect your phone or computer to the open Wi-Fi network:
 
-When File Transfer is running, the device screen shows the IP address and web server URL.
+```text
+CrossPoint-Reader
+```
 
-1. Open a browser on your computer, phone, or tablet.
-2. Enter the URL shown on the CrossInk screen.
-3. Keep File Transfer open on the device while using the web interface.
+3. Open the URL shown on the reader. `http://crosspoint.local/` is preferred
+   when supported; the fallback IP is typically `http://192.168.4.1/`.
 
----
+The reader displays one QR code for joining the hotspot and another QR code for
+opening the web interface.
+
+## Calibre Wireless Mode
+
+Calibre Wireless starts the same web server in station mode, then displays setup
+instructions and upload progress on the reader. Use this mode with the
+CrossPoint Calibre plugin or other clients that speak the documented WebSocket
+upload protocol.
+
+For Calibre OPDS browsing, add `/opds` to the catalog URL when configuring an
+OPDS server.
 
 ## Web Interface
 
+The browser UI has four primary pages.
+
 ### Home
 
-The home page shows device status, IP address, network mode, signal strength, free heap, and uptime.
+The Home page shows firmware status, network mode, IP address, device type,
+uptime, and free heap.
 
-### Files
+### File Manager
 
-The file manager lets you:
+The File Manager page can:
 
-- Browse folders on the SD card.
-- Upload files using HTTP or the faster WebSocket upload path used by the page.
-- Download files from the SD card.
-- Create folders.
-- Move or rename files.
-- Delete files and empty folders.
+- Browse SD-card folders
+- Upload files, using WebSocket upload when available and HTTP upload as a fallback
+- Create folders
+- Download files
+- Rename files
+- Move files into existing folders
+- Delete one or more selected files or empty folders
 
-Folders must be empty before deletion. File uploads, overwrites, moves, renames, and deletes clear the affected EPUB cache so stale book metadata is not reused.
+Existing files with the same name are overwritten by uploads. When EPUB files
+are overwritten, moved, renamed, or deleted through the web server, the matching
+book cache is cleared so stale metadata is not reused.
 
 ### Settings
 
-The settings page exposes supported device settings through `/api/settings`. Changes are saved to `/.crosspoint/settings.json`.
+The Settings page exposes many firmware settings in the browser. It also has
+cards for:
+
+- Saved Wi-Fi networks
+- OPDS servers
+
+Passwords are accepted when adding or editing entries, but saved passwords are
+not returned by the API.
 
 ### Fonts
 
-The fonts page lists installed SD-card font families and allows `.cpfont` uploads and font family deletion. Uploaded fonts are installed under the SD-card font roots and are picked up by the reader font list.
+The Fonts page lists installed SD-card font families and lets you upload
+`.cpfont` files. Upload files from one font family at a time. The server validates
+the font family name, filename, and `.cpfont` magic bytes before accepting the
+upload.
 
-### OPDS and WiFi Management
+Installed fonts appear in **Settings > Reader > Font Family** after the font
+registry refreshes.
 
-The web interface includes APIs for managing saved OPDS servers and saved WiFi credentials. Passwords are never returned by the API; the API only reports whether a password is set. Saved passwords use device-specific validation, so password fields copied from a different reader are ignored until re-entered.
+## Command Line Use
 
----
+Power users can use `curl`, WebDAV clients, or WebSocket clients while the web
+server is running.
 
-## Command Line File Management
-
-You can manage files directly from a terminal with `curl` while File Transfer is running. See [Webserver Endpoints](./webserver-endpoints.md).
-
-## Bluetooth Reading Stats Sync
-
-CrossPoint Reader supports reader-to-reader stats sync from **File Transfer > Bluetooth Stats Sync**. Bluetooth is
-advertised only while that screen is open. Press **Sync Stats** on one nearby reader; both readers exchange their
-`/.crosspoint/global_stats.bin` contribution and save the peer copy under `/.crosspoint/synced_stats/`.
-
-The `synced_stats` folder is created automatically when the user starts the Bluetooth stats-sync workflow. Peer files
-are named with the durable device MAC fallback, for example `device_aabbccddeeff.bin`.
+Endpoint details are documented in [webserver-endpoints.md](./webserver-endpoints.md).
 
 ## Security Notes
 
-- The web server runs on port 80 (standard HTTP)
-- **No authentication is required** - anyone on the same network can access the interface
-- The web server is only accessible while the WiFi screen shows "Connected"
-- The web server automatically stops when you exit the WiFi screen
-- Bluetooth stats sync only accepts stats payloads from nearby CrossPoint readers
-- Bluetooth stats sync is only available while the Bluetooth Stats Sync screen is open
-- For security, only use on trusted private networks
-
----
-
-## Technical Details
-
-- **Supported WiFi:** 2.4 GHz networks
-- **HTTP port:** 80
-- **WebSocket port:** 81
-- **Upload size:** limited by available SD card space
-- **Browser support:** modern Chrome, Firefox, Safari, and Edge
-
----
+- The HTTP server runs on port 80.
+- The WebSocket upload server runs on port 81.
+- There is no authentication.
+- Anyone on the same network can access the web interface while it is running.
+- The server stops when you exit File Transfer or Calibre Wireless mode.
+- Hotspot mode creates an open network for connectivity fallback; disconnect when done.
 
 ## Tips
 
-1. Create folders before large upload batches to keep the library organized.
-2. Prefer strong WiFi signal when uploading large EPUBs.
-3. Use **Create Hotspot** when you do not want to join an existing WiFi network.
-4. Press **Back** on the device when finished to stop the server and save battery.
-
----
+1. Use **Create Hotspot** when no trusted network is available.
+2. Prefer `crosspoint.local` when available, but keep the displayed IP address as a fallback.
+3. Move closer to the router if upload progress stalls in Join Network mode.
+4. Upload custom fonts through the Fonts page or copy them to `/.fonts/` or `/fonts/` on the SD card.
+5. Exit File Transfer mode when finished to conserve battery.
 
 ## Related Documentation
 
+- [User Guide](../USER_GUIDE.md)
 - [Webserver Endpoints](./webserver-endpoints.md)
-- [Common Issues](./troubleshooting.md)
 - [SD Card Fonts](./sd-card-fonts.md)
+- [Troubleshooting](./troubleshooting.md)

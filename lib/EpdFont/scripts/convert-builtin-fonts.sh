@@ -10,8 +10,7 @@ PHM_FONT="../builtinFonts/source/NotoSansCJKsc/NotoSansCJKsc-Regular.otf"
 
 # Additional Unicode intervals to include beyond the default Latin/Cyrillic/math set.
 # 0x2669-0x266F: Music notes and accidentals (♩♪♫♬♭♮♯)
-# 0x1F600-0x1F637, 0x1F641-0x1F644, 0x1F64F: Emoticons subset.
-#   Omits U+1F638-1F640, U+1F645-1F647, and U+1F648-1F64E.
+# Emoticons subset, excluding lower-value faces to keep firmware size down.
 # 0x1F44B-0x1F44F: Hand gesture emojis (👋👌👍👎👏)
 # 0x2764: Heart symbol (❤️)
 # 0x03BB: Greek lambda (λ)
@@ -43,14 +42,23 @@ COMMON_FALLBACK_INTERVALS=(
 
 EMOJI_ONLY_INTERVALS=(
   --additional-intervals 0x2669,0x266F
-  --additional-intervals 0x1F600,0x1F637
-  --additional-intervals 0x1F641,0x1F644
-  --additional-intervals 0x1F64F,0x1F64F
+  --additional-intervals 0x1F600,0x1F607
+  --additional-intervals 0x1F609,0x1F614
+  --additional-intervals 0x1F618,0x1F618
+  --additional-intervals 0x1F61A,0x1F61A
+  --additional-intervals 0x1F61C,0x1F61D
+  --additional-intervals 0x1F620,0x1F622
+  --additional-intervals 0x1F624,0x1F625
+  --additional-intervals 0x1F629,0x1F629
+  --additional-intervals 0x1F62C,0x1F62E
+  --additional-intervals 0x1F631,0x1F635
+  --additional-intervals 0x1F641,0x1F642
+  --additional-intervals 0x1F644,0x1F644
   --additional-intervals 0x1F44B,0x1F44F
   --additional-intervals 0x2764,0x2764
 )
 
-EMOJI_INTERVALS=(
+BASE_FALLBACK_INTERVALS=(
   "${COMMON_FALLBACK_INTERVALS[@]}"
   "${EMOJI_ONLY_INTERVALS[@]}"
 )
@@ -97,9 +105,18 @@ CHAREINK_FALLBACK_RANGES=(
 )
 
 EMOJI_FALLBACK_RANGES=(
-  0x1F600,0x1F637
-  0x1F641,0x1F644
-  0x1F64F,0x1F64F
+  0x1F600,0x1F607
+  0x1F609,0x1F614
+  0x1F618,0x1F618
+  0x1F61A,0x1F61A
+  0x1F61C,0x1F61D
+  0x1F620,0x1F622
+  0x1F624,0x1F625
+  0x1F629,0x1F629
+  0x1F62C,0x1F62E
+  0x1F631,0x1F635
+  0x1F641,0x1F642
+  0x1F644,0x1F644
   0x1F44B,0x1F44F
   0x2764,0x2764
 )
@@ -144,9 +161,8 @@ generate_family() {
   local source_dir="$2"
   local source_prefix="$3"
   local output_dir="$4"
-  local include_emoji="$5"
-  local include_phm="$6"
-  local use_chareink_common_fallback="$7"
+  local include_fallbacks="$5"
+  local use_chareink_common_fallback="$6"
 
   for size in ${READING_FONT_SIZES[@]}; do
     for style in ${READING_FONT_STYLES[@]}; do
@@ -159,8 +175,8 @@ generate_family() {
       local interval_args=()
       local include_args=()
 
-      if [[ "$include_emoji" == "yes" ]]; then
-        interval_args+=("${EMOJI_INTERVALS[@]}")
+      if [[ "$include_fallbacks" == "yes" ]]; then
+        interval_args+=("${BASE_FALLBACK_INTERVALS[@]}")
         if [[ "$use_chareink_common_fallback" == "yes" ]]; then
           font_stack+=("../builtinFonts/source/ChareInk7/ChareInk7-${style}.ttf")
           include_args+=($(font_include_args $(( ${#font_stack[@]} - 1 )) "${CHAREINK_FALLBACK_RANGES[@]}"))
@@ -169,12 +185,12 @@ generate_family() {
         include_args+=($(font_include_args $(( ${#font_stack[@]} - 1 )) "${EMOJI_FALLBACK_RANGES[@]}"))
         font_stack+=("$SYMBOLS_FONT")
         include_args+=($(font_include_args $(( ${#font_stack[@]} - 1 )) "${SYMBOL_FALLBACK_RANGES[@]}"))
-      fi
 
-      if [[ "$include_phm" == "yes" && "$style" == "Regular" ]]; then
-        interval_args+=("${PHM_INTERVALS[@]}")
-        font_stack+=("$PHM_FONT")
-        include_args+=($(font_include_args $(( ${#font_stack[@]} - 1 )) "${PHM_FALLBACK_RANGES[@]}"))
+        if [[ "$style" == "Regular" ]]; then
+          interval_args+=("${PHM_INTERVALS[@]}")
+          font_stack+=("$PHM_FONT")
+          include_args+=($(font_include_args $(( ${#font_stack[@]} - 1 )) "${PHM_FALLBACK_RANGES[@]}"))
+        fi
       fi
 
       python fontconvert.py $font_name $size "${font_stack[@]}" "${interval_args[@]}" "${include_args[@]}" "${READING_FONT_RENDER_ARGS[@]}" > $output_path
@@ -185,15 +201,14 @@ generate_family() {
 
 generate_reading_variant() {
   local output_dir="$1"
-  local include_emoji="$2"
-  local include_phm="$3"
-  local label="$4"
+  local include_fallbacks="$2"
+  local label="$3"
 
   mkdir -p "$output_dir"
   echo "Generating ${label} font variants..."
-  generate_family lexenddeca LexendDeca LexendDeca "$output_dir" "$include_emoji" "$include_phm" yes
-  generate_family bitter Bitter Bitter "$output_dir" "$include_emoji" "$include_phm" yes
-  generate_family charein ChareInk7 ChareInk7 "$output_dir" "$include_emoji" "$include_phm" no
+  generate_family lexenddeca LexendDeca LexendDeca "$output_dir" "$include_fallbacks" yes
+  generate_family bitter Bitter Bitter "$output_dir" "$include_fallbacks" yes
+  generate_family charein ChareInk7 ChareInk7 "$output_dir" "$include_fallbacks" no
   echo ""
   echo "${label} variants complete."
   echo ""
@@ -202,10 +217,8 @@ generate_reading_variant() {
 # Reading font variants:
 #   builtinFonts/             default: emoji/symbol fallback + PHM CJK fallback
 #   builtinFonts/noemoji/     OMIT_EMOJI_FONTS: primary fonts only, no emoji and no PHM CJK
-#   builtinFonts/nophm/       OMIT_PHM only: emoji/symbol fallback, no PHM CJK
-generate_reading_variant ../builtinFonts yes yes "default"
-generate_reading_variant ../builtinFonts/noemoji no no "no-emoji"
-generate_reading_variant ../builtinFonts/nophm yes no "no-PHM"
+generate_reading_variant ../builtinFonts yes "default"
+generate_reading_variant ../builtinFonts/noemoji no "no-emoji"
 
 # UI Font - Inter
 
@@ -216,15 +229,20 @@ for size in ${UI_FONT_SIZES[@]}; do
   for style in ${UI_FONT_STYLES[@]}; do
     font_name="inter_${size}_$(echo $style | tr '[:upper:]' '[:lower:]')"
     font_path="../builtinFonts/source/Inter/Inter-${style}.ttf"
+    hebrew_path="../builtinFonts/source/IBMPlexSansHebrew/IBMPlexSansHebrew-${style}.ttf"
     output_path="../builtinFonts/${font_name}.h"
-    python fontconvert.py $font_name $size $font_path > $output_path
+    python fontconvert.py $font_name $size $font_path $hebrew_path \
+      --additional-intervals 0x05D0,0x05EA > $output_path
     echo "Generated $output_path"
   done
 done
 
 # Small UI Font - Inter
 
-python fontconvert.py inter_8_regular 8 ../builtinFonts/source/Inter/Inter-Regular.ttf > ../builtinFonts/inter_8_regular.h
+python fontconvert.py inter_8_regular 8 \
+  ../builtinFonts/source/Inter/Inter-Regular.ttf \
+  ../builtinFonts/source/IBMPlexSansHebrew/IBMPlexSansHebrew-Regular.ttf \
+  --additional-intervals 0x05D0,0x05EA > ../builtinFonts/inter_8_regular.h
 
 echo ""
 echo "Running compression verification..."

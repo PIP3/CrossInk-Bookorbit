@@ -1,5 +1,6 @@
 #include "ImageBlock.h"
 
+#include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <Logging.h>
 #include <Serialization.h>
@@ -74,10 +75,22 @@ bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x,
     return true;
   }
 
-  // Read and render row by row to minimize memory usage
+  // Read several rows per SD access. A full-page image is re-rendered on every
+  // grayscale strip pass (~14x per page), and a one-row-per-read loop here means
+  // cachedHeight (~728) tiny reads through the storage mutex + SdFat each time —
+  // the dominant cost of displaying an image page. Batching rows into a ~4KB
+  // buffer cuts that to ~20 reads per pass without holding the whole image.
   const int bytesPerRow = (cachedWidth + 3) / 4;  // 2 bits per pixel, 4 pixels per byte
-  uint8_t* rowBuffer = (uint8_t*)malloc(bytesPerRow);
-  if (!rowBuffer) {
+  int rowsPerRead = 4096 / bytesPerRow;
+  if (rowsPerRead < 1) rowsPerRead = 1;
+  if (rowsPerRead > cachedHeight) rowsPerRead = cachedHeight;
+  uint8_t* readBuffer = (uint8_t*)malloc((size_t)rowsPerRead * bytesPerRow);
+  if (!readBuffer) {
+    // Fall back to a single-row buffer under memory pressure.
+    rowsPerRead = 1;
+    readBuffer = (uint8_t*)malloc(bytesPerRow);
+  }
+  if (!readBuffer) {
     LOG_ERR("IMG", "Failed to allocate row buffer");
     cacheFile.close();
     return false;
@@ -86,19 +99,33 @@ bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x,
   DirectPixelWriter pw;
   pw.init(renderer);
 
+  int rowsInBuffer = 0;
+  int bufferRow = 0;
   for (int row = 0; row < cachedHeight; row++) {
-    if (cacheFile.read(rowBuffer, bytesPerRow) != bytesPerRow) {
-      LOG_ERR("IMG", "Cache read error at row %d", row);
-      free(rowBuffer);
-      cacheFile.close();
-      return false;
+    if (bufferRow >= rowsInBuffer) {
+      const int toRead = (cachedHeight - row < rowsPerRead) ? (cachedHeight - row) : rowsPerRead;
+      const size_t bytes = (size_t)toRead * bytesPerRow;
+      if (cacheFile.read(readBuffer, bytes) != static_cast<int>(bytes)) {
+        LOG_ERR("IMG", "Cache read error at row %d", row);
+        free(readBuffer);
+        cacheFile.close();
+        return false;
+      }
+      rowsInBuffer = toRead;
+      bufferRow = 0;
     }
+
+    const uint8_t* rowBuffer = readBuffer + (size_t)bufferRow * bytesPerRow;
+    bufferRow++;
 
     if (row < clipYStart) continue;
     if (row >= clipYEnd) break;
 
     const int destY = y + row;
     pw.beginRow(destY);
+    // Walk only the on-screen columns: writePixel drops off-band rows but does
+    // not clip X, so this range is what keeps a partially off-screen image
+    // inside the framebuffer.
     for (int col = clipXStart; col < clipXEnd; col++) {
       const int byteIdx = col >> 2;            // col / 4
       const int bitShift = 6 - (col & 3) * 2;  // MSB first within byte
@@ -108,7 +135,7 @@ bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x,
     }
   }
 
-  free(rowBuffer);
+  free(readBuffer);
   cacheFile.close();
   LOG_DBG("IMG", "Cache render complete");
   return true;
@@ -117,6 +144,14 @@ bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x,
 }  // namespace
 
 void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
+  // The font-prewarm scan pass only accumulates glyphs; an image contributes
+  // none, and its DirectPixelWriter output bypasses the renderer's scan-mode
+  // suppression, so it would otherwise do a full (discarded) cache render every
+  // page view. Skip it here. The image still draws in the real BW/grayscale
+  // passes; on first view this just moves the one-time decode to the BW pass.
+  FontCacheManager* fcm = renderer.getFontCacheManager();
+  if (fcm && fcm->isScanning()) return;
+
   LOG_DBG("IMG", "Rendering image at %d,%d: %s (%dx%d)", x, y, imagePath.c_str(), width, height);
 
   const int screenWidth = renderer.getScreenWidth();
@@ -135,6 +170,16 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
     return;
   }
   const bool fullyOnScreen = x >= 0 && y >= 0 && x + width <= screenWidth && y + height <= screenHeight;
+
+  // Tiled grayscale (#2190): skip the whole image when it doesn't touch the
+  // active band. The per-pixel writer already clips off-band pixels, but without
+  // this each of the ~7 bands per plane re-ran the full cache load / pixel walk
+  // and discarded the result — the dominant cost of AA on image pages. The check
+  // is orientation-aware and returns true when no strip is active, so the BW
+  // pass and non-tiled controllers render the image exactly as before.
+  if (!renderer.glyphIntersectsStrip(x, y, x + width - 1, y + height - 1)) {
+    return;
+  }
 
   // Try to render from cache first
   std::string cachePath = getCachePath(imagePath);

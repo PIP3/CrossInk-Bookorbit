@@ -48,6 +48,25 @@ int centeredRowY(const int rowY, const int rowHeight, const int contentHeight) {
   return rowY + std::max(0, rowHeight - contentHeight) / 2;
 }
 
+int mainMenuIconYOffset(const UIIcon icon) {
+  switch (icon) {
+    case UIIcon::Chart:
+      return -7;
+    case UIIcon::Folder:
+      return -4;
+    case UIIcon::Recent:
+      return -3;
+    case UIIcon::Transfer:
+      return -2;
+    case UIIcon::Settings:
+      return -2;
+    case UIIcon::Library:
+      return -4;
+    default:
+      return 0;
+  }
+}
+
 }  // namespace
 
 const uint8_t* LyraTheme::iconForName(UIIcon icon, uint32_t size) {
@@ -93,22 +112,23 @@ const uint8_t* LyraTheme::iconForName(UIIcon icon, uint32_t size) {
   return nullptr;
 }
 
-void LyraTheme::fillBatteryIcon(const GfxRenderer& renderer, Rect rect, uint16_t percentage) const {
+void LyraTheme::fillBatteryIcon(const GfxRenderer& renderer, Rect rect, uint16_t percentage,
+                                const bool foregroundBlack) const {
   const bool charging = gpio.isUsbConnected();
 
   if (charging) {
     // Solid fill when charging so lightning bolt is visible
-    renderer.fillRect(rect.x + 2, rect.y + 2, rect.width - 5, rect.height - 4);
-    drawBatteryLightningBolt(renderer, rect.x + 4, rect.y + 2);
+    renderer.fillRect(rect.x + 2, rect.y + 2, rect.width - 5, rect.height - 4, foregroundBlack);
+    drawBatteryLightningBolt(renderer, rect.x + 4, rect.y + 2, !foregroundBlack);
   } else {
     if (percentage > 10) {
-      renderer.fillRect(rect.x + 2, rect.y + 2, 3, rect.height - 4);
+      renderer.fillRect(rect.x + 2, rect.y + 2, 3, rect.height - 4, foregroundBlack);
     }
     if (percentage > 40) {
-      renderer.fillRect(rect.x + 6, rect.y + 2, 3, rect.height - 4);
+      renderer.fillRect(rect.x + 6, rect.y + 2, 3, rect.height - 4, foregroundBlack);
     }
     if (percentage > 70) {
-      renderer.fillRect(rect.x + 10, rect.y + 2, 3, rect.height - 4);
+      renderer.fillRect(rect.x + 10, rect.y + 2, 3, rect.height - 4, foregroundBlack);
     }
   }
 }
@@ -121,7 +141,7 @@ void LyraTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
       SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS;
   // Position icon at right edge, drawBatteryRight will place text to the left
   const int batteryX = rect.x + rect.width - 12 - LyraMetrics::values.batteryWidth;
-  const int batteryY = rect.y + (title == nullptr ? homeHeaderTopInset : 5);
+  const int batteryY = rect.y + homeHeaderTopInset;
   drawBatteryRight(renderer,
                    Rect{batteryX, batteryY, LyraMetrics::values.batteryWidth, LyraMetrics::values.batteryHeight},
                    showBatteryPercentage);
@@ -684,7 +704,8 @@ void LyraTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
       } else {
         const uint8_t* iconBitmap = iconForName(icon, mainMenuIconSize);
         if (iconBitmap != nullptr) {
-          renderer.drawIcon(iconBitmap, textX, textY + 3, mainMenuIconSize, mainMenuIconSize);
+          renderer.drawIcon(iconBitmap, textX, textY + 3 + mainMenuIconYOffset(icon), mainMenuIconSize,
+                            mainMenuIconSize);
           textX += mainMenuIconSize + hPaddingInSelection + 2;
         }
       }

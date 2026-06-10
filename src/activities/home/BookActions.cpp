@@ -18,6 +18,7 @@
 #include "activities/reader/GlobalReadingStats.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/BookCacheUtils.h"
 
 namespace {
 
@@ -81,11 +82,8 @@ void clearFileMetadata(const std::string& fullPath) {
 }
 
 bool clearBookCache(const std::string& fullPath) {
-  if (FsHelpers::hasEpubExtension(fullPath)) {
-    return Epub(fullPath, "/.crosspoint").clearCache();
-  }
-  if (FsHelpers::hasXtcExtension(fullPath)) {
-    return Xtc(fullPath, "/.crosspoint").clearCache();
+  if (FsHelpers::hasEpubExtension(fullPath) || FsHelpers::hasXtcExtension(fullPath)) {
+    return clearBookCachePreservingUserState(fullPath);
   }
   return false;
 }
@@ -106,6 +104,12 @@ bool toggleEpubCompleted(const std::string& fullPath, const std::string& display
   BookReadingStats stats = BookReadingStats::load(epub.getCachePath());
   completed = !stats.isCompleted;
   stats.isCompleted = completed;
+  if (completed && !stats.finishedDateManual) {
+    ReadingStatsDateTime now;
+    if (getCurrentLocalReadingStatsDateTime(now)) {
+      stats.finishedDate = now.date;
+    }
+  }
 
   GlobalReadingStats globalStats = GlobalReadingStats::load();
   if (completed) {
@@ -120,6 +124,8 @@ bool toggleEpubCompleted(const std::string& fullPath, const std::string& display
   if (completed && SETTINGS.moveFinishedToReadFolder && fullPath.rfind("/Read/", 0) != 0) {
     const std::string oldCachePath = epub.getCachePath();
     const std::string dstPath = buildReadFolderDestination(fullPath);
+    const std::string title = epub.getTitle();
+    const std::string author = epub.getAuthor();
     LOG_INF("BookActions", "Moving completed epub: %s -> %s", fullPath.c_str(), dstPath.c_str());
     if (!Storage.rename(fullPath.c_str(), dstPath.c_str())) {
       LOG_ERR("BookActions", "Failed to move book to 'Read' folder");
@@ -138,6 +144,9 @@ bool toggleEpubCompleted(const std::string& fullPath, const std::string& display
         LOG_ERR("BookActions", "Failed to rename cache dir %s -> %s (non-fatal)", oldCachePath.c_str(),
                 newCachePath.c_str());
       }
+    }
+    if (!BookmarkStore::migrateForFilePath(fullPath, dstPath, title, author, "epub")) {
+      LOG_ERR("BookActions", "Failed to migrate bookmarks for moved book %s -> %s", fullPath.c_str(), dstPath.c_str());
     }
 
     RECENT_BOOKS.updatePath(fullPath, dstPath, oldCachePath, newCachePath);

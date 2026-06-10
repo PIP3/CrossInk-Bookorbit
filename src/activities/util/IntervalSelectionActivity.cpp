@@ -10,6 +10,18 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
+namespace {
+void formatCompactSeconds(const int seconds, char* buf, const size_t len) {
+  if (seconds < 60) {
+    snprintf(buf, len, "%ds", seconds);
+  } else if (seconds % 60 == 0) {
+    snprintf(buf, len, "%dm", seconds / 60);
+  } else {
+    snprintf(buf, len, "%dm %ds", seconds / 60, seconds % 60);
+  }
+}
+}  // namespace
+
 int IntervalSelectionActivity::clampedValue(const int candidate) const {
   return std::clamp(candidate, minValue, maxValue);
 }
@@ -66,8 +78,12 @@ void IntervalSelectionActivity::render(RenderLock&&) {
                  readerActivity);
 
   char formattedValue[32];
-  if (showPercentValue) {
+  if (maxBoundaryLabelId != StrId::STR_NONE_OPT && value == maxValue) {
+    snprintf(formattedValue, sizeof(formattedValue), "%s", I18N.get(maxBoundaryLabelId));
+  } else if (showPercentValue) {
     snprintf(formattedValue, sizeof(formattedValue), "%d%%", value);
+  } else if (valueFormatId == StrId::STR_SECONDS_VALUE_FORMAT) {
+    formatCompactSeconds(value, formattedValue, sizeof(formattedValue));
   } else if (valueFormatId != StrId::STR_NONE_OPT) {
     snprintf(formattedValue, sizeof(formattedValue), I18N.get(valueFormatId), static_cast<unsigned int>(value));
   } else {
@@ -94,7 +110,7 @@ void IntervalSelectionActivity::render(RenderLock&&) {
   renderer.drawCenteredText(SMALL_FONT_ID, barY + 30, I18N.get(stepHintId), true);
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), "-", "+");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4, true);
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4, readerActivity);
 
   renderer.displayBuffer();
 }

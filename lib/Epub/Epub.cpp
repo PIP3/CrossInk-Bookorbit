@@ -86,6 +86,10 @@ std::string Epub::cachePathForFilePath(const std::string& filepath, const std::s
   return cacheDir + "/epub_" + std::to_string(ZipFile::fnvHash64(filepath.c_str(), filepath.size()));
 }
 
+bool Epub::hasCache(const std::string& filepath, const std::string& cacheDir) {
+  return BookMetadataCache::exists(cachePathForFilePath(filepath, cacheDir));
+}
+
 void Epub::migrateLegacyCachePath(const std::string& cacheDir) const {
   if (Storage.exists(cachePath.c_str())) {
     return;
@@ -208,7 +212,7 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, const 
       }
 
       if (!imageRef.empty()) {
-        bookMetadata.coverItemHref = FsHelpers::normalisePath(coverPageBase + imageRef);
+        bookMetadata.coverItemHref = FsHelpers::normalisePath(FsHelpers::decodeUriEscapes(coverPageBase + imageRef));
         LOG_DBG("EBP", "Found cover image from guide: %s", bookMetadata.coverItemHref.c_str());
       }
     }
@@ -344,6 +348,30 @@ bool Epub::parseTocNavFile() const {
 
   LOG_DBG("EBP", "Parsed TOC nav items");
   return true;
+}
+
+void Epub::discoverCssFilesFromZip() {
+  const std::string& opfDir = contentBasePath;
+  ZipFile zf(filepath);
+
+  if (!zf.enumerateFilePaths([&](std::string_view filePath) {
+        if (!opfDir.empty() && filePath.find(opfDir) != 0) {
+          return;
+        }
+
+        if (!FsHelpers::hasCssExtension(filePath)) {
+          return;
+        }
+
+        if (std::find(cssFiles.begin(), cssFiles.end(), filePath) != cssFiles.end()) {
+          return;
+        }
+
+        LOG_DBG("EBP", "Discovered CSS file via ZIP enumeration: %.*s", (int)filePath.size(), filePath.data());
+        cssFiles.push_back(std::string{filePath});
+      })) {
+    LOG_ERR("EBP", "Failed to enumerate ZIP file paths for CSS discovery");
+  }
 }
 
 Epub::CssParseStatus Epub::parseCssFiles(const bool forceRebuild) const {
@@ -500,6 +528,8 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
         if (!parseContentOpf(cachedMetadata, /*writeSpineEntries=*/false)) {
           LOG_ERR("EBP", "Could not parse content.opf from cached bookMetadata for CSS files");
           // continue anyway - book will work without CSS and we'll still load any inline style CSS
+        } else {
+          discoverCssFilesFromZip();
         }
         bookMetadataCache.reset();
         const CssParseStatus cssStatus = parseCssFiles(forceCssRebuild);
@@ -551,6 +581,7 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
     LOG_ERR("EBP", "Could not parse content.opf");
     return false;
   }
+  discoverCssFilesFromZip();
   if (!bookMetadataCache->endContentOpfPass()) {
     LOG_ERR("EBP", "Could not end writing content.opf pass");
     return false;
@@ -610,6 +641,7 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
 
   if (!skipLoadingCss) {
     // Parse CSS before reloading book.bin to keep heap as open as possible for rule-table growth.
+    bookMetadataCache.reset();
     if (parseCssFiles() != CssParseStatus::Failed) {
       Storage.removeDir((cachePath + "/sections").c_str());
     } else {
@@ -1092,10 +1124,10 @@ float Epub::calculateProgress(const int currentSpineIndex, const float currentSp
 int Epub::resolveHrefToSpineIndex(const std::string& href) const {
   if (!bookMetadataCache || !bookMetadataCache->isLoaded()) return -1;
 
-  // Extract filename (remove #anchor)
-  std::string target = href;
-  size_t hashPos = target.find('#');
-  if (hashPos != std::string::npos) target = target.substr(0, hashPos);
+  // Split before decoding so escaped '#' characters in filenames stay part of the path.
+  const size_t hashPos = href.find('#');
+  const std::string rawTarget = hashPos != std::string::npos ? href.substr(0, hashPos) : href;
+  const std::string target = FsHelpers::normalisePath(FsHelpers::decodeUriEscapes(rawTarget));
 
   // Same-file reference (anchor-only)
   if (target.empty()) return -1;

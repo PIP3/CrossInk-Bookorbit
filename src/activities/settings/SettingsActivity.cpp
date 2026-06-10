@@ -9,6 +9,7 @@
 #include <iterator>
 
 #include "AppVersion.h"
+#include "BackupStatsActivity.h"
 #include "ButtonRemapActivity.h"
 #include "ClearCacheActivity.h"
 #include "ClockOffsetActivity.h"
@@ -26,7 +27,11 @@
 #include "SettingsList.h"
 #include "StatusBarSettingsActivity.h"
 #include "activities/network/WifiSelectionActivity.h"
+#include "activities/reader/GlobalReadingStats.h"
+#include "activities/util/ConfirmationActivity.h"
 #include "activities/util/IntervalSelectionActivity.h"
+#include "activities/util/OptionSelectionActivity.h"
+#include "components/HeaderDate.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -77,6 +82,19 @@ std::string formatUtcOffset(uint8_t biasedQ) {
   return buf;
 }
 
+std::string formatCompactDuration(const uint32_t seconds) {
+  char buf[24];
+  if (seconds < 60) {
+    snprintf(buf, sizeof(buf), "%lus", static_cast<unsigned long>(seconds));
+  } else if (seconds % 60 == 0) {
+    snprintf(buf, sizeof(buf), "%lum", static_cast<unsigned long>(seconds / 60));
+  } else {
+    snprintf(buf, sizeof(buf), "%lum %lus", static_cast<unsigned long>(seconds / 60),
+             static_cast<unsigned long>(seconds % 60));
+  }
+  return buf;
+}
+
 void drawSystemVersionFooter(const GfxRenderer& renderer, const int pageWidth, const int pageHeight,
                              const ThemeMetrics& metrics) {
   const std::string label = "CrossInk " CROSSINK_VERSION;
@@ -118,6 +136,9 @@ void drawSystemVersionFooter(const GfxRenderer& renderer, const int pageWidth, c
 
 std::string formatSettingValue(const SettingInfo& setting) {
   if (setting.nameId == StrId::STR_TIME_TO_SLEEP) {
+    if (SETTINGS.sleepTimeoutMinutes >= CrossPointSettings::SLEEP_TIMEOUT_NEVER_MINUTES) {
+      return tr(STR_SLEEP_NEVER);
+    }
     char valueBuffer[32];
     snprintf(valueBuffer, sizeof(valueBuffer), tr(STR_SLEEP_TIMER_VALUE_FORMAT),
              static_cast<unsigned int>(SETTINGS.*(setting.valuePtr)));
@@ -126,10 +147,33 @@ std::string formatSettingValue(const SettingInfo& setting) {
   if (setting.valuePtr == &CrossPointSettings::lineHeightPercent) {
     return std::to_string(SETTINGS.*(setting.valuePtr)) + "%";
   }
+  if (setting.valuePtr == &CrossPointSettings::readingIdleTimeThresholdUnits) {
+    return formatCompactDuration(SETTINGS.getReadingIdleTimeThresholdSeconds());
+  }
   if (setting.valuePtr == &CrossPointSettings::clockUtcOffsetQ) {
     return formatUtcOffset(SETTINGS.*(setting.valuePtr));
   }
   return std::to_string(SETTINGS.*(setting.valuePtr));
+}
+
+uint8_t valueDisplayIndexForRawValue(const SettingInfo& setting, const uint8_t rawValue) {
+  const uint8_t min = setting.valueRange.min;
+  const uint8_t max = setting.valueRange.max;
+  const uint8_t step = setting.valueRange.step == 0 ? 1 : setting.valueRange.step;
+  const uint8_t clampedValue = std::clamp(rawValue, min, max);
+  const uint8_t offset = clampedValue > min ? clampedValue - min : 0;
+  return static_cast<uint8_t>((offset + step / 2) / step);
+}
+
+uint8_t rawValueForValueDisplayIndex(const SettingInfo& setting, const uint8_t displayIndex) {
+  const uint8_t step = setting.valueRange.step == 0 ? 1 : setting.valueRange.step;
+  const uint16_t rawValue = static_cast<uint16_t>(setting.valueRange.min) + static_cast<uint16_t>(displayIndex) * step;
+  return static_cast<uint8_t>(std::min<uint16_t>(rawValue, setting.valueRange.max));
+}
+
+uint8_t valueOptionCount(const SettingInfo& setting) {
+  const uint8_t step = setting.valueRange.step == 0 ? 1 : setting.valueRange.step;
+  return static_cast<uint8_t>(((setting.valueRange.max - setting.valueRange.min) / step) + 1);
 }
 }  // namespace
 
@@ -146,6 +190,8 @@ void SettingsActivity::rebuildSettingsLists() {
   systemSettings.clear();
   systemDeviceSettings.clear();
   systemFilesCacheSettings.clear();
+  systemReadingStatsSettings.clear();
+  systemGlobalStatsSettings.clear();
 
   // Pick up any fonts uploaded/deleted over the web server since the last
   // reader activity ran — otherwise the font-family picker shows stale list.
@@ -157,15 +203,17 @@ void SettingsActivity::rebuildSettingsLists() {
   readerSettings = buildReaderSettingsParentList(allSettings);
   readerFontSettings = buildReaderFontSettingsList(allSettings);
   readerPageLayoutSettings = buildReaderPageLayoutSettingsList(allSettings);
-  systemSettings = buildSystemSettingsParentList();
+  systemSettings = buildSystemSettingsParentList(allSettings);
   systemDeviceSettings = buildSystemDeviceSettingsList(allSettings);
   systemFilesCacheSettings = buildSystemFilesCacheSettingsList(allSettings);
+  systemReadingStatsSettings = buildSystemReadingStatsSettingsList(allSettings);
+  systemGlobalStatsSettings = buildSystemGlobalStatsSettingsList(allSettings);
   controlsSettings = buildControlsSettingsParentList(allSettings);
   controlsPowerSettings = buildControlsPowerSettingsList(allSettings);
   controlsFrontButtonSettings = buildControlsFrontButtonSettingsList(allSettings);
   controlsSideButtonSettings = buildControlsSideButtonSettingsList(allSettings);
 
-  if (controlsPowerSettings.size() != 2 || controlsFrontButtonSettings.size() != 5 ||
+  if (controlsPowerSettings.size() < 2 || controlsPowerSettings.size() > 3 || controlsFrontButtonSettings.size() != 5 ||
       controlsSideButtonSettings.size() != 3) {
     LOG_ERR("SET", "Unexpected controls submenu counts: power=%u front=%u side=%u",
             static_cast<uint32_t>(controlsPowerSettings.size()),
@@ -218,6 +266,12 @@ void SettingsActivity::setCurrentSettingsForCategory() {
         case SettingAction::SystemFilesCache:
           currentSettings = &systemFilesCacheSettings;
           break;
+        case SettingAction::SystemReadingStats:
+          currentSettings = &systemReadingStatsSettings;
+          break;
+        case SettingAction::SystemGlobalStats:
+          currentSettings = &systemGlobalStatsSettings;
+          break;
         default:
           currentSettings = &systemSettings;
           break;
@@ -230,6 +284,7 @@ void SettingsActivity::setCurrentSettingsForCategory() {
 void SettingsActivity::enterCategory(int categoryIndex) {
   selectedCategoryIndex = categoryIndex;
   activeSubmenu = SettingAction::None;
+  parentSubmenu = SettingAction::None;
   setCurrentSettingsForCategory();
 }
 
@@ -251,12 +306,17 @@ StrId SettingsActivity::activeSubmenuTitleId() const {
       return StrId::STR_SYSTEM_DEVICE;
     case SettingAction::SystemFilesCache:
       return StrId::STR_SYSTEM_FILES_CACHE;
+    case SettingAction::SystemReadingStats:
+      return StrId::STR_READING_STATS;
+    case SettingAction::SystemGlobalStats:
+      return StrId::STR_ALL_TIME_STATS;
     default:
       return StrId::STR_NONE_OPT;
   }
 }
 
 void SettingsActivity::openSubmenu(SettingAction action) {
+  parentSubmenu = activeSubmenu;
   activeSubmenu = action;
   setCurrentSettingsForCategory();
   selectedSettingIndex = 1;
@@ -267,9 +327,98 @@ void SettingsActivity::openSubmenu(SettingAction action) {
 }
 
 void SettingsActivity::closeSubmenu() {
-  activeSubmenu = SettingAction::None;
+  activeSubmenu = parentSubmenu;
+  parentSubmenu = SettingAction::None;
   setCurrentSettingsForCategory();
   selectedSettingIndex = 1;
+}
+
+bool SettingsActivity::currentSettingUsesOptionMenu(const SettingInfo& setting) const {
+  return (selectedCategoryIndex == 0 || selectedCategoryIndex == 1 || selectedCategoryIndex == 2) &&
+         setting.nameId != StrId::STR_FONT_FAMILY && setting.type == SettingType::ENUM &&
+         settingEnumOptionCount(setting) > 2 &&
+         (setting.valuePtr != nullptr || (setting.valueGetter && setting.valueSetter));
+}
+
+void SettingsActivity::openEnumOptionPicker(const SettingInfo& setting) {
+  const size_t optionCount = settingEnumOptionCount(setting);
+  if (optionCount == 0) return;
+
+  std::vector<std::string> options;
+  options.reserve(optionCount);
+  for (uint8_t i = 0; i < optionCount; i++) {
+    options.push_back(settingEnumOptionLabel(setting, i));
+  }
+
+  uint8_t currentIndex = 0;
+  if (setting.valuePtr != nullptr) {
+    currentIndex = enumDisplayIndexForRawValue(setting, SETTINGS.*(setting.valuePtr));
+  } else if (setting.valueGetter) {
+    currentIndex = setting.valueGetter();
+  }
+  if (currentIndex >= optionCount) currentIndex = 0;
+
+  const SettingInfo selectedSetting = setting;
+  startActivityForResult(
+      std::make_unique<OptionSelectionActivity>(renderer, mappedInput, "SettingsOptionSelect", setting.nameId,
+                                                std::move(options), currentIndex),
+      [this, selectedSetting](const ActivityResult& result) {
+        if (result.isCancelled) {
+          requestUpdate();
+          return;
+        }
+
+        const auto* selection = std::get_if<OptionSelectionResult>(&result.data);
+        if (selection == nullptr) {
+          requestUpdate();
+          return;
+        }
+
+        if (selectedSetting.valuePtr != nullptr) {
+          SETTINGS.*(selectedSetting.valuePtr) = enumRawValueForDisplayIndex(selectedSetting, selection->index);
+        } else if (selectedSetting.valueSetter) {
+          selectedSetting.valueSetter(selection->index);
+        }
+
+        const bool sleepScreenChanged = selectedSetting.valuePtr == &CrossPointSettings::sleepScreen;
+        const bool quickResumeTimeoutChanged = selectedSetting.valuePtr == &CrossPointSettings::quickResumeSleepScreen;
+        syncQuickResumeTimeoutForSleepScreen(sleepScreenChanged, quickResumeTimeoutChanged);
+        SETTINGS.saveToFile();
+        rebuildSettingsLists();
+        requestUpdate();
+      });
+}
+
+void SettingsActivity::openScreenMarginPicker(const SettingInfo& setting) {
+  const uint8_t optionCount = valueOptionCount(setting);
+  if (optionCount == 0 || setting.valuePtr == nullptr) return;
+
+  std::vector<std::string> options;
+  options.reserve(optionCount);
+  for (uint8_t i = 0; i < optionCount; i++) {
+    options.push_back(std::to_string(rawValueForValueDisplayIndex(setting, i)));
+  }
+
+  uint8_t currentIndex = valueDisplayIndexForRawValue(setting, SETTINGS.*(setting.valuePtr));
+  if (currentIndex >= optionCount) currentIndex = 0;
+
+  const SettingInfo selectedSetting = setting;
+  startActivityForResult(
+      std::make_unique<OptionSelectionActivity>(renderer, mappedInput, "SettingsValueSelect", selectedSetting.nameId,
+                                                std::move(options), currentIndex),
+      [this, selectedSetting](const ActivityResult& result) {
+        if (result.isCancelled) {
+          requestUpdate();
+          return;
+        }
+
+        const auto* selection = std::get_if<OptionSelectionResult>(&result.data);
+        if (selection != nullptr && selectedSetting.valuePtr != nullptr) {
+          SETTINGS.*(selectedSetting.valuePtr) = rawValueForValueDisplayIndex(selectedSetting, selection->index);
+          SETTINGS.saveToFile();
+        }
+        requestUpdate();
+      });
 }
 
 void SettingsActivity::onEnter() {
@@ -279,6 +428,7 @@ void SettingsActivity::onEnter() {
   selectedCategoryIndex = 0;
   selectedSettingIndex = 0;
   activeSubmenu = SettingAction::None;
+  parentSubmenu = SettingAction::None;
   preserveQuickResumeTimeoutOn =
       SETTINGS.quickResumeSleepScreen == CrossPointSettings::QUICK_RESUME_SLEEP_SCREEN::QUICK_RESUME_AFTER_TIMEOUT;
   quickResumeTimeoutAutoEnabled = false;
@@ -393,11 +543,32 @@ void SettingsActivity::toggleCurrentSetting() {
     openLineHeightPicker();
     return;
   }
+  if (setting.valuePtr == &CrossPointSettings::screenMargin) {
+    openScreenMarginPicker(setting);
+    return;
+  }
+  if (setting.valuePtr == &CrossPointSettings::readingIdleTimeThresholdUnits) {
+    openIdleTimeThresholdPicker();
+    return;
+  }
   if (setting.valuePtr == &CrossPointSettings::clockUtcOffsetQ) {
     startActivityForResult(std::make_unique<ClockOffsetActivity>(renderer, mappedInput), [this](const ActivityResult&) {
       SETTINGS.saveToFile();
       requestUpdate();
     });
+    return;
+  }
+  if (setting.nameId == StrId::STR_FONT_FAMILY && setting.type == SettingType::ENUM) {
+    startActivityForResult(std::make_unique<FontSelectionActivity>(renderer, mappedInput, &sdFontSystem.registry()),
+                           [this](const ActivityResult&) {
+                             SETTINGS.saveToFile();
+                             rebuildSettingsLists();
+                           });
+    return;
+  }
+
+  if (currentSettingUsesOptionMenu(setting)) {
+    openEnumOptionPicker(setting);
     return;
   }
 
@@ -456,6 +627,20 @@ void SettingsActivity::toggleCurrentSetting() {
       case SettingAction::Network:
         startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput, false), resultHandler);
         break;
+      case SettingAction::BackupStats:
+        startActivityForResult(std::make_unique<BackupStatsActivity>(renderer, mappedInput), resultHandler);
+        break;
+      case SettingAction::ResetGlobalStats:
+        startActivityForResult(
+            std::make_unique<ConfirmationActivity>(renderer, mappedInput, tr(STR_RESET_ALL_TIME_STATS),
+                                                   tr(STR_RESET_ALL_TIME_STATS_CONFIRM)),
+            [this](const ActivityResult& result) {
+              if (!result.isCancelled && !GlobalReadingStats::resetLocal()) {
+                LOG_ERR("SET", "Failed to reset all-time reading stats");
+              }
+              requestUpdate();
+            });
+        break;
       case SettingAction::ClearCache:
         startActivityForResult(std::make_unique<ClearCacheActivity>(renderer, mappedInput), resultHandler);
         break;
@@ -485,6 +670,8 @@ void SettingsActivity::toggleCurrentSetting() {
       case SettingAction::ControlsSideButtons:
       case SettingAction::SystemDevice:
       case SettingAction::SystemFilesCache:
+      case SettingAction::SystemReadingStats:
+      case SettingAction::SystemGlobalStats:
       case SettingAction::DisplaySleepScreen:
       case SettingAction::None:
         // Do nothing
@@ -530,7 +717,9 @@ void SettingsActivity::openSleepTimeoutPicker() {
       std::make_unique<IntervalSelectionActivity>(
           renderer, mappedInput, "SleepTimeoutInterval", StrId::STR_TIME_TO_SLEEP, StrId::STR_SLEEP_TIMER_STEP_HINT,
           SETTINGS.sleepTimeoutMinutes, CrossPointSettings::MIN_SLEEP_TIMEOUT_MINUTES,
-          CrossPointSettings::MAX_SLEEP_TIMEOUT_MINUTES, 1, 5, StrId::STR_SLEEP_TIMER_VALUE_FORMAT),
+          CrossPointSettings::MAX_SLEEP_TIMEOUT_MINUTES, 1, 5, StrId::STR_SLEEP_TIMER_VALUE_FORMAT,
+          /*readerActivity=*/false, /*allowPowerAsConfirm=*/false, /*ignoreInitialConfirmRelease=*/true,
+          /*showPercentValue=*/false, StrId::STR_SLEEP_NEVER),
       [this](const ActivityResult& result) {
         if (!result.isCancelled) {
           SETTINGS.sleepTimeoutMinutes = static_cast<uint8_t>(std::get<IntervalResult>(result.data).value);
@@ -557,6 +746,26 @@ void SettingsActivity::openLineHeightPicker() {
       });
 }
 
+void SettingsActivity::openIdleTimeThresholdPicker() {
+  startActivityForResult(
+      std::make_unique<IntervalSelectionActivity>(
+          renderer, mappedInput, "IdleTimeThresholdInterval", StrId::STR_IDLE_TIME_THRESHOLD,
+          StrId::STR_IDLE_TIME_THRESHOLD_STEP_HINT, SETTINGS.getReadingIdleTimeThresholdSeconds(),
+          CrossPointSettings::MIN_READING_IDLE_TIME_THRESHOLD_SECONDS,
+          CrossPointSettings::MAX_READING_IDLE_TIME_THRESHOLD_SECONDS,
+          CrossPointSettings::READING_IDLE_TIME_THRESHOLD_UNIT_SECONDS, 60, StrId::STR_SECONDS_VALUE_FORMAT,
+          /*readerActivity=*/false, /*allowPowerAsConfirm=*/false, /*ignoreInitialConfirmRelease=*/false,
+          /*showPercentValue=*/false),
+      [this](const ActivityResult& result) {
+        if (!result.isCancelled) {
+          SETTINGS.readingIdleTimeThresholdUnits = CrossPointSettings::readingIdleTimeThresholdUnitsForSeconds(
+              static_cast<uint16_t>(std::get<IntervalResult>(result.data).value));
+          SETTINGS.saveToFile();
+        }
+        requestUpdate();
+      });
+}
+
 void SettingsActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
@@ -566,6 +775,7 @@ void SettingsActivity::render(RenderLock&&) {
   const auto& metrics = UITheme::getInstance().getMetrics();
 
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_SETTINGS_TITLE));
+  drawHeaderDate(renderer, pageWidth, metrics);
 
   std::vector<TabInfo> tabs;
   tabs.reserve(categoryCount);
@@ -596,7 +806,7 @@ void SettingsActivity::render(RenderLock&&) {
   GUI.drawList(
       renderer, listRect, settingsCount, selectedSettingIndex - 1,
       [&settings](int index) { return std::string(I18N.get(settings[index].nameId)); }, nullptr, nullptr,
-      [&settings](int i) {
+      [this, &settings](int i) {
         const auto& setting = settings[i];
         std::string valueText = "";
         if (settingShowsNavigationCaret(setting)) {
@@ -630,10 +840,15 @@ void SettingsActivity::render(RenderLock&&) {
       (selectedSettingIndex == 0)
           ? I18N.get(categoryNames[(selectedCategoryIndex + 1) % categoryCount])
           : (selectedSettingIndex > 0 &&
-                     ((*currentSettings)[selectedSettingIndex - 1].type == SettingType::SUBMENU ||
+                     (currentSettingUsesOptionMenu((*currentSettings)[selectedSettingIndex - 1]) ||
+                      (*currentSettings)[selectedSettingIndex - 1].type == SettingType::SUBMENU ||
                       (*currentSettings)[selectedSettingIndex - 1].type == SettingType::ACTION ||
+                      (*currentSettings)[selectedSettingIndex - 1].nameId == StrId::STR_FONT_FAMILY ||
                       (*currentSettings)[selectedSettingIndex - 1].nameId == StrId::STR_TIME_TO_SLEEP ||
-                      (*currentSettings)[selectedSettingIndex - 1].valuePtr == &CrossPointSettings::lineHeightPercent)
+                      (*currentSettings)[selectedSettingIndex - 1].valuePtr == &CrossPointSettings::lineHeightPercent ||
+                      (*currentSettings)[selectedSettingIndex - 1].valuePtr ==
+                          &CrossPointSettings::readingIdleTimeThresholdUnits ||
+                      (*currentSettings)[selectedSettingIndex - 1].valuePtr == &CrossPointSettings::screenMargin)
                  ? tr(STR_SELECT)
                  : tr(STR_TOGGLE));
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));

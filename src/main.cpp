@@ -75,6 +75,8 @@ inline esp_sleep_wakeup_cause_t esp_sleep_get_wakeup_cause() { return ESP_SLEEP_
 #include "activities/ActivityManager.h"
 #include "activities/reader/EpubReaderUtils.h"
 #include "activities/reader/KOReaderSyncActivity.h"
+#include "activities/reader/ReadingStatsUtils.h"
+#include "activities/reader/StatsBackup.h"
 #include "activities/settings/KOReaderSettingsActivity.h"
 #include "activities/settings/SdFirmwareUpdateActivity.h"
 #include "components/UITheme.h"
@@ -628,6 +630,13 @@ void enterDeepSleep(bool fromTimeout) {
     delay(POST_SLEEP_SCREEN_SETTLE_MS);
   }
 
+  if (gpio.deviceIsX3() && SETTINGS.autoBackupStats != 0) {
+    ReadingStatsDateTime now;
+    if (getCurrentLocalReadingStatsDateTime(now) && !backupGlobalStats(false)) {
+      LOG_ERR("MAIN", "Automatic reading-stats backup failed before deep sleep");
+    }
+  }
+
   putTiltSensorToSleepForDeepSleep();
   display.deepSleep();
   LOG_DBG("MAIN", "Entering deep sleep");
@@ -842,7 +851,7 @@ void setup() {
   }
 
   // First serial output only here to avoid timing inconsistencies for power button press duration verification
-  LOG_DBG("MAIN", "Starting CrossPoint version " CROSSPOINT_VERSION);
+  LOG_DBG("MAIN", "Starting CrossInk version " CROSSINK_VERSION);
 
   // Resolve the single boot-presentation decision. Skipping the splash also
   // skips the panel-clearing pass and the X3 initial-full-sync arming (see
@@ -868,7 +877,12 @@ void setup() {
       if (loadSleepFrameBuffer()) {
         // Frame restored: swap the sleep moon for the loading icon.
         const auto pageHeight = renderer.getScreenHeight();
-        renderer.drawImage(LoadingIcon, 0, pageHeight - LOADINGICON_HEIGHT, LOADINGICON_WIDTH, LOADINGICON_HEIGHT);
+        if (SETTINGS.readerDarkMode != 0) {
+          renderer.drawImageInverted(LoadingIcon, 0, pageHeight - LOADINGICON_HEIGHT, LOADINGICON_WIDTH,
+                                     LOADINGICON_HEIGHT);
+        } else {
+          renderer.drawImage(LoadingIcon, 0, pageHeight - LOADINGICON_HEIGHT, LOADINGICON_WIDTH, LOADINGICON_HEIGHT);
+        }
         renderer.displayBuffer(HalDisplay::HALF_REFRESH);
       } else {
         activityManager.goToBoot();  // frame file missing, fall back to the splash
@@ -1007,7 +1021,7 @@ void loop() {
 #endif
 
   const unsigned long sleepTimeoutMs = SETTINGS.getSleepTimeoutMs();
-  if (millis() - lastActivityTime >= sleepTimeoutMs) {
+  if (sleepTimeoutMs > 0 && millis() - lastActivityTime >= sleepTimeoutMs) {
     LOG_DBG("SLP", "Auto-sleep triggered after %lu ms of inactivity", sleepTimeoutMs);
     enterDeepSleep(true);
     // This should never be hit as `enterDeepSleep` calls esp_deep_sleep_start
