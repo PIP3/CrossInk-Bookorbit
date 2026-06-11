@@ -585,7 +585,10 @@ void SleepActivity::renderCoverSleepScreen() const {
   }
 
   bool cropped = SETTINGS.sleepScreenCoverMode == CrossPointSettings::SLEEP_SCREEN_COVER_MODE::CROP;
-  const std::string coverBmpPath = SleepCoverAssets::cachedCoverPathFor(path, cropped);
+  std::string coverBmpPath = SleepCoverAssets::cachedCoverPathFor(path, cropped);
+  if (coverBmpPath.empty() && SleepCoverAssets::prepareFullCoverForPath(path, cropped)) {
+    coverBmpPath = SleepCoverAssets::cachedCoverPathFor(path, cropped);
+  }
   if (coverBmpPath.empty()) {
     return (this->*renderNoCoverSleepScreen)();
   }
