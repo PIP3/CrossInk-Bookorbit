@@ -28,6 +28,7 @@ constexpr int kTabHorizontalInset = 2;
 constexpr int kTitleFontId = UI_12_FONT_ID;     // Requested main title size: 12px
 constexpr int kSubtitleFontId = SMALL_FONT_ID;  // Requested subtitle size: 8px
 constexpr int kGuideFontId = SMALL_FONT_ID;     // Closest available to requested 6px
+constexpr int kHeaderBatteryYOffset = 5;
 
 void drawScrollBar(const GfxRenderer& renderer, Rect rect, int itemCount, int pageStartIndex, int pageItems) {
   if (itemCount <= 0 || pageItems <= 0 || itemCount <= pageItems) {
@@ -67,7 +68,7 @@ void RoundedRaffTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const 
   const bool showBatteryPercentage =
       SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS;
   const int batteryIconX = rect.x + rect.width - sidePadding - RoundedRaffMetrics::values.batteryWidth;
-  const int batteryY = rect.y + homeHeaderTopInset;
+  const int batteryY = rect.y + homeHeaderTopInset + kHeaderBatteryYOffset;
 
   // Reserve space for the widest possible percentage text to avoid title/battery overlap
   int batteryGroupLeftX = batteryIconX;
