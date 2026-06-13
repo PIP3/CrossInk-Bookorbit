@@ -185,6 +185,12 @@ class CrossPointSettings {
     REFRESH_FREQUENCY_COUNT
   };
 
+  enum FILE_BROWSER_DISPLAY {
+    FILE_BROWSER_DISPLAY_1_LINE = 0,
+    FILE_BROWSER_DISPLAY_2_LINES = 1,
+    FILE_BROWSER_DISPLAY_COUNT
+  };
+
   // Short power button press actions
   enum SHORT_PWRBTN {
     IGNORE = 0,
@@ -400,6 +406,8 @@ class CrossPointSettings {
   uint8_t showHiddenFiles = 0;
   // Hide file extensions in the file browser right-side value column (0 = show, 1 = hide)
   uint8_t hideFileExtension = 0;
+  // File browser display row style (0 = one-line theme list, 1 = two-line compact display)
+  uint8_t fileBrowserDisplay = FILE_BROWSER_DISPLAY_1_LINE;
   // Remove a book from the Recent Books list when its End-of-Book screen is reached (0 = off, 1 = on)
   uint8_t removeReadBooksFromRecents = 0;
   // Move epub to /Read/ folder on SD card when marked as finished (0 = disabled, 1 = enabled)

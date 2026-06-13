@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- `File Browser Display` in `Settings > System > Files & Cache` for choosing one-line or two-line file browser rows across all themes, while preserving Minimal users' existing two-line display on upgrade.
 - `Hide File Extension` in `Settings > System > Files & Cache` for expanding file-browser filenames by hiding the right-side extension label.
 - Device Name in Settings > System > Device for customizing the KOReader Sync and Nearby Stats Sync device label.
 - Additional shortcut options and new ability to add custom shortcuts for Long-press Back Action

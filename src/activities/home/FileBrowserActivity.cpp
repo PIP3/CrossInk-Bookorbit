@@ -16,6 +16,7 @@
 #include "MappedInputManager.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "components/UITheme.h"
+#include "components/themes/minimal/MinimalTheme.h"
 #include "fontIds.h"
 
 namespace {
@@ -570,12 +571,13 @@ void FileBrowserActivity::loop() {
 
   const int pathReserved = renderer.getLineHeight(SMALL_FONT_ID) + UITheme::getInstance().getMetrics().verticalSpacing;
   int pageItems = UITheme::getNumberOfItemsPerPage(renderer, true, false, true, false, pathReserved);
-  if (GUI.usesCompactFileBrowserRows()) {
+  const bool compactFileRows = SETTINGS.fileBrowserDisplay == CrossPointSettings::FILE_BROWSER_DISPLAY_2_LINES;
+  if (compactFileRows) {
     const auto& metrics = UITheme::getInstance().getMetrics();
     const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
     const int contentHeight =
         renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing - pathReserved;
-    pageItems = std::max(1, contentHeight / GUI.compactFileBrowserRowHeight(renderer));
+    pageItems = std::max(1, contentHeight / MinimalTheme::compactFileBrowserRowHeightFor(renderer));
   }
 
   if (!files.empty()) {
@@ -744,27 +746,31 @@ void FileBrowserActivity::render(RenderLock&&) {
                                : ((mode == Mode::PickFirmware) ? tr(STR_NO_BIN_FILES) : tr(STR_NO_FILES_FOUND));
     renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, contentTop + 20, emptyMsg);
   } else {
-    const bool compactFileRows = GUI.usesCompactFileBrowserRows();
+    const bool compactFileRows = SETTINGS.fileBrowserDisplay == CrossPointSettings::FILE_BROWSER_DISPLAY_2_LINES;
     const std::function<std::string(int)> compactRowMarker =
         compactFileRows ? [this](int index) { return files[index].back() == '/' ? "folder" : ""; }
                         : std::function<std::string(int)>{};
-    GUI.drawList(
-        renderer, Rect{0, contentTop, pageWidth, contentHeight}, files.size(), selectorIndex,
-        [this](int index) { return getFileName(files[index]); }, compactRowMarker,
-        [this](int index) { return UITheme::getFileIcon(files[index]); },
-        [this](int index) {
-          const std::string extension =
-              SETTINGS.hideFileExtension != 0 ? std::string() : getFileExtension(files[index]);
-          const std::string fullPath = buildFullPath(basepath, files[index]);
-          if (files[index].back() == '/' && isPreferredSleepFolder(fullPath)) {
-            return std::string("*");
-          }
-          if (isPinnedSleepFavorite(fullPath)) {
-            return extension.empty() ? std::string("*") : "* " + extension;
-          }
-          return extension;
-        },
-        false);
+    const auto rowTitle = [this](int index) { return getFileName(files[index]); };
+    const auto rowIcon = [this](int index) { return UITheme::getFileIcon(files[index]); };
+    const auto rowValue = [this](int index) {
+      const std::string extension = SETTINGS.hideFileExtension != 0 ? std::string() : getFileExtension(files[index]);
+      const std::string fullPath = buildFullPath(basepath, files[index]);
+      if (files[index].back() == '/' && isPreferredSleepFolder(fullPath)) {
+        return std::string("*");
+      }
+      if (isPinnedSleepFavorite(fullPath)) {
+        return extension.empty() ? std::string("*") : "* " + extension;
+      }
+      return extension;
+    };
+    const Rect listRect{0, contentTop, pageWidth, contentHeight};
+    if (compactFileRows) {
+      MinimalTheme::drawCompactFileBrowserList(renderer, listRect, files.size(), selectorIndex, rowTitle,
+                                               compactRowMarker, rowIcon, rowValue);
+    } else {
+      GUI.drawList(renderer, listRect, files.size(), selectorIndex, rowTitle, compactRowMarker, rowIcon, rowValue,
+                   false);
+    }
   }
 
   // Full path display

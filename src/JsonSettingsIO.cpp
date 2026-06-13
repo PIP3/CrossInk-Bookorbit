@@ -293,6 +293,21 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
     }
   }
 
+  // Migration: preserve Minimal users' old two-line file browser default when the new
+  // fileBrowserDisplay setting is not present yet.
+  if (doc["fileBrowserDisplay"].isNull()) {
+    if (!doc["fileBrowserPreview"].isNull()) {
+      s.fileBrowserDisplay =
+          clamp(doc["fileBrowserPreview"] | static_cast<uint8_t>(CrossPointSettings::FILE_BROWSER_DISPLAY_1_LINE),
+                static_cast<uint8_t>(CrossPointSettings::FILE_BROWSER_DISPLAY_COUNT),
+                static_cast<uint8_t>(CrossPointSettings::FILE_BROWSER_DISPLAY_1_LINE));
+      if (needsResave) *needsResave = true;
+    } else if (s.uiTheme == CrossPointSettings::MINIMAL) {
+      s.fileBrowserDisplay = CrossPointSettings::FILE_BROWSER_DISPLAY_2_LINES;
+      if (needsResave) *needsResave = true;
+    }
+  }
+
   if (migrateLegacyTiltMode) {
     if (legacyTiltMode == 1 || legacyTiltMode == 2) {
       s.tiltPageTurn = CrossPointSettings::TILT_ON;
