@@ -1,5 +1,35 @@
 # Changelog
 
+## [v1.3.3] - 2026-06-13
+
+### Added
+- `File Browser Display` in `Settings > System > Files & Cache` for choosing one-line or two-line file browser rows across all themes, while preserving Minimal users' existing two-line display on upgrade.
+- `Hide File Extension` in `Settings > System > Files & Cache` for expanding file-browser filenames by hiding the right-side extension label.
+- Device Name in Settings > System > Device for customizing the KOReader Sync and Nearby Stats Sync device label.
+- Additional shortcut options and new ability to add custom shortcuts for Long-press Back Action.
+- Delete Reading Stats actions in the EPUB reader and book action menus for clearing one book's stats without deleting its cache.
+
+### Changed
+- CrossInk settings now save to `/.crosspoint/crossink-settings.json`, with a one-time fallback migration from `/.crosspoint/settings.json`, so switching between firmware builds is less likely to reset preferences.
+- The X3 clock visibility setting is now phrased as `Hide Clock`, with existing `Show Clock` preferences migrated to the matching hide behavior.
+
+### Fixed
+- RoundedRaff's date shown in settings now sits lower on X3 devices instead of overlapping the battery.
+- Clear Bookmark List now asks for confirmation before deleting a book's bookmarks.
+- Clear Reading Cache now preserves per-book reading stats while continuing to leave all-time reading stats untouched.
+- Moving finished EPUBs to `/Read` now consistently preserves reading progress, per-book stats, bookmarks, and resume state.
+- Book settings option lists now return to the submenu they were opened from when pressing Back.
+- Lyra Carousel now refreshes its cached Home icon row after OPDS, Reading Stats, or Bookmarks icons appear or disappear.
+- KOReader Sync failure screens now wrap long error messages and shut down WiFi cleanly before returning to the book.
+- Sleep Screen > Cover now generates the current book cover on demand instead of falling back to the dark sleep screen when the setting is changed after opening a book.
+- File Browser now previews PNG images instead of trying to open them as EPUBs, and hides common macOS and Windows metadata files.
+- File Browser now refreshes immediately after falling back to the root folder from a stale saved path.
+- File Browser now stops loading oversized folders before low memory can crash the device and shows a memory error instead.
+- TXT reader long-press Power page turns now work when Long Power Button is set to Page Turn.
+- SD-card font read failures no longer risk a reboot while cleaning up the failed file read.
+- Page Overlay sleep screens no longer force EPUB chapters to re-index after waking.
+- Page Overlay sleep screens now use the current screen as the overlay background outside the reader instead of trying to rebuild a stale book page.
+
 ## [v1.3.2] - 2026-06-10
 
 ### Added
