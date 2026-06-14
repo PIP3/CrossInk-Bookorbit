@@ -84,14 +84,18 @@ void XtcReaderActivity::loop() {
     }
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back) && longPressBackHandled) {
-    longPressBackHandled = false;
+  if (longPressBackHandled) {
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
+        !mappedInput.isPressed(MappedInputManager::Button::Back)) {
+      longPressBackHandled = false;
+    }
     return;
   }
 
   if (!longPressBackHandled && mappedInput.isPressed(MappedInputManager::Button::Back) &&
       mappedInput.getHeldTime() >= ReaderUtils::GO_HOME_MS) {
     longPressBackHandled = true;
+    mappedInput.suppressNextBackRelease();
     executeLongPressBackAction();
     return;
   }

@@ -1,5 +1,14 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+### Changed
+
+### Fixed
+- Long-press reader shortcuts that open another screen no longer close or confirm it again when releasing the shortcut button.
+
 ## [v1.3.3] - 2026-06-13
 
 ### Added
