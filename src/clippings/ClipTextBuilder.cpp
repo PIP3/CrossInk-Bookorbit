@@ -13,7 +13,52 @@ bool hasEmSpace(const std::string& word) {
          static_cast<unsigned char>(word[1]) == 0x80 && static_cast<unsigned char>(word[2]) == 0x83;
 }
 
-std::string stripEmSpace(const std::string& word) { return hasEmSpace(word) ? word.substr(3) : word; }
+bool isUtf8SpaceAt(const std::string& text, const size_t index, size_t& advance) {
+  const auto c = static_cast<unsigned char>(text[index]);
+  if (c == 0xC2 && index + 1 < text.size() && static_cast<unsigned char>(text[index + 1]) == 0xA0) {
+    advance = 2;
+    return true;
+  }
+  if (c == 0xE2 && index + 2 < text.size() && static_cast<unsigned char>(text[index + 1]) == 0x80) {
+    const auto c2 = static_cast<unsigned char>(text[index + 2]);
+    if (c2 == 0x83 || c2 == 0xAF) {
+      advance = 3;
+      return true;
+    }
+  }
+  return false;
+}
+
+std::string cleanWordText(const std::string& word) {
+  std::string out;
+  out.reserve(word.size());
+  for (size_t i = 0; i < word.size();) {
+    size_t advance = 0;
+    if (isUtf8SpaceAt(word, i, advance)) {
+      if (!out.empty() && out.back() != ' ') {
+        out += ' ';
+      }
+      i += advance;
+      continue;
+    }
+    const char c = word[i++];
+    if (c == '\r' || c == '\n' || c == '\t') {
+      if (!out.empty() && out.back() != ' ') {
+        out += ' ';
+      }
+      continue;
+    }
+    out += c;
+  }
+
+  while (!out.empty() && out.front() == ' ') {
+    out.erase(out.begin());
+  }
+  while (!out.empty() && out.back() == ' ') {
+    out.pop_back();
+  }
+  return out;
+}
 
 std::string stripTrailingHyphen(std::string word) {
   while (!word.empty() && word.back() == '-') {
@@ -45,13 +90,16 @@ ClippingResult build(const std::vector<WordRef>& words, const int from, const in
   int anchorCount = 0;
 
   for (int i = from; i <= to; ++i) {
-    const auto wordText = stripEmSpace(words[i].text);
+    const auto wordText = cleanWordText(words[i].text);
+    if (wordText.empty()) {
+      continue;
+    }
     const bool yGap =
         i > from && words[i].pageIdx == words[i - 1].pageIdx && words[i].y > words[i - 1].y + words[i - 1].h;
     const bool paragraphStart = i > from && (hasEmSpace(words[i].text) || words[i].paragraphStart || yGap);
 
     if (i > from && !text.empty() && !paragraphStart) {
-      const auto prevStripped = stripEmSpace(words[i - 1].text);
+      const auto prevStripped = cleanWordText(words[i - 1].text);
       if (!prevStripped.empty() && prevStripped.back() == '-' && !wordText.empty() &&
           !std::isspace(static_cast<unsigned char>(wordText[0])) &&
           !std::ispunct(static_cast<unsigned char>(wordText[0]))) {
@@ -82,7 +130,7 @@ ClippingResult build(const std::vector<WordRef>& words, const int from, const in
   std::string endAnchor;
   anchorCount = 0;
   for (int i = to; i >= from && anchorCount < ANCHOR_WORDS; --i) {
-    const auto wordText = stripTrailingHyphen(stripEmSpace(words[i].text));
+    const auto wordText = stripTrailingHyphen(cleanWordText(words[i].text));
     endAnchor = endAnchor.empty() ? wordText : wordText + ' ' + endAnchor;
     anchorCount++;
   }
@@ -90,13 +138,13 @@ ClippingResult build(const std::vector<WordRef>& words, const int from, const in
   constexpr int CONTEXT_WORDS = 3;
   std::string beforeStart;
   for (int i = from - 1; i >= 0 && (from - i) <= CONTEXT_WORDS; --i) {
-    const auto stripped = stripTrailingHyphen(stripEmSpace(words[i].text));
+    const auto stripped = stripTrailingHyphen(cleanWordText(words[i].text));
     if (stripped.find_first_not_of(' ') == std::string::npos) continue;
     beforeStart = beforeStart.empty() ? stripped : stripped + ' ' + beforeStart;
   }
   std::string afterEnd;
   for (int i = to + 1; i < total && (i - to) <= CONTEXT_WORDS; ++i) {
-    const auto stripped = stripTrailingHyphen(stripEmSpace(words[i].text));
+    const auto stripped = stripTrailingHyphen(cleanWordText(words[i].text));
     if (stripped.find_first_not_of(' ') == std::string::npos) continue;
     afterEnd = afterEnd.empty() ? stripped : afterEnd + ' ' + stripped;
   }
@@ -108,7 +156,7 @@ ClippingResult build(const std::vector<WordRef>& words, const int from, const in
   if (midStart < from) midStart = from;
   if (midEnd > to) midEnd = to;
   for (int i = midStart; i <= midEnd; ++i) {
-    const auto wordText = stripTrailingHyphen(stripEmSpace(words[i].text));
+    const auto wordText = stripTrailingHyphen(cleanWordText(words[i].text));
     if (!midText.empty()) midText += ' ';
     midText += wordText;
   }

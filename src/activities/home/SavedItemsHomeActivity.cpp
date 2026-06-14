@@ -252,6 +252,7 @@ void SavedItemsHomeActivity::openBookmarkList(const SavedBookEntry& entry) {
             APP_STATE.pendingBookmarkSpine = bm->spineIndex;
             APP_STATE.pendingBookmarkProgress = bm->progress;
             APP_STATE.pendingBookmarkParagraphIndex = bm->paragraphIndex;
+            APP_STATE.pendingClippingIndex = UINT16_MAX;
             APP_STATE.saveToFile();
             onSelectBook(entry.bookPath);
           } else {
@@ -277,7 +278,8 @@ void SavedItemsHomeActivity::openClippingList(const SavedBookEntry& entry) {
             APP_STATE.pendingBookmarkSpine = clipping->spineIndex;
             APP_STATE.pendingBookmarkProgress =
                 clipping->pageCount > 0 ? static_cast<float>(clipping->page) / clipping->pageCount : 0.0f;
-            APP_STATE.pendingBookmarkParagraphIndex = UINT16_MAX;
+            APP_STATE.pendingBookmarkParagraphIndex = clipping->paragraphIndex;
+            APP_STATE.pendingClippingIndex = clipping->clippingIndex;
             APP_STATE.saveToFile();
             onSelectBook(entry.bookPath);
           } else {
