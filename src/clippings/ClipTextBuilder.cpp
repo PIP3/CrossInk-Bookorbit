@@ -25,9 +25,20 @@ std::string stripTrailingHyphen(std::string word) {
 }  // namespace
 
 ClippingResult build(const std::vector<WordRef>& words, const int from, const int to, const int total,
-                     const int startPageInSection) {
+                     const int startPageInSection, const int sectionPageCount) {
   std::string text;
   text.reserve(256);
+
+  uint16_t startPageWordIndex = 0;
+  uint16_t endPageWordIndex = 0;
+  for (int i = 0; i <= to; ++i) {
+    if (words[i].pageIdx == words[from].pageIdx && i < from) {
+      startPageWordIndex++;
+    }
+    if (words[i].pageIdx == words[to].pageIdx && i < to) {
+      endPageWordIndex++;
+    }
+  }
 
   constexpr int ANCHOR_WORDS = 4;
   std::string startAnchor;
@@ -110,6 +121,10 @@ ClippingResult build(const std::vector<WordRef>& words, const int from, const in
                         to,
                         static_cast<uint16_t>(startPageInSection + words[from].pageIdx),
                         static_cast<uint16_t>(startPageInSection + words[to].pageIdx),
+                        static_cast<uint16_t>(std::max(1, sectionPageCount)),
+                        startPageWordIndex,
+                        endPageWordIndex,
+                        UINT16_MAX,
                         std::move(startAnchor),
                         std::move(endAnchor),
                         std::move(beforeStart),

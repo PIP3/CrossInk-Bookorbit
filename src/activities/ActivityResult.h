@@ -89,6 +89,10 @@ struct ClippingResult {
   int toWordIdx = -1;
   uint16_t sectionPage = 0;
   uint16_t endSectionPage = 0;
+  uint16_t sectionPageCount = 1;
+  uint16_t startPageWordIndex = 0;
+  uint16_t endPageWordIndex = 0;
+  uint16_t paragraphIndex = UINT16_MAX;
   std::string startText;
   std::string endText;
   std::string beforeStartText;
@@ -97,10 +101,17 @@ struct ClippingResult {
   uint16_t wordCount = 0;
 };
 
-using ResultVariant =
-    std::variant<std::monostate, WifiResult, KeyboardResult, MenuResult, ChapterResult, PercentResult, IntervalResult,
-                 OptionSelectionResult, PageResult, ProgressChangeResult, SyncResult, NetworkModeResult, FootnoteResult,
-                 BookmarkResult, FileBrowserActionResult, FilePathResult, ReadingStatsResult, ClippingResult>;
+struct ClippingJumpResult {
+  uint16_t spineIndex = 0;
+  uint16_t page = 0;
+  uint16_t pageCount = 1;
+  uint16_t paragraphIndex = UINT16_MAX;
+};
+
+using ResultVariant = std::variant<std::monostate, WifiResult, KeyboardResult, MenuResult, ChapterResult, PercentResult,
+                                   IntervalResult, OptionSelectionResult, PageResult, ProgressChangeResult, SyncResult,
+                                   NetworkModeResult, FootnoteResult, BookmarkResult, FileBrowserActionResult,
+                                   FilePathResult, ReadingStatsResult, ClippingResult, ClippingJumpResult>;
 
 struct ActivityResult {
   bool isCancelled = false;

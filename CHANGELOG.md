@@ -3,7 +3,7 @@
 ## [Unreleased]
 
 ### Added
-- EPUB reader text clipping for selecting words on the current page and saving them to `/My Clippings.txt`.
+- EPUB reader text clipping with persisted highlights, saved clipping lists, and Kindle-style `/My Clippings.txt` export.
 
 ### Changed
 

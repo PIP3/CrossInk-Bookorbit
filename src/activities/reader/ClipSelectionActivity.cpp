@@ -149,7 +149,11 @@ void ClipSelectionActivity::loop() {
     } else {
       const int from = std::min(startMarkIdx, cursorIdx);
       const int to = std::max(startMarkIdx, cursorIdx);
-      setResult(ClipTextBuilder::build(words, from, to, total, startPageInSection));
+      auto result = ClipTextBuilder::build(words, from, to, total, startPageInSection, section.pageCount);
+      if (const auto paragraphIndex = section.getParagraphIndexForPage(result.sectionPage)) {
+        result.paragraphIndex = *paragraphIndex;
+      }
+      setResult(std::move(result));
       finish();
     }
     return;
@@ -182,7 +186,7 @@ void ClipSelectionActivity::render(RenderLock&&) {
   drawHighlights();
 
   const auto confirmLabel = startMarkIdx == -1 ? tr(STR_SELECT) : tr(STR_DONE);
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
