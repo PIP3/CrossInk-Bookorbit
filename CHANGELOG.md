@@ -8,6 +8,7 @@
 - EPUB books can now keep their own reader font, layout, styling, and reading-aid settings when changed from inside the reader.
 
 ### Changed
+- The EPUB reader menu now labels per-book reader settings as Book Options and avoids showing duplicate Orientation controls.
 
 ### Fixed
 - EPUB chapters that run out of memory during full CrossInk layout now retry with a lighter compatibility renderer before showing a low-memory error.

@@ -2,6 +2,7 @@
 #include <Epub.h>
 #include <I18n.h>
 
+#include <array>
 #include <string>
 #include <vector>
 
@@ -9,6 +10,8 @@
 #include "ReaderOptionsActivity.h"
 #include "activities/Activity.h"
 #include "util/ButtonNavigator.h"
+
+struct Rect;
 
 class EpubReaderMenuActivity final : public Activity {
  public:
@@ -65,14 +68,24 @@ class EpubReaderMenuActivity final : public Activity {
     StrId labelId;
   };
 
-  static std::vector<MenuItem> buildMenuItems(bool hasFootnotes, bool hasBookmarks, bool hasClippings,
-                                              bool isCurrentPageBookmarked, bool isBookCompleted,
-                                              bool showReadingPaceReset);
+  enum class MenuTab : uint8_t { Main = 0, Bookmarks = 1, Settings = 2 };
+  static constexpr size_t MENU_TAB_COUNT = 3;
+  using TabMenuItems = std::array<std::vector<MenuItem>, MENU_TAB_COUNT>;
+
+  static TabMenuItems buildMenuItems(bool hasFootnotes, bool hasBookmarks, bool hasClippings,
+                                     bool isCurrentPageBookmarked, bool isBookCompleted, bool showReadingPaceReset);
+  [[nodiscard]] const std::vector<MenuItem>& activeMenuItems() const;
+  [[nodiscard]] size_t activeTabIndex() const { return static_cast<size_t>(activeTab); }
+  void cycleActiveTab();
+  void focusTabRow();
+  void finishCancelled();
+  void drawIconTabBar(Rect rect) const;
 
   // Fixed menu layout
-  const std::vector<MenuItem> menuItems;
+  const TabMenuItems menuItems;
 
-  int selectedIndex = 0;
+  int selectedIndex = -1;
+  MenuTab activeTab = MenuTab::Main;
 
   ButtonNavigator buttonNavigator;
   std::string title = "Reader Menu";
