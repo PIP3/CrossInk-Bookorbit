@@ -345,7 +345,7 @@ void appendCarouselCoverStateToKey(std::string& key, const RecentBook& book) {
   if (!cachePath.empty()) {
     appendHashedFileStateToKey(key, cachePath + "/progress.bin");
     if (FsHelpers::hasEpubExtension(book.path)) {
-      appendHashedFileStateToKey(key, cachePath + "/stats.bin");
+      appendHashedFileStateToKey(key, cachePath + "/stats_v5.bin");
     }
   } else {
     key += "no-cache-path";

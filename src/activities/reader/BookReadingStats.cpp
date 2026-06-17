@@ -57,6 +57,7 @@ static constexpr int STATS_FILE_SIZE = 69;
 static constexpr uint16_t MAX_PACE_SAMPLE_COUNT = 1000;
 static constexpr uint8_t FLAG_START_DATE_MANUAL = 1u << 0;
 static constexpr uint8_t FLAG_FINISHED_DATE_MANUAL = 1u << 1;
+static constexpr const char* STATS_FILE_NAME = "stats_v5.bin";
 
 uint16_t readLe16(const uint8_t* data, const int offset) {
   return static_cast<uint16_t>(data[offset]) | (static_cast<uint16_t>(data[offset + 1]) << 8);
@@ -95,12 +96,13 @@ ReadingStatsDate readDate(const uint8_t* data, const int offset) {
   }
   return date;
 }
+
 }  // namespace
 
 BookReadingStats BookReadingStats::load(const std::string& cachePath) {
   BookReadingStats stats;
   FsFile f;
-  if (!Storage.openFileForRead("STATS", cachePath + "/stats.bin", f)) {
+  if (!Storage.openFileForRead("STATS", cachePath + "/" + STATS_FILE_NAME, f)) {
     return stats;
   }
   uint8_t data[STATS_FILE_SIZE] = {};
@@ -192,8 +194,8 @@ void BookReadingStats::formatDuration(uint32_t seconds, char* buf, size_t len) {
 
 void BookReadingStats::save(const std::string& cachePath) const {
   FsFile f;
-  if (!Storage.openFileForWrite("STATS", cachePath + "/stats.bin", f)) {
-    LOG_ERR("STATS", "Could not write stats.bin");
+  if (!Storage.openFileForWrite("STATS", cachePath + "/" + STATS_FILE_NAME, f)) {
+    LOG_ERR("STATS", "Could not write %s", STATS_FILE_NAME);
     return;
   }
   uint8_t data[STATS_FILE_SIZE];
@@ -223,12 +225,12 @@ void BookReadingStats::save(const std::string& cachePath) const {
 }
 
 bool BookReadingStats::remove(const std::string& cachePath) {
-  const std::string statsPath = cachePath + "/stats.bin";
+  const std::string statsPath = cachePath + "/" + STATS_FILE_NAME;
   if (!Storage.exists(statsPath.c_str())) {
     return true;
   }
   if (!Storage.remove(statsPath.c_str())) {
-    LOG_ERR("STATS", "Could not delete stats.bin");
+    LOG_ERR("STATS", "Could not delete %s", STATS_FILE_NAME);
     return false;
   }
   return true;

@@ -31,7 +31,8 @@ The main data directory is `.crosspoint` on the SD card. It stores render caches
 ├── sleep_frame.bin         # Temporary sleep overlay framebuffer, when used
 ├── epub_12471232/          # Each EPUB is cached to epub_<hash>
 │   ├── progress.bin        # Reading position (chapter, page, etc.)
-│   ├── stats.bin           # Per-book reading stats
+│   ├── stats.bin           # Legacy per-book reading stats
+│   ├── stats_v5.bin        # Version 5 per-book reading stats
 │   ├── reader_settings.bin # Per-book reader settings and auto-page-turn interval
 │   ├── cover.bmp           # Book cover image, once generated
 │   ├── thumb_*.bmp         # Home/recent-books thumbnail images

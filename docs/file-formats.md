@@ -131,6 +131,32 @@ struct ReaderSettingsBin {
 };
 ```
 
+## `stats_v5.bin`
+
+### Version 5
+
+`stats_v5.bin` stores per-book reading statistics for stats schema version 5.
+Versioned filenames let firmware branches with different stats schemas keep
+their own per-book stats files without overwriting each other. Version 5 extends
+version 4 with a cached live reader book time-left estimate so Home/Dashboard
+and Reading Stats can show the same estimate the reader last computed.
+
+Binary layout:
+
+- `[0]` version (`5`)
+- `[1-2]` `sessionCount` (`uint16_t` LE)
+- `[3-6]` `totalReadingSeconds` (`uint32_t` LE)
+- `[7-10]` `totalPagesTurned` (`uint32_t` LE)
+- `[11]` `isCompleted` (`uint8_t`)
+- `[12-13]` `avgSecondsPerForwardPage` (`uint16_t` LE)
+- `[14-15]` `paceSampleCount` (`uint16_t` LE)
+- `[16]` flags (`bit0=startDateManual`, `bit1=finishedDateManual`)
+- `[17-20]` `startDate` (`year uint16_t` LE, `month uint8_t`, `day uint8_t`)
+- `[21-24]` `finishedDate` (`year uint16_t` LE, `month uint8_t`, `day uint8_t`)
+- `[25-40]` `timeOfDaySeconds[4]` (`uint32_t` LE each)
+- `[41-68]` `dayOfWeekSeconds[7]` (`uint32_t` LE each)
+- `[69-72]` `estimatedTimeLeftSeconds` (`uint32_t` LE, `0` means unavailable)
+
 ## `section.bin`
 
 ### Version 40

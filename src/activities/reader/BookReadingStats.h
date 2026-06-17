@@ -5,7 +5,7 @@
 
 #include "ReadingStatsUtils.h"
 
-// Per-book reading statistics, persisted to cachePath/stats.bin.
+// Per-book reading statistics, persisted to cachePath/stats_v5.bin.
 struct BookReadingStats {
   uint16_t sessionCount = 0;              // Total times this book was opened
   uint32_t totalReadingSeconds = 0;       // Accumulated reading time in seconds
@@ -20,14 +20,14 @@ struct BookReadingStats {
   std::array<uint32_t, READING_TIME_BUCKET_COUNT> timeOfDaySeconds{};
   std::array<uint32_t, READING_DAY_OF_WEEK_COUNT> dayOfWeekSeconds{};
 
-  // Loads stats from cachePath/stats.bin. Returns default-constructed stats if
+  // Loads stats from cachePath/stats_v5.bin. Returns default-constructed stats if
   // the file is missing or the version byte does not match.
   static BookReadingStats load(const std::string& cachePath);
 
-  // Saves stats to cachePath/stats.bin.
+  // Saves stats to cachePath/stats_v5.bin.
   void save(const std::string& cachePath) const;
 
-  // Deletes cachePath/stats.bin. Missing files are treated as success.
+  // Deletes cachePath/stats_v5.bin. Missing files are treated as success.
   static bool remove(const std::string& cachePath);
 
   // Updates the running reading pace with one forward page dwell sample.
