@@ -69,6 +69,9 @@ class EpubReaderMenuActivity final : public Activity {
   };
 
   enum class MenuTab : uint8_t { Main = 0, Bookmarks = 1, Settings = 2 };
+  static constexpr size_t MAIN_TAB_INDEX = 0;
+  static constexpr size_t BOOKMARKS_TAB_INDEX = 1;
+  static constexpr size_t SETTINGS_TAB_INDEX = 2;
   static constexpr size_t MENU_TAB_COUNT = 3;
   using TabMenuItems = std::array<std::vector<MenuItem>, MENU_TAB_COUNT>;
 

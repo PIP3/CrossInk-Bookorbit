@@ -351,7 +351,7 @@ bool pageContainsClippingText(Section& section, const Clipping& clipping, const 
 
 bool findClippingPageNear(Section& section, const Clipping& clipping, const uint16_t center, const uint16_t radius,
                           uint16_t& outPage) {
-  if (section.pageCount <= 0) return false;
+  if (section.pageCount == 0) return false;
 
   const uint16_t pageCount = static_cast<uint16_t>(section.pageCount);
   const uint16_t clampedCenter = clampSectionPage(center, pageCount);
@@ -379,7 +379,7 @@ bool findClippingPageNear(Section& section, const Clipping& clipping, const uint
 
 uint16_t resolveClippingJumpPage(Section& section, const Clipping& clipping, const uint16_t fallbackPage) {
   constexpr uint16_t SEARCH_RADIUS = 8;
-  if (section.pageCount <= 0) return fallbackPage;
+  if (section.pageCount == 0) return fallbackPage;
 
   const uint16_t pageCount = static_cast<uint16_t>(section.pageCount);
   uint16_t resolvedPage = clampSectionPage(fallbackPage, pageCount);
@@ -3771,9 +3771,8 @@ void EpubReaderActivity::drawClippingHighlights(const Page& page, const int font
 
   std::array<ClippingPageMatch, CLIPPING_MAX_PER_BOOK> matches;
   uint16_t matchCount = 0;
-  const bool canUseStoredRanges =
-      section->pageCount > 0 && section->pageCount <= UINT16_MAX && section->currentPage >= 0 &&
-      section->currentPage < section->pageCount;
+  const bool canUseStoredRanges = section->pageCount > 0 && section->pageCount <= UINT16_MAX &&
+                                  section->currentPage >= 0 && section->currentPage < section->pageCount;
   const uint16_t currentPage = canUseStoredRanges ? static_cast<uint16_t>(section->currentPage) : 0;
   const uint16_t currentPageCount = canUseStoredRanges ? static_cast<uint16_t>(section->pageCount) : 0;
   for (const Clipping& clipping : CLIPPINGS.getClippings()) {

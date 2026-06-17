@@ -115,13 +115,23 @@ void appendFixedPreservedFiles(std::vector<ResolvedPreservedCacheFile>& files, c
 
 bool appendStatsPreservedFiles(const std::string& cachePath, std::vector<ResolvedPreservedCacheFile>& files,
                                const char* tmpPrefix) {
+  if (!tmpPrefix) {
+    LOG_ERR("BookCache", "Missing stats preservation temp prefix: %s", cachePath.c_str());
+    return false;
+  }
+
   FsFile dir = Storage.open(cachePath.c_str());
   if (!dir) {
+    if (Storage.exists(cachePath.c_str())) {
+      LOG_ERR("BookCache", "Failed to open cache directory for stats preservation: %s", cachePath.c_str());
+      return false;
+    }
     return true;
   }
   if (!dir.isDirectory()) {
     dir.close();
-    return true;
+    LOG_ERR("BookCache", "Cache path is not a directory during stats preservation: %s", cachePath.c_str());
+    return false;
   }
 
   std::vector<StatsFileCandidate> candidates;

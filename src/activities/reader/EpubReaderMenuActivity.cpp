@@ -138,9 +138,9 @@ EpubReaderMenuActivity::TabMenuItems EpubReaderMenuActivity::buildMenuItems(bool
                                                                             bool isBookCompleted,
                                                                             bool showReadingPaceReset) {
   TabMenuItems items;
-  auto& mainItems = items[static_cast<size_t>(MenuTab::Main)];
-  auto& bookmarkItems = items[static_cast<size_t>(MenuTab::Bookmarks)];
-  auto& settingsItems = items[static_cast<size_t>(MenuTab::Settings)];
+  auto& mainItems = items[MAIN_TAB_INDEX];
+  auto& bookmarkItems = items[BOOKMARKS_TAB_INDEX];
+  auto& settingsItems = items[SETTINGS_TAB_INDEX];
 
   mainItems.reserve(8 + (hasFootnotes ? 1u : 0u));
   bookmarkItems.reserve(7 + (hasBookmarks ? 2u : 0u) + (hasClippings ? 1u : 0u));

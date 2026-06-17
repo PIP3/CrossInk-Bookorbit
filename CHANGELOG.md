@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [1.3.4-RC] - 2026-06-17
 
 ### Added
 - File Browser now indexes large SD-card folders so directories with many books can be browsed without loading every filename into memory at once.

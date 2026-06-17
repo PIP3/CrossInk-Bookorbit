@@ -77,10 +77,10 @@ ClippingResult build(const std::vector<WordRef>& words, const int from, const in
   uint16_t startPageWordIndex = 0;
   uint16_t endPageWordIndex = 0;
   for (int i = 0; i <= to; ++i) {
-    if (words[i].pageIdx == words[from].pageIdx && i < from) {
+    if (i < from && words[i].pageIdx == words[from].pageIdx) {
       startPageWordIndex++;
     }
-    if (words[i].pageIdx == words[to].pageIdx && i < to) {
+    if (i < to && words[i].pageIdx == words[to].pageIdx) {
       endPageWordIndex++;
     }
   }
@@ -100,7 +100,7 @@ ClippingResult build(const std::vector<WordRef>& words, const int from, const in
 
     if (i > from && !text.empty() && !paragraphStart) {
       const auto prevStripped = cleanWordText(words[i - 1].text);
-      if (!prevStripped.empty() && prevStripped.back() == '-' && !wordText.empty() &&
+      if (!prevStripped.empty() && prevStripped.back() == '-' &&
           !std::isspace(static_cast<unsigned char>(wordText[0])) &&
           !std::ispunct(static_cast<unsigned char>(wordText[0]))) {
         text.pop_back();
