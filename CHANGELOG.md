@@ -19,6 +19,7 @@
 - Per-book reading stats now migrate compatible legacy `stats.bin` files into the `stats_v5.bin` flow instead of resetting when only the old filename exists.
 - Per-book reading stats now use versioned filenames so firmware builds with different schemas do not overwrite each other's stats.
 - Lyra Carousel Home menu rendering now avoids extra label allocations that could crash tiny builds under low memory.
+- TXT readers now stay open when pressing a page-turn button at the end of the file.
 - Long-press reader shortcuts that open another screen no longer close or confirm it again when releasing the shortcut button.
 - RoundedRaff's header battery icon and percentage now sit lower to avoid clipping at the top edge.
 - Lyra Carousel now keeps the Home header current when rendering the menu or restoring cached carousel frames, preventing stale battery and clock values while navigating between books.
