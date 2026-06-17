@@ -14,11 +14,12 @@
 
 namespace {
 
-constexpr uint8_t MenuIcon24[] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xf3, 0xe7, 0xcf, 0xf3, 0xe7,
-                                  0xcf, 0xf3, 0xe7, 0xcf, 0xf3, 0xe7, 0xcf, 0xf3, 0xe7, 0xcf, 0xf3, 0xe7, 0xcf, 0xf3,
-                                  0xe7, 0xcf, 0xf3, 0xe7, 0xcf, 0xf3, 0xe7, 0xcf, 0xf3, 0xe7, 0xcf, 0xf3, 0xe7, 0xcf,
-                                  0xf3, 0xe7, 0xcf, 0xf3, 0xe7, 0xcf, 0xf3, 0xe7, 0xcf, 0xf3, 0xe7, 0xcf, 0xf3, 0xe7,
-                                  0xcf, 0xf3, 0xe7, 0xcf, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+constexpr uint8_t MenuIcon24[] = {
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xf3, 0xe7, 0xcf, 0xf3, 0xe7, 0xcf, 0xf3, 0xe7, 0xcf,
+    0xf3, 0xe7, 0xcf, 0xf3, 0xe7, 0xcf, 0xf3, 0xe7, 0xcf, 0xf3, 0xe7, 0xcf, 0xf3, 0xe7, 0xcf, 0xf3, 0xe7, 0xcf,
+    0xf3, 0xe7, 0xcf, 0xf3, 0xe7, 0xcf, 0xf3, 0xe7, 0xcf, 0xf3, 0xe7, 0xcf, 0xf3, 0xe7, 0xcf, 0xf3, 0xe7, 0xcf,
+    0xf3, 0xe7, 0xcf, 0xf3, 0xe7, 0xcf, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+static_assert(sizeof(MenuIcon24) == 24 * ((24 + 7) / 8), "MenuIcon24 must contain 24 rows of 1-bit icon data");
 
 constexpr int tabIconSize = 24;
 constexpr int selectedTabBoxWidth = 50;
@@ -87,7 +88,7 @@ bool haveReaderLayoutSettingsChanged(const ReaderLayoutSettingsSnapshot& before)
   return before != captureReaderLayoutSettings();
 }
 
-void drawBookmarkTabIcon(const GfxRenderer& renderer, int x, int y) {
+void drawBookmarkTabIcon(const GfxRenderer& renderer, int x, int y, const bool foregroundBlack = true) {
   constexpr int ribbonWidth = 16;
   constexpr int ribbonHeight = 22;
   constexpr int notchSize = 6;
@@ -97,7 +98,7 @@ void drawBookmarkTabIcon(const GfxRenderer& renderer, int x, int y) {
 
   const int polyX[5] = {iconX, iconX + ribbonWidth, iconX + ribbonWidth, centerX, iconX};
   const int polyY[5] = {iconY, iconY, iconY + ribbonHeight, iconY + ribbonHeight - notchSize, iconY + ribbonHeight};
-  renderer.fillPolygon(polyX, polyY, 5, true);
+  renderer.fillPolygon(polyX, polyY, 5, foregroundBlack);
 }
 
 }  // namespace
@@ -210,20 +211,33 @@ void EpubReaderMenuActivity::drawIconTabBar(const Rect rect) const {
     const int slotWidth = nextSlotX - slotX;
     const int centerX = slotX + slotWidth / 2;
     const bool selected = i == activeTabIndex();
+    const bool tabFocused = selected && selectedIndex < 0;
+    const int boxX = centerX - selectedTabBoxWidth / 2;
+    const int boxY = rect.y + (rect.height - selectedTabBoxHeight) / 2;
+    const int iconX = centerX - tabIconSize / 2;
+    const int iconY = rect.y + (rect.height - tabIconSize) / 2;
 
-    if (selected) {
-      renderer.drawRoundedRect(centerX - selectedTabBoxWidth / 2, rect.y + (rect.height - selectedTabBoxHeight) / 2,
-                               selectedTabBoxWidth, selectedTabBoxHeight, 1, selectedTabBoxRadius, true);
+    if (tabFocused) {
+      renderer.fillRoundedRect(boxX, boxY, selectedTabBoxWidth, selectedTabBoxHeight, selectedTabBoxRadius,
+                               Color::Black);
+    } else if (selected) {
+      renderer.drawRoundedRect(boxX, boxY, selectedTabBoxWidth, selectedTabBoxHeight, 1, selectedTabBoxRadius, true);
     }
 
     if (i == static_cast<size_t>(MenuTab::Main)) {
-      renderer.drawIcon(MenuIcon24, centerX - tabIconSize / 2, rect.y + (rect.height - tabIconSize) / 2, tabIconSize,
-                        tabIconSize);
+      if (tabFocused) {
+        renderer.drawIconInverted(MenuIcon24, iconX, iconY, tabIconSize, tabIconSize);
+      } else {
+        renderer.drawIcon(MenuIcon24, iconX, iconY, tabIconSize, tabIconSize);
+      }
     } else if (i == static_cast<size_t>(MenuTab::Bookmarks)) {
-      drawBookmarkTabIcon(renderer, centerX - tabIconSize / 2, rect.y + (rect.height - tabIconSize) / 2);
+      drawBookmarkTabIcon(renderer, iconX, iconY, !tabFocused);
     } else {
-      renderer.drawIcon(Settings2Icon24, centerX - tabIconSize / 2, rect.y + (rect.height - tabIconSize) / 2,
-                        tabIconSize, tabIconSize);
+      if (tabFocused) {
+        renderer.drawIconInverted(Settings2Icon24, iconX, iconY, tabIconSize, tabIconSize);
+      } else {
+        renderer.drawIcon(Settings2Icon24, iconX, iconY, tabIconSize, tabIconSize);
+      }
     }
   }
 }
