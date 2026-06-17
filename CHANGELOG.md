@@ -11,6 +11,7 @@
 - The EPUB reader menu now labels per-book reader settings as Book Options and avoids showing duplicate Orientation controls.
 
 ### Fixed
+- Calibre Wireless transfer status no longer stacks the last received-file message on top of the upload percentage.
 - EPUB chapters that run out of memory during full CrossInk layout now retry with a lighter compatibility renderer before showing a low-memory error.
 - EPUB reader font-size changes now restore the current chapter position by content instead of jumping far backward after re-indexing.
 - Long-press reader shortcuts that open another screen no longer close or confirm it again when releasing the shortcut button.
