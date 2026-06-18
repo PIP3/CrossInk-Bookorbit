@@ -182,6 +182,7 @@ class EpubReaderActivity final : public Activity {
   bool consumeLongPowerButtonHold();
   bool executeShortPowerButtonAction();
   bool executeLongPowerButtonAction();
+  void handleClippingJump(const ClippingJumpResult& clipping);
   void onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action);
   void applyOrientation(uint8_t orientation);
   void pageTurn(bool isForwardTurn, const char* source = "unknown");

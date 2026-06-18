@@ -6,7 +6,9 @@
 #include <algorithm>
 #include <cstring>
 
+#include "ClippingStore.h"
 #include "CrossPointSettings.h"
+#include "EpubReaderClippingListActivity.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "components/icons/settings2.h"
@@ -310,6 +312,30 @@ void EpubReaderMenuActivity::loop() {
                                setResult(std::move(result));
                                finish();
                              });
+      return;
+    }
+
+    if (selectedAction == MenuAction::VIEW_CLIPPINGS) {
+      startActivityForResult(
+          std::make_unique<EpubReaderClippingListActivity>(renderer, mappedInput, CLIPPINGS.getClippings()),
+          [this](const ActivityResult& result) {
+            if (result.isCancelled) {
+              requestUpdate();
+              return;
+            }
+
+            const auto* clipping = std::get_if<ClippingJumpResult>(&result.data);
+            if (clipping == nullptr) {
+              requestUpdate();
+              return;
+            }
+
+            ClippingJumpResult menuResult = *clipping;
+            menuResult.orientation = pendingOrientation;
+            menuResult.settingsChanged = settingsChanged;
+            setResult(std::move(menuResult));
+            finish();
+          });
       return;
     }
 

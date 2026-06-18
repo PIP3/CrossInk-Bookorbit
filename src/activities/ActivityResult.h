@@ -107,6 +107,8 @@ struct ClippingJumpResult {
   uint16_t pageCount = 1;
   uint16_t paragraphIndex = UINT16_MAX;
   uint16_t clippingIndex = UINT16_MAX;
+  uint8_t orientation = 0;
+  bool settingsChanged = false;
 };
 
 using ResultVariant = std::variant<std::monostate, WifiResult, KeyboardResult, MenuResult, ChapterResult, PercentResult,

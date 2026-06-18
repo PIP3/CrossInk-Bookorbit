@@ -1837,10 +1837,30 @@ void EpubReaderActivity::loop() {
             saveReaderOptionsForBook, this, saveGlobalSettingsForBookReader, this, beginGlobalSettingsEditForBookReader,
             this, endGlobalSettingsEditForBookReader, this),
         [this](const ActivityResult& result) {
+          if (const auto* clipping = std::get_if<ClippingJumpResult>(&result.data)) {
+            applyOrientation(clipping->orientation);
+            if (clipping->settingsChanged) {
+              sdFontSystem.ensureLoaded(renderer);
+              RenderLock lock(*this);
+              if (section) {
+                cacheCurrentSectionPosition();
+              }
+              section.reset();  // Force re-layout with changed reader settings
+            }
+            handleClippingJump(*clipping);
+            requestUpdate();
+            return;
+          }
+
           // Always apply orientation change even if the menu was cancelled
-          const auto& menu = std::get<MenuResult>(result.data);
-          applyOrientation(menu.orientation);
-          if (menu.settingsChanged) {
+          const auto* menu = std::get_if<MenuResult>(&result.data);
+          if (menu == nullptr) {
+            resumeReadingPaceTimer("reader_menu_return");
+            requestUpdate();
+            return;
+          }
+          applyOrientation(menu->orientation);
+          if (menu->settingsChanged) {
             sdFontSystem.ensureLoaded(renderer);
             RenderLock lock(*this);
             if (section) {
@@ -1850,7 +1870,7 @@ void EpubReaderActivity::loop() {
           }
           resumeReadingPaceTimer("reader_menu_return");
           if (!result.isCancelled) {
-            onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
+            onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu->action));
           }
         });
   }
@@ -2149,6 +2169,17 @@ void EpubReaderActivity::jumpToPercent(int percent) {
   pendingPercentJump = true;
   section.reset();
   armReadingPaceWarmup("percent_jump");
+}
+
+void EpubReaderActivity::handleClippingJump(const ClippingJumpResult& clipping) {
+  RenderLock lock(*this);
+  currentSpineIndex = clipping.spineIndex;
+  pendingPageJump = clipping.page;
+  pendingParagraphIndex = clipping.paragraphIndex;
+  pendingClippingIndex = clipping.clippingIndex;
+  section.reset();
+  armReadingPaceWarmup("clipping_jump");
+  pauseReadingPaceTimer("clipping_jump");
 }
 
 void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action) {
@@ -2519,14 +2550,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
           [this](const ActivityResult& result) {
             if (!result.isCancelled) {
               const auto& clipping = std::get<ClippingJumpResult>(result.data);
-              RenderLock lock(*this);
-              currentSpineIndex = clipping.spineIndex;
-              pendingPageJump = clipping.page;
-              pendingParagraphIndex = clipping.paragraphIndex;
-              pendingClippingIndex = clipping.clippingIndex;
-              section.reset();
-              armReadingPaceWarmup("clipping_jump");
-              pauseReadingPaceTimer("clipping_jump");
+              handleClippingJump(clipping);
             } else {
               resumeReadingPaceTimer("clipping_list_cancel");
             }
