@@ -67,7 +67,6 @@ class ChapterHtmlSlimParser {
   bool lowMemoryImageFallback = false;
   bool lowMemoryAbort = false;
   bool attemptedTextLayoutFontCacheRelease = false;
-  bool attemptedSimplifiedCssRelease = false;
   EpubRenderMode renderMode = EpubRenderMode::CrossInkDefault;
 
   // Style tracking (replaces depth-based approach)

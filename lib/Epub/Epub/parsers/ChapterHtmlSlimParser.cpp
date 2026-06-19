@@ -230,21 +230,6 @@ bool ChapterHtmlSlimParser::shouldAbortForLowMemory(const char* stage) {
     }
   }
 
-  if (usesSimpleCssLookup() && cssParser && !attemptedSimplifiedCssRelease) {
-    attemptedSimplifiedCssRelease = true;
-    const auto beforeClear = heap;
-    cssParser->clear();
-    cssParser = nullptr;
-    decltype(ancestorStack_){}.swap(ancestorStack_);
-    const auto afterClear = MemoryBudget::snapshot();
-    LOG_DBG("EHP", "Cleared CSS cache during simplified layout before %s: free=%u->%u maxAlloc=%u->%u", stage,
-            beforeClear.freeHeap, afterClear.freeHeap, beforeClear.maxAllocHeap, afterClear.maxAllocHeap);
-    heap = afterClear;
-    if (heap.freeHeap >= MIN_FREE_HEAP_FOR_TEXT_LAYOUT && heap.maxAllocHeap >= MIN_MAX_ALLOC_FOR_TEXT_LAYOUT) {
-      return false;
-    }
-  }
-
   LOG_ERR("EHP", "Low heap during %s (%u free, %u max alloc); aborting section build", stage, heap.freeHeap,
           heap.maxAllocHeap);
   lowMemoryAbort = true;
