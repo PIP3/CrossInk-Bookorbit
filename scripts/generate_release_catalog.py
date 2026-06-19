@@ -16,6 +16,9 @@ from pathlib import Path
 
 VARIANT_ORDER = ('teensy', 'tiny', 'xlarge', 'no_emoji')
 FIRMWARE_NAME_PATTERN = re.compile(r'^firmware-(?P<variant>.+?)-v[^/]+\.bin$')
+OTA_VARIANT_ALIASES = {
+    'no_emoji': 'tiny',
+}
 
 
 def sha256_file(path):
@@ -89,6 +92,19 @@ def sort_key_for_variant(variant):
         return (len(VARIANT_ORDER), variant)
 
 
+def build_ota_asset(filename, firmware_url, firmware_size, firmware_sha256):
+    return {
+        'name': filename,
+        'browser_download_url': firmware_url,
+        'size': firmware_size,
+        'sha256': firmware_sha256,
+    }
+
+
+def firmware_filename_for_variant(version, variant):
+    return f'firmware-{variant}-v{version}.bin'
+
+
 def main():
     args = parse_args()
     version = normalize_version(args.version)
@@ -100,7 +116,9 @@ def main():
 
     releases = []
     ota_assets = []
+    ota_aliases = []
     seen_variants = set()
+    firmware_by_variant = {}
     firmware_paths = sorted(args.firmware, key=lambda path: sort_key_for_variant(parse_variant(path)))
 
     for firmware_path in firmware_paths:
@@ -116,6 +134,11 @@ def main():
         if variant in seen_variants:
             raise SystemExit(f'Duplicate firmware variant supplied: {variant}')
         seen_variants.add(variant)
+        firmware_by_variant[variant] = {
+            'size': firmware_size,
+            'sha256': firmware_sha256,
+            'ota_url': ota_firmware_url,
+        }
 
         releases.append(
             {
@@ -132,13 +155,21 @@ def main():
                 'supported_devices': supported_devices,
             }
         )
-        ota_assets.append(
-            {
-                'name': filename,
-                'browser_download_url': ota_firmware_url,
-                'size': firmware_size,
-                'sha256': firmware_sha256,
-            }
+        ota_assets.append(build_ota_asset(filename, ota_firmware_url, firmware_size, firmware_sha256))
+
+    for alias_variant, target_variant in OTA_VARIANT_ALIASES.items():
+        if alias_variant in seen_variants:
+            continue
+        target = firmware_by_variant.get(target_variant)
+        if target is None:
+            raise SystemExit(f'OTA alias target not found: {alias_variant} -> {target_variant}')
+        ota_aliases.append(
+            build_ota_asset(
+                firmware_filename_for_variant(version, alias_variant),
+                target['ota_url'],
+                target['size'],
+                target['sha256'],
+            )
         )
 
     catalog = {
@@ -153,7 +184,7 @@ def main():
     if args.ota_output:
         ota_manifest = {
             'tag_name': f'v{version}',
-            'assets': ota_assets,
+            'assets': ota_assets + ota_aliases,
         }
         args.ota_output.parent.mkdir(parents=True, exist_ok=True)
         args.ota_output.write_text(json.dumps(ota_manifest, indent=2) + '\n', encoding='utf-8')
