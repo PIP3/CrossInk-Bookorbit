@@ -88,6 +88,18 @@ uint8_t defaultEnumRawValue(const SettingInfo& info, uint8_t fieldDefault) {
 
 bool isSleepScreenSetting(const SettingInfo& info) { return info.key && strcmp(info.key, "sleepScreen") == 0; }
 
+constexpr uint8_t TILT_DIRECTION_SCHEMA_CURRENT = 2;
+
+uint8_t migrateTiltDirectionValue(uint8_t direction) {
+  if (direction == CrossPointSettings::TILT_LEFT_RIGHT) {
+    return CrossPointSettings::TILT_LEFT_RIGHT_INVERTED;
+  }
+  if (direction == CrossPointSettings::TILT_LEFT_RIGHT_INVERTED) {
+    return CrossPointSettings::TILT_LEFT_RIGHT;
+  }
+  return direction;
+}
+
 // ---- CrossPointState ----
 
 bool JsonSettingsIO::saveState(const CrossPointState& s, const char* path) {
@@ -197,6 +209,7 @@ bool JsonSettingsIO::saveSettings(const CrossPointSettings& s, const char* path)
   // Language -- managed by LanguageSelectActivity, not in SettingsList.
   // Stored as ISO code string ("EN", "DE", ...) for stability across enum reorders.
   doc["language"] = (s.language < getLanguageCount()) ? LANGUAGE_CODES[s.language] : "EN";
+  doc["tiltPageTurnDirectionSchema"] = TILT_DIRECTION_SCHEMA_CURRENT;
   // Separate from the legacy clock sync flag because older builds synced time
   // only, leaving the RTC date registers at their placeholder/default value.
   doc["clockDateHasBeenSynced"] = s.clockDateHasBeenSynced;
@@ -218,6 +231,9 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
   auto clamp = [](uint8_t val, uint8_t maxVal, uint8_t def) -> uint8_t { return val < maxVal ? val : def; };
   const bool migrateLegacyTiltMode = !doc["tiltPageTurn"].isNull() && doc["tiltPageTurnDirection"].isNull();
   const uint8_t legacyTiltMode = doc["tiltPageTurn"] | static_cast<uint8_t>(CrossPointSettings::TILT_OFF);
+  const bool migrateTiltDirectionSchema =
+      !doc["tiltPageTurnDirection"].isNull() &&
+      ((doc["tiltPageTurnDirectionSchema"] | static_cast<uint8_t>(1)) < TILT_DIRECTION_SCHEMA_CURRENT);
 
   // Legacy migration: if statusBarChapterPageCount is absent this is a pre-refactor settings file.
   // Populate s with migrated values now so the generic loop below picks them up as defaults and clamps them.
@@ -314,11 +330,18 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
     if (legacyTiltMode == 1 || legacyTiltMode == 2) {
       s.tiltPageTurn = CrossPointSettings::TILT_ON;
       s.tiltPageTurnDirection =
-          legacyTiltMode == 2 ? CrossPointSettings::TILT_LEFT_RIGHT_INVERTED : CrossPointSettings::TILT_LEFT_RIGHT;
+          legacyTiltMode == 2 ? CrossPointSettings::TILT_LEFT_RIGHT : CrossPointSettings::TILT_LEFT_RIGHT_INVERTED;
       if (needsResave) *needsResave = true;
     } else {
       s.tiltPageTurn = CrossPointSettings::TILT_OFF;
     }
+  } else if (migrateTiltDirectionSchema) {
+    s.tiltPageTurnDirection = migrateTiltDirectionValue(s.tiltPageTurnDirection);
+    if (needsResave) *needsResave = true;
+  }
+
+  if (!doc["tiltPageTurnDirection"].isNull() && doc["tiltPageTurnDirectionSchema"].isNull()) {
+    if (needsResave) *needsResave = true;
   }
 
   if (doc["hideClock"].isNull() && !doc["statusBarClock"].isNull()) {
