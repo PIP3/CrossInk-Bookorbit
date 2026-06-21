@@ -3333,7 +3333,20 @@ void EpubReaderActivity::render(RenderLock&& lock) {
 
   const auto showLowMemoryLayoutError = [this]() {
     snprintf(APP_STATE.pendingAlertTitle, sizeof(APP_STATE.pendingAlertTitle), "%s", tr(STR_EPUB_LAYOUT_MEMORY_TITLE));
-    snprintf(APP_STATE.pendingAlertBody, sizeof(APP_STATE.pendingAlertBody), "%s", tr(STR_EPUB_LAYOUT_MEMORY_BODY));
+    const char* readingAidHint = nullptr;
+    if (SETTINGS.bionicReadingEnabled && SETTINGS.guideReadingEnabled) {
+      readingAidHint = tr(STR_EPUB_LAYOUT_MEMORY_READING_AIDS_HINT_BOTH);
+    } else if (SETTINGS.bionicReadingEnabled) {
+      readingAidHint = tr(STR_EPUB_LAYOUT_MEMORY_READING_AIDS_HINT_BIONIC);
+    } else if (SETTINGS.guideReadingEnabled) {
+      readingAidHint = tr(STR_EPUB_LAYOUT_MEMORY_READING_AIDS_HINT_GUIDE);
+    }
+    if (readingAidHint) {
+      snprintf(APP_STATE.pendingAlertBody, sizeof(APP_STATE.pendingAlertBody), "%s %s", tr(STR_EPUB_LAYOUT_MEMORY_BODY),
+               readingAidHint);
+    } else {
+      snprintf(APP_STATE.pendingAlertBody, sizeof(APP_STATE.pendingAlertBody), "%s", tr(STR_EPUB_LAYOUT_MEMORY_BODY));
+    }
     APP_STATE.pendingAlertGoHomeOnBack.store(true, std::memory_order_relaxed);
     APP_STATE.hasPendingAlert.store(true, std::memory_order_release);
     GUI.drawPopup(renderer, tr(STR_EPUB_LAYOUT_MEMORY_TITLE));
