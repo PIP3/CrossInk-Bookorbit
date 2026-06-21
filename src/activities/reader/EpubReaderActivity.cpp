@@ -3736,15 +3736,45 @@ void EpubReaderActivity::silentIndexNextChapterIfNeeded(const uint16_t viewportW
 
   LOG_DBG("ERS", "Silently indexing next chapter: %d (free=%u, maxAlloc=%u)", nextSpineIndex, ESP.getFreeHeap(),
           ESP.getMaxAllocHeap());
-  if (!nextSection.createSectionFile(
-          SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(), SETTINGS.extraParagraphSpacing,
-          SETTINGS.forceParagraphIndents, SETTINGS.paragraphAlignment, viewportWidth, viewportHeight,
-          SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle, SETTINGS.imageRendering, SETTINGS.bionicReadingEnabled,
-          SETTINGS.guideReadingEnabled, nullptr, nullptr, nullptr, renderMode)) {
+  bool layoutAbortedForLowMemory = false;
+  bool buildSucceeded = false;
+  EpubRenderMode usedRenderMode = renderMode;
+  uint8_t fallbackCount = 0;
+  const auto fallbackModes = fallbackModesForSelection(renderMode, fallbackCount);
+  for (uint8_t i = 0; i < fallbackCount && !buildSucceeded; ++i) {
+    const EpubRenderMode attemptMode = fallbackModes[i];
+    if (i > 0) {
+      if (!layoutAbortedForLowMemory) {
+        break;
+      }
+      LOG_DBG("ERS", "Silent indexing retrying mode %u for chapter %d after low heap",
+              static_cast<unsigned>(attemptMode), nextSpineIndex);
+      releaseReaderSdFontCachesForLowMemory(renderer, "ERS", "silent next-chapter fallback indexing");
+    }
+
+    layoutAbortedForLowMemory = false;
+    Section attemptSection(epub, nextSpineIndex, renderer, sectionCacheSuffixForRenderMode(attemptMode));
+    buildSucceeded = attemptSection.createSectionFile(
+        SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(), SETTINGS.extraParagraphSpacing,
+        SETTINGS.forceParagraphIndents, SETTINGS.paragraphAlignment, viewportWidth, viewportHeight,
+        SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle, SETTINGS.imageRendering, SETTINGS.bionicReadingEnabled,
+        SETTINGS.guideReadingEnabled, nullptr, nullptr, &layoutAbortedForLowMemory, attemptMode);
+    if (buildSucceeded) {
+      usedRenderMode = attemptMode;
+      LOG_DBG("ERS", "Silent indexing complete: chapter=%d pages=%u mode=%u free=%u maxAlloc=%u", nextSpineIndex,
+              attemptSection.pageCount, static_cast<unsigned>(usedRenderMode), ESP.getFreeHeap(),
+              ESP.getMaxAllocHeap());
+    }
+  }
+
+  if (!buildSucceeded) {
     LOG_ERR("ERS", "Failed silent indexing for chapter: %d", nextSpineIndex);
-  } else {
-    LOG_DBG("ERS", "Silent indexing complete: chapter=%d pages=%u free=%u maxAlloc=%u", nextSpineIndex,
-            nextSection.pageCount, ESP.getFreeHeap(), ESP.getMaxAllocHeap());
+    return;
+  }
+  if (usedRenderMode != renderMode) {
+    SETTINGS.epubRenderMode = static_cast<uint8_t>(usedRenderMode);
+    bookHasRenderModeOverride = true;
+    saveBookRenderModeForCache(epub->getCachePath(), SETTINGS.epubRenderMode);
   }
 }
 

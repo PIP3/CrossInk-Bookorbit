@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <HalStorage.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <MemoryBudget.h>
 #include <Serialization.h>
 
@@ -14,7 +15,7 @@
 namespace {
 constexpr uint32_t SECTION_CACHE_MAGIC = 0x535843FF;  // bytes: 0xFF, "CXS"
 constexpr uint8_t SECTION_FILE_VERSION = 41;
-constexpr uint8_t INITIAL_PAGE_LUT_RESERVE = 32;
+constexpr uint16_t MAX_SECTION_PAGE_LUT_ENTRIES = 1024;
 constexpr uint32_t HEADER_SIZE = sizeof(SECTION_CACHE_MAGIC) + sizeof(uint8_t) + sizeof(int) + sizeof(float) +
                                  sizeof(bool) + sizeof(bool) + sizeof(uint8_t) + sizeof(uint16_t) + sizeof(uint16_t) +
                                  sizeof(uint16_t) + sizeof(bool) + sizeof(bool) + sizeof(uint8_t) + sizeof(bool) +
@@ -31,6 +32,10 @@ struct PageLutEntry {
 uint32_t Section::onPageComplete(std::unique_ptr<Page> page) {
   if (!file) {
     LOG_ERR("SCT", "File not open for writing page %d", pageCount);
+    return 0;
+  }
+  if (!page) {
+    LOG_ERR("SCT", "Cannot write null page %d", pageCount);
     return 0;
   }
 
@@ -273,8 +278,18 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
     Storage.remove(tmpSectionPath.c_str());
     return false;
   }
-  std::vector<PageLutEntry> lut = {};
-  lut.reserve(INITIAL_PAGE_LUT_RESERVE);
+  // 1024 entries is 8 KB. Stack is too small, and std::vector growth in the page callback can abort on OOM.
+  auto lut = makeUniqueNoThrow<PageLutEntry[]>(MAX_SECTION_PAGE_LUT_ENTRIES);
+  if (!lut) {
+    LOG_ERR("SCT", "Failed to allocate page LUT (%u bytes)",
+            static_cast<unsigned>(sizeof(PageLutEntry) * MAX_SECTION_PAGE_LUT_ENTRIES));
+    if (layoutAbortedForLowMemory) *layoutAbortedForLowMemory = true;
+    file.close();
+    Storage.remove(tmpSectionPath.c_str());
+    return false;
+  }
+  uint16_t lutCount = 0;
+  bool pageCompletionFailed = false;
 
   // Derive the content base directory and image cache path prefix for the parser
   size_t lastSlash = localPath.find_last_of('/');
@@ -317,8 +332,22 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
       epub, tmpHtmlPath, renderer, fontId, lineCompression, extraParagraphSpacing, forceParagraphIndents,
       paragraphAlignment, viewportWidth, viewportHeight, hyphenationEnabled, effectiveBionicReadingEnabled,
       effectiveGuideReadingEnabled,
-      [this, &lut](std::unique_ptr<Page> page, const uint16_t paragraphIndex, const uint16_t listItemIndex) {
-        lut.push_back({this->onPageComplete(std::move(page)), paragraphIndex, listItemIndex});
+      [this, &lut, &lutCount, &pageCompletionFailed](std::unique_ptr<Page> page, const uint16_t paragraphIndex,
+                                                     const uint16_t listItemIndex) {
+        if (pageCompletionFailed) {
+          return;
+        }
+        if (lutCount >= MAX_SECTION_PAGE_LUT_ENTRIES) {
+          LOG_ERR("SCT", "Section page LUT exceeded %u entries", MAX_SECTION_PAGE_LUT_ENTRIES);
+          pageCompletionFailed = true;
+          return;
+        }
+        const uint32_t fileOffset = this->onPageComplete(std::move(page));
+        if (fileOffset == 0) {
+          pageCompletionFailed = true;
+          return;
+        }
+        lut[lutCount++] = {fileOffset, paragraphIndex, listItemIndex};
       },
       embeddedStyle, contentBase, imageBasePath, imageRendering, std::move(tocAnchors), popupFn, cssParser, renderMode);
   Hyphenator::setPreferredLanguage(epub->getLanguage());
@@ -331,7 +360,7 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
   if (layoutAbortedForLowMemory) *layoutAbortedForLowMemory = visitor.wasLowMemoryAbortTriggered();
 
   Storage.remove(tmpHtmlPath.c_str());
-  if (!success) {
+  if (!success || pageCompletionFailed) {
     LOG_ERR("SCT", "Failed to parse XML and build pages");
     // Explicitly close() file before calling Storage.remove()
     file.close();
@@ -345,12 +374,12 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
   const uint32_t lutOffset = file.position();
   bool hasFailedLutRecords = false;
   // Write LUT
-  for (const auto& entry : lut) {
-    if (entry.fileOffset == 0) {
+  for (uint16_t i = 0; i < lutCount; i++) {
+    if (lut[i].fileOffset == 0) {
       hasFailedLutRecords = true;
       break;
     }
-    if (!serialization::tryWritePod(file, entry.fileOffset)) {
+    if (!serialization::tryWritePod(file, lut[i].fileOffset)) {
       hasFailedLutRecords = true;
       break;
     }
@@ -381,13 +410,13 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
   }
 
   const uint32_t paragraphLutOffset = file.position();
-  if (!serialization::tryWritePod(file, static_cast<uint16_t>(lut.size()))) {
+  if (!serialization::tryWritePod(file, lutCount)) {
     file.close();
     Storage.remove(tmpSectionPath.c_str());
     return false;
   }
-  for (const auto& entry : lut) {
-    if (!serialization::tryWritePod(file, entry.paragraphIndex)) {
+  for (uint16_t i = 0; i < lutCount; i++) {
+    if (!serialization::tryWritePod(file, lut[i].paragraphIndex)) {
       file.close();
       Storage.remove(tmpSectionPath.c_str());
       return false;
@@ -395,8 +424,8 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
   }
 
   const uint32_t liLutFileOffset = static_cast<uint32_t>(file.position());
-  for (const auto& entry : lut) {
-    if (!serialization::tryWritePod(file, entry.listItemIndex)) {
+  for (uint16_t i = 0; i < lutCount; i++) {
+    if (!serialization::tryWritePod(file, lut[i].listItemIndex)) {
       file.close();
       Storage.remove(tmpSectionPath.c_str());
       return false;
