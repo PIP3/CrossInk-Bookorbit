@@ -4019,9 +4019,12 @@ void EpubReaderActivity::drawClippingHighlights(const Page& page, const int font
     if (clipping.spineIndex != static_cast<uint16_t>(currentSpineIndex)) {
       continue;
     }
+    if (!canUseStoredRanges || clipping.pageCount != currentPageCount) {
+      continue;
+    }
+
     ClippingPageMatch match;
-    if ((canUseStoredRanges && findClippingStoredRangeOnPage(page, clipping, currentPage, currentPageCount, match)) ||
-        findClippingTextOnPage(page, clipping, match)) {
+    if (findClippingStoredRangeOnPage(page, clipping, currentPage, currentPageCount, match)) {
       matches[matchCount++] = match;
       if (matchCount >= matches.size()) {
         break;
