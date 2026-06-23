@@ -4032,12 +4032,12 @@ void EpubReaderActivity::drawClippingHighlights(const Page& page, const int font
     if (clipping.spineIndex != static_cast<uint16_t>(currentSpineIndex)) {
       continue;
     }
-    if (!canUseStoredRanges || clipping.pageCount != currentPageCount) {
-      continue;
-    }
-
     ClippingPageMatch match;
-    if (findClippingStoredRangeOnPage(page, clipping, currentPage, currentPageCount, match)) {
+    const bool matchedStoredRange =
+        canUseStoredRanges && findClippingStoredRangeOnPage(page, clipping, currentPage, currentPageCount, match);
+    const bool shouldSearchText = !canUseStoredRanges || clipping.pageCount != currentPageCount ||
+                                  (currentPage >= clipping.startPage && currentPage <= clipping.endPage);
+    if (matchedStoredRange || (shouldSearchText && findClippingTextOnPage(page, clipping, match))) {
       matches[matchCount++] = match;
       if (matchCount >= matches.size()) {
         break;
