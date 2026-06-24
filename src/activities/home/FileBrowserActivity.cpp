@@ -473,6 +473,7 @@ void FileBrowserActivity::showDirectoryActionMenu(const std::string& entry, bool
                              case FileBrowserAction::DeleteBookmarks:
                              case FileBrowserAction::DeleteClippings:
                              case FileBrowserAction::EpubRenderMode:
+                             case FileBrowserAction::ResetReaderSettings:
                                return;
                            }
                          });
@@ -601,6 +602,23 @@ void FileBrowserActivity::showFileActionMenu(const std::string& entry, bool igno
                       LOG_ERR("FileBrowser", "Failed to delete book stats for: %s", fullPath.c_str());
                     } else {
                       BookActions::drawToast(renderer, tr(STR_BOOK_STATS_DELETED));
+                      delay(1000);
+                    }
+                  }
+                  requestUpdate();
+                });
+            return;
+          case FileBrowserAction::ResetReaderSettings:
+            startActivityForResult(
+                std::make_unique<ConfirmationActivity>(
+                    renderer, mappedInput, BookActions::confirmationHeading(StrId::STR_RESET_BOOK_READER_SETTINGS),
+                    getFileName(entry)),
+                [this, fullPath](const ActivityResult& confirmation) {
+                  if (!confirmation.isCancelled) {
+                    if (!BookActions::resetBookReaderSettings(fullPath)) {
+                      LOG_ERR("FileBrowser", "Failed to reset reader settings for: %s", fullPath.c_str());
+                    } else {
+                      BookActions::drawToast(renderer, tr(STR_BOOK_READER_SETTINGS_RESET));
                       delay(1000);
                     }
                   }

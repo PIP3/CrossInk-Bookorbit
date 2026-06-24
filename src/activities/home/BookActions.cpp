@@ -17,6 +17,7 @@
 #include "CrossPointState.h"
 #include "RecentBooksStore.h"
 #include "activities/reader/BookReadingStats.h"
+#include "activities/reader/EpubReaderActivity.h"
 #include "activities/reader/GlobalReadingStats.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -28,13 +29,14 @@ namespace BookActions {
 std::vector<FileBrowserActionActivity::MenuItem> buildBookActionItems(const std::string& fullPath,
                                                                       const bool includeRemoveFromRecents) {
   std::vector<FileBrowserActionActivity::MenuItem> items;
-  items.reserve(includeRemoveFromRecents ? 6 : 5);
+  items.reserve(includeRemoveFromRecents ? 7 : 6);
   items.push_back({FileBrowserAction::Delete, StrId::STR_DELETE});
   if (hasClearableBookCache(fullPath)) {
     items.push_back({FileBrowserAction::DeleteCache, StrId::STR_DELETE_CACHE});
   }
   if (FsHelpers::hasEpubExtension(fullPath)) {
     items.push_back({FileBrowserAction::EpubRenderMode, StrId::STR_EPUB_RENDER_MODE});
+    items.push_back({FileBrowserAction::ResetReaderSettings, StrId::STR_RESET_BOOK_READER_SETTINGS});
     items.push_back({FileBrowserAction::DeleteStats, StrId::STR_DELETE_BOOK_STATS});
   }
   if (FsHelpers::hasEpubExtension(fullPath)) {
@@ -77,6 +79,13 @@ bool deleteBookStats(const std::string& fullPath) {
   }
   const Epub epub(fullPath, "/.crosspoint");
   return BookReadingStats::remove(epub.getCachePath());
+}
+
+bool resetBookReaderSettings(const std::string& fullPath) {
+  if (!FsHelpers::hasEpubExtension(fullPath)) {
+    return false;
+  }
+  return EpubReaderActivity::resetBookReaderSettings(fullPath);
 }
 
 std::vector<std::string> epubRenderModeOptions() {

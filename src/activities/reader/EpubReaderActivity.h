@@ -104,6 +104,8 @@ class EpubReaderActivity final : public Activity {
   unsigned long tiltPageTurnFeedbackShowTime = 0UL;
   bool pendingRenderModeToast = false;
   bool renderModeToastShown = false;
+  bool pendingSafeModeToast = false;
+  bool safeModeToastShown = false;
   uint8_t renderModeToastMode = 0;
   unsigned long renderModeToastShowTime = 0UL;
   int completionTriggerSpineIndex = -1;
@@ -195,6 +197,7 @@ class EpubReaderActivity final : public Activity {
   void showCompletedFeedback(bool isCompleted);
   void showTiltPageTurnFeedback(bool enabled);
   void showRenderModeToast(uint8_t renderMode);
+  void showSafeModeToast();
 
   // Footnote navigation
   void navigateToHref(const std::string& href, bool savePosition = false);
@@ -220,5 +223,6 @@ class EpubReaderActivity final : public Activity {
   static bool drawCurrentPageToBuffer(const std::string& filePath, GfxRenderer& renderer);
   static uint8_t loadBookRenderMode(const std::string& filePath);
   static bool saveBookRenderMode(const std::string& filePath, uint8_t renderMode);
+  static bool resetBookReaderSettings(const std::string& filePath);
   ScreenshotInfo getScreenshotInfo() const override;
 };

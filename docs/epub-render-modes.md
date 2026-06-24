@@ -20,6 +20,7 @@ default behavior for your other books.
 | CrossInk Default | Most books | Full CrossInk styling, detailed CSS, table layout, image sizing, publisher spacing, Bionic Reading, Guide Dots | Nothing by default |
 | Balanced | Books where CrossInk has fallen back automatically, or books you want to start in a lighter mode | Publisher spacing, image sizing, decorations, Bionic Reading, Guide Dots | Complex CSS lookups and table layout |
 | Light | Books where Balanced is still too heavy, or books you want to start in the safest mode | Text content, hidden-content rules, basic formatting, Bionic Reading, Guide Dots | Complex CSS lookups, table layout, publisher spacing, image sizing, and decorative separators |
+| Safe Mode | Final automatic fallback for books that still run out of memory in Light | Text content, hidden-content rules, basic formatting | Light-mode simplifications plus embedded styles, Bionic Reading, and Guide Dots |
 
 Most users can leave books on **CrossInk Default**. If a book runs out of memory
 while building a section, CrossInk will automatically try **Balanced** and then
@@ -94,6 +95,21 @@ known-problem book to start in the safest mode immediately. Light may look less
 like the publisher's original layout, but it gives CrossInk the best chance of
 rendering the book on limited memory.
 
+## Safe Mode
+
+Safe Mode is an automatic final fallback, not a selectable render mode.
+
+If CrossInk cannot build a section in Light because memory is still too tight,
+it tries Safe Mode once. Safe Mode uses Light rendering and also turns off:
+
+- Embedded styles
+- Bionic Reading
+- Guide Dots
+
+When Safe Mode succeeds, CrossInk saves those settings for that book. The reader
+briefly shows **Safe Mode** over the current page. Your other books keep their
+own reader settings.
+
 ## Automatic Fallback
 
 If a book starts in CrossInk Default and a section runs out of memory while
@@ -102,9 +118,10 @@ building, CrossInk automatically retries in this order:
 1. CrossInk Default
 2. Balanced
 3. Light
+4. Safe Mode
 
-If the book starts in Balanced, CrossInk can fall back to Light. If the book
-starts in Light, CrossInk only tries Light.
+If the book starts in Balanced, CrossInk can fall back to Light and then Safe
+Mode. If the book starts in Light, CrossInk can still try Safe Mode.
 
 When a fallback succeeds, CrossInk saves that successful mode for the book. The
 next time you open the same book, it starts in the saved mode.
@@ -112,6 +129,12 @@ next time you open the same book, it starts in the saved mode.
 When a book opens in Balanced or Light, the reader briefly shows **Balanced
 Mode** or **Light Mode** over the current page. The message disappears
 automatically and does not change page layout, margins, or reading position.
+
+If Safe Mode also cannot open the book, long-press the book in **File Browser**
+or **Recent Books** and choose **Reset Book Reader Settings**. This clears only
+that book's reader settings, including a saved Safe Mode or render-mode
+override. It preserves reading progress, bookmarks, clippings, and reading
+stats.
 
 ## Changing A Book's Render Mode
 

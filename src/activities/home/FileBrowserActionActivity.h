@@ -23,6 +23,7 @@ enum class FileBrowserAction : int {
   DeleteBookmarks = 11,
   DeleteClippings = 12,
   EpubRenderMode = 13,
+  ResetReaderSettings = 14,
 };
 
 class FileBrowserActionActivity final : public Activity {
