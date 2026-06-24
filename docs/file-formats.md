@@ -106,7 +106,9 @@ file preserve an auto-page-turn interval without forcing custom font/layout
 settings for the book. It also stores a per-book EPUB render mode override,
 which can be changed from book action menus before opening the book so a
 problematic EPUB can be moved to Balanced or Light rendering without entering
-the reader first.
+the reader first. Safe Mode also uses this file to save Light rendering with
+embedded styles, Bionic Reading, and Guide Dots disabled after that final
+fallback successfully opens a difficult book.
 
 ```c++
 struct ReaderSettingsBin {

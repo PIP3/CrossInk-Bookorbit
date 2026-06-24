@@ -506,6 +506,23 @@ void RecentBooksGridActivity::showBookActionMenu(const int bookIndex, const bool
                   reloadAfterBookAction();
                 });
             return;
+          case FileBrowserAction::ResetReaderSettings:
+            startActivityForResult(
+                std::make_unique<ConfirmationActivity>(
+                    renderer, mappedInput, BookActions::confirmationHeading(StrId::STR_RESET_BOOK_READER_SETTINGS),
+                    book.title),
+                [this, book](const ActivityResult& confirmation) {
+                  if (!confirmation.isCancelled) {
+                    if (!BookActions::resetBookReaderSettings(book.path)) {
+                      LOG_ERR("RBGA", "Failed to reset reader settings for: %s", book.path.c_str());
+                    } else {
+                      BookActions::drawToast(renderer, tr(STR_BOOK_READER_SETTINGS_RESET));
+                      delay(1000);
+                    }
+                  }
+                  reloadAfterBookAction();
+                });
+            return;
           case FileBrowserAction::ToggleCompleted: {
             bool completed = false;
             if (BookActions::toggleEpubCompleted(book.path, book.title, completed)) {

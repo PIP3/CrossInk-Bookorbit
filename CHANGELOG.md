@@ -18,9 +18,7 @@
 - X3 Tilt Direction now labels left/right choices as `Left-Right` and `Right-Left`, with existing left/right preferences migrated to keep the same physical tilt behavior.
 - EPUB layout now honors publisher page-break CSS, avoids stretching justified spaces before closing punctuation, and keeps large CSS rule sets in a smaller disk-backed lookup cache.
 - EPUB first-open conversion now uses more compact OPF manifest lookups and streams cover-wrapper parsing to avoid large temporary heap buffers on books with huge manifests.
-- EPUB chapters that run out of memory during full CrossInk layout now retry with `Balanced` and then `Light` rendering before showing a low-memory error, and save the first successful fallback for that book.
-- EPUB low-memory layout errors now suggest turning off Bionic Reading or Guide Dots when either reading aid is adding memory pressure.
-- EPUB next-chapter pre-indexing now uses the same render-mode fallbacks as visible chapter loading when layout runs low on memory.
+- EPUB chapters that run out of memory now retry with `Balanced`, `Light`, and final `Safe Mode` rendering before showing an error, apply the same fallbacks during next-chapter pre-indexing, and let book action menus reset a book's reader settings if Safe Mode still cannot open it.
 - EPUB reader font-size changes now restore the current chapter position by content instead of jumping far backward after re-indexing.
 - Reading Stats now use the reader's last live book time-left estimate instead of showing a separate fallback estimate.
 - Per-book reading stats now migrate compatible legacy `stats.bin` files into the `stats_v5.bin` flow instead of resetting when only the old filename exists.
