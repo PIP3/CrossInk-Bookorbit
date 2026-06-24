@@ -138,7 +138,7 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(
     ReaderOptionsActivity::SaveSettingsCallback saveReaderSettingsCallback, void* saveReaderSettingsContext,
     ReaderOptionsActivity::SaveGlobalSettingsCallback saveGlobalSettingsCallback, void* saveGlobalSettingsContext,
     ReaderOptionsActivity::GlobalSettingsEditCallback beginGlobalSettingsEditCallback,
-    void* beginGlobalSettingsEditContext,
+    void* beginGlobalSettingsEditContext, const bool stablePageNumbersAvailable,
     ReaderOptionsActivity::GlobalSettingsEditCallback endGlobalSettingsEditCallback, void* endGlobalSettingsEditContext)
     : Activity("EpubReaderMenu", renderer, mappedInput),
       menuItems(buildMenuItems(hasFootnotes, hasBookmarks, hasClippings, isCurrentPageBookmarked, isBookCompleted,
@@ -156,6 +156,7 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(
       saveGlobalSettingsContext(saveGlobalSettingsContext),
       beginGlobalSettingsEditCallback(beginGlobalSettingsEditCallback),
       beginGlobalSettingsEditContext(beginGlobalSettingsEditContext),
+      stablePageNumbersAvailable(stablePageNumbersAvailable),
       endGlobalSettingsEditCallback(endGlobalSettingsEditCallback),
       endGlobalSettingsEditContext(endGlobalSettingsEditContext) {}
 
@@ -309,7 +310,7 @@ void EpubReaderMenuActivity::loop() {
           std::make_unique<ReaderOptionsActivity>(
               renderer, mappedInput, saveReaderSettingsCallback, saveReaderSettingsContext, saveGlobalSettingsCallback,
               saveGlobalSettingsContext, beginGlobalSettingsEditCallback, beginGlobalSettingsEditContext,
-              endGlobalSettingsEditCallback, endGlobalSettingsEditContext),
+              endGlobalSettingsEditCallback, endGlobalSettingsEditContext, stablePageNumbersAvailable),
           [this, before](const ActivityResult&) {
             settingsChanged = settingsChanged || haveReaderLayoutSettingsChanged(before);
             pendingOrientation = SETTINGS.orientation;  // sync in case orientation changed
