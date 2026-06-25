@@ -4,6 +4,7 @@
 #include <Epub.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include <HalGPIO.h>
 #include <HalStorage.h>
 #include <I18n.h>
 
@@ -36,6 +37,7 @@ constexpr int kCoverCornerRadius = 8;
 constexpr int kStatsColumnWidth = 105;
 constexpr int kStatsColumnWidthWide = 120;
 constexpr int kCoverStatsGap = 15;
+constexpr int kPairInwardShiftX3 = 15;
 constexpr int kTitleTopGap = 28;
 constexpr int kTitleChapterGap = 8;
 constexpr int kFooterIconSize = 24;
@@ -54,7 +56,7 @@ Rect coverRectForScreen(const GfxRenderer& renderer, const Rect& rect) {
   const int maxCoverW = renderer.getScreenWidth() - inset * 2 - statsW - kCoverStatsGap;
   const int coverW = std::min(DashboardMetrics::homeCoverImageWidth, maxCoverW);
   const int coverH = std::min(DashboardMetrics::homeCoverImageHeight, (coverW * 3) / 2);
-  return Rect{inset, rect.y + kTopInset, coverW, coverH};
+  return Rect{inset + (gpio.deviceIsX3() ? kPairInwardShiftX3 : 0), rect.y + kTopInset, coverW, coverH};
 }
 
 Rect fittedBitmapRect(const Bitmap& bitmap, const Rect& target) {
@@ -241,7 +243,7 @@ void drawStatsRow(const GfxRenderer& renderer, const int rightX, const int y, co
 
 void drawDashboardStats(const GfxRenderer& renderer, const Rect& coverRect, const BookReadingStats* stats,
                         const float progressPercent, const bool black = true) {
-  const int rightX = renderer.getScreenWidth() - contentInset(renderer);
+  const int rightX = renderer.getScreenWidth() - contentInset(renderer) - (gpio.deviceIsX3() ? kPairInwardShiftX3 : 0);
   const int blockH = statsBlockHeight(renderer);
   const BookReadingStats emptyStats;
   const BookReadingStats& bookStats = stats != nullptr ? *stats : emptyStats;
