@@ -24,6 +24,7 @@
 namespace {
 constexpr int kDefaultThumbHeight = 180;
 constexpr char kCrossInkLocationsPath[] = "META-INF/x-locations.json";
+constexpr char kCrossInkLocationsFormat[] = "x-locations";
 constexpr size_t kCrossInkLocationsMaxBytes = 64 * 1024;
 constexpr uint32_t kDefaultReferenceWordsPerPage = 250;
 
@@ -1108,7 +1109,8 @@ bool Epub::loadCrossInkLocations() {
   const uint32_t parsedTotalReferencePages = doc["totalReferencePages"] | 0;
   JsonArrayConst spine = doc["spine"];
 
-  if (std::strcmp(format, "crossink-locations") != 0 || version != 1 || parsedTotalLocations == 0 || spine.isNull()) {
+  if (std::strcmp(format, kCrossInkLocationsFormat) != 0 || version != 1 || parsedTotalLocations == 0 ||
+      spine.isNull()) {
     LOG_ERR("EBP", "Ignoring unsupported CrossInk locations manifest");
     return false;
   }
