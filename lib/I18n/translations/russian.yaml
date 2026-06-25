@@ -495,3 +495,4 @@ STR_TOGGLE_BOOKMARK: "Переключить закладку"
 STR_TOGGLE_GUIDE_DOTS: "Направляющие точки"
 
 STR_NEARBY_STATS_VERSION_MISMATCH: "Несовпадение версий. Статистика не синхронизирована"
+STR_STATS_TOTAL_READING_TIME_LBL: "Общее время чтения"

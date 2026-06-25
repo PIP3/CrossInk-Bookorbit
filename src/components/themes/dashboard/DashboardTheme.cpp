@@ -429,23 +429,83 @@ void drawIconLabel(const GfxRenderer& renderer, const uint8_t* icon, const int i
                     visibleLabel.c_str(), !inverted);
 }
 
+void drawRightAlignedIconLabel(const GfxRenderer& renderer, const uint8_t* icon, const int rightX, const int centerY,
+                               const char* label, const int maxTextW, const bool inverted = false) {
+  const std::string visibleLabel = renderer.truncatedText(UI_10_FONT_ID, label, maxTextW);
+  const int labelW = renderer.getTextWidth(UI_10_FONT_ID, visibleLabel.c_str());
+  const int lineH = renderer.getLineHeight(UI_10_FONT_ID);
+  const int textX = rightX - labelW;
+  const int iconX = textX - kFooterIconTextGap - kFooterIconSize;
+  if (inverted) {
+    renderer.drawIconInverted(icon, iconX, centerY - kFooterIconSize / 2, kFooterIconSize, kFooterIconSize);
+  } else {
+    renderer.drawIcon(icon, iconX, centerY - kFooterIconSize / 2, kFooterIconSize, kFooterIconSize);
+  }
+  renderer.drawText(UI_10_FONT_ID, textX, centerY - lineH / 2, visibleLabel.c_str(), !inverted);
+}
+
+void drawLeftAnchoredFooterStat(const GfxRenderer& renderer, const int labelX, const int centerY, const int maxTextW,
+                                const char* value, const char* label, const bool inverted = false) {
+  const int valueLineH = renderer.getLineHeight(UI_12_FONT_ID);
+  const int labelLineH = renderer.getLineHeight(UI_10_FONT_ID);
+  const int totalH = valueLineH + kStatsValueLabelGap + labelLineH;
+  const int valueW = renderer.getTextWidth(UI_12_FONT_ID, value, EpdFontFamily::BOLD);
+  const std::string visibleLabel = renderer.truncatedText(UI_10_FONT_ID, label, maxTextW);
+  const int labelW = renderer.getTextWidth(UI_10_FONT_ID, visibleLabel.c_str());
+  const int topY = centerY - totalH / 2;
+  renderer.drawText(UI_12_FONT_ID, labelX + (labelW - valueW) / 2, topY, value, !inverted, EpdFontFamily::BOLD);
+  renderer.drawText(UI_10_FONT_ID, labelX, topY + valueLineH + kStatsValueLabelGap, visibleLabel.c_str(), !inverted);
+}
+
+void drawRightAnchoredFooterStat(const GfxRenderer& renderer, const int labelRightX, const int centerY,
+                                 const int maxTextW, const char* value, const char* label,
+                                 const bool inverted = false) {
+  const int valueLineH = renderer.getLineHeight(UI_12_FONT_ID);
+  const int labelLineH = renderer.getLineHeight(UI_10_FONT_ID);
+  const int totalH = valueLineH + kStatsValueLabelGap + labelLineH;
+  const int valueW = renderer.getTextWidth(UI_12_FONT_ID, value, EpdFontFamily::BOLD);
+  const std::string visibleLabel = renderer.truncatedText(UI_10_FONT_ID, label, maxTextW);
+  const int labelW = renderer.getTextWidth(UI_10_FONT_ID, visibleLabel.c_str());
+  const int labelX = labelRightX - labelW;
+  const int topY = centerY - totalH / 2;
+  renderer.drawText(UI_12_FONT_ID, labelX + (labelW - valueW) / 2, topY, value, !inverted, EpdFontFamily::BOLD);
+  renderer.drawText(UI_10_FONT_ID, labelX, topY + valueLineH + kStatsValueLabelGap, visibleLabel.c_str(), !inverted);
+}
+
 void drawFooterStats(const GfxRenderer& renderer, const Rect& coverRect, const GlobalReadingStats* globalStats,
                      const bool inverted = false) {
-  char streakBuf[48];
-  formatStreakStat(globalStats, streakBuf, sizeof(streakBuf));
-
   const int inset = contentInset(renderer);
   const int footerY = renderer.getScreenHeight() - DashboardMetrics::values.buttonHintsHeight - kFooterBottomGap;
   const int centerY = std::max(coverRect.y + coverRect.height + 120, footerY);
+
+  if (gpio.deviceIsX4()) {
+    char totalTime[40];
+    char booksRead[16];
+    const uint32_t totalReadingSeconds = globalStats != nullptr ? globalStats->totalReadingSeconds : 0;
+    const uint32_t completedBooks = globalStats != nullptr ? globalStats->completedBooks : 0;
+    BookReadingStats::formatDuration(totalReadingSeconds, totalTime, sizeof(totalTime));
+    snprintf(booksRead, sizeof(booksRead), "%lu", static_cast<unsigned long>(completedBooks));
+
+    const int halfW = renderer.getScreenWidth() / 2;
+    const int maxTextW = std::max(1, halfW - inset * 2);
+    drawLeftAnchoredFooterStat(renderer, coverRect.x, centerY, maxTextW, totalTime,
+                               tr(STR_STATS_TOTAL_READING_TIME_LBL), inverted);
+    const int rightX = renderer.getScreenWidth() - inset;
+    drawRightAnchoredFooterStat(renderer, rightX, centerY, maxTextW, booksRead, tr(STR_STATS_COMPLETED_LBL), inverted);
+    return;
+  }
+
+  char streakBuf[48];
+  formatStreakStat(globalStats, streakBuf, sizeof(streakBuf));
+
   const int leftTextW = renderer.getScreenWidth() / 2 - inset - kFooterIconSize - kFooterIconTextGap;
   drawIconLabel(renderer, StreakIcon, coverRect.x, centerY, streakBuf, leftTextW, inverted);
 
   const char* readerLabel = readerTypeLabel(globalStats);
-  const int readerTextW = renderer.getTextWidth(UI_10_FONT_ID, readerLabel);
-  const int readerBlockW = kFooterIconSize + kFooterIconTextGap + readerTextW;
-  const int readerX = renderer.getScreenWidth() - inset - readerBlockW;
-  const int maxReaderTextW = std::max(1, renderer.getScreenWidth() / 2 - inset);
-  drawIconLabel(renderer, readerTypeIcon(globalStats), readerX, centerY, readerLabel, maxReaderTextW, inverted);
+  const int rightX = renderer.getScreenWidth() - inset - kPairInwardShiftX3;
+  const int maxReaderTextW = std::max(1, renderer.getScreenWidth() / 2 - inset - kFooterIconSize - kFooterIconTextGap);
+  drawRightAlignedIconLabel(renderer, readerTypeIcon(globalStats), rightX, centerY, readerLabel, maxReaderTextW,
+                            inverted);
 }
 
 void drawBookText(const GfxRenderer& renderer, const Rect& coverRect, const RecentBook& book,
