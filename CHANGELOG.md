@@ -10,6 +10,7 @@
 ### Changed
 
 ### Fixed
+- EPUB grayscale page turns on X3 now use the grayscale-aware display base, reducing the moment where new text appears too dark before the anti-aliased overlay finishes.
 
 ## [v1.3.4] - 2026-06-24
 
