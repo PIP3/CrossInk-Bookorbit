@@ -917,8 +917,7 @@ void HomeActivity::showNextRecentBookOnHome() {
   lastCarouselBookIndex = 0;
   bookStatsCached = false;
   updateHighlightedBookContext();
-  coverRendered = false;
-  freeCoverBuffer();
+  invalidateCoverCache();
   requestUpdate();
 }
 
@@ -997,6 +996,11 @@ void HomeActivity::freeCoverBuffer() {
   }
   coverBufferSize = 0;
   coverBufferStored = false;
+}
+
+void HomeActivity::invalidateCoverCache() {
+  coverRendered = false;
+  freeCoverBuffer();
 }
 
 void HomeActivity::freeCarouselFrames() {
@@ -1544,8 +1548,10 @@ void HomeActivity::loop() {
       if (inCarouselRow) {
         lastCarouselBookIndex = selectorIndex;
         selectorIndex = bookCount;
+        invalidateCoverCache();
       } else {
         selectorIndex = lastCarouselBookIndex;
+        invalidateCoverCache();
       }
       requestUpdate();
     }
@@ -1553,8 +1559,10 @@ void HomeActivity::loop() {
       if (inCarouselRow) {
         lastCarouselBookIndex = selectorIndex;
         selectorIndex = bookCount;
+        invalidateCoverCache();
       } else {
         selectorIndex = lastCarouselBookIndex;
+        invalidateCoverCache();
       }
       requestUpdate();
     }
