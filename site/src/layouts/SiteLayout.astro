@@ -1,0 +1,79 @@
+---
+import '../styles/site.css';
+import { getDocs } from '../lib/docs';
+
+type Props = {
+  title?: string;
+  description?: string;
+  pageClass?: string;
+};
+
+const docs = await getDocs();
+const { title = 'CrossInk', description = 'CrossInk firmware documentation', pageClass = '' } = Astro.props;
+const pageTitle = title === 'CrossInk' ? title : `${title} | CrossInk`;
+const currentDoc = docs.find((doc) => Astro.url.pathname === doc.url);
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content={description} />
+    <link rel="icon" href="/favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400..900&display=swap" rel="stylesheet" />
+    <title>{pageTitle}</title>
+  </head>
+  <body class={pageClass}>
+    <header class="site-header">
+      <a class="brand" href="/">
+        <span class="brand-mark">CI</span>
+        <span>
+          <strong>CrossInk</strong>
+          <small>Xteink X4 firmware</small>
+        </span>
+      </a>
+      <nav class="top-nav" aria-label="Primary navigation">
+        <a href="/docs.html">Docs</a>
+        <a href="/installation.html">Install</a>
+        <a href="/reader-features.html">Features</a>
+        <a href="https://github.com/uxjulia/CrossInk">GitHub</a>
+      </nav>
+    </header>
+    <slot name="hero" />
+    <div class="shell">
+      <aside class="docs-sidebar" aria-label="Documentation navigation">
+        <div class="sidebar-title">Documentation</div>
+        <nav>
+          {
+            docs.map((doc) => (
+              <a class:list={['sidebar-link', { active: Astro.url.pathname === doc.url }]} href={doc.url}>
+                {doc.title}
+              </a>
+            ))
+          }
+        </nav>
+      </aside>
+      <main class="content">
+        <details class="mobile-docs-nav">
+          <summary>
+            <span>Docs</span>
+            {currentDoc && <strong>{currentDoc.title}</strong>}
+          </summary>
+          <nav aria-label="Mobile documentation navigation">
+            {
+              docs.map((doc) => (
+                <a class:list={['mobile-docs-link', { active: Astro.url.pathname === doc.url }]} href={doc.url}>
+                  {doc.title}
+                </a>
+              ))
+            }
+          </nav>
+        </details>
+        <slot />
+      </main>
+    </div>
+  </body>
+</html>
