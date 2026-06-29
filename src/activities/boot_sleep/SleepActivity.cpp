@@ -734,6 +734,9 @@ void SleepActivity::renderDashboardSleepScreen() const {
   const std::string chapterTitle = loadChapterTitleForPath(path);
   DashboardTheme theme;
   theme.drawSleepScreen(renderer, book, &bookStats, &globalStats, progressPercent, chapterTitle.c_str());
+  if (sleepCoverFilterInvertsGeneratedScreen()) {
+    renderer.invertScreen();
+  }
   renderer.displayBuffer(HalDisplay::HALF_REFRESH, TURN_OFF_SCREEN_AFTER_SLEEP_REFRESH);
 }
 
