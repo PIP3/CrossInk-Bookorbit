@@ -1,4 +1,20 @@
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'astro/config';
+
+// Docs live at the repo root (../docs), outside the Astro project root, so Vite's
+// file watcher never sees them and edits to docs/**/*.md don't hot reload in dev.
+// Add the docs directory to the dev watcher so content edits invalidate and refresh.
+const docsDir = fileURLToPath(new URL('../docs', import.meta.url));
+
+function watchExternalDocs() {
+  return {
+    name: 'crossink:watch-external-docs',
+    apply: 'serve',
+    configureServer(server) {
+      server.watcher.add(docsDir);
+    }
+  };
+}
 
 function rewriteMarkdownLinks() {
   return (tree) => {
@@ -37,6 +53,9 @@ export default defineConfig({
   },
   markdown: {
     remarkPlugins: [rewriteMarkdownLinks]
+  },
+  vite: {
+    plugins: [watchExternalDocs()]
   },
   site: 'https://crossink.uxj.io'
 });

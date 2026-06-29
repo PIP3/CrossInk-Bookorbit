@@ -1,9 +1,9 @@
 ---
-title: Font Build Variants
-nav_order: 12
+title: CrossInk Build Variants
+nav_order: 3
 ---
 
-# Font Build Variants
+# CrossInk Build Variants
 
 CrossInk ships multiple firmware build variants because the ESP32-C3 has limited flash and RAM. The variants trade available point sizes against emoji and miscellaneous-symbol support.
 

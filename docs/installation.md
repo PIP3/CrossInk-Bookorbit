@@ -1,11 +1,13 @@
 ---
 title: Installation
-nav_order: 14
+nav_order: 2
 ---
 
 # Installation
 
-## Web Installer
+## Web Installation via USB
+
+#### For new installs and updates for unlocked devices.
 
 1. Download the `firmware-*.bin` file for the build variant of your choosing from the [releases page](https://github.com/uxjulia/CrossInk/releases).
 2. Connect your Xteink X4 or X3 to your computer via USB-C and wake/unlock the device.
@@ -14,6 +16,22 @@ nav_order: 14
 5. Choose the `firmware-*.bin` file you downloaded and click **Flash**.
 
 To revert back to the official firmware, flash the latest official firmware from <https://crosspointreader.com/#flash-tools>.
+
+## SD Card Firmware Update
+
+#### For installing newer versions of CrossInk. Can be used by USB locked devices.
+
+1. Download the `firmware-*.bin` file for the build variant of your choosing from the [releases page](https://github.com/uxjulia/CrossInk/releases).
+2. Place the downloaded `firmware-*.bin` file in your SD card. You can place this file anywhere.
+3. Go to `Settings > System > SD Card Firmware Update` and navigate to the `.bin` file and update.
+
+## USB Locked Devices
+
+If your device has USB data transfer disabled and you are currently still on Stock XTEINK firmware:
+
+1. Download the `firmware-*.bin` file for the build variant of your choosing from the [releases page](https://github.com/uxjulia/CrossInk/releases).
+2. Rename the file to `update.bin` and place it at the root of your SD card (i.e. not in a folder).
+3. Plug your device into a USB cable to receive power, then hold the **power** + **up** buttons until you see a message that the update is applying (**Up** on the X3 is the button on the left side of the device).
 
 ## Command Line
 

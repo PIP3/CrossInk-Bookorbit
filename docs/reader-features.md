@@ -1,6 +1,6 @@
 ---
 title: Reader Features
-nav_order: 17
+nav_order: 5
 ---
 
 # Reader Features
@@ -117,9 +117,6 @@ The in-app clipping list is stored separately from the text export. Deleting a
 clipping from CrossInk removes the saved clipping and highlight from the device
 UI, but it does not rewrite old entries that were already appended to
 `/My Clippings.txt`.
-
-For storage paths and binary format details, see [Data Cache](./data-cache.md)
-and [File Formats](./file-formats.md).
 
 ## Reading Stats
 

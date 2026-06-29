@@ -1,12 +1,17 @@
+---
+title: Troubleshooting
+nav_order: 14
+---
+
 # Troubleshooting
 
 This document shows common issues and possible solutions while using the device features.
 
 - [Troubleshooting](#troubleshooting)
-    - [Cannot See the Device on the Network](#cannot-see-the-device-on-the-network)
-    - [Connection Drops or Times Out](#connection-drops-or-times-out)
-    - [Upload Fails](#upload-fails)
-    - [Saved Password Not Working](#saved-password-not-working)
+  - [Cannot See the Device on the Network](#cannot-see-the-device-on-the-network)
+  - [Connection Drops or Times Out](#connection-drops-or-times-out)
+  - [Upload Fails](#upload-fails)
+  - [Saved Password Not Working](#saved-password-not-working)
 
 ### Cannot See the Device on the Network
 

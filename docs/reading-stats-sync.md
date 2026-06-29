@@ -1,11 +1,11 @@
 ---
 title: Reading Stats Sync
-nav_order: 6
+nav_order: 7
 ---
 
 # Reading Stats Sync
 
-CrossInk can sync all-time reading stats between nearby readers running CrossInk from **File Transfer > Nearby Stats Sync**. The sync is direct reader-to-reader; it does not use a server, account, or one "main" reader. This only works with CrossInk reading stats. This will *NOT* work with any other firmware's reading stats.
+CrossInk can sync all-time reading stats between nearby readers running CrossInk from **File Transfer > Nearby Stats Sync**. The sync is direct reader-to-reader; it does not use a server, account, or one "main" reader. This only works with CrossInk reading stats. This will _NOT_ work with any other firmware's reading stats.
 
 ## What Gets Synced
 

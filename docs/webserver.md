@@ -23,11 +23,11 @@ networks or in hotspot mode when you control who is connected.
 1. From the Home screen, select **File Transfer**.
 2. Choose one of the available modes:
 
-| Mode | Use when |
-|------|----------|
-| **Join Network** | You want the reader to join an existing Wi-Fi network. |
+| Mode                 | Use when                                                               |
+| -------------------- | ---------------------------------------------------------------------- |
+| **Join Network**     | You want the reader to join an existing Wi-Fi network.                 |
 | **Calibre Wireless** | You want to receive books from the CrossPoint Calibre plugin workflow. |
-| **Create Hotspot** | You want the reader to create its own open Wi-Fi network. |
+| **Create Hotspot**   | You want the reader to create its own open Wi-Fi network.              |
 
 ## Join Network Mode
 
@@ -140,13 +140,6 @@ upload.
 Installed fonts appear in **Settings > Reader > Font Family** after the font
 registry refreshes.
 
-## Command Line Use
-
-Power users can use `curl`, WebDAV clients, or WebSocket clients while the web
-server is running.
-
-Endpoint details are documented in [webserver-endpoints.md](./webserver-endpoints.md).
-
 ## Security Notes
 
 - The HTTP server runs on port 80.
@@ -163,10 +156,3 @@ Endpoint details are documented in [webserver-endpoints.md](./webserver-endpoint
 3. Move closer to the router if upload progress stalls in Join Network mode.
 4. Upload custom fonts through the Fonts page or copy them to `/.fonts/` or `/fonts/` on the SD card.
 5. Exit File Transfer mode when finished to conserve battery.
-
-## Related Documentation
-
-- [User Guide](../USER_GUIDE.md)
-- [Webserver Endpoints](./webserver-endpoints.md)
-- [SD Card Fonts](./sd-card-fonts.md)
-- [Troubleshooting](./troubleshooting.md)

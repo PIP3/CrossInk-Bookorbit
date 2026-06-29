@@ -19,25 +19,36 @@ export type DocEntry = {
   load: () => Promise<DocModule>;
 };
 
-const modules = import.meta.glob<DocModule>('../../../docs/**/*.md');
+const modules = import.meta.glob<DocModule>("../../../docs/**/*.md");
+
+// Slugs that are too technical/internal for the public docs site. These are
+// dropped from both the nav and route generation, so the pages are not built.
+const HIDDEN_SLUGS = new Set([
+  "hyphenation-trie-format",
+  "activity-manager",
+  "i18n",
+  "translators",
+  "webserver-endpoints",
+]);
+
 const visibleModules = Object.fromEntries(
-  Object.entries(modules).filter(([path]) => !path.includes('/docs/contributing/'))
+  Object.entries(modules).filter(
+    ([path]) => !path.includes("/docs/contributing/") && !HIDDEN_SLUGS.has(slugFromPath(path)),
+  ),
 );
 
 function titleFromSlug(slug: string) {
-  const leaf = slug.split('/').pop() ?? slug;
-  return leaf
-    .replace(/-/g, ' ')
-    .replace(/\b\w/g, (char) => char.toUpperCase());
+  const leaf = slug.split("/").pop() ?? slug;
+  return leaf.replace(/-/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function slugFromPath(path: string) {
-  let slug = path.replace('../../../docs/', '').replace(/\.md$/, '');
-  if (slug.endsWith('/README')) {
-    slug = slug.replace(/\/README$/, '/index');
+  let slug = path.replace("../../../docs/", "").replace(/\.md$/, "");
+  if (slug.endsWith("/README")) {
+    slug = slug.replace(/\/README$/, "/index");
   }
-  if (slug === 'index') {
-    slug = 'docs';
+  if (slug === "index") {
+    slug = "docs";
   }
   return slug;
 }
@@ -59,9 +70,9 @@ export async function getDocs(): Promise<DocEntry[]> {
         navOrder: mod.frontmatter.nav_order ?? 999,
         parent: mod.frontmatter.parent,
         hasChildren: mod.frontmatter.has_children ?? false,
-        load
+        load,
       };
-    })
+    }),
   );
 
   return entries.sort((a, b) => {
