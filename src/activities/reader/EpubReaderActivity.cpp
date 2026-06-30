@@ -2833,8 +2833,8 @@ void EpubReaderActivity::openAutoPageTurnIntervalPicker(const bool ignoreInitial
   startActivityForResult(
       std::make_unique<IntervalSelectionActivity>(
           renderer, mappedInput, "EpubReaderAutoPageTurnInterval", StrId::STR_AUTO_TURN_INTERVAL_SECONDS,
-          StrId::STR_AUTO_TURN_STEP_HINT, getAutoPageTurnIntervalSeconds(), MIN_AUTO_PAGE_TURN_INTERVAL_S,
-          MAX_AUTO_PAGE_TURN_INTERVAL_S, 1, 5, StrId::STR_NONE_OPT, /*readerActivity=*/true,
+          getAutoPageTurnIntervalSeconds(), MIN_AUTO_PAGE_TURN_INTERVAL_S, MAX_AUTO_PAGE_TURN_INTERVAL_S, 1, 5,
+          StrId::STR_NONE_OPT, /*readerActivity=*/true,
           /*allowPowerAsConfirm=*/true, ignoreInitialConfirmRelease),
       [this](const ActivityResult& result) {
         if (!result.isCancelled) {

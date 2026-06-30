@@ -357,9 +357,9 @@ void ReaderOptionsActivity::toggleCurrentSetting() {
 void ReaderOptionsActivity::openLineHeightPicker() {
   startActivityForResult(
       std::make_unique<IntervalSelectionActivity>(
-          renderer, mappedInput, "ReaderOptionsLineHeightInterval", StrId::STR_LINE_SPACING,
-          StrId::STR_PERCENT_STEP_HINT, SETTINGS.lineHeightPercent, CrossPointSettings::MIN_LINE_HEIGHT_PERCENT,
-          CrossPointSettings::MAX_LINE_HEIGHT_PERCENT, 1, 10, StrId::STR_NONE_OPT, /*readerActivity=*/true,
+          renderer, mappedInput, "ReaderOptionsLineHeightInterval", StrId::STR_LINE_SPACING, SETTINGS.lineHeightPercent,
+          CrossPointSettings::MIN_LINE_HEIGHT_PERCENT, CrossPointSettings::MAX_LINE_HEIGHT_PERCENT, 1, 10,
+          StrId::STR_NONE_OPT, /*readerActivity=*/true,
           /*allowPowerAsConfirm=*/true, /*ignoreInitialConfirmRelease=*/false, /*showPercentValue=*/true),
       [this](const ActivityResult& result) {
         if (!result.isCancelled) {
