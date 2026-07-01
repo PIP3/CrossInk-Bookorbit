@@ -42,26 +42,6 @@ int readerFontIdForRenderer(const GfxRenderer* renderer) { return renderer ? SET
 
 namespace SleepCoverAssets {
 
-bool prepareEpub(const Epub& epub, const GfxRenderer* renderer) {
-  bool success = true;
-  const int readerFontId = readerFontIdForRenderer(renderer);
-  if (shouldPrepareFullCover()) {
-    const bool cropped = SETTINGS.sleepScreenCoverMode == CrossPointSettings::SLEEP_SCREEN_COVER_MODE::CROP;
-    success = epub.generateCoverBmp(cropped, renderer, readerFontId) && success;
-  }
-  if (shouldPrepareMinimalCover()) {
-    success =
-        epub.generateAdaptiveThumbBmp(kMinimalSleepCoverWidth, kMinimalSleepCoverHeight, renderer, readerFontId) &&
-        success;
-  }
-  if (shouldPrepareDashboardCover()) {
-    success =
-        epub.generateAdaptiveThumbBmp(kDashboardSleepCoverWidth, kDashboardSleepCoverHeight, renderer, readerFontId) &&
-        success;
-  }
-  return success;
-}
-
 bool prepareXtc(const Xtc& xtc) {
   bool success = true;
   if (shouldPrepareFullCover()) {
@@ -105,6 +85,34 @@ bool prepareFullCoverForPath(const std::string& bookPath, const bool cropped, co
       return false;
     }
     return xtc.generateCoverBmp();
+  }
+  if (FsHelpers::hasTxtExtension(bookPath) || FsHelpers::hasMarkdownExtension(bookPath)) {
+    Txt txt(bookPath, "/.crosspoint");
+    return txt.generateCoverBmp();
+  }
+  return false;
+}
+
+bool prepareMinimalCoverForPath(const std::string& bookPath, const GfxRenderer* renderer) {
+  if (bookPath.empty()) {
+    return false;
+  }
+
+  if (FsHelpers::hasEpubExtension(bookPath)) {
+    Epub epub(bookPath, "/.crosspoint");
+    if (!epub.load(/*buildIfMissing=*/true, /*skipLoadingCss=*/true)) {
+      return false;
+    }
+    return epub.generateAdaptiveThumbBmp(kMinimalSleepCoverWidth, kMinimalSleepCoverHeight, renderer,
+                                         readerFontIdForRenderer(renderer));
+  }
+  if (FsHelpers::hasXtcExtension(bookPath)) {
+    Xtc xtc(bookPath, "/.crosspoint");
+    if (!xtc.load()) {
+      return false;
+    }
+    return xtc.generateThumbBmp(static_cast<uint16_t>(kMinimalSleepCoverWidth),
+                                static_cast<uint16_t>(kMinimalSleepCoverHeight));
   }
   if (FsHelpers::hasTxtExtension(bookPath) || FsHelpers::hasMarkdownExtension(bookPath)) {
     Txt txt(bookPath, "/.crosspoint");

@@ -188,7 +188,7 @@ std::string getReusableCoverPath(const RecentBook& book) {
 }
 
 bool ensureReusableCoverPath(RecentBook& book) {
-  if (book.coverBmpPath.empty() || hasThumbnailPlaceholder(book.coverBmpPath)) {
+  if (hasThumbnailPlaceholder(book.coverBmpPath)) {
     return false;
   }
 
@@ -634,6 +634,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
       progress++;
       continue;
     }
+    ensureReusableCoverPath(book);
     if (!book.coverBmpPath.empty()) {
       if (isCarouselTheme) {
         // For carousel: generate exact-size thumbnails for the center image rect and side slots.
@@ -653,7 +654,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
               popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
             }
             GUI.fillPopupProgress(renderer, popupRect, 10 + progress * progressIncrement);
-            if (!epub.load(false, true)) {
+            if (!epub.load(true, true)) {
               LOG_ERR("HOME", "carousel: failed to load EPUB cache for thumb generation: %s", book.path.c_str());
               updateRecentBookCoverPath(book, "");
               book.coverBmpPath = "";
@@ -724,7 +725,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
               popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
             }
             GUI.fillPopupProgress(renderer, popupRect, 10 + progress * progressIncrement);
-            if (!epub.load(false, true)) {
+            if (!epub.load(true, true)) {
               LOG_ERR("HOME", "failed to load EPUB cache for thumb generation: %s", book.path.c_str());
               updateRecentBookCoverPath(book, "");
               book.coverBmpPath = "";

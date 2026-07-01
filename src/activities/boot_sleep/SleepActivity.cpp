@@ -681,6 +681,9 @@ void SleepActivity::renderMinimalSleepScreen() const {
 
   RecentBook book = recentBookForPath(path);
   book.coverBmpPath = SleepCoverAssets::cachedMinimalCoverPathFor(path);
+  if (book.coverBmpPath.empty() && SleepCoverAssets::prepareMinimalCoverForPath(path, &renderer)) {
+    book.coverBmpPath = SleepCoverAssets::cachedMinimalCoverPathFor(path);
+  }
 
   const BookReadingStats bookStats = loadBookStatsForPath(path);
   const float progressPercent = RecentBookProgress::loadPercent(book);
@@ -700,6 +703,9 @@ void SleepActivity::renderMinimalStatsSleepScreen() const {
 
   RecentBook book = recentBookForPath(path);
   book.coverBmpPath = SleepCoverAssets::cachedMinimalCoverPathFor(path);
+  if (book.coverBmpPath.empty() && SleepCoverAssets::prepareMinimalCoverForPath(path, &renderer)) {
+    book.coverBmpPath = SleepCoverAssets::cachedMinimalCoverPathFor(path);
+  }
 
   const BookReadingStats bookStats = loadBookStatsForPath(path);
   const GlobalReadingStats globalStats = GlobalReadingStats::load();
