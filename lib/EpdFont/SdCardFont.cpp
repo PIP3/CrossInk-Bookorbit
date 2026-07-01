@@ -1051,9 +1051,11 @@ void SdCardFont::clearCache() {
   }
 }
 
-void SdCardFont::releaseForLowMemory() {
+void SdCardFont::releaseForLowMemory(const bool preserveAdvanceTable) {
   clearOverflow();
-  clearPersistentCache();
+  if (!preserveAdvanceTable) {
+    clearPersistentCache();
+  }
 
   for (uint8_t i = 0; i < MAX_STYLES; i++) {
     if (!styles_[i].present) continue;

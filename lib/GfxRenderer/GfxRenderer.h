@@ -161,7 +161,7 @@ class GfxRenderer {
                              uint8_t styleMask = 0x0F) const;
   void ensureSdCardFontReady(int fontId, const uint32_t* codepoints, uint32_t cpCount, bool includeSpace,
                              bool includeHyphen, uint8_t styleMask = 0x0F) const;
-  bool releaseSdCardFontForLowMemory(int fontId) const;
+  bool releaseSdCardFontForLowMemory(int fontId, bool preserveAdvanceTable = false) const;
 
   // Orientation control (affects logical width/height and coordinate transforms)
   void setOrientation(const Orientation o) { orientation = o; }

@@ -123,11 +123,11 @@ void GfxRenderer::ensureSdCardFontReady(int fontId, const uint32_t* codepoints, 
   }
 }
 
-bool GfxRenderer::releaseSdCardFontForLowMemory(int fontId) const {
+bool GfxRenderer::releaseSdCardFontForLowMemory(int fontId, const bool preserveAdvanceTable) const {
   auto it = sdCardFonts_.find(fontId);
   if (it == sdCardFonts_.end()) return false;
 
-  it->second->releaseForLowMemory();
+  it->second->releaseForLowMemory(preserveAdvanceTable);
   return true;
 }
 
