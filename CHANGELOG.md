@@ -10,10 +10,16 @@
 ### Changed
 - Settings with three or more choices, including Language, now open an inline popup menu instead of cycling through every option one press at a time.
 - EPUB parsing, large-book metadata indexing, and generated cover conversion now use more arena-backed scratch buffers to reduce heap fragmentation during heavy book processing.
+- EPUB section layout reuses more text-line scratch buffers and writes less empty per-word metadata, reducing first-open chapter build work.
+- EPUB CSS cache lookups now hydrate selector rules into arena-backed memory when heap allows, reducing repeated SD-card reads while building pages.
+- EPUB section builds now batch SD-card font advance metric prewarming for a chapter before layout, reducing repeated small SD reads while pages are built.
+- Home and sleep screens now regenerate missing EPUB cover thumbnails on demand instead of generating them during reader startup.
+- EPUB cover generation now caches the extracted source cover image and Home reuses one metadata load for highlighted-book progress and chapter title.
 
 ### Fixed
 - Auto Turn interval settings and related action prompts opened from a long-press shortcut now stay open after releasing the shortcut button.
 - Font selection no longer reopens the font preview after choosing a font.
+- EPUB CSS caches are now validated before reuse so stale stylesheet caches are rebuilt instead of silently opening chapters without publisher CSS.
 - Chinese and other large SD-card font EPUBs no longer overlap characters after font or line-spacing changes exhaust the small glyph-advance cache.
 - EPUB clipping selection now falls back to a built-in UI font if an SD-card reader font cannot be prewarmed, avoiding replacement-glyph pages and low-memory crashes while leaving the reader font unchanged.
 - EPUB cover and thumbnail generation now releases SD-card reader font caches before JPEG/PNG decoding when heap is tight, reducing cover failures with custom fonts selected.

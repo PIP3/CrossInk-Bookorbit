@@ -209,7 +209,7 @@ std::string getReusableCoverPath(const RecentBook& book) {
 }
 
 void ensureReusableCoverPath(RecentBook& book) {
-  if (book.coverBmpPath.empty() || hasThumbnailPlaceholder(book.coverBmpPath)) {
+  if (hasThumbnailPlaceholder(book.coverBmpPath)) {
     return;
   }
 
@@ -279,7 +279,7 @@ void RecentBooksGridActivity::loadPageCovers(int pageStart) {
     if (needsCoverThumbGeneration(book, coverPath)) {
       if (FsHelpers::hasEpubExtension(book.path)) {
         Epub epub(book.path, "/.crosspoint");
-        if (epub.load(false, true)) {
+        if (epub.load(true, true)) {
           if (!showingLoading) {
             showingLoading = true;
             popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));

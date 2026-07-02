@@ -50,6 +50,8 @@ class SdCardFont {
   // Returns number of codepoints not found in font coverage.
   int buildAdvanceTable(const char* utf8Text, uint8_t styleMask = 0x0F);
   int buildAdvanceTable(const std::vector<std::string>& words, bool includeHyphen, uint8_t styleMask = 0x0F);
+  int buildAdvanceTableForCodepoints(const uint32_t* codepoints, uint32_t cpCount, bool includeSpace,
+                                     bool includeHyphen, uint8_t styleMask = 0x0F);
 
   // Look up advanceX for a codepoint from the advance table.
   // Returns the 12.4 fixed-point advance, or 0 if not found.
@@ -67,7 +69,7 @@ class SdCardFont {
   // Release optional resident caches before memory-heavy work such as EPUB
   // image extraction. Keeps the font loaded and usable, but future layout or
   // rendering may need to re-read font metadata from SD.
-  void releaseForLowMemory();
+  void releaseForLowMemory(bool preserveAdvanceTable = false);
 
   // Drop the persistent advance cache. Call when unloading the SD font or
   // when font/size/family/glyph-table state changes.

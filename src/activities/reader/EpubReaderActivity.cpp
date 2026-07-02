@@ -44,7 +44,6 @@
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
 #include "WordRef.h"
-#include "activities/boot_sleep/SleepCoverAssets.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "activities/util/IntervalSelectionActivity.h"
 #include "clippings/ClippingsManager.h"
@@ -1731,7 +1730,6 @@ void EpubReaderActivity::onEnter() {
   APP_STATE.openEpubPath = epub->getPath();
   APP_STATE.saveToFile();
   RECENT_BOOKS.addOrUpdateBook(epub->getPath(), epub->getTitle(), epub->getAuthor(), epub->getThumbBmpPath());
-  SleepCoverAssets::prepareEpub(*epub, &renderer);
 
   // Trigger first update
   requestUpdate();
