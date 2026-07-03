@@ -20,14 +20,38 @@
 #include "MappedInputManager.h"
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
+#include "BookStatsActivity.h"
+#include "XtcReaderMenuActivity.h"
 #include "XtcReaderChapterSelectionActivity.h"
 #include "activities/boot_sleep/SleepCoverAssets.h"
+#include "activities/util/ConfirmationActivity.h"
 #include "components/UITheme.h"
 #include "components/themes/lyra/LyraCarouselTheme.h"
 #include "fontIds.h"
+#include "util/BookCacheUtils.h"
 
 namespace {
 constexpr unsigned long MIN_READING_STATS_PAGE_MS = 2000UL;
+
+std::string confirmationHeading(const StrId actionLabelId) {
+  return std::string(tr(STR_CONFIRM)) + ": " + std::string(I18N.get(actionLabelId));
+}
+
+void drawToast(const GfxRenderer& renderer, const char* msg) {
+  constexpr int toastPadX = 20;
+  constexpr int toastPadY = 12;
+  const bool toastBackgroundBlack = ReaderUtils::readerForegroundBlack();
+  const int msgW = renderer.getTextWidth(UI_10_FONT_ID, msg);
+  const int msgH = renderer.getLineHeight(UI_10_FONT_ID);
+  const int toastW = msgW + toastPadX * 2;
+  const int toastH = msgH + toastPadY * 2;
+  const int toastX = (renderer.getScreenWidth() - toastW) / 2;
+  const int toastY = (renderer.getScreenHeight() - toastH) / 2;
+  renderer.fillRect(toastX, toastY, toastW, toastH, toastBackgroundBlack);
+  renderer.drawRect(toastX, toastY, toastW, toastH, !toastBackgroundBlack);
+  renderer.drawText(UI_10_FONT_ID, toastX + toastPadX, toastY + toastPadY, msg, !toastBackgroundBlack);
+  renderer.displayBuffer();
+}
 }
 
 void XtcReaderActivity::onEnter() {
@@ -82,19 +106,22 @@ void XtcReaderActivity::onExit() {
 }
 
 void XtcReaderActivity::loop() {
-  // Enter chapter selection activity
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    if (xtc && xtc->hasChapters() && !xtc->getChapters().empty()) {
-      pauseReadingStatsTimer("chapter_selection");
-      startActivityForResult(
-          std::make_unique<XtcReaderChapterSelectionActivity>(renderer, mappedInput, xtc, currentPage),
-          [this](const ActivityResult& result) {
-            if (!result.isCancelled) {
-              currentPage = std::get<PageResult>(result.data).page;
-            }
-            resumeReadingStatsTimer("chapter_selection_return");
-          });
-    }
+    const bool hasChapters = xtc && xtc->hasChapters() && !xtc->getChapters().empty();
+    pauseReadingStatsTimer("reader_menu");
+    startActivityForResult(
+        std::make_unique<XtcReaderMenuActivity>(renderer, mappedInput, xtc ? xtc->getTitle() : std::string{},
+                                                hasChapters, stats.isCompleted),
+        [this](const ActivityResult& result) {
+          const auto* menu = std::get_if<MenuResult>(&result.data);
+          if (result.isCancelled || menu == nullptr) {
+            resumeReadingStatsTimer("reader_menu_return");
+            requestUpdate();
+            return;
+          }
+          onReaderMenuConfirm(menu->action);
+        });
+    return;
   }
 
   if (longPressBackHandled) {
@@ -385,6 +412,185 @@ void XtcReaderActivity::commitReadingStats() {
   }
   stats.save(xtc->getCachePath());
   globalStats.save();
+}
+
+void XtcReaderActivity::resetCurrentBookStatsAfterDelete() {
+  stats = BookReadingStats{};
+  sessionReadingSeconds = 0;
+  hasSessionStartLocalDateTime = getCurrentLocalReadingStatsDateTime(sessionStartLocalDateTime);
+}
+
+void XtcReaderActivity::setBookCompleted(const bool isCompleted) {
+  if (!xtc || stats.isCompleted == isCompleted) {
+    return;
+  }
+
+  stats.isCompleted = isCompleted;
+  if (isCompleted && !stats.finishedDateManual) {
+    ReadingStatsDateTime now;
+    if (getCurrentLocalReadingStatsDateTime(now)) {
+      stats.finishedDate = now.date;
+    }
+  }
+
+  if (isCompleted) {
+    globalStats.completedBooks++;
+  } else if (globalStats.completedBooks > 0) {
+    globalStats.completedBooks--;
+  }
+
+  stats.save(xtc->getCachePath());
+  globalStats.save();
+}
+
+float XtcReaderActivity::getCurrentBookProgressPercent() const {
+  if (!xtc || xtc->getPageCount() == 0) {
+    return -1.0f;
+  }
+  const uint32_t pageCount = xtc->getPageCount();
+  const uint32_t clampedPage = currentPage >= pageCount ? pageCount - 1 : currentPage;
+  return static_cast<float>(xtc->calculateProgress(clampedPage));
+}
+
+void XtcReaderActivity::openChapterSelection() {
+  if (!xtc || !xtc->hasChapters() || xtc->getChapters().empty()) {
+    resumeReadingStatsTimer("chapter_selection_unavailable");
+    requestUpdate();
+    return;
+  }
+
+  startActivityForResult(std::make_unique<XtcReaderChapterSelectionActivity>(renderer, mappedInput, xtc, currentPage),
+                         [this](const ActivityResult& result) {
+                           if (!result.isCancelled) {
+                             currentPage = std::get<PageResult>(result.data).page;
+                           }
+                           resumeReadingStatsTimer("chapter_selection_return");
+                           requestUpdate();
+                         });
+}
+
+void XtcReaderActivity::openReadingStats() {
+  if (!xtc) {
+    resumeReadingStatsTimer("book_stats_no_book");
+    requestUpdate();
+    return;
+  }
+
+  BookReadingStats displayStats = stats;
+  if (SETTINGS.shouldTrackReadingStats()) {
+    displayStats.totalReadingSeconds = displayStats.totalReadingSeconds > UINT32_MAX - sessionReadingSeconds
+                                           ? UINT32_MAX
+                                           : displayStats.totalReadingSeconds + sessionReadingSeconds;
+    uint32_t currentPageSeconds = 0;
+    if (currentPageReadingSecondsForStats(currentPageSeconds, "book_stats_preview")) {
+      displayStats.totalReadingSeconds = displayStats.totalReadingSeconds > UINT32_MAX - currentPageSeconds
+                                             ? UINT32_MAX
+                                             : displayStats.totalReadingSeconds + currentPageSeconds;
+    }
+  }
+
+  const bool hasSyncedStats = GlobalReadingStats::hasSyncedStats();
+  const GlobalReadingStats displayAllDevicesStats =
+      hasSyncedStats ? GlobalReadingStats::loadAggregated(globalStats) : GlobalReadingStats{};
+  if (hasSyncedStats) {
+    startActivityForResult(std::make_unique<BookStatsActivity>(renderer, mappedInput, xtc->getTitle(), xtc->getCachePath(),
+                                                               displayStats, getCurrentBookProgressPercent(), false, 0,
+                                                               globalStats, displayAllDevicesStats),
+                           [this](const ActivityResult&) {
+                             if (xtc) {
+                               stats = BookReadingStats::load(xtc->getCachePath());
+                             }
+                             globalStats = GlobalReadingStats::load();
+                             resumeReadingStatsTimer("book_stats_return");
+                             requestUpdate();
+                           });
+  } else {
+    startActivityForResult(std::make_unique<BookStatsActivity>(renderer, mappedInput, xtc->getTitle(), xtc->getCachePath(),
+                                                               displayStats, getCurrentBookProgressPercent(), false, 0,
+                                                               globalStats),
+                           [this](const ActivityResult&) {
+                             if (xtc) {
+                               stats = BookReadingStats::load(xtc->getCachePath());
+                             }
+                             globalStats = GlobalReadingStats::load();
+                             resumeReadingStatsTimer("book_stats_return");
+                             requestUpdate();
+                           });
+  }
+}
+
+void XtcReaderActivity::deleteBookStats() {
+  startActivityForResult(std::make_unique<ConfirmationActivity>(renderer, mappedInput,
+                                                                confirmationHeading(StrId::STR_DELETE_BOOK_STATS),
+                                                                xtc ? xtc->getTitle() : std::string{}),
+                         [this](const ActivityResult& result) {
+                           bool statsDeleted = false;
+                           if (!result.isCancelled && xtc) {
+                             {
+                               RenderLock lock(*this);
+                               statsDeleted = BookReadingStats::remove(xtc->getCachePath());
+                               if (statsDeleted) {
+                                 resetCurrentBookStatsAfterDelete();
+                               }
+                             }
+                             if (statsDeleted) {
+                               drawToast(renderer, tr(STR_BOOK_STATS_DELETED));
+                               delay(1000);
+                             } else {
+                               LOG_ERR("XTR", "Failed to delete book stats");
+                             }
+                           }
+                           resumeReadingStatsTimer("delete_stats_return");
+                           requestUpdate();
+                         });
+}
+
+void XtcReaderActivity::deleteBookCache() {
+  startActivityForResult(
+      std::make_unique<ConfirmationActivity>(renderer, mappedInput, confirmationHeading(StrId::STR_DELETE_CACHE),
+                                             xtc ? xtc->getTitle() : std::string{}),
+      [this](const ActivityResult& result) {
+        bool cacheDeleted = false;
+        if (!result.isCancelled && xtc) {
+          {
+            RenderLock lock(*this);
+            stats.save(xtc->getCachePath());
+            cacheDeleted = clearBookCachePreservingUserState(xtc->getPath());
+            xtc->setupCacheDir();
+            stats.save(xtc->getCachePath());
+          }
+          if (cacheDeleted) {
+            drawToast(renderer, tr(STR_BOOK_CACHE_DELETED));
+            delay(1000);
+          } else {
+            LOG_ERR("XTR", "Failed to delete book cache");
+          }
+        }
+        resumeReadingStatsTimer("delete_cache_return");
+        requestUpdate();
+      });
+}
+
+void XtcReaderActivity::onReaderMenuConfirm(const int action) {
+  switch (static_cast<XtcReaderMenuActivity::MenuAction>(action)) {
+    case XtcReaderMenuActivity::MenuAction::SELECT_CHAPTER:
+      openChapterSelection();
+      break;
+    case XtcReaderMenuActivity::MenuAction::READING_STATS:
+      openReadingStats();
+      break;
+    case XtcReaderMenuActivity::MenuAction::TOGGLE_COMPLETED:
+      setBookCompleted(!stats.isCompleted);
+      resumeReadingStatsTimer("toggle_completed_return");
+      requestUpdate();
+      break;
+    case XtcReaderMenuActivity::MenuAction::DELETE_STATS:
+      deleteBookStats();
+      break;
+    case XtcReaderMenuActivity::MenuAction::DELETE_CACHE:
+      deleteBookCache();
+      break;
+  }
 }
 
 bool XtcReaderActivity::executeLongPressBackAction() {

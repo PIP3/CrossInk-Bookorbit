@@ -50,6 +50,14 @@ class XtcReaderActivity final : public Activity {
   void recordCurrentPageReadingTime(const char* source = "unknown");
   void recordForwardPageTurn(uint32_t seconds);
   void commitReadingStats();
+  void resetCurrentBookStatsAfterDelete();
+  void setBookCompleted(bool isCompleted);
+  float getCurrentBookProgressPercent() const;
+  void openChapterSelection();
+  void openReadingStats();
+  void deleteBookStats();
+  void deleteBookCache();
+  void onReaderMenuConfirm(int action);
   bool executeLongPressBackAction();
 
  public:
