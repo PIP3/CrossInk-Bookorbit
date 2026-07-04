@@ -16,6 +16,10 @@
 - Home and sleep screens now do more EPUB cover and thumbnail work on demand, reducing reader startup work and reusing cached cover data where possible.
 - ChareInk is no longer bundled as a built-in reader font choice, reducing firmware size while keeping the remaining built-in fonts' fallback glyph coverage.
 
+### Removed
+
+- Teensy firmware builds are no longer produced for releases or release candidates.
+
 ### Fixed
 
 - KOSync now frees SD-card font registry memory before TLS requests and releases the EPUB before upload, reducing sync low-memory failures with many SD fonts installed.
