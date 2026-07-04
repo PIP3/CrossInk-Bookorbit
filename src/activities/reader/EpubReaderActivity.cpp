@@ -1292,6 +1292,13 @@ bool EpubReaderActivity::estimateRemainingTimeLeftPages(const bool bookEstimate,
   }
 
   if (!bookEstimate) {
+    const float rawProgress = static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount);
+    const auto grouped = epub->resolveChapterGroupProgress(currentSpineIndex, rawProgress);
+    if (grouped.valid) {
+      remainingPages = grouped.remainingPages;
+      return remainingPages > 0.0f;
+    }
+
     const int remainingChapterPages = static_cast<int>(section->pageCount) - section->currentPage - 1;
     if (remainingChapterPages <= 0) {
       return false;
@@ -4434,17 +4441,26 @@ void EpubReaderActivity::drawClippingHighlights(const Page& page, const int font
 }
 
 void EpubReaderActivity::renderStatusBar() const {
-  const int currentPage = section->currentPage + 1;
-  const int pageCount = section->pageCount;
+  int currentPage = section->currentPage + 1;
+  int pageCount = section->pageCount;
   const float bookProgress = activeFootnotePreview ? 0.0f : getCurrentBookProgressPercent();
-  const float chapterProgress = (section->pageCount > 0)
-                                    ? static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount)
-                                    : 0.0f;
+  const float sectionProgress =
+      (section->pageCount > 0) ? static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount)
+                               : 0.0f;
+  float chapterProgress = sectionProgress;
+  if (!activeFootnotePreview) {
+    const auto grouped = epub->resolveChapterGroupProgress(currentSpineIndex, sectionProgress);
+    if (grouped.valid) {
+      currentPage = static_cast<int>(grouped.currentPage);
+      pageCount = static_cast<int>(grouped.pageCount);
+      chapterProgress = grouped.chapterProgress;
+    }
+  }
 
   uint32_t referencePage = 0;
   uint32_t referencePageCount = 0;
   if (activeFootnotePreview || !SETTINGS.stablePageNumbers ||
-      !epub->resolveReferencePage(currentSpineIndex, chapterProgress, referencePage, referencePageCount)) {
+      !epub->resolveReferencePage(currentSpineIndex, sectionProgress, referencePage, referencePageCount)) {
     referencePage = 0;
     referencePageCount = 0;
   }
@@ -4478,11 +4494,8 @@ void EpubReaderActivity::renderStatusBar() const {
     title = epub->getTitle();
   }
 
-  const float rawProgress = (section->pageCount > 0)
-                                ? (static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount))
-                                : 0.0f;
   const bool bookmarked =
-      !activeFootnotePreview && BOOKMARKS.hasBookmarkForPage(static_cast<uint16_t>(currentSpineIndex), rawProgress,
+      !activeFootnotePreview && BOOKMARKS.hasBookmarkForPage(static_cast<uint16_t>(currentSpineIndex), sectionProgress,
                                                              section->pageCount > 0 ? section->pageCount : 1);
   char timeLeftLabel[24] = {};
   const char* timeLeft =

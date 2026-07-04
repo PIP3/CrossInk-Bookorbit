@@ -183,6 +183,27 @@ Some sources are generated and should not be edited manually.
 
 When editing related source assets, regenerate via normal build steps/scripts.
 
+### Web portal preview
+
+When editing the web portal under `web/`, use the local preview server to see
+the composed pages without flashing a device:
+
+```sh
+python3 scripts/preview_web.py
+```
+
+The preview is available at `http://localhost:8000`. Pass a port number to use a
+different port:
+
+```sh
+python3 scripts/preview_web.py 9000
+```
+
+The preview server re-renders `web/templates/base.html`, `web/pages/*`, and
+shared assets on refresh, and it serves mock API responses for Files, Settings,
+Fonts, Wi-Fi, and OPDS data. It is for browser iteration only; firmware builds
+still use `scripts/build_web.py` to generate the flash-served headers.
+
 ## Key directories
 
 - `src/`: app orchestration, settings/state, and activity implementations

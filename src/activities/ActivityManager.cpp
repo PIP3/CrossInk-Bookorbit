@@ -292,6 +292,8 @@ void ActivityManager::popActivity() {
 
 bool ActivityManager::preventAutoSleep() const { return currentActivity && currentActivity->preventAutoSleep(); }
 
+bool ActivityManager::isHomeActivity() const { return currentActivity && currentActivity->name == "Home"; }
+
 bool ActivityManager::isReaderActivity() const {
   if (currentActivity && currentActivity->isReaderActivity()) {
     return true;

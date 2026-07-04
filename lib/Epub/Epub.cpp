@@ -25,14 +25,14 @@
 
 namespace {
 constexpr int kDefaultThumbHeight = 180;
-constexpr char kCrossInkLocationsPath[] = "META-INF/x-locations.json";
-constexpr char kCrossInkLocationsFormat[] = "x-locations";
-constexpr char kLegacyCrossInkLocationsFormat[] = "crossink-locations";
-constexpr size_t kCrossInkLocationsMaxBytes = 64 * 1024;
-constexpr uint32_t kDefaultReferenceWordsPerPage = 250;
+constexpr char kXLocationsPath[] = "META-INF/x-locations.json";
+constexpr char kXLocationsFormat[] = "x-locations";
+constexpr char kLegacyXLocationsFormat[] = "crossink-locations";
+constexpr size_t kXLocationsMaxBytes = 64 * 1024;
+constexpr uint32_t kDefaultReferenceCharactersPerPage = 1500;
 
 bool isSupportedLocationsFormat(const char* format) {
-  return std::strcmp(format, kCrossInkLocationsFormat) == 0 || std::strcmp(format, kLegacyCrossInkLocationsFormat) == 0;
+  return std::strcmp(format, kXLocationsFormat) == 0 || std::strcmp(format, kLegacyXLocationsFormat) == 0;
 }
 
 float clampUnit(const float value) {
@@ -638,7 +638,7 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
         }
       }
     }
-    loadCrossInkLocations();
+    loadXLocations();
     LOG_DBG("EBP", "Loaded ePub: %s", filepath.c_str());
     return true;
   }
@@ -746,7 +746,7 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
     return false;
   }
 
-  loadCrossInkLocations();
+  loadXLocations();
   LOG_DBG("EBP", "Loaded ePub: %s", filepath.c_str());
   return true;
 }
@@ -1100,13 +1100,14 @@ bool Epub::getItemSize(const std::string& itemHref, size_t* size) const {
   return ZipFile(filepath).getInflatedFileSize(path.c_str(), size);
 }
 
-bool Epub::loadCrossInkLocations() {
+bool Epub::loadXLocations() {
   locationSpine.clear();
+  locationChapterGroups.clear();
   totalLocations = 0;
   totalWords = 0;
   wordsPerReferencePage = 0;
   totalReferencePages = 0;
-  crossinkLocationsLoaded = false;
+  xLocationsLoaded = false;
 
   if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
     return false;
@@ -1118,18 +1119,18 @@ bool Epub::loadCrossInkLocations() {
   }
 
   size_t manifestSize = 0;
-  if (!getItemSize(kCrossInkLocationsPath, &manifestSize)) {
+  if (!getItemSize(kXLocationsPath, &manifestSize)) {
     return false;
   }
-  if (manifestSize == 0 || manifestSize > kCrossInkLocationsMaxBytes) {
-    LOG_ERR("EBP", "Ignoring CrossInk locations manifest with unsupported size: %zu bytes", manifestSize);
+  if (manifestSize == 0 || manifestSize > kXLocationsMaxBytes) {
+    LOG_ERR("EBP", "Ignoring X locations manifest with unsupported size: %zu bytes", manifestSize);
     return false;
   }
 
   size_t bytesRead = 0;
-  uint8_t* manifestData = readItemContentsToBytes(kCrossInkLocationsPath, &bytesRead, true);
+  uint8_t* manifestData = readItemContentsToBytes(kXLocationsPath, &bytesRead, true);
   if (!manifestData) {
-    LOG_ERR("EBP", "Failed to read CrossInk locations manifest");
+    LOG_ERR("EBP", "Failed to read X locations manifest");
     return false;
   }
 
@@ -1138,7 +1139,7 @@ bool Epub::loadCrossInkLocations() {
   free(manifestData);
 
   if (err) {
-    LOG_ERR("EBP", "CrossInk locations parse error: %s", err.c_str());
+    LOG_ERR("EBP", "X locations parse error: %s", err.c_str());
     return false;
   }
 
@@ -1146,12 +1147,19 @@ bool Epub::loadCrossInkLocations() {
   const int version = doc["version"] | 0;
   const uint32_t parsedTotalLocations = doc["totalLocations"] | 0;
   const uint32_t parsedTotalWords = doc["totalWords"] | 0;
+  const uint32_t parsedTotalCharacters = doc["totalCharacters"] | 0;
   const uint32_t parsedWordsPerReferencePage = doc["wordsPerReferencePage"] | 0;
+  const uint32_t parsedCharactersPerReferencePage = doc["charactersPerReferencePage"] | 0;
+  const bool useCharacterReferencePages = parsedTotalCharacters > 0 && parsedCharactersPerReferencePage > 0;
+  const uint32_t parsedReferenceUnits = useCharacterReferencePages ? parsedTotalCharacters : parsedTotalWords;
+  const uint32_t parsedReferenceUnitsPerPage =
+      useCharacterReferencePages ? parsedCharactersPerReferencePage : parsedWordsPerReferencePage;
   const uint32_t parsedTotalReferencePages = doc["totalReferencePages"] | 0;
   JsonArrayConst spine = doc["spine"];
+  JsonArrayConst chapterGroups = doc["chapterGroups"];
 
   if (!isSupportedLocationsFormat(format) || version != 1 || parsedTotalLocations == 0 || spine.isNull()) {
-    LOG_ERR("EBP", "Ignoring unsupported CrossInk locations manifest");
+    LOG_ERR("EBP", "Ignoring unsupported X locations manifest");
     return false;
   }
 
@@ -1167,17 +1175,22 @@ bool Epub::loadCrossInkLocations() {
 
     const uint32_t startLocation = spineItem["startLocation"] | 0;
     const uint32_t endLocation = spineItem["endLocation"] | 0;
-    const uint32_t wordStart = spineItem["wordStart"] | 0;
-    const uint32_t wordCount = spineItem["wordCount"] | 0;
+    const uint32_t wordStart =
+        useCharacterReferencePages ? (spineItem["characterStart"] | 0) : (spineItem["wordStart"] | 0);
+    const uint32_t wordCount =
+        useCharacterReferencePages ? (spineItem["characterCount"] | 0) : (spineItem["wordCount"] | 0);
+    const int chapterGroup = spineItem["chapterGroup"] | -1;
     if (startLocation == 0 && endLocation == 0) {
       continue;
     }
     if (startLocation == 0 || endLocation < startLocation || endLocation > parsedTotalLocations) {
-      LOG_ERR("EBP", "Ignoring invalid CrossInk location range at spine %d", index);
+      LOG_ERR("EBP", "Ignoring invalid X location range at spine %d", index);
       continue;
     }
 
-    locationSpine[static_cast<size_t>(index)] = {startLocation, endLocation, wordStart, wordCount};
+    const uint16_t parsedChapterGroup =
+        chapterGroup >= 0 && chapterGroup <= UINT16_MAX ? static_cast<uint16_t>(chapterGroup) : UINT16_MAX;
+    locationSpine[static_cast<size_t>(index)] = {startLocation, endLocation, wordStart, wordCount, parsedChapterGroup};
     hasValidEntry = true;
   }
 
@@ -1187,14 +1200,51 @@ bool Epub::loadCrossInkLocations() {
   }
 
   totalLocations = parsedTotalLocations;
-  totalWords = parsedTotalWords;
-  wordsPerReferencePage = parsedWordsPerReferencePage > 0 ? parsedWordsPerReferencePage : kDefaultReferenceWordsPerPage;
+  totalWords = parsedReferenceUnits;
+  wordsPerReferencePage =
+      parsedReferenceUnitsPerPage > 0 ? parsedReferenceUnitsPerPage : kDefaultReferenceCharactersPerPage;
   totalReferencePages = parsedTotalReferencePages;
   if (totalReferencePages == 0 && totalWords > 0 && wordsPerReferencePage > 0) {
     totalReferencePages = (totalWords + wordsPerReferencePage - 1) / wordsPerReferencePage;
   }
-  crossinkLocationsLoaded = true;
-  LOG_INF("EBP", "Loaded CrossInk locations: %lu locations, %lu reference pages across %zu spine items",
+  if (!chapterGroups.isNull()) {
+    const size_t groupCount = chapterGroups.size();
+    if (groupCount > 0 && groupCount <= static_cast<size_t>(spineCount)) {
+      locationChapterGroups.assign(groupCount, {});
+      std::vector<bool> validGroups(groupCount, false);
+      size_t ordinalGroup = 0;
+      for (JsonObjectConst group : chapterGroups) {
+        const int index = group["index"] | static_cast<int>(ordinalGroup);
+        ordinalGroup++;
+        if (index < 0 || index >= static_cast<int>(groupCount)) {
+          continue;
+        }
+
+        const int startSpineIndex = group["startSpineIndex"] | -1;
+        const int endSpineIndex = group["endSpineIndex"] | -1;
+        const uint32_t wordStart =
+            useCharacterReferencePages ? (group["characterStart"] | 0) : (group["wordStart"] | 0);
+        const uint32_t wordCount =
+            useCharacterReferencePages ? (group["characterCount"] | 0) : (group["wordCount"] | 0);
+        if (startSpineIndex < 0 || endSpineIndex < startSpineIndex || endSpineIndex >= spineCount || wordCount == 0 ||
+            wordStart >= totalWords) {
+          continue;
+        }
+
+        locationChapterGroups[static_cast<size_t>(index)] = {
+            static_cast<uint16_t>(startSpineIndex), static_cast<uint16_t>(endSpineIndex), wordStart, wordCount};
+        validGroups[static_cast<size_t>(index)] = true;
+      }
+
+      for (auto& entry : locationSpine) {
+        if (entry.chapterGroup >= validGroups.size() || !validGroups[entry.chapterGroup]) {
+          entry.chapterGroup = UINT16_MAX;
+        }
+      }
+    }
+  }
+  xLocationsLoaded = true;
+  LOG_INF("EBP", "Loaded X locations: %lu locations, %lu reference pages across %zu spine items",
           static_cast<unsigned long>(totalLocations), static_cast<unsigned long>(totalReferencePages),
           locationSpine.size());
   return true;
@@ -1324,7 +1374,7 @@ float Epub::calculateSizeProgress(const int currentSpineIndex, const float curre
 
 // Calculate progress in book (returns 0.0-1.0)
 float Epub::calculateProgress(const int currentSpineIndex, const float currentSpineRead) const {
-  if (!crossinkLocationsLoaded || totalLocations == 0 || currentSpineIndex < 0 ||
+  if (!xLocationsLoaded || totalLocations == 0 || currentSpineIndex < 0 ||
       currentSpineIndex >= static_cast<int>(locationSpine.size())) {
     return calculateSizeProgress(currentSpineIndex, currentSpineRead);
   }
@@ -1341,7 +1391,7 @@ float Epub::calculateProgress(const int currentSpineIndex, const float currentSp
 }
 
 bool Epub::resolveLocationPercentToSpineProgress(const int percent, int& spineIndex, float& spineProgress) const {
-  if (!crossinkLocationsLoaded || totalLocations == 0 || locationSpine.empty()) {
+  if (!xLocationsLoaded || totalLocations == 0 || locationSpine.empty()) {
     return false;
   }
 
@@ -1391,7 +1441,7 @@ bool Epub::resolveReferencePage(const int currentSpineIndex, const float current
                                 uint32_t& pageCount) const {
   currentPage = 0;
   pageCount = 0;
-  if (!crossinkLocationsLoaded || totalWords == 0 || wordsPerReferencePage == 0 || totalReferencePages == 0 ||
+  if (!xLocationsLoaded || totalWords == 0 || wordsPerReferencePage == 0 || totalReferencePages == 0 ||
       currentSpineIndex < 0 || currentSpineIndex >= static_cast<int>(locationSpine.size())) {
     return false;
   }
@@ -1407,6 +1457,40 @@ bool Epub::resolveReferencePage(const int currentSpineIndex, const float current
   currentPage = std::min<uint32_t>(completedWords / wordsPerReferencePage + 1, totalReferencePages);
   pageCount = totalReferencePages;
   return true;
+}
+
+Epub::ChapterGroupProgress Epub::resolveChapterGroupProgress(const int currentSpineIndex,
+                                                             const float currentSpineRead) const {
+  ChapterGroupProgress result;
+  if (!xLocationsLoaded || wordsPerReferencePage == 0 || currentSpineIndex < 0 ||
+      currentSpineIndex >= static_cast<int>(locationSpine.size())) {
+    return result;
+  }
+
+  const LocationSpineEntry& spineEntry = locationSpine[static_cast<size_t>(currentSpineIndex)];
+  if (spineEntry.chapterGroup >= locationChapterGroups.size() || spineEntry.wordCount == 0) {
+    return result;
+  }
+
+  const LocationChapterGroupEntry& group = locationChapterGroups[spineEntry.chapterGroup];
+  if (group.wordCount == 0 || currentSpineIndex < group.startSpineIndex || currentSpineIndex > group.endSpineIndex ||
+      spineEntry.wordStart < group.wordStart) {
+    return result;
+  }
+
+  const float clampedProgress = clampUnit(currentSpineRead);
+  const uint32_t completedSpineWords =
+      static_cast<uint32_t>(clampedProgress * static_cast<float>(spineEntry.wordCount));
+  const uint32_t completedGroupWords = (spineEntry.wordStart - group.wordStart) + completedSpineWords;
+  const uint32_t clampedGroupWords = std::min<uint32_t>(completedGroupWords, group.wordCount);
+  result.pageCount = std::max<uint32_t>(1, (group.wordCount + wordsPerReferencePage - 1) / wordsPerReferencePage);
+  result.currentPage = std::min<uint32_t>(clampedGroupWords / wordsPerReferencePage + 1, result.pageCount);
+  result.chapterProgress = static_cast<float>(clampedGroupWords) / static_cast<float>(group.wordCount);
+  if (result.currentPage < result.pageCount) {
+    result.remainingPages = static_cast<float>(result.pageCount - result.currentPage);
+  }
+  result.valid = true;
+  return result;
 }
 
 int Epub::resolveHrefToSpineIndex(const std::string& href) const {

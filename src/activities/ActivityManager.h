@@ -114,6 +114,7 @@ class ActivityManager {
   void popActivity();
 
   bool preventAutoSleep() const;
+  bool isHomeActivity() const;
   bool isReaderActivity() const;
   bool canSnapshotForSleepOverlay() const;
   bool skipLoopDelay() const;
