@@ -2607,7 +2607,9 @@ void ChapterHtmlSlimParser::prewarmSectionAdvanceTable(FsFile& file) const {
           static_cast<unsigned>(cpCount), millis() - startMs, ESP.getFreeHeap(), ESP.getMaxAllocHeap());
 }
 
-bool ChapterHtmlSlimParser::parseAndBuildPages() {
+ChapterHtmlSlimParser::~ChapterHtmlSlimParser() { abortParse(); }
+
+bool ChapterHtmlSlimParser::beginParse() {
   malformedMarkupTruncated = false;
   // Initialize block style stack with a root entry representing "no ancestor block elements".
   // The user's paragraph alignment is set as the default so child elements without explicit
@@ -2643,25 +2645,21 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
     ancestorStack_.reserve(32);
   }
 
-  XML_Parser parser = XML_ParserCreate(nullptr);
-  int done = 0;
-
-  if (!parser) {
+  activeParser = XML_ParserCreate(nullptr);
+  if (!activeParser) {
     LOG_ERR("EHP", "Couldn't allocate memory for parser");
     parseArena_.release();
     inlineStyleBuf_ = nullptr;
     blockStyleBuf_ = nullptr;
     return false;
   }
-  activeParser = parser;
 
   // Handle HTML entities (like &nbsp;) that aren't in XML spec or DTD
   // Using DefaultHandlerExpand preserves normal entity expansion from DOCTYPE
-  XML_SetDefaultHandlerExpand(parser, defaultHandlerExpand);
+  XML_SetDefaultHandlerExpand(activeParser, defaultHandlerExpand);
 
-  FsFile file;
-  if (!Storage.openFileForRead("EHP", filepath, file)) {
-    destroyXmlParser(parser);
+  if (!Storage.openFileForRead("EHP", filepath, parseFile_)) {
+    destroyXmlParser(activeParser);
     activeParser = nullptr;
     parseArena_.release();
     inlineStyleBuf_ = nullptr;
@@ -2670,83 +2668,84 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
   }
 
   // Get file size to decide whether to show indexing popup.
-  if (popupFn && file.size() >= MIN_SIZE_FOR_POPUP) {
+  if (popupFn && parseFile_.size() >= MIN_SIZE_FOR_POPUP) {
     popupFn();
   }
 
-  XML_SetUserData(parser, this);
-  XML_SetElementHandler(parser, startElement, endElement);
-  XML_SetCharacterDataHandler(parser, characterData);
+  XML_SetUserData(activeParser, this);
+  XML_SetElementHandler(activeParser, startElement, endElement);
+  XML_SetCharacterDataHandler(activeParser, characterData);
 
   // Compute the time taken to parse and build pages
-  const uint32_t chapterStartTime = millis();
-  prewarmSectionAdvanceTable(file);
-  do {
-    void* const buf = XML_GetBuffer(parser, PARSE_BUFFER_SIZE);
-    if (!buf) {
-      LOG_ERR("EHP", "Couldn't allocate memory for buffer");
-      destroyXmlParser(parser);
-      activeParser = nullptr;
-      file.close();
-      parseArena_.release();
-      inlineStyleBuf_ = nullptr;
-      blockStyleBuf_ = nullptr;
-      return false;
+  parseStartTime_ = millis();
+  prewarmSectionAdvanceTable(parseFile_);
+  return true;
+}
+
+ChapterHtmlSlimParser::ParseStatus ChapterHtmlSlimParser::parseStep() {
+  if (!activeParser) {
+    LOG_ERR("EHP", "parseStep called without an active parser");
+    return ParseStatus::Error;
+  }
+
+  void* const buf = XML_GetBuffer(activeParser, PARSE_BUFFER_SIZE);
+  if (!buf) {
+    LOG_ERR("EHP", "Couldn't allocate memory for buffer");
+    return ParseStatus::Error;
+  }
+
+  const size_t len = parseFile_.read(buf, PARSE_BUFFER_SIZE);
+  if (len == 0 && parseFile_.available() > 0) {
+    LOG_ERR("EHP", "File read error");
+    return ParseStatus::Error;
+  }
+
+  const bool done = parseFile_.available() == 0;
+  const XML_Status parseStatus = XML_ParseBuffer(activeParser, static_cast<int>(len), done);
+  if (parseStatus == XML_STATUS_ERROR && !previewStopRequested) {
+    LOG_ERR("EHP", "Parse error at line %lu:\n%s", XML_GetCurrentLineNumber(activeParser),
+            XML_ErrorString(XML_GetErrorCode(activeParser)));
+    if (isPreviewBuild()) {
+      return ParseStatus::Error;
     }
+    malformedMarkupTruncated = true;
+    return ParseStatus::Done;
+  }
 
-    const size_t len = file.read(buf, PARSE_BUFFER_SIZE);
+  if (lowMemoryAbort) {
+    LOG_ERR("EHP", "Aborting section parse due to low heap");
+    return ParseStatus::Error;
+  }
 
-    if (len == 0 && file.available() > 0) {
-      LOG_ERR("EHP", "File read error");
-      destroyXmlParser(parser);
-      activeParser = nullptr;
-      file.close();
-      parseArena_.release();
-      inlineStyleBuf_ = nullptr;
-      blockStyleBuf_ = nullptr;
-      return false;
-    }
+  if (done || previewStopRequested || parseStatus == XML_STATUS_SUSPENDED) {
+    return ParseStatus::Done;
+  }
+  return ParseStatus::More;
+}
 
-    done = file.available() == 0;
+void ChapterHtmlSlimParser::abortParse() {
+  if (activeParser) {
+    destroyXmlParser(activeParser);
+    activeParser = nullptr;
+  }
+  if (parseFile_) {
+    parseFile_.close();
+  }
+  parseArena_.release();
+  inlineStyleBuf_ = nullptr;
+  inlineStyleCount_ = 0;
+  blockStyleBuf_ = nullptr;
+  blockStyleCount_ = 0;
+}
 
-    const XML_Status parseStatus = XML_ParseBuffer(parser, static_cast<int>(len), done);
-    if (parseStatus == XML_STATUS_ERROR && !previewStopRequested) {
-      LOG_ERR("EHP", "Parse error at line %lu:\n%s", XML_GetCurrentLineNumber(parser),
-              XML_ErrorString(XML_GetErrorCode(parser)));
-      if (isPreviewBuild()) {
-        destroyXmlParser(parser);
-        activeParser = nullptr;
-        file.close();
-        parseArena_.release();
-        inlineStyleBuf_ = nullptr;
-        blockStyleBuf_ = nullptr;
-        return false;
-      }
-      malformedMarkupTruncated = true;
-      done = true;
-    }
-    if (previewStopRequested || parseStatus == XML_STATUS_SUSPENDED) {
-      done = true;
-    }
-
-    if (lowMemoryAbort) {
-      LOG_ERR("EHP", "Aborting section parse due to low heap");
-      destroyXmlParser(parser);
-      activeParser = nullptr;
-      file.close();
-      parseArena_.release();
-      inlineStyleBuf_ = nullptr;
-      blockStyleBuf_ = nullptr;
-      return false;
-    }
-
-  } while (!done);
-  LOG_DBG("EHP", "Time to parse and build pages: %lu ms (free=%u, maxAlloc=%u)", millis() - chapterStartTime,
-          ESP.getFreeHeap(), ESP.getMaxAllocHeap());
-
-  destroyXmlParser(parser);
-  activeParser = nullptr;
-  file.close();
+bool ChapterHtmlSlimParser::finishParse() {
+  if (activeParser) {
+    LOG_DBG("EHP", "Time to parse and build pages: %lu ms (free=%u, maxAlloc=%u)", millis() - parseStartTime_,
+            ESP.getFreeHeap(), ESP.getMaxAllocHeap());
+    destroyXmlParser(activeParser);
+    activeParser = nullptr;
+  }
+  parseFile_.close();
 
   if (malformedMarkupTruncated) {
     LOG_DBG("EHP", "Malformed markup encountered; finalizing partial chapter content");
@@ -2762,18 +2761,18 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
   // Process last page if there is still text
   if (isPreviewBuild() && !previewAnchorFound) {
     LOG_ERR("EHP", "Preview anchor '%s' was not found", previewAnchor.c_str());
-    parseArena_.release();
-    inlineStyleBuf_ = nullptr;
-    blockStyleBuf_ = nullptr;
+    abortParse();
     return false;
   }
 
   if (currentTextBlock && !previewStopRequested) {
     if (shouldAbortForLowMemory("final page layout")) {
+      abortParse();
       return false;
     }
     makePages();
     if (lowMemoryAbort) {
+      abortParse();
       return false;
     }
     if (!pendingAnchorId.empty()) {
@@ -2804,6 +2803,23 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
   blockStyleBuf_ = nullptr;
 
   return true;
+}
+
+bool ChapterHtmlSlimParser::parseAndBuildPages() {
+  if (!beginParse()) {
+    return false;
+  }
+  for (;;) {
+    const ParseStatus status = parseStep();
+    if (status == ParseStatus::Error) {
+      abortParse();
+      return false;
+    }
+    if (status == ParseStatus::Done) {
+      break;
+    }
+  }
+  return finishParse();
 }
 
 void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {

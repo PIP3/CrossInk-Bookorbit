@@ -672,9 +672,8 @@ bool SdCardFont::readAdvance(uint32_t codepoint, uint8_t style, uint16_t* outAdv
 
   const uint8_t styleIdx = resolveStyle(style);
   if (styleIdx >= MAX_STYLES || !styles_[styleIdx].present) return false;
-  if (advanceTableLookup(styleIdx, codepoint, outAdvance)) return true;
-
   const auto& s = styles_[styleIdx];
+  if (advanceTableLookup(styleIdx, codepoint, outAdvance)) return true;
   if (!s.fullIntervals && !s.bmpIntervals) return false;
 
   int32_t glyphIndex = findGlobalGlyphIndex(s, codepoint);

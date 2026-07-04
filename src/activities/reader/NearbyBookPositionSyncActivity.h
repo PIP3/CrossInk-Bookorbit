@@ -18,7 +18,8 @@ class NearbyBookPositionSyncActivity final : public Activity {
                                           std::shared_ptr<Epub> epub, const std::string& epubPath,
                                           int currentSpineIndex, int currentPage, int totalPagesInSpine,
                                           KOReaderPosition localKoPos, std::string localChapterName,
-                                          std::optional<uint16_t> currentParagraphIndex = std::nullopt);
+                                          std::optional<uint16_t> currentParagraphIndex = std::nullopt,
+                                          std::optional<uint16_t> currentListItemIndex = std::nullopt);
   ~NearbyBookPositionSyncActivity() override;
 
   void onEnter() override;
@@ -91,6 +92,7 @@ class NearbyBookPositionSyncActivity final : public Activity {
   int currentPage_ = 0;
   int totalPagesInSpine_ = 1;
   std::optional<uint16_t> currentParagraphIndex_;
+  std::optional<uint16_t> currentListItemIndex_;
   KOReaderPosition localKoPosition_;
   CompactPosition localPosition_ = {};
   CompactPosition peerPosition_ = {};

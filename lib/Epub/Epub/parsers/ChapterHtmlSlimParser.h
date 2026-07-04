@@ -79,6 +79,8 @@ class ChapterHtmlSlimParser {
   bool previewStopRequested = false;
   bool malformedMarkupTruncated = false;
   XML_Parser activeParser = nullptr;
+  FsFile parseFile_;
+  uint32_t parseStartTime_ = 0;
 
   // Style tracking (replaces depth-based approach)
   struct StyleStackEntry {
@@ -245,10 +247,22 @@ class ChapterHtmlSlimParser {
         imageBasePath(imageBasePath),
         tocAnchors(std::move(tocAnchors)) {}
 
-  ~ChapterHtmlSlimParser() = default;
+  ~ChapterHtmlSlimParser();
   bool parseAndBuildPages();
+  enum class ParseStatus { More, Done, Error };
+  bool beginParse();
+  ParseStatus parseStep();
+  bool finishParse();  // flush the trailing page and tear down; returns true
+  void abortParse();   // tear down without flushing (error / abandon)
+
   void addLineToPage(std::shared_ptr<TextBlock> line);
   const std::vector<std::pair<std::string, uint16_t>>& getAnchors() const { return anchorData; }
   bool wasLowMemoryFallbackTriggered() const { return lowMemoryImageFallback; }
   bool wasLowMemoryAbortTriggered() const { return lowMemoryAbort; }
+
+  // Byte progress of the in-flight parse, used to estimate a still-building section's total page
+  // count (a giant single-spine book never fully lays out, so its real count is unknown). Valid
+  // between beginParse() and finishParse()/abortParse().
+  size_t parseBytesConsumed() { return parseFile_ ? parseFile_.position() : 0; }
+  size_t parseTotalBytes() { return parseFile_ ? parseFile_.size() : 0; }
 };

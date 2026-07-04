@@ -44,7 +44,8 @@ NearbyBookPositionSyncActivity::NearbyBookPositionSyncActivity(GfxRenderer& rend
                                                                int currentSpineIndex, int currentPage,
                                                                int totalPagesInSpine, KOReaderPosition localKoPos,
                                                                std::string localChapterName,
-                                                               std::optional<uint16_t> currentParagraphIndex)
+                                                               std::optional<uint16_t> currentParagraphIndex,
+                                                               std::optional<uint16_t> currentListItemIndex)
     : Activity("NearbyBookPositionSync", renderer, mappedInput),
       epub_(std::move(epub)),
       epubPath_(epubPath),
@@ -53,6 +54,7 @@ NearbyBookPositionSyncActivity::NearbyBookPositionSyncActivity(GfxRenderer& rend
       currentPage_(currentPage),
       totalPagesInSpine_(totalPagesInSpine),
       currentParagraphIndex_(currentParagraphIndex),
+      currentListItemIndex_(currentListItemIndex),
       localKoPosition_(std::move(localKoPos)) {}
 
 NearbyBookPositionSyncActivity::~NearbyBookPositionSyncActivity() = default;
@@ -524,7 +526,8 @@ NearbyBookPositionSyncActivity::NearbyBookPositionSyncActivity(GfxRenderer& rend
                                                                int currentSpineIndex, int currentPage,
                                                                int totalPagesInSpine, KOReaderPosition localKoPos,
                                                                std::string localChapterName,
-                                                               std::optional<uint16_t> currentParagraphIndex)
+                                                               std::optional<uint16_t> currentParagraphIndex,
+                                                               std::optional<uint16_t> currentListItemIndex)
     : Activity("NearbyBookPositionSync", renderer, mappedInput),
       eventMutex_(xSemaphoreCreateMutex()),
       epub_(std::move(epub)),
@@ -534,6 +537,7 @@ NearbyBookPositionSyncActivity::NearbyBookPositionSyncActivity(GfxRenderer& rend
       currentPage_(currentPage),
       totalPagesInSpine_(std::max(1, totalPagesInSpine)),
       currentParagraphIndex_(currentParagraphIndex),
+      currentListItemIndex_(currentListItemIndex),
       localKoPosition_(std::move(localKoPos)) {}
 
 NearbyBookPositionSyncActivity::~NearbyBookPositionSyncActivity() {
@@ -569,6 +573,10 @@ bool NearbyBookPositionSyncActivity::prepareLocalPosition() {
   if (currentParagraphIndex_.has_value() && *currentParagraphIndex_ != UINT16_MAX) {
     localPosition_.paragraphIndex = *currentParagraphIndex_;
     localPosition_.hasParagraphIndex = true;
+  }
+  if (currentListItemIndex_.has_value() && *currentListItemIndex_ != 0 && *currentListItemIndex_ != UINT16_MAX) {
+    localPosition_.liIndex = *currentListItemIndex_;
+    localPosition_.hasLiIndex = true;
   }
   if (localKoPosition_.xpath.size() <= MAX_XPATH_BYTES) {
     copyBounded(localPosition_.xpath.data(), localPosition_.xpath.size(), localKoPosition_.xpath.c_str(),
