@@ -219,10 +219,10 @@ void ChapterHtmlSlimParser::updateEffectiveInlineStyle() {
   // Start with block-level styles
   effectiveBold = currentCssStyle.hasFontWeight() && currentCssStyle.fontWeight == CssFontWeight::Bold;
   effectiveItalic = currentCssStyle.hasFontStyle() && currentCssStyle.fontStyle == CssFontStyle::Italic;
-  effectiveUnderline =
-      currentCssStyle.hasTextDecoration() && currentCssStyle.textDecoration == CssTextDecoration::Underline;
-  effectiveStrikethrough =
-      currentCssStyle.hasTextDecoration() && currentCssStyle.textDecoration == CssTextDecoration::LineThrough;
+  effectiveUnderline = currentCssStyle.hasTextDecoration() &&
+                       (currentCssStyle.textDecoration & CssTextDecoration::Underline) != CssTextDecoration::None;
+  effectiveStrikethrough = currentCssStyle.hasTextDecoration() &&
+                           (currentCssStyle.textDecoration & CssTextDecoration::LineThrough) != CssTextDecoration::None;
   effectiveBackgroundBlack =
       honorsPublisherDecorations() && currentCssStyle.hasBackgroundBlack() && currentCssStyle.backgroundBlack;
   effectiveDirectionDefined = currentCssStyle.hasDirection();
@@ -2026,9 +2026,9 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     }
     if (cssStyle.hasTextDecoration()) {
       entry.hasUnderline = true;
-      entry.underline = cssStyle.textDecoration == CssTextDecoration::Underline;
+      entry.underline = (cssStyle.textDecoration & CssTextDecoration::Underline) != CssTextDecoration::None;
       entry.hasStrikethrough = true;
-      entry.strikethrough = cssStyle.textDecoration == CssTextDecoration::LineThrough;
+      entry.strikethrough = (cssStyle.textDecoration & CssTextDecoration::LineThrough) != CssTextDecoration::None;
     }
     if (cssStyle.hasBackgroundBlack()) {
       entry.hasBackgroundBlack = true;
@@ -2059,9 +2059,9 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     }
     if (cssStyle.hasTextDecoration()) {
       entry.hasUnderline = true;
-      entry.underline = cssStyle.textDecoration == CssTextDecoration::Underline;
+      entry.underline = (cssStyle.textDecoration & CssTextDecoration::Underline) != CssTextDecoration::None;
       entry.hasStrikethrough = true;
-      entry.strikethrough = cssStyle.textDecoration == CssTextDecoration::LineThrough;
+      entry.strikethrough = (cssStyle.textDecoration & CssTextDecoration::LineThrough) != CssTextDecoration::None;
     }
     if (cssStyle.hasBackgroundBlack()) {
       entry.hasBackgroundBlack = true;
@@ -2116,9 +2116,9 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       }
       if (cssStyle.hasTextDecoration()) {
         entry.hasUnderline = true;
-        entry.underline = cssStyle.textDecoration == CssTextDecoration::Underline;
+        entry.underline = (cssStyle.textDecoration & CssTextDecoration::Underline) != CssTextDecoration::None;
         entry.hasStrikethrough = true;
-        entry.strikethrough = cssStyle.textDecoration == CssTextDecoration::LineThrough;
+        entry.strikethrough = (cssStyle.textDecoration & CssTextDecoration::LineThrough) != CssTextDecoration::None;
       }
       if (cssStyle.hasBackgroundBlack()) {
         entry.hasBackgroundBlack = true;
