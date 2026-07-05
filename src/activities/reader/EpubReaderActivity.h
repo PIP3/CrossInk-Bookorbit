@@ -56,6 +56,8 @@ class EpubReaderActivity final : public Activity {
   int cachedChapterTotalPageCount = 0;
   bool pendingRelayoutReposition = false;
   uint16_t cachedPageParagraphIndex = UINT16_MAX;
+  uint16_t cachedPageParagraphOffset = 0;
+  uint16_t cachedPageParagraphSpan = 0;
   unsigned long lastPageTurnTime = 0UL;
   unsigned long pageTurnDuration = 0UL;
   unsigned long pageShownAtMs = 0UL;

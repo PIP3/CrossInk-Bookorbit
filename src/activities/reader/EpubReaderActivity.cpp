@@ -4006,32 +4006,6 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       pendingFootnotePreviewAnchor.clear();
     }
 
-    // handles changes in reader settings and reset to approximate position based on cached progress
-    if (cachedChapterTotalPageCount > 0) {
-      if (currentSpineIndex == cachedSpineIndex) {
-        bool restoredFromParagraph = false;
-        if (cachedPageParagraphIndex != UINT16_MAX) {
-          if (const auto paragraphPage = section->getPageForParagraphIndex(cachedPageParagraphIndex)) {
-            section->currentPage = *paragraphPage;
-            restoredFromParagraph = true;
-            LOG_DBG("ERS", "Resolved cached paragraph %u to page %u", cachedPageParagraphIndex, *paragraphPage);
-          } else {
-            LOG_DBG("ERS", "Cached paragraph %u not found; using saved chapter progress", cachedPageParagraphIndex);
-          }
-        }
-
-        if (!restoredFromParagraph && section->pageCount != cachedChapterTotalPageCount) {
-          const float progress =
-              static_cast<float>(cachedChapterPageNumber) / static_cast<float>(cachedChapterTotalPageCount);
-          section->currentPage = static_cast<int>(progress * static_cast<float>(section->pageCount));
-        }
-      }
-      cachedChapterPageNumber = 0;
-      cachedChapterTotalPageCount = 0;  // resets to 0 to prevent reading cached progress again
-      pendingRelayoutReposition = false;
-      cachedPageParagraphIndex = UINT16_MAX;
-    }
-
     if (pendingPercentJump && section->pageCount > 0) {
       // Apply the pending percent jump now that we know the new section's page count.
       int newPage = static_cast<int>(pendingSpineProgress * static_cast<float>(section->pageCount));
@@ -4205,10 +4179,34 @@ bool EpubReaderActivity::applyDeferredReposition() {
     bool restoredFromParagraph = false;
     if (cachedPageParagraphIndex != UINT16_MAX) {
       if (const auto paragraphPage = section->getPageForParagraphIndex(cachedPageParagraphIndex)) {
-        section->currentPage = *paragraphPage;
+        uint16_t newStartPage = *paragraphPage;
+        if (newStartPage >= section->pageCount) {
+          newStartPage = section->pageCount > 0 ? section->pageCount - 1 : 0;
+        }
+
+        uint16_t newEndPage = newStartPage + 1;
+        while (newEndPage < section->pageCount) {
+          const auto pIdx = section->getParagraphIndexForPage(newEndPage);
+          if (!pIdx || *pIdx != cachedPageParagraphIndex) {
+            break;
+          }
+          newEndPage++;
+        }
+
+        const uint16_t newSpan = std::max<uint16_t>(1, newEndPage - newStartPage);
+        const uint16_t oldSpan = std::max<uint16_t>(1, cachedPageParagraphSpan);
+        const uint16_t oldOffset = std::min<uint16_t>(cachedPageParagraphOffset, oldSpan - 1);
+        uint16_t newOffset = 0;
+        if (oldSpan > 1 && newSpan > 1) {
+          newOffset = static_cast<uint16_t>((static_cast<uint32_t>(oldOffset) * (newSpan - 1) + (oldSpan - 1) / 2) /
+                                            (oldSpan - 1));
+        }
+
+        section->currentPage = newStartPage + newOffset;
         restoredFromParagraph = true;
         changed = true;
-        LOG_DBG("ERS", "Resolved cached paragraph %u to page %u", cachedPageParagraphIndex, *paragraphPage);
+        LOG_DBG("ERS", "Resolved cached paragraph %u offset %u/%u to page %d (span %u)", cachedPageParagraphIndex,
+                oldOffset, oldSpan, section->currentPage, newSpan);
       }
     }
 
@@ -4231,6 +4229,8 @@ bool EpubReaderActivity::applyDeferredReposition() {
   cachedChapterTotalPageCount = 0;
   pendingRelayoutReposition = false;
   cachedPageParagraphIndex = UINT16_MAX;
+  cachedPageParagraphOffset = 0;
+  cachedPageParagraphSpan = 0;
   return changed;
 }
 
@@ -4250,11 +4250,35 @@ void EpubReaderActivity::cacheCurrentSectionPosition() {
   cachedChapterTotalPageCount = section->estimatedTotalPages();
   pendingRelayoutReposition = true;
   cachedPageParagraphIndex = UINT16_MAX;
+  cachedPageParagraphOffset = 0;
+  cachedPageParagraphSpan = 0;
   nextPageNumber = section->currentPage;
 
   if (section->currentPage >= 0 && section->currentPage < section->pageCount) {
-    if (const auto pIdx = section->getParagraphIndexForPage(static_cast<uint16_t>(section->currentPage))) {
+    const uint16_t currentPage = static_cast<uint16_t>(section->currentPage);
+    if (const auto pIdx = section->getParagraphIndexForPage(currentPage)) {
       cachedPageParagraphIndex = *pIdx;
+
+      uint16_t paragraphStartPage = currentPage;
+      while (paragraphStartPage > 0) {
+        const auto prevPIdx = section->getParagraphIndexForPage(paragraphStartPage - 1);
+        if (!prevPIdx || *prevPIdx != *pIdx) {
+          break;
+        }
+        paragraphStartPage--;
+      }
+
+      uint16_t paragraphEndPage = currentPage + 1;
+      while (paragraphEndPage < section->pageCount) {
+        const auto nextPIdx = section->getParagraphIndexForPage(paragraphEndPage);
+        if (!nextPIdx || *nextPIdx != *pIdx) {
+          break;
+        }
+        paragraphEndPage++;
+      }
+
+      cachedPageParagraphOffset = currentPage - paragraphStartPage;
+      cachedPageParagraphSpan = std::max<uint16_t>(1, paragraphEndPage - paragraphStartPage);
     }
   }
 }
