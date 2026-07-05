@@ -67,6 +67,24 @@ bool isWhitespace(const char c) { return c == ' ' || c == '\r' || c == '\n' || c
 
 static char asciiLower(const char c) { return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c; }
 
+bool isSvgImagePath(const std::string_view path) {
+  const size_t end = path.find_first_of("?#");
+  const std::string_view cleanPath = end == std::string_view::npos ? path : path.substr(0, end);
+  const size_t dot = cleanPath.rfind('.');
+  if (dot == std::string_view::npos) return false;
+
+  const std::string_view ext = cleanPath.substr(dot);
+  if (ext.size() == 4) {
+    return asciiLower(ext[0]) == '.' && asciiLower(ext[1]) == 's' && asciiLower(ext[2]) == 'v' &&
+           asciiLower(ext[3]) == 'g';
+  }
+  if (ext.size() == 5) {
+    return asciiLower(ext[0]) == '.' && asciiLower(ext[1]) == 's' && asciiLower(ext[2]) == 'v' &&
+           asciiLower(ext[3]) == 'g' && asciiLower(ext[4]) == 'z';
+  }
+  return false;
+}
+
 bool appendUniquePrewarmCodepoint(const uint32_t cp, uint32_t* codepoints, uint32_t& cpCount, const uint32_t maxCount) {
   if (cp == 0) return false;
   for (uint32_t i = 0; i < cpCount; ++i) {
@@ -1497,6 +1515,12 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
 
       if (!src.empty() && self->imageRendering != 1) {
         LOG_DBG("EHP", "Found image: src=%s", src.c_str());
+        const std::string resolvedPath = FsHelpers::normalisePath(FsHelpers::decodeUriEscapes(self->contentBase + src));
+        if (isSvgImagePath(resolvedPath)) {
+          LOG_DBG("EHP", "Skipping unsupported SVG image: %s", resolvedPath.c_str());
+          self->skipCurrentElement();
+          return;
+        }
 
         {
           const auto releaseHeapBefore = MemoryBudget::snapshot();
@@ -1519,9 +1543,6 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
             self->skipCurrentElement();
             return;
           } else {
-            // Resolve the image path relative to the HTML file
-            std::string resolvedPath = FsHelpers::normalisePath(FsHelpers::decodeUriEscapes(self->contentBase + src));
-
             if (ImageDecoderFactory::isFormatSupported(resolvedPath)) {
               // Create a unique filename for the cached image
               std::string ext;
