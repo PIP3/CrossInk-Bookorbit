@@ -33,6 +33,7 @@
 - Web EPUB optimizer no longer leaves transparent PNG artwork blank or replaced by alt text.
 - Web EPUB optimizer now rasterizes SVG images to JPEG so optimized EPUBs preserve more dividers and artwork on-device.
 - Unsupported SVG images in EPUB chapters are now skipped silently instead of triggering low-memory image warnings.
+- Nearby Position Sync now silently restarts back into the reader after using ESP-NOW, matching other WiFi sync flows and reducing post-sync memory fragmentation.
 - EPUB grayscale page turns on X3 now use the grayscale-aware display base, reducing the moment where new text appears too dark before the anti-aliased overlay finishes.
 - EPUB chapters with many inline anchors, footnote links, or malformed XHTML are less likely to fail or get stuck on the indexing screen.
 - EPUB chapters with large publisher style caches and SD-card fonts now keep more heap available during indexing and retry lighter render modes after low-memory incremental builds.

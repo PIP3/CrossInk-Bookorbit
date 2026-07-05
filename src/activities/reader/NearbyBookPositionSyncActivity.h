@@ -75,6 +75,7 @@ class NearbyBookPositionSyncActivity final : public Activity {
   uint8_t eventCount_ = 0;
   bool eventOverflow_ = false;
   bool espNowStarted_ = false;
+  bool radioActivated_ = false;
   bool localPrepared_ = false;
   bool peerSeen_ = false;
   bool peerPositionReceived_ = false;

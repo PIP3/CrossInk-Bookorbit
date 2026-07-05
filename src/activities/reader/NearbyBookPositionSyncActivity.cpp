@@ -328,6 +328,7 @@ void NearbyBookPositionSyncActivity::renderComparison() const {
 #include "KOReaderDocumentId.h"
 #include "MappedInputManager.h"
 #include "SdCardFontSystem.h"
+#include "SilentRestart.h"
 #include "activities/ActivityManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -614,7 +615,11 @@ void NearbyBookPositionSyncActivity::onEnter() {
 
 void NearbyBookPositionSyncActivity::onExit() {
   Activity::onExit();
+  const bool shouldRestart = radioActivated_;
   endEspNow();
+  if (shouldRestart) {
+    silentRestartToReader();
+  }
 }
 
 void NearbyBookPositionSyncActivity::loop() {
@@ -645,6 +650,7 @@ void NearbyBookPositionSyncActivity::loop() {
 
 bool NearbyBookPositionSyncActivity::beginEspNow() {
   WiFi.mode(WIFI_STA);
+  radioActivated_ = true;
   WiFi.disconnect(false);
   WiFi.setSleep(false);
   if (esp_wifi_set_channel(ESPNOW_CHANNEL, WIFI_SECOND_CHAN_NONE) != ESP_OK) return false;
