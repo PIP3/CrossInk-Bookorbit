@@ -36,16 +36,8 @@ class Epub {
     uint32_t endLocation = 0;
     uint32_t wordStart = 0;
     uint32_t wordCount = 0;
-    uint16_t chapterGroup = UINT16_MAX;
-  };
-  struct LocationChapterGroupEntry {
-    uint16_t startSpineIndex = 0;
-    uint16_t endSpineIndex = 0;
-    uint32_t wordStart = 0;
-    uint32_t wordCount = 0;
   };
   std::vector<LocationSpineEntry> locationSpine;
-  std::vector<LocationChapterGroupEntry> locationChapterGroups;
   uint32_t totalLocations = 0;
   uint32_t totalWords = 0;
   uint32_t wordsPerReferencePage = 0;
@@ -129,14 +121,6 @@ class Epub {
   bool resolveLocationPercentToSpineProgress(int percent, int& spineIndex, float& spineProgress) const;
   bool resolveReferencePage(int currentSpineIndex, float currentSpineRead, uint32_t& currentPage,
                             uint32_t& pageCount) const;
-  struct ChapterGroupProgress {
-    uint32_t currentPage = 0;
-    uint32_t pageCount = 0;
-    float chapterProgress = 0.0f;
-    float remainingPages = 0.0f;
-    bool valid = false;
-  };
-  ChapterGroupProgress resolveChapterGroupProgress(int currentSpineIndex, float currentSpineRead) const;
   CssParser* getCssParser() const { return cssParser.get(); }
   int resolveHrefToSpineIndex(const std::string& href) const;
 

@@ -2275,7 +2275,6 @@ function buildXLocationManifest(opfContent, opfPath, xhtmlFiles, charactersPerRe
   if (spineHrefs.length === 0) return null;
 
   const spine = [];
-  const chapterGroups = buildXLocationChapterGroups(spineHrefs, xhtmlFiles, charactersPerReferencePage);
   let totalWords = 0;
   let totalCharacters = 0;
   let nextLocation = 1;
@@ -2304,7 +2303,6 @@ function buildXLocationManifest(opfContent, opfPath, xhtmlFiles, charactersPerRe
       endLocation,
       startReferencePage,
       endReferencePage,
-      chapterGroup: chapterGroups.groupByHref.has(href) ? chapterGroups.groupByHref.get(href) : index,
     });
 
     totalWords += wordCount;
@@ -2325,67 +2323,7 @@ function buildXLocationManifest(opfContent, opfPath, xhtmlFiles, charactersPerRe
     totalLocations: Math.max(0, nextLocation - 1),
     totalReferencePages: Math.ceil(totalCharacters / charactersPerReferencePage),
     spine,
-    chapterGroups: chapterGroups.groups,
   };
-}
-
-function buildXLocationChapterGroups(spineHrefs, xhtmlFiles, charactersPerReferencePage) {
-  const byChapterHref = new Map();
-  const groupByHref = new Map();
-  let totalWords = 0;
-  let totalCharacters = 0;
-
-  for (let spineIndex = 0; spineIndex < spineHrefs.length; spineIndex++) {
-    const href = spineHrefs[spineIndex];
-    const chapterHref = originalXLocationChapterHref(href);
-    const content = resolveXhtmlContentForLocation(href, xhtmlFiles);
-    const visibleText = content ? extractLocationText(content) : "";
-    const wordCount = countLocationWords(visibleText);
-    const characterCount = countReferenceCharacters(visibleText);
-    const group = byChapterHref.get(chapterHref) || {
-      href: chapterHref,
-      startSpineIndex: spineIndex,
-      endSpineIndex: spineIndex,
-      wordStart: totalWords,
-      wordCount: 0,
-      characterStart: totalCharacters,
-      characterCount: 0,
-    };
-    group.endSpineIndex = spineIndex;
-    group.wordCount += wordCount;
-    group.characterCount += characterCount;
-    byChapterHref.set(chapterHref, group);
-    totalWords += wordCount;
-    totalCharacters += characterCount;
-  }
-
-  const groups = Array.from(byChapterHref.values()).map((group, index) => {
-    for (let spineIndex = group.startSpineIndex; spineIndex <= group.endSpineIndex; spineIndex++) {
-      groupByHref.set(spineHrefs[spineIndex], index);
-    }
-    return {
-      index,
-      href: group.href,
-      startSpineIndex: group.startSpineIndex,
-      endSpineIndex: group.endSpineIndex,
-      wordStart: group.wordStart,
-      wordCount: group.wordCount,
-      characterStart: group.characterStart,
-      characterCount: group.characterCount,
-      startReferencePage:
-        group.characterCount > 0 ? Math.floor(group.characterStart / charactersPerReferencePage) + 1 : 0,
-      endReferencePage:
-        group.characterCount > 0
-          ? Math.ceil((group.characterStart + group.characterCount) / charactersPerReferencePage)
-          : 0,
-    };
-  });
-
-  return { groups, groupByHref };
-}
-
-function originalXLocationChapterHref(href) {
-  return href.replace(/__ci_section_\d+(?=\.[^/.]+$)/, "");
 }
 
 /**

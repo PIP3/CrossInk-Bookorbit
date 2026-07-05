@@ -1132,7 +1132,6 @@ bool Epub::getItemSize(const std::string& itemHref, size_t* size) const {
 
 bool Epub::loadXLocations() {
   locationSpine.clear();
-  locationChapterGroups.clear();
   totalLocations = 0;
   totalWords = 0;
   wordsPerReferencePage = 0;
@@ -1186,7 +1185,6 @@ bool Epub::loadXLocations() {
       useCharacterReferencePages ? parsedCharactersPerReferencePage : parsedWordsPerReferencePage;
   const uint32_t parsedTotalReferencePages = doc["totalReferencePages"] | 0;
   JsonArrayConst spine = doc["spine"];
-  JsonArrayConst chapterGroups = doc["chapterGroups"];
 
   if (!isSupportedLocationsFormat(format) || version != 1 || parsedTotalLocations == 0 || spine.isNull()) {
     LOG_ERR("EBP", "Ignoring unsupported X locations manifest");
@@ -1209,7 +1207,6 @@ bool Epub::loadXLocations() {
         useCharacterReferencePages ? (spineItem["characterStart"] | 0) : (spineItem["wordStart"] | 0);
     const uint32_t wordCount =
         useCharacterReferencePages ? (spineItem["characterCount"] | 0) : (spineItem["wordCount"] | 0);
-    const int chapterGroup = spineItem["chapterGroup"] | -1;
     if (startLocation == 0 && endLocation == 0) {
       continue;
     }
@@ -1218,9 +1215,7 @@ bool Epub::loadXLocations() {
       continue;
     }
 
-    const uint16_t parsedChapterGroup =
-        chapterGroup >= 0 && chapterGroup <= UINT16_MAX ? static_cast<uint16_t>(chapterGroup) : UINT16_MAX;
-    locationSpine[static_cast<size_t>(index)] = {startLocation, endLocation, wordStart, wordCount, parsedChapterGroup};
+    locationSpine[static_cast<size_t>(index)] = {startLocation, endLocation, wordStart, wordCount};
     hasValidEntry = true;
   }
 
@@ -1236,42 +1231,6 @@ bool Epub::loadXLocations() {
   totalReferencePages = parsedTotalReferencePages;
   if (totalReferencePages == 0 && totalWords > 0 && wordsPerReferencePage > 0) {
     totalReferencePages = (totalWords + wordsPerReferencePage - 1) / wordsPerReferencePage;
-  }
-  if (!chapterGroups.isNull()) {
-    const size_t groupCount = chapterGroups.size();
-    if (groupCount > 0 && groupCount <= static_cast<size_t>(spineCount)) {
-      locationChapterGroups.assign(groupCount, {});
-      std::vector<bool> validGroups(groupCount, false);
-      size_t ordinalGroup = 0;
-      for (JsonObjectConst group : chapterGroups) {
-        const int index = group["index"] | static_cast<int>(ordinalGroup);
-        ordinalGroup++;
-        if (index < 0 || index >= static_cast<int>(groupCount)) {
-          continue;
-        }
-
-        const int startSpineIndex = group["startSpineIndex"] | -1;
-        const int endSpineIndex = group["endSpineIndex"] | -1;
-        const uint32_t wordStart =
-            useCharacterReferencePages ? (group["characterStart"] | 0) : (group["wordStart"] | 0);
-        const uint32_t wordCount =
-            useCharacterReferencePages ? (group["characterCount"] | 0) : (group["wordCount"] | 0);
-        if (startSpineIndex < 0 || endSpineIndex < startSpineIndex || endSpineIndex >= spineCount || wordCount == 0 ||
-            wordStart >= totalWords) {
-          continue;
-        }
-
-        locationChapterGroups[static_cast<size_t>(index)] = {
-            static_cast<uint16_t>(startSpineIndex), static_cast<uint16_t>(endSpineIndex), wordStart, wordCount};
-        validGroups[static_cast<size_t>(index)] = true;
-      }
-
-      for (auto& entry : locationSpine) {
-        if (entry.chapterGroup >= validGroups.size() || !validGroups[entry.chapterGroup]) {
-          entry.chapterGroup = UINT16_MAX;
-        }
-      }
-    }
   }
   xLocationsLoaded = true;
   LOG_INF("EBP", "Loaded X locations: %lu locations, %lu reference pages across %zu spine items",
@@ -1487,40 +1446,6 @@ bool Epub::resolveReferencePage(const int currentSpineIndex, const float current
   currentPage = std::min<uint32_t>(completedWords / wordsPerReferencePage + 1, totalReferencePages);
   pageCount = totalReferencePages;
   return true;
-}
-
-Epub::ChapterGroupProgress Epub::resolveChapterGroupProgress(const int currentSpineIndex,
-                                                             const float currentSpineRead) const {
-  ChapterGroupProgress result;
-  if (!xLocationsLoaded || wordsPerReferencePage == 0 || currentSpineIndex < 0 ||
-      currentSpineIndex >= static_cast<int>(locationSpine.size())) {
-    return result;
-  }
-
-  const LocationSpineEntry& spineEntry = locationSpine[static_cast<size_t>(currentSpineIndex)];
-  if (spineEntry.chapterGroup >= locationChapterGroups.size() || spineEntry.wordCount == 0) {
-    return result;
-  }
-
-  const LocationChapterGroupEntry& group = locationChapterGroups[spineEntry.chapterGroup];
-  if (group.wordCount == 0 || currentSpineIndex < group.startSpineIndex || currentSpineIndex > group.endSpineIndex ||
-      spineEntry.wordStart < group.wordStart) {
-    return result;
-  }
-
-  const float clampedProgress = clampUnit(currentSpineRead);
-  const uint32_t completedSpineWords =
-      static_cast<uint32_t>(clampedProgress * static_cast<float>(spineEntry.wordCount));
-  const uint32_t completedGroupWords = (spineEntry.wordStart - group.wordStart) + completedSpineWords;
-  const uint32_t clampedGroupWords = std::min<uint32_t>(completedGroupWords, group.wordCount);
-  result.pageCount = std::max<uint32_t>(1, (group.wordCount + wordsPerReferencePage - 1) / wordsPerReferencePage);
-  result.currentPage = std::min<uint32_t>(clampedGroupWords / wordsPerReferencePage + 1, result.pageCount);
-  result.chapterProgress = static_cast<float>(clampedGroupWords) / static_cast<float>(group.wordCount);
-  if (result.currentPage < result.pageCount) {
-    result.remainingPages = static_cast<float>(result.pageCount - result.currentPage);
-  }
-  result.valid = true;
-  return result;
 }
 
 int Epub::resolveHrefToSpineIndex(const std::string& href) const {

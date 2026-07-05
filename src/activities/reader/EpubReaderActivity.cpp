@@ -1309,13 +1309,6 @@ bool EpubReaderActivity::estimateRemainingTimeLeftPages(const bool bookEstimate,
   }
 
   if (!bookEstimate) {
-    const float sectionProgress = static_cast<float>(section->currentPage) / static_cast<float>(totalPages);
-    const auto grouped = epub->resolveChapterGroupProgress(currentSpineIndex, sectionProgress);
-    if (grouped.valid) {
-      remainingPages = grouped.remainingPages;
-      return remainingPages > 0.0f;
-    }
-
     const int remainingChapterPages = totalPages - section->currentPage - 1;
     if (remainingChapterPages <= 0) {
       return false;
@@ -4584,15 +4577,6 @@ void EpubReaderActivity::renderStatusBar() const {
                                     : 0.0f;
   float chapterProgress = sectionProgress;
   bool pageCountEstimated = section->isBuilding();
-  if (!activeFootnotePreview) {
-    const auto grouped = epub->resolveChapterGroupProgress(currentSpineIndex, sectionProgress);
-    if (grouped.valid) {
-      currentPage = static_cast<int>(grouped.currentPage);
-      pageCount = static_cast<int>(grouped.pageCount);
-      chapterProgress = grouped.chapterProgress;
-      pageCountEstimated = false;
-    }
-  }
 
   uint32_t referencePage = 0;
   uint32_t referencePageCount = 0;
