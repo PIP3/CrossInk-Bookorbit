@@ -2068,6 +2068,41 @@ function resolvePath(basePath, href) {
   return resolved.replace(/\/+/g, "/");
 }
 
+function renamedImageSrc(src, xhtmlPath, renamed, splitImages = {}) {
+  const renameEntries = Object.entries(renamed);
+  if (renameEntries.length === 0) return { src, changed: false };
+
+  const decodedSrc = decodeHref(src);
+  const resolvedSrc = resolvePath(xhtmlPath, decodedSrc);
+  const matchEntry = renameEntries.find(([oldPath, newPath]) => resolvedSrc === oldPath || resolvedSrc === newPath);
+  if (!matchEntry) return { src, changed: false };
+
+  const [oldPath, newPath] = matchEntry;
+  const oldName = oldPath.split("/").pop();
+  const mappedName = newPath.split("/").pop();
+  const splitParts = splitImages[oldPath]?.parts || [];
+  const targetName = splitParts[0]?.imgName || mappedName;
+
+  let updatedSrc = decodedSrc.replace(oldName, targetName);
+  if (updatedSrc === decodedSrc) updatedSrc = decodedSrc.replace(mappedName, targetName);
+  if (updatedSrc === decodedSrc) return { src, changed: false };
+
+  return { src: updatedSrc, changed: true };
+}
+
+function rewriteImageSrcReferences(content, xhtmlPath, renamed, splitImages = {}) {
+  let changed = false;
+  const rewritten = content.replace(/(<(?:\w+:)?img\b[^>]*?\bsrc\s*=\s*)(["'])([^"']+)\2/gi, (match, prefix, quote, src) => {
+    const renamedSrc = renamedImageSrc(src, xhtmlPath, renamed, splitImages);
+    if (!renamedSrc.changed) return match;
+
+    changed = true;
+    return `${prefix}${quote}${renamedSrc.src}${quote}`;
+  });
+
+  return { content: rewritten, changed };
+}
+
 /**
  * Serialize an XML doc back to string, preserving the original <?xml?> declaration
  * and cleaning up XMLSerializer namespace prefix noise (xmlns:ns0 etc).
@@ -3393,14 +3428,9 @@ async function convertEpubFile(file, progressCallback) {
 
           const src = img.getAttribute("src");
           if (src) {
-            const decodedSrc = decodeHref(src);
-            const resolvedSrc = resolvePath(xhtmlPath, decodedSrc);
-
-            const match = Object.entries(renamed).find(([oldPath]) => resolvedSrc === oldPath);
-
-            if (match) {
-              const [oldPath, newPath] = match;
-              img.setAttribute("src", decodedSrc.replace(oldPath.split("/").pop(), newPath.split("/").pop()));
+            const renamedSrc = renamedImageSrc(src, xhtmlPath, renamed);
+            if (renamedSrc.changed) {
+              img.setAttribute("src", renamedSrc.src);
               modified = true;
             }
           }
@@ -3513,9 +3543,14 @@ async function convertEpubFile(file, progressCallback) {
         if (modified) {
           t = whitespaceGuard.restore(safeSerialize(doc, whitespaceGuard.content));
         }
+      } else {
+        const fallback = rewriteImageSrcReferences(t, xhtmlPath, renamed, splitImages);
+        if (fallback.changed) t = fallback.content;
       }
     } catch (e) {
       console.warn("DOMParser error for", xhtmlPath, e.message);
+      const fallback = rewriteImageSrcReferences(t, xhtmlPath, renamed, splitImages);
+      if (fallback.changed) t = fallback.content;
     }
 
     // Inject universal image constraint — prevents overflow on e-ink displays

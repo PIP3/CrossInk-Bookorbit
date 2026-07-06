@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- Web EPUB optimizer now keeps image references in malformed chapters aligned with renamed JPEG files.
+
 ## [v1.4.0] - 2026-07-04
 
 ### Added
