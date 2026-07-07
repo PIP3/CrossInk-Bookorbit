@@ -3900,9 +3900,14 @@ void EpubReaderActivity::render(RenderLock&& lock) {
               (currentSpineIndex > 0 ? epub->getCumulativeSpineItemSize(currentSpineIndex - 1) : 0);
           const bool willInflate = !section->hasHtmlCache();
           const bool anchorJump = !pendingAnchor.empty();
+          const auto anchorPageReady = [&]() {
+            const auto page = section->findAnchor(pendingAnchor);
+            return page.has_value() &&
+                   (static_cast<int>(*page) < static_cast<int>(section->pageCount) || section->isBuildComplete());
+          };
           bool showPopup = false;
           if (anchorJump) {
-            showPopup = !section->findAnchor(pendingAnchor).has_value() && spineBytes > BUILD_POPUP_BYTE_THRESHOLD;
+            showPopup = !anchorPageReady() && spineBytes > BUILD_POPUP_BYTE_THRESHOLD;
           } else {
             const bool targetAvailable = target < static_cast<int>(section->pageCount);
             showPopup = !targetAvailable && ((spineBytes > BUILD_POPUP_BYTE_THRESHOLD && willInflate) ||
@@ -3918,8 +3923,8 @@ void EpubReaderActivity::render(RenderLock&& lock) {
                                   SETTINGS.imageRendering, profile.bionicReadingEnabled, profile.guideReadingEnabled,
                                   profile.renderMode, buildOptions)) {
             bool buildFailed = false;
-            while (!section->isBuildComplete() && (anchorJump ? !section->findAnchor(pendingAnchor)
-                                                              : static_cast<int>(section->pageCount) <= target)) {
+            while (!section->isBuildComplete() &&
+                   (anchorJump ? !anchorPageReady() : static_cast<int>(section->pageCount) <= target)) {
               if (!section->buildSomeMore(BUILD_PAGES_PER_CHUNK)) {
                 LOG_ERR("ERS", "Failed during incremental section build");
                 buildFailed = true;
@@ -3929,9 +3934,8 @@ void EpubReaderActivity::render(RenderLock&& lock) {
             attemptImagesWereSuppressed = attemptImagesWereSuppressed || section->lastBuildImagesWereSuppressed();
             attemptLayoutAbortedForLowMemory =
                 attemptLayoutAbortedForLowMemory || section->lastBuildLayoutAbortedForLowMemory();
-            const bool requestedPageAvailable = anchorJump
-                                                    ? section->findAnchor(pendingAnchor).has_value()
-                                                    : target >= 0 && target < static_cast<int>(section->pageCount);
+            const bool requestedPageAvailable =
+                anchorJump ? anchorPageReady() : target >= 0 && target < static_cast<int>(section->pageCount);
             if (buildFailed && attemptLayoutAbortedForLowMemory && requestedPageAvailable) {
               LOG_ERR("ERS", "Incremental section build paused for low heap after reaching requested page");
               attemptLayoutAbortedForLowMemory = false;
@@ -4094,9 +4098,12 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     if (!pendingAnchor.empty()) {
       // Resolve from the pages laid out so far and/or the on-disk map (finalized or partial).
       const auto page = section->findAnchor(pendingAnchor);
-      if (page) {
+      if (page && static_cast<int>(*page) < static_cast<int>(section->pageCount)) {
         section->currentPage = *page;
         LOG_DBG("ERS", "Resolved anchor '%s' to page %d", pendingAnchor.c_str(), *page);
+      } else if (page) {
+        LOG_DBG("ERS", "Anchor '%s' resolved to unavailable page %d in section %d (pages=%u)", pendingAnchor.c_str(),
+                *page, currentSpineIndex, section->pageCount);
       } else {
         LOG_DBG("ERS", "Anchor '%s' not found in section %d", pendingAnchor.c_str(), currentSpineIndex);
       }

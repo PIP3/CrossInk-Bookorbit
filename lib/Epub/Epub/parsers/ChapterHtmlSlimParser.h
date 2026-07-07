@@ -46,6 +46,7 @@ class ChapterHtmlSlimParser {
   int underlineUntilDepth = INT_MAX;
   int strikethroughUntilDepth = INT_MAX;
   int headingDepth = -1;
+  bool headingOpenerActive = false;
   // buffer for building up words from characters, will auto break if longer than this
   // leave one char at end for null pointer
   char partWordBuffer[MAX_WORD_SIZE + 1] = {};
