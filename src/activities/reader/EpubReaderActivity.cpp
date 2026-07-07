@@ -3878,7 +3878,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
             static_cast<uint16_t>(buildingFootnotePreview ? FOOTNOTE_PREVIEW_MAX_PAGES : 0)};
         const bool needsFullBuild = buildingFootnotePreview || pendingPercentJump ||
                                     pendingClippingIndex != UINT16_MAX || pendingParagraphIndex != UINT16_MAX ||
-                                    cachedChapterTotalPageCount > 0;
+                                    pendingRelayoutReposition;
         bool buildSucceeded = false;
         if (needsFullBuild) {
           GUI.drawPopup(renderer, tr(STR_INDEXING));
