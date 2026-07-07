@@ -1950,12 +1950,12 @@ void EpubReaderActivity::loop() {
   // reopen comes from suspendBuild() persisting the laid-out pages as a partial on exit.
   // Skip while the render mutex is busy so we never delay a pending render; re-check
   // isBuilding() under the lock since render() may have just finished it.
-  if (section && section->isBuilding() && !RenderLock::peek() &&
+  if (section && section->isBuilding() && !RenderLock::peek() && section->activeBuildHasCaughtReadablePages() &&
       static_cast<int>(section->pageCount) < section->currentPage + BUILD_WINDOW_AHEAD) {
     RenderLock lock(*this);
     // Re-check under the lock: render() may have finalized the build between the outer
     // isBuilding() check and acquiring the lock here.
-    if (section && section->isBuilding()) {
+    if (section && section->isBuilding() && section->activeBuildHasCaughtReadablePages()) {
       if (!section->buildSomeMore(BACKGROUND_BUILD_PAGES_PER_TICK)) {
         LOG_ERR("ERS", "Background section build failed");
         if (section->lastBuildLayoutAbortedForLowMemory() && section->pageCount > 0) {
