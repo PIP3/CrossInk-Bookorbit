@@ -355,10 +355,10 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
       if (!Storage.openFileForWrite("SCT", tmpHtmlPath, tmpHtml)) {
         continue;
       }
-      // Larger chunks mean far fewer SD writes inflating the HTML; a 1KB chunk turned a 584KB
-      // single-spine novel into ~570 tiny writes (multi-second). 8KB keeps the transient buffers
-      // small while cutting the write count 8x.
-      streamed = epub->readItemContentsToStream(localPath, tmpHtml, 8192);
+      // Larger chunks mean far fewer SD writes inflating full chapters. Footnote previews are short-lived
+      // and memory-sensitive, so use a smaller chunk there to keep transient ZIP buffers tiny.
+      const size_t htmlStreamChunkSize = buildOptions.isPreview() ? 1024 : 8192;
+      streamed = epub->readItemContentsToStream(localPath, tmpHtml, htmlStreamChunkSize);
       fileSize = tmpHtml.size();
       // Explicitly close() file before calling Storage.remove()
       tmpHtml.close();
@@ -683,7 +683,8 @@ bool Section::startBuild(const int fontId, const float lineCompression, const bo
       if (!Storage.openFileForWrite("SCT", tmpHtmlPath, tmpHtml)) {
         continue;
       }
-      streamed = epub->readItemContentsToStream(localPath, tmpHtml, 8192);
+      const size_t htmlStreamChunkSize = buildOptions.isPreview() ? 1024 : 8192;
+      streamed = epub->readItemContentsToStream(localPath, tmpHtml, htmlStreamChunkSize);
       fileSize = tmpHtml.size();
       tmpHtml.close();
       if (!streamed && Storage.exists(tmpHtmlPath.c_str())) {

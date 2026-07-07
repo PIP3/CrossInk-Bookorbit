@@ -8,9 +8,11 @@
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
+#include <InflateReader.h>
 #include <Logging.h>
 #include <Memory.h>
 #include <MemoryBudget.h>
+#include <ScratchWorkspace.h>
 
 #include <algorithm>
 #include <array>
@@ -774,6 +776,20 @@ bool releaseReaderSdFontCachesForLowMemory(const GfxRenderer& renderer, const ch
           before.maxAllocHeap, after.maxAllocHeap);
 #endif
   return true;
+}
+
+ScratchWorkspace::Lease acquireReaderZipInflateScratch(const GfxRenderer& renderer, const char* reason) {
+  if (ESP.getMaxAllocHeap() < InflateReader::STREAMING_DICT_SIZE) {
+    releaseReaderSdFontCachesForLowMemory(renderer, "ERS", reason);
+  }
+
+  auto scratch = ScratchWorkspace::acquire(InflateReader::STREAMING_DICT_SIZE, reason);
+  if (scratch) {
+    return scratch;
+  }
+
+  releaseReaderSdFontCachesForLowMemory(renderer, "ERS", reason);
+  return ScratchWorkspace::acquire(InflateReader::STREAMING_DICT_SIZE, reason);
 }
 
 int clampPercent(int percent) {
@@ -3875,6 +3891,10 @@ void EpubReaderActivity::render(RenderLock&& lock) {
         const SectionBuildOptions buildOptions{
             buildingFootnotePreview ? pendingFootnotePreviewAnchor.c_str() : nullptr,
             static_cast<uint16_t>(buildingFootnotePreview ? FOOTNOTE_PREVIEW_MAX_PAGES : 0)};
+        ScratchWorkspace::Lease zipInflateScratch;
+        if (section && !section->hasHtmlCache()) {
+          zipInflateScratch = acquireReaderZipInflateScratch(renderer, "Reader section HTML inflate");
+        }
         const bool needsFullBuild = buildingFootnotePreview || pendingPercentJump ||
                                     pendingClippingIndex != UINT16_MAX || pendingParagraphIndex != UINT16_MAX ||
                                     pendingRelayoutReposition;
@@ -3980,10 +4000,24 @@ void EpubReaderActivity::render(RenderLock&& lock) {
         if (!layoutAbortedForLowMemory) {
           LOG_ERR("ERS", "Failed to persist page data to SD");
         }
+        const bool shouldRestoreFootnoteOrigin = buildingFootnotePreview && footnoteDepth > 0;
         section.reset();
         if (buildingFootnotePreview) {
           pendingFootnotePreviewAnchor.clear();
           activeFootnotePreview = false;
+        }
+        if (shouldRestoreFootnoteOrigin) {
+          footnoteDepth--;
+          const SavedPosition& origin = savedPositions[footnoteDepth];
+          LOG_ERR("ERS", "Footnote preview build failed; restoring origin spine %d page %d", origin.spineIndex,
+                  origin.pageNumber);
+          pendingAnchor.clear();
+          pendingPageJump.reset();
+          currentSpineIndex = origin.spineIndex;
+          nextPageNumber = origin.pageNumber;
+          armReadingPaceWarmup("footnote_preview_failed_restore");
+          requestUpdate();
+          return;
         }
         if (layoutAbortedForLowMemory) {
           showLowMemoryLayoutError();
