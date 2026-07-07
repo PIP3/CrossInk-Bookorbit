@@ -1493,6 +1493,11 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         return;
       }
 
+      if (self->headingDepth >= 0 && alt.empty()) {
+        self->skipCurrentElement();
+        return;
+      }
+
       // imageRendering: 0=display, 1=placeholder (alt text only), 2=suppress entirely
       if (self->imageRendering == 2) {
         self->skipCurrentElement();
@@ -1913,6 +1918,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
   }
 
   if (matches(name, HEADER_TAGS, std::size(HEADER_TAGS))) {
+    self->headingDepth = self->depth;
     self->currentCssStyle = cssStyle;
     auto headerBlockStyle = BlockStyle::fromCssStyle(cssStyle, emSize, CssTextAlign::Center, self->viewportWidth);
     headerBlockStyle.textAlignDefined = true;
@@ -2541,6 +2547,9 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
       }
       self->blockStyleCount_--;
     }
+  }
+  if (self->headingDepth == self->depth) {
+    self->headingDepth = -1;
   }
 }
 

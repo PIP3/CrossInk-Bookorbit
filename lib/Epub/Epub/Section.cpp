@@ -838,7 +838,11 @@ bool Section::buildSomeMore(const int maxPages) {
     lastLayoutAbortedForLowMemory_ = lastLayoutAbortedForLowMemory_ || build_->parser->wasLowMemoryAbortTriggered();
     if (build_->pageCompletionFailed || status == ChapterHtmlSlimParser::ParseStatus::Error) {
       LOG_ERR("SCT", "Failed during incremental section build");
-      abandonBuild();
+      if (lastLayoutAbortedForLowMemory_ && builtPageCount_ > 0) {
+        suspendBuild();
+      } else {
+        abandonBuild();
+      }
       return false;
     }
     if (status == ChapterHtmlSlimParser::ParseStatus::Done) {

@@ -1974,8 +1974,11 @@ void EpubReaderActivity::loop() {
     if (section && section->isBuilding()) {
       if (!section->buildSomeMore(BACKGROUND_BUILD_PAGES_PER_TICK)) {
         LOG_ERR("ERS", "Background section build failed");
+        if (section->lastBuildLayoutAbortedForLowMemory() && section->pageCount > 0) {
+          LOG_ERR("ERS", "Background section build suspended for low heap");
+          return;
+        }
         section.reset();
-        pendingSyncSaveError = true;
         requestUpdate();
         return;
       }
@@ -3946,6 +3949,14 @@ void EpubReaderActivity::render(RenderLock&& lock) {
             attemptImagesWereSuppressed = attemptImagesWereSuppressed || section->lastBuildImagesWereSuppressed();
             attemptLayoutAbortedForLowMemory =
                 attemptLayoutAbortedForLowMemory || section->lastBuildLayoutAbortedForLowMemory();
+            const bool requestedPageAvailable = anchorJump
+                                                    ? section->findAnchor(pendingAnchor).has_value()
+                                                    : target >= 0 && target < static_cast<int>(section->pageCount);
+            if (buildFailed && attemptLayoutAbortedForLowMemory && requestedPageAvailable) {
+              LOG_ERR("ERS", "Incremental section build paused for low heap after reaching requested page");
+              attemptLayoutAbortedForLowMemory = false;
+              buildFailed = false;
+            }
             buildSucceeded = !buildFailed && (section->pageCount > 0 || section->isBuildComplete());
           } else {
             attemptImagesWereSuppressed = attemptImagesWereSuppressed || section->lastBuildImagesWereSuppressed();
