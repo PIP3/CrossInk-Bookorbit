@@ -2123,10 +2123,67 @@ function safeSerialize(doc, originalContent) {
   return result;
 }
 
+function findXmlDoctypeEnd(content, start) {
+  let quote = null;
+  let bracketDepth = 0;
+  for (let i = start; i < content.length; i++) {
+    const ch = content[i];
+    if (quote) {
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+    } else if (ch === "[") {
+      bracketDepth++;
+    } else if (ch === "]" && bracketDepth > 0) {
+      bracketDepth--;
+    } else if (ch === ">" && bracketDepth === 0) {
+      return i + 1;
+    }
+  }
+  return -1;
+}
+
+function findXmlRootElementStart(content) {
+  let index = 0;
+  while (index < content.length) {
+    while (index < content.length && /\s/.test(content[index])) index++;
+
+    if (content.startsWith("<!--", index)) {
+      const end = content.indexOf("-->", index + 4);
+      if (end < 0) return index;
+      index = end + 3;
+      continue;
+    }
+
+    if (content.startsWith("<?", index)) {
+      const end = content.indexOf("?>", index + 2);
+      if (end < 0) return index;
+      index = end + 2;
+      continue;
+    }
+
+    if (content.substring(index, index + 9).toLowerCase() === "<!doctype") {
+      const end = findXmlDoctypeEnd(content, index + 9);
+      if (end < 0) return index;
+      index = end;
+      continue;
+    }
+
+    if (content[index] === "<") return index;
+    return 0;
+  }
+  return 0;
+}
+
 function protectWhitespaceOnlyTextNodes(content) {
   const preserved = [];
   const tokenPrefix = "__CROSSINK_PRESERVE_WS_";
-  const protectedContent = content.replace(/>([\s\u00a0]+)</g, (_, whitespace) => {
+  const rootStart = findXmlRootElementStart(content);
+  const protectedContent = content.replace(/>([\s\u00a0]+)</g, (match, whitespace, offset) => {
+    if (offset < rootStart) return match;
+
     const token = `${tokenPrefix}${preserved.length}__`;
     preserved.push(whitespace);
     return `>${token}<`;
