@@ -1493,11 +1493,6 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         return;
       }
 
-      if (self->headingDepth >= 0 && alt.empty()) {
-        self->skipCurrentElement();
-        return;
-      }
-
       // imageRendering: 0=display, 1=placeholder (alt text only), 2=suppress entirely
       if (self->imageRendering == 2) {
         self->skipCurrentElement();
