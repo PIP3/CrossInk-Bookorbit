@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- Manage Fonts no longer crashes (abort) while loading the font list on devices with many SD-card font families installed. The font registry is now released before the network request, and the manifest is parsed without keeping the parsed JSON and the font registry in memory at the same time.
+
 ## [v1.4.0] - 2026-07-04
 
 ### Added
