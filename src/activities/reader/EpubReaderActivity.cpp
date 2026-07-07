@@ -78,7 +78,6 @@ constexpr uint8_t STORED_PACE_SLOWER_RECOVERY_PERCENT = 110;
 constexpr uint16_t MIN_STORED_PACE_FASTER_RECOVERY_SESSION_SAMPLES = 15;
 constexpr uint8_t STORED_PACE_FASTER_RECOVERY_PERCENT = 90;
 constexpr uint8_t BOOK_PROGRESS_ESTIMATE_FLOOR_PERCENT = 90;
-constexpr size_t FOOTNOTE_PREVIEW_MIN_SPINE_BYTES = 96 * 1024;
 constexpr uint16_t FOOTNOTE_PREVIEW_MAX_PAGES = 3;
 constexpr uint8_t PUBLISHER_PAGE_NUMBER_LEFT_MARGIN_MIN = 15;
 constexpr int PUBLISHER_PAGE_NUMBER_X = 5;
@@ -4734,14 +4733,7 @@ bool EpubReaderActivity::shouldUseFootnotePreview(const int targetSpineIndex, co
   if (!epub || anchor.empty() || targetSpineIndex < 0 || targetSpineIndex >= epub->getSpineItemsCount()) {
     return false;
   }
-  if (targetSpineIndex == currentSpineIndex) {
-    return false;
-  }
-
-  const size_t previousCumulative = (targetSpineIndex > 0) ? epub->getCumulativeSpineItemSize(targetSpineIndex - 1) : 0;
-  const size_t currentCumulative = epub->getCumulativeSpineItemSize(targetSpineIndex);
-  const size_t spineBytes = (currentCumulative > previousCumulative) ? currentCumulative - previousCumulative : 0;
-  return spineBytes >= FOOTNOTE_PREVIEW_MIN_SPINE_BYTES;
+  return targetSpineIndex != currentSpineIndex;
 }
 
 std::string EpubReaderActivity::footnotePreviewCacheSuffix(const EpubRenderMode renderMode,
