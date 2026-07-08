@@ -3751,6 +3751,15 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     GUI.drawPopup(renderer, tr(STR_EPUB_LAYOUT_MEMORY_TITLE));
   };
 
+  // A section build failure (e.g. an invalid/corrupt EPUB that fails XML parsing) leaves the
+  // "Indexing" popup on screen with no way forward. Surface an explicit error instead of hanging.
+  // clearScreen first so the error popup doesn't overlay the stale "Indexing" popup.
+  const auto showBuildError = [this]() {
+    renderer.clearScreen(ReaderUtils::readerBackgroundColor());
+    GUI.drawPopup(renderer, tr(STR_INDEX_FAILED));
+    automaticPageTurnActive = false;
+  };
+
   // edge case handling for sub-zero spine index
   if (currentSpineIndex < 0) {
     currentSpineIndex = 0;
@@ -3920,7 +3929,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
         if (layoutAbortedForLowMemory) {
           showLowMemoryLayoutError();
         } else {
-          showPendingSyncSaveError();
+          showBuildError();
         }
         return;
       }
@@ -4076,7 +4085,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     auto p = section->loadPageFromSectionFile();
     if (!p) {
       pageLoadRetryCount++;
-      if (pageLoadRetryCount < MAX_PAGE_LOAD_RETRIES) {
+      if (pageLoadRetryCount <= MAX_PAGE_LOAD_RETRIES) {
         LOG_ERR("ERS", "Failed to load page from SD (retry %d) - clearing section cache", pageLoadRetryCount);
         section->clearCache();
         section.reset();
@@ -4087,6 +4096,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       }
 
       LOG_ERR("ERS", "Failed to load page from SD after %d retries", pageLoadRetryCount);
+      pageLoadRetryCount = 0;
       renderer.clearScreen(ReaderUtils::readerBackgroundColor());
       renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_PAGE_LOAD_ERROR), ReaderUtils::readerForegroundBlack(),
                                 EpdFontFamily::BOLD);
@@ -4096,7 +4106,6 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       showPendingSyncSaveError();
       return;
     }
-
     pageLoadRetryCount = 0;
 
     // Preview pages are transient note windows, not full chapter pages with reusable footnote metadata.
