@@ -1724,16 +1724,22 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                   if (self->partWordBufferIndex > 0) {
                     self->flushPartWordBuffer();
                   }
+                  bool openerNumberPrecededImage = false;
                   if (self->currentTextBlock && !self->currentTextBlock->isEmpty()) {
                     const BlockStyle parentBlockStyle = self->currentTextBlock->getBlockStyle();
                     self->startNewTextBlock(parentBlockStyle);
+                    // The block synthesized above copies the heading style. Inside a chapter opener that
+                    // style still carries the heading's drop margin (the large gap that pushes "Chapter N"
+                    // down the page), which was already spent positioning the number. Remember that so it
+                    // is not re-applied a second time as the ornament's top gap.
+                    openerNumberPrecededImage = self->headingOpenerActive;
                   }
 
                   int16_t imageMarginTop = 0;
                   int16_t imageMarginBottom = 0;
                   if (self->currentTextBlock && self->currentTextBlock->isEmpty()) {
                     const auto& bs = self->currentTextBlock->getBlockStyle();
-                    imageMarginTop = bs.topInset();
+                    imageMarginTop = openerNumberPrecededImage ? 0 : bs.topInset();
                     if (self->blockStyleCount_ > 1) {
                       imageMarginBottom = self->blockStyleBuf_[self->blockStyleCount_ - 1].bottomInset();
                     }
@@ -1780,8 +1786,15 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                   self->currentPageNextY += displayHeight + imageMarginBottom;
 
                   if (self->currentTextBlock && self->currentTextBlock->isEmpty()) {
-                    self->currentTextBlock->setBlockStyle(
-                        self->blockStyleBuf_[self->blockStyleCount_ - 1].withoutBottom());
+                    BlockStyle afterImageStyle = self->blockStyleBuf_[self->blockStyleCount_ - 1].withoutBottom();
+                    if (self->headingOpenerActive) {
+                      // The title run trailing the ornament copies the heading style too and would inherit
+                      // the same drop margin, stacking a second heading-sized gap under the image. Replace
+                      // it with a modest half-line gap so the title sits just below the ornament instead.
+                      afterImageStyle.marginTop = static_cast<int16_t>(self->effectiveLineHeight() / 2);
+                      afterImageStyle.paddingTop = 0;
+                    }
+                    self->currentTextBlock->setBlockStyle(afterImageStyle);
                   }
 
                   self->pushCssAncestor(self->depth, name, classAttr);
