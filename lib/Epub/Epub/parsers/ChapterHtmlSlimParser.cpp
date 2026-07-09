@@ -1203,6 +1203,19 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
           }
           self->pendingAnchorId = idValue;
           self->pendingAnchorFromInlineA = !isTocAnchor && strcmp(name, "a") == 0;
+
+          // A chapter's TOC target is sometimes an empty inline <a id> tucked *inside* an
+          // already-open heading, ahead of the chapter-number/ornament/title runs
+          // (e.g. <h1><a id="rsecN"/>Chapter N<img/>Title</h1>). Resolving it lazily at the
+          // next block flush defers the chapter's page break until after the "Chapter N" run
+          // is already on the page: the break then lands mid-heading, orphaning the number and
+          // pushing the ornament + title onto the next page. While the heading opener is still
+          // active and has produced no content yet, resolve it now so any needed break lands at
+          // the heading's start and the whole opener stays together.
+          if (isTocAnchor && self->headingOpenerActive && self->partWordBufferIndex == 0 && self->currentTextBlock &&
+              self->currentTextBlock->isEmpty()) {
+            self->flushPendingAnchor();
+          }
         }
       } else if (strcmp(atts[i], "dir") == 0) {
         dirAttr = attrValue;

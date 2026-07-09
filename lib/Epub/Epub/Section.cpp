@@ -17,8 +17,8 @@
 
 namespace {
 constexpr uint32_t SECTION_CACHE_MAGIC = 0x535843FF;  // bytes: 0xFF, "CXS"
-// v43: TextBlock background/hyphen flags are stored only when a line uses them.
-constexpr uint8_t SECTION_FILE_VERSION = 43;
+// v44: chapter-opener TOC anchors resolve at the heading start, keeping number+ornament+title together.
+constexpr uint8_t SECTION_FILE_VERSION = 44;
 constexpr uint16_t INITIAL_SECTION_PAGE_LUT_ENTRIES = 1024;
 constexpr uint32_t HEADER_SIZE = sizeof(SECTION_CACHE_MAGIC) + sizeof(uint8_t) + sizeof(int) + sizeof(float) +
                                  sizeof(bool) + sizeof(bool) + sizeof(uint8_t) + sizeof(uint16_t) + sizeof(uint16_t) +

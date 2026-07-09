@@ -6,6 +6,7 @@
 
 ### Fixed
 
+- Chapter openers whose decorative image sits inside the heading (chapter number, ornament, then title) now stay together on one page instead of splitting the chapter number onto its own page.
 - Unsupported EPUB chapter image formats no longer trigger the low-memory image warning.
 
 ## [v1.4.0] - 2026-07-09
