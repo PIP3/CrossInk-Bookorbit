@@ -2,6 +2,8 @@
 
 ### Added
 
+- EPUB inline-image pages on X3 now use the grayscale-aware display base before the image grayscale overlay, reducing the moment where images appear too dark before settling.
+
 ### Changed
 
 ### Fixed

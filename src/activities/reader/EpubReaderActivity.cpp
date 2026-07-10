@@ -4341,8 +4341,11 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int fo
       const auto tImageRestoreRender = millis();
       composePageBuffer();
       const uint32_t imageRestoreRenderMs = millis() - tImageRestoreRender;
+      // The restored image frame becomes the base for the grayscale image
+      // planes below. On X3, use the same grayscale-aware base waveform as
+      // text-only grayscale turns; other panels keep the FAST fallback behavior.
       const auto tImageFinalDisplay = millis();
-      renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+      renderer.displayGrayscaleBase(HalDisplay::FAST_REFRESH);
       const uint32_t imageFinalDisplayMs = millis() - tImageFinalDisplay;
       logImagePageProfile(imageBlankDisplayMs, imageRestoreRenderMs, imageFinalDisplayMs);
     } else {
