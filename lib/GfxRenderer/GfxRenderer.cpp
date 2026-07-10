@@ -50,6 +50,18 @@ int scaled75SourceEnd(const int dst, const int srcLimit) {
   const int srcStart = dst * 4 / 3;
   return std::min(srcLimit, std::max(srcStart + 1, ((dst + 1) * 4 + 2) / 3));
 }
+
+void draw2BitFontPixel(const GfxRenderer& renderer, const GfxRenderer::RenderMode renderMode, const int x, const int y,
+                       const uint8_t raw, const bool pixelState) {
+  const uint8_t bmpVal = 3 - raw;
+  if (renderMode == GfxRenderer::BW && bmpVal < 3) {
+    renderer.drawPixel(x, y, pixelState);
+  } else if (renderMode == GfxRenderer::GRAYSCALE_MSB && (bmpVal == 1 || bmpVal == 2)) {
+    renderer.drawPixel(x, y, false);
+  } else if (renderMode == GfxRenderer::GRAYSCALE_LSB && bmpVal == 1) {
+    renderer.drawPixel(x, y, false);
+  }
+}
 }  // namespace
 
 const uint8_t* GfxRenderer::getGlyphBitmap(const EpdFontData* fontData, const EpdGlyph* glyph) const {
@@ -568,20 +580,16 @@ static void renderCharSmallCaps(const GfxRenderer& renderer, GfxRenderer::Render
       for (int dstX = 0; dstX < dstW; dstX++) {
         const int srcX = dstX * 4 / 3;
         const int srcXEnd = scaled75SourceEnd(dstX, srcW);
-        uint8_t coverage = 0;
         uint8_t maxRaw = 0;
         for (int sampleY = srcY; sampleY < srcYEnd; sampleY++) {
           for (int sampleX = srcX; sampleX < srcXEnd; sampleX++) {
             const int pos = sampleY * srcW + sampleX;
             const uint8_t byte = bitmap[pos >> 2];
             const uint8_t raw = (byte >> ((3 - (pos & 3)) * 2)) & 0x3;
-            coverage += raw;
             if (raw > maxRaw) maxRaw = raw;
           }
         }
-        if (maxRaw >= 2 || coverage >= 2) {
-          renderer.drawPixel(baseX + dstX, baseY + dstY, pixelState);
-        }
+        draw2BitFontPixel(renderer, renderMode, baseX + dstX, baseY + dstY, maxRaw, pixelState);
       }
     }
   } else {
