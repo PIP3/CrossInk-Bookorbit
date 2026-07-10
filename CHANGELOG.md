@@ -6,6 +6,7 @@
 
 ### Fixed
 
+- KOReader Sync authentication errors now wrap on-screen instead of running off the display.
 - Chapter openers whose decorative image sits inside the heading (chapter number, ornament, then title) now stay together on one page instead of splitting the chapter number onto its own page.
 - Chapter openers with an inline ornament image no longer stack an oversized gap between the chapter number, the ornament, and the title.
 - Unsupported EPUB chapter image formats no longer trigger the low-memory image warning.
