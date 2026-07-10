@@ -62,9 +62,9 @@ constexpr size_t CSS_RULE_ARENA_EXTRA_BYTES = 1024;
 constexpr size_t MAX_SELECTOR_LENGTH = 256;
 constexpr size_t CSS_LENGTH_FIELD_COUNT = 11;
 constexpr size_t CSS_LENGTH_BYTES = sizeof(float) + sizeof(uint8_t);
-constexpr size_t CSS_FIXED_STYLE_BYTES = 4 * sizeof(uint8_t) + (CSS_LENGTH_FIELD_COUNT * CSS_LENGTH_BYTES) +
+constexpr size_t CSS_FIXED_STYLE_BYTES = 5 * sizeof(uint8_t) + (CSS_LENGTH_FIELD_COUNT * CSS_LENGTH_BYTES) +
                                          4 * sizeof(uint8_t) + 2 * sizeof(uint8_t) + sizeof(uint32_t);
-static_assert(CSS_FIXED_STYLE_BYTES == 69,
+static_assert(CSS_FIXED_STYLE_BYTES == 70,
               "CssStyle cache payload changed; update read/writeCssStylePayload and bump CSS_CACHE_VERSION");
 
 // Check if character is CSS whitespace
@@ -326,6 +326,20 @@ CssFontWeight CssParser::interpretFontWeight(std::string_view val) {
   return CssFontWeight::Normal;
 }
 
+CssFontVariantCaps CssParser::interpretFontVariantCaps(std::string_view val) {
+  val = trimCssWhitespace(stripTrailingImportant(val));
+
+  CssFontVariantCaps result = CssFontVariantCaps::Normal;
+  forEachDelimitedToken(val, isCssWhitespace, [&](const std::string_view token) {
+    if (iequalsAscii(token, "small-caps")) {
+      result = CssFontVariantCaps::SmallCaps;
+    } else if (iequalsAscii(token, "normal")) {
+      result = CssFontVariantCaps::Normal;
+    }
+  });
+  return result;
+}
+
 CssTextDecoration CssParser::interpretDecoration(std::string_view val) {
   // text-decoration can have multiple space-separated values. Compare whole tokens
   // so malformed values like "notunderline" do not accidentally enable a line.
@@ -407,6 +421,9 @@ void CssParser::parseDeclarationIntoStyle(std::string_view decl, CssStyle& style
   } else if (iequalsAscii(name, "font-weight")) {
     style.fontWeight = interpretFontWeight(value);
     style.defined.fontWeight = 1;
+  } else if (iequalsAscii(name, "font-variant") || iequalsAscii(name, "font-variant-caps")) {
+    style.fontVariantCaps = interpretFontVariantCaps(value);
+    style.defined.fontVariantCaps = 1;
   } else if (iequalsAscii(name, "text-decoration") || iequalsAscii(name, "text-decoration-line")) {
     style.textDecoration = interpretDecoration(value);
     style.defined.textDecoration = 1;
@@ -887,6 +904,7 @@ bool CssParser::writeCssStylePayload(FsFile& file, const CssStyle& style) {
 
   if (!writeByte(static_cast<uint8_t>(style.textAlign)) || !writeByte(static_cast<uint8_t>(style.fontStyle)) ||
       !writeByte(static_cast<uint8_t>(style.fontWeight)) || !writeByte(static_cast<uint8_t>(style.textDecoration)) ||
+      !writeByte(static_cast<uint8_t>(style.fontVariantCaps)) ||
       !writeLength(style.textIndent) || !writeLength(style.marginTop) || !writeLength(style.marginBottom) ||
       !writeLength(style.marginLeft) || !writeLength(style.marginRight) || !writeLength(style.paddingTop) ||
       !writeLength(style.paddingBottom) || !writeLength(style.paddingLeft) || !writeLength(style.paddingRight) ||
@@ -921,6 +939,7 @@ bool CssParser::writeCssStylePayload(FsFile& file, const CssStyle& style) {
   if (style.defined.direction) definedBits |= 1 << 18;
   if (style.defined.pageBreakBefore) definedBits |= 1 << 20;
   if (style.defined.pageBreakAfter) definedBits |= 1 << 21;
+  if (style.defined.fontVariantCaps) definedBits |= 1 << 22;
   return writeBytes(&definedBits, sizeof(definedBits));
 }
 
@@ -942,6 +961,8 @@ bool CssParser::readCssStylePayload(FsFile& file, CssStyle& style) {
   style.fontWeight = static_cast<CssFontWeight>(enumVal);
   if (file.read(&enumVal, 1) != 1) return false;
   style.textDecoration = static_cast<CssTextDecoration>(enumVal & CSS_TEXT_DECORATION_MASK);
+  if (file.read(&enumVal, 1) != 1) return false;
+  style.fontVariantCaps = static_cast<CssFontVariantCaps>(enumVal);
   if (!readLength(style.textIndent) || !readLength(style.marginTop) || !readLength(style.marginBottom) ||
       !readLength(style.marginLeft) || !readLength(style.marginRight) || !readLength(style.paddingTop) ||
       !readLength(style.paddingBottom) || !readLength(style.paddingLeft) || !readLength(style.paddingRight) ||
@@ -989,6 +1010,7 @@ bool CssParser::readCssStylePayload(FsFile& file, CssStyle& style) {
   style.defined.direction = (definedBits & 1 << 18) != 0;
   style.defined.pageBreakBefore = (definedBits & 1 << 20) != 0;
   style.defined.pageBreakAfter = (definedBits & 1 << 21) != 0;
+  style.defined.fontVariantCaps = (definedBits & 1 << 22) != 0;
   return true;
 }
 
