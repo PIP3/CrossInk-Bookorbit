@@ -4324,8 +4324,14 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     LOG_DBG("ERS", "Rendered page in %dms", millis() - start);
   }
   if (!activeFootnotePreview) {
-    if (!saveProgress(currentSpineIndex, section->currentPage, section->estimatedTotalPages())) {
-      pendingSyncSaveError = true;
+    const int totalPages = section->estimatedTotalPages();
+    // render() also runs on menu/bookmark/screenshot re-renders. Avoid repeating
+    // the same progress.bin write unless the rendered position or estimated total changed.
+    if (currentSpineIndex != lastSavedSpineIndex || section->currentPage != lastSavedPage ||
+        totalPages != lastSavedPageCount) {
+      if (!saveProgress(currentSpineIndex, section->currentPage, totalPages)) {
+        pendingSyncSaveError = true;
+      }
     }
     queueCompletionPromptIfNeeded();
   }
@@ -4412,7 +4418,13 @@ bool EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageC
     // another file open while a still-building EPUB section keeps files open.
     section->releaseBuildFile();
   }
-  return EpubReaderUtils::saveProgress(*epub, spineIndex, currentPage, pageCount);
+  const bool saved = EpubReaderUtils::saveProgress(*epub, spineIndex, currentPage, pageCount);
+  if (saved) {
+    lastSavedSpineIndex = spineIndex;
+    lastSavedPage = currentPage;
+    lastSavedPageCount = pageCount;
+  }
+  return saved;
 }
 
 void EpubReaderActivity::cacheCurrentSectionPosition() {

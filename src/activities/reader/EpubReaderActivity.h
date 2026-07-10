@@ -161,6 +161,12 @@ class EpubReaderActivity final : public Activity {
   // Set when the lazy extension start failed, so loop() does not retry every tick.
   bool partialRebuildStartFailed = false;
 
+  // Last position successfully persisted by saveProgress, used to skip redundant
+  // writeAtomic calls on no-op re-renders.
+  int lastSavedSpineIndex = -1;
+  int lastSavedPage = -1;
+  int lastSavedPageCount = -1;
+
   void renderContents(std::unique_ptr<Page> page, int fontId, int orientedMarginTop, int orientedMarginRight,
                       int orientedMarginBottom, int orientedMarginLeft);
   void drawClippingHighlights(const Page& page, int fontId, int orientedMarginTop, int orientedMarginLeft) const;
