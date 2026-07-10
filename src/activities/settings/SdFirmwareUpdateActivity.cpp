@@ -236,7 +236,13 @@ void SdFirmwareUpdateActivity::render(RenderLock&&) {
     renderer.drawCenteredText(UI_10_FONT_ID, y, tr(STR_FIRMWARE_UPDATE_DO_NOT_POWER_OFF));
   } else if (state == State::SUCCESS) {
     renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_UPDATE_COMPLETE), true, EpdFontFamily::BOLD);
-    renderer.drawCenteredText(UI_10_FONT_ID, top + lineHeight + metrics.verticalSpacing, tr(STR_RESTARTING_HINT));
+    const auto hintLines =
+        renderer.wrappedText(UI_10_FONT_ID, tr(STR_RESTARTING_HINT), pageWidth - metrics.contentSidePadding * 2, 3);
+    int hintY = top + lineHeight + metrics.verticalSpacing;
+    for (const auto& line : hintLines) {
+      renderer.drawCenteredText(UI_10_FONT_ID, hintY, line.c_str());
+      hintY += lineHeight;
+    }
   } else if (state == State::FAILED) {
     renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_UPDATE_FAILED), true, EpdFontFamily::BOLD);
     if (!errorMessage.empty()) {
