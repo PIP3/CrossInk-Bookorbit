@@ -23,12 +23,13 @@ My goal with this fork was to maintain the core Crosspoint firmware while integr
 
 ### Highlights
 
-- New reader fonts: ChareInk, Lexend Deca, and Bitter.
+- New reader fonts: Lexend Deca and Bitter.
 - Unicode emoji and miscellaneous symbols support (a limited subset).
 - Adjusted font sizes: 8 pt, 9 pt, 10 pt, 12 pt, 14 pt, 16 pt, 18 pt, and 20 pt. See [Font Build Variants](./docs/font-build-variants.md) for more details.
 - Added ~~strikethrough~~ support.
 - Made <u>underlines</u> thicker for better visibility.
 - Added a custom `Minimal` theme and sleep screen option for the minimalists out there.
+- Added a custom `Dashboard` theme and sleep screen option for reading stats enthusiasts.
 - Added support for `<hr>` section breaks.
 - Added support for "redaction" style rendering.
 - Added improved support for tables with simple markup.
@@ -42,7 +43,8 @@ My goal with this fork was to maintain the core Crosspoint firmware while integr
 - Added ability to move finished books to "Read" folder.
 - In-book menu to quickly adjust reader options without having to exit the book.
 - Reading stats: total books read, total reading time, number of sessions, pages turned, average session time, pages turned per minute. You can also set your reading stats as your sleep screen.
-- Reading stats [syncing](./docs/reading-stats-sync.md) between two devices.
+- All-time reading stats [syncing](./docs/reading-stats-sync.md) between two CrossInk devices.
+- Reading [progress sync](./docs/nearby-position-sync.md) between two CrossInk devices.
 - Added customizable Auto Page Turn Interval (anything between 5-120 seconds).
 - Added ability to view Recent Books as a 3x3 grid view.
 - To view a more detailed list for each version, visit the [releases](https://github.com/uxjulia/CrossInk/releases) page to read release notes.
@@ -51,9 +53,8 @@ My goal with this fork was to maintain the core Crosspoint firmware while integr
 
 ### Reader Fonts
 
-The default fonts have been replaced with ChareInk, Lexend Deca, and Bitter. These fonts have been chosen specifically to improve reading fluency and e-ink performance. These 'sturdier' typefaces feature uniform stroke weights and open geometries, allowing the X4/X3 to render crisp, high-contrast text with font-aliasing on while significantly reducing ghosting and artifacts.
+The default fonts have been replaced with Lexend Deca and Bitter. These fonts have been chosen specifically to improve reading fluency and e-ink performance. These 'sturdier' typefaces feature uniform stroke weights and open geometries, allowing the X4/X3 to render crisp, high-contrast text with font-aliasing on while significantly reducing ghosting and artifacts.
 
-- [ChareInk](https://www.mobileread.com/forums/showthread.php?t=184056) - A cult favorite among the e-reading community for over a decade based off of the typeface [Charis](https://software.sil.org/charis/). It is specially designed to make long texts pleasant and easy to read.
 - [Lexend Deca](https://fonts.google.com/specimen/Lexend+Deca) - A research-backed sans-serif typeface designed to improve reading fluency. Lexend was engineered based on the theory that reading issues are often a design problem (visual crowding) rather than a cognitive one.
 - [Bitter](https://fonts.google.com/specimen/Bitter) - A "contemporary" slab serif typeface for text, it is specially designed for comfortably reading on digital screens. The consistent stroke weight of Bitter helps it render particularly well on e-ink devices. The medium weight has been chosen specifically for improved rendering on the X4/X3.
 
@@ -67,7 +68,7 @@ The UI now uses [Inter](https://fonts.google.com/specimen/Inter) as the display 
 
 ### Font Sizes
 
-There are 3 available build variants to choose from due to build size constraints: `teensy`, `tiny`, and `xlarge`.
+There are 2 available build variants to choose from due to build size constraints: `tiny`, and `xlarge`.
 
 See [Font Build Variants](./docs/font-build-variants.md) for the full point-size and emoji-support matrix.
 
@@ -89,7 +90,7 @@ See [Controls](./docs/controls.md) for the full action list and defaults.
 
 CrossInk runs on an ESP32-C3 with limited RAM, so very large folders or complex EPUBs can be slower than they would be on a phone, tablet, or desktop app.
 
-- Keep folders under about 200  files. For the smoothest browsing, aim for 50-100 files per folder.
+- Keep folders under about 200 files. For the smoothest browsing, aim for 50-100 files per folder.
 - Having 1000+ books on the SD card is fine if they are split into smaller folders, such as by author, series, genre, or read/unread status.
 - Avoid putting every book in the SD card root. The file browser has to scan and sort the current folder before it can show it.
 - Text-first EPUBs are the best fit. Large image-heavy EPUBs, scanned books, comics, and omnibus files with thousands of sections may load slowly or fail under memory pressure.
@@ -104,6 +105,7 @@ The [device simulator](https://github.com/uxjulia/crosspoint-simulator) renders 
 See [Simulator](./docs/simulator.md) for setup, platform notes, keyboard controls, and cache tips.
 
 ---
+
 ## Installation
 
 Download a `firmware-*.bin` from the [releases page](https://github.com/uxjulia/CrossInk/releases), then flash it with the web installer or command line.
