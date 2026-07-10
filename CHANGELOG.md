@@ -10,7 +10,7 @@
 - Chapter openers with an inline ornament image no longer stack an oversized gap between the chapter number, the ornament, and the title.
 - Unsupported EPUB chapter image formats no longer trigger the low-memory image warning.
 
-## [v1.4.0] - 2026-07-09
+## [v1.4.0] - 2026-07-10
 
 ### Added
 
