@@ -259,7 +259,19 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
         underlineWidth = (underlineWidth + 1) / 2;
       }
 
-      renderer.drawLine(startX, underlineY, startX + underlineWidth, underlineY, 3, foregroundBlack);
+      int underlineEndX = startX + underlineWidth;
+      if (i + 1 < numWords) {
+        const EpdFontFamily::Style nextStyle = wordStyle(i + 1);
+        const bool nextSharesBaseline = (nextStyle & (EpdFontFamily::SUP | EpdFontFamily::SUB)) ==
+                                        (currentStyle & (EpdFontFamily::SUP | EpdFontFamily::SUB));
+        if ((nextStyle & EpdFontFamily::UNDERLINE) != 0 && nextSharesBaseline) {
+          const int nextStartX = wordXpos(i + 1) + x;
+          underlineEndX = std::max(underlineEndX, nextStartX);
+          startX = std::min(startX, nextStartX);
+        }
+      }
+
+      renderer.drawLine(startX, underlineY, underlineEndX, underlineY, 3, foregroundBlack);
     }
 
     if ((currentStyle & EpdFontFamily::STRIKETHROUGH) != 0) {
