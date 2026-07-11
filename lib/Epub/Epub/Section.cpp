@@ -17,15 +17,15 @@
 
 namespace {
 constexpr uint32_t SECTION_CACHE_MAGIC = 0x535843FF;  // bytes: 0xFF, "CXS"
-// v45: TextBlock word data uses a flat arena, and chapter-opener TOC anchors
-// resolve at the heading start so number, ornament, and title stay together.
-constexpr uint8_t SECTION_FILE_VERSION = 45;
+// v47: word spacing widens the natural inter-word gap, changing laid-out
+// positions, so sections cached before this must rebuild.
+constexpr uint8_t SECTION_FILE_VERSION = 47;
 constexpr uint16_t INITIAL_SECTION_PAGE_LUT_ENTRIES = 1024;
 constexpr uint32_t HEADER_SIZE = sizeof(SECTION_CACHE_MAGIC) + sizeof(uint8_t) + sizeof(int) + sizeof(float) +
                                  sizeof(bool) + sizeof(bool) + sizeof(uint8_t) + sizeof(uint16_t) + sizeof(uint16_t) +
                                  sizeof(uint16_t) + sizeof(bool) + sizeof(bool) + sizeof(uint8_t) + sizeof(bool) +
-                                 sizeof(bool) + sizeof(uint8_t) + sizeof(uint32_t) + sizeof(uint32_t) +
-                                 sizeof(uint32_t) + sizeof(uint32_t);
+                                 sizeof(bool) + sizeof(uint8_t) + sizeof(uint8_t) + sizeof(uint32_t) +
+                                 sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t);
 constexpr size_t SECTION_HTML_STREAM_CHUNK_SIZE = 8192;
 constexpr size_t LOW_MEMORY_SECTION_HTML_STREAM_CHUNK_SIZE = 1024;
 
@@ -122,7 +122,8 @@ bool Section::writeSectionFileHeader(const int fontId, const float lineCompressi
                                      const uint16_t viewportWidth, const uint16_t viewportHeight,
                                      const bool hyphenationEnabled, const bool embeddedStyle,
                                      const uint8_t imageRendering, const bool bionicReadingEnabled,
-                                     const bool guideReadingEnabled, const EpubRenderMode renderMode) {
+                                     const bool guideReadingEnabled, const uint8_t wordSpacing,
+                                     const EpubRenderMode renderMode) {
   if (!file) {
     LOG_DBG("SCT", "File not open for writing header");
     return false;
@@ -133,7 +134,7 @@ bool Section::writeSectionFileHeader(const int fontId, const float lineCompressi
                                    sizeof(viewportHeight) + sizeof(pageCount) + sizeof(hyphenationEnabled) +
                                    sizeof(embeddedStyle) + sizeof(imageRendering) + sizeof(bionicReadingEnabled) +
                                    sizeof(guideReadingEnabled) + sizeof(uint8_t) + sizeof(uint32_t) + sizeof(uint32_t) +
-                                   sizeof(uint32_t) + sizeof(uint32_t),
+                                   sizeof(uint8_t) + sizeof(uint32_t) + sizeof(uint32_t),
                 "Header size mismatch");
   return serialization::tryWritePod(file, SECTION_CACHE_MAGIC) &&
          serialization::tryWritePod(file, SECTION_FILE_VERSION) && serialization::tryWritePod(file, fontId) &&
@@ -143,7 +144,7 @@ bool Section::writeSectionFileHeader(const int fontId, const float lineCompressi
          serialization::tryWritePod(file, viewportHeight) && serialization::tryWritePod(file, hyphenationEnabled) &&
          serialization::tryWritePod(file, embeddedStyle) && serialization::tryWritePod(file, imageRendering) &&
          serialization::tryWritePod(file, bionicReadingEnabled) &&
-         serialization::tryWritePod(file, guideReadingEnabled) &&
+         serialization::tryWritePod(file, guideReadingEnabled) && serialization::tryWritePod(file, wordSpacing) &&
          serialization::tryWritePod(file, static_cast<uint8_t>(renderMode)) &&
          serialization::tryWritePod(file,
                                     pageCount) &&  // Placeholder for page count (will be initially 0, patched later)
@@ -161,7 +162,7 @@ bool Section::loadSectionFile(const int fontId, const float lineCompression, con
                               const uint16_t viewportWidth, const uint16_t viewportHeight,
                               const bool hyphenationEnabled, const bool embeddedStyle, const uint8_t imageRendering,
                               const bool bionicReadingEnabled, const bool guideReadingEnabled,
-                              const EpubRenderMode renderMode) {
+                              const uint8_t wordSpacing, const EpubRenderMode renderMode) {
   if (!Storage.openFileForRead("SCT", filePath, file)) {
     return false;
   }
@@ -208,6 +209,7 @@ bool Section::loadSectionFile(const int fontId, const float lineCompression, con
     uint8_t fileImageRendering;
     bool fileBionicReadingEnabled;
     bool fileGuideReadingEnabled;
+    uint8_t fileWordSpacing;
     uint8_t fileRenderMode;
     if (!serialization::tryReadPod(file, fileFontId) || !serialization::tryReadPod(file, fileLineCompression) ||
         !serialization::tryReadPod(file, fileExtraParagraphSpacing) ||
@@ -217,7 +219,8 @@ bool Section::loadSectionFile(const int fontId, const float lineCompression, con
         !serialization::tryReadPod(file, fileHyphenationEnabled) ||
         !serialization::tryReadPod(file, fileEmbeddedStyle) || !serialization::tryReadPod(file, fileImageRendering) ||
         !serialization::tryReadPod(file, fileBionicReadingEnabled) ||
-        !serialization::tryReadPod(file, fileGuideReadingEnabled) || !serialization::tryReadPod(file, fileRenderMode)) {
+        !serialization::tryReadPod(file, fileGuideReadingEnabled) ||
+        !serialization::tryReadPod(file, fileWordSpacing) || !serialization::tryReadPod(file, fileRenderMode)) {
       file.close();
       LOG_ERR("SCT", "Deserialization failed: truncated section header");
       clearCache();
@@ -230,7 +233,7 @@ bool Section::loadSectionFile(const int fontId, const float lineCompression, con
         viewportHeight != fileViewportHeight || hyphenationEnabled != fileHyphenationEnabled ||
         embeddedStyle != fileEmbeddedStyle || imageRendering != fileImageRendering ||
         bionicReadingEnabled != fileBionicReadingEnabled || guideReadingEnabled != fileGuideReadingEnabled ||
-        static_cast<uint8_t>(renderMode) != fileRenderMode) {
+        wordSpacing != fileWordSpacing || static_cast<uint8_t>(renderMode) != fileRenderMode) {
       file.close();
       LOG_ERR("SCT", "Deserialization failed: Parameters do not match");
       clearCache();
@@ -272,9 +275,9 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
                                 const uint16_t viewportWidth, const uint16_t viewportHeight,
                                 const bool hyphenationEnabled, const bool embeddedStyle, const uint8_t imageRendering,
                                 const bool bionicReadingEnabled, const bool guideReadingEnabled,
-                                const std::function<void()>& popupFn, bool* imagesWereSuppressed,
-                                bool* layoutAbortedForLowMemory, const EpubRenderMode renderMode,
-                                const SectionBuildOptions buildOptions) {
+                                const uint8_t wordSpacing, const std::function<void()>& popupFn,
+                                bool* imagesWereSuppressed, bool* layoutAbortedForLowMemory,
+                                const EpubRenderMode renderMode, const SectionBuildOptions buildOptions) {
   const auto localPath = epub->getSpineItem(spineIndex).href;
   const auto htmlDir = epub->getCachePath() + "/html";
   const auto htmlPath = htmlDir + "/" + std::to_string(spineIndex) + ".html";
@@ -376,7 +379,7 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
   }
   if (!writeSectionFileHeader(fontId, lineCompression, extraParagraphSpacing, forceParagraphIndents, paragraphAlignment,
                               viewportWidth, viewportHeight, hyphenationEnabled, embeddedStyle, imageRendering,
-                              effectiveBionicReadingEnabled, effectiveGuideReadingEnabled, renderMode)) {
+                              effectiveBionicReadingEnabled, effectiveGuideReadingEnabled, wordSpacing, renderMode)) {
     LOG_ERR("SCT", "Failed to write section header");
     file.close();
     Storage.remove(tmpSectionPath.c_str());
@@ -437,7 +440,7 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
   ChapterHtmlSlimParser visitor(
       epub, parsePath, renderer, fontId, lineCompression, extraParagraphSpacing, forceParagraphIndents,
       paragraphAlignment, viewportWidth, viewportHeight, hyphenationEnabled, effectiveBionicReadingEnabled,
-      effectiveGuideReadingEnabled,
+      effectiveGuideReadingEnabled, wordSpacing,
       [this, &lut, &lutCapacity, &lutCount, &pageCompletionFailed, layoutAbortedForLowMemory](
           std::unique_ptr<Page> page, const uint16_t paragraphIndex, const uint16_t listItemIndex) {
         if (pageCompletionFailed) {

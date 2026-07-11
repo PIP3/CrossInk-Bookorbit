@@ -349,11 +349,27 @@ size_t guideDotGapSlots(const std::string& rightWord) {
   return 1 + (isClosingPunctuationForJustify(firstCodepoint(rightWord)) ? 0 : 1);
 }
 
+int wordSpacingExtraFromGap(const int gap, const uint8_t wordSpacing) {
+  if (gap <= 0) {
+    return 0;
+  }
+  // Each level widens the natural inter-word gap by ~75%, so the top level (4)
+  // adds ~3x. This is deliberately large: on justified text the per-line gap
+  // sum is fixed by justification, so word spacing only becomes visible by making
+  // the line breaker pack fewer words per line, and a smaller nudge rarely crosses
+  // that threshold. On ragged (left/center/right) text it just widens each space.
+  const int level = std::min<uint8_t>(wordSpacing, 4);
+  return (gap * level * 7 + 4) / 8;
+}
+
 int naturalGapBeforeToken(const GfxRenderer& renderer, const int fontId, const std::string& leftWord,
                           const std::string& rightWord, const EpdFontFamily::Style leftStyle, const bool continues,
-                          const bool noSpaceBefore, const bool guideDotBefore) {
+                          const bool noSpaceBefore, const bool guideDotBefore, const uint8_t wordSpacing) {
   if (guideDotBefore) {
-    return guideDotNaturalGap(renderer, fontId, leftWord, rightWord, leftStyle);
+    const int naturalWordGap =
+        renderer.getSpaceAdvance(fontId, lastCodepoint(leftWord), firstCodepoint(rightWord), leftStyle);
+    const int extraGap = wordSpacingExtraFromGap(naturalWordGap, wordSpacing);
+    return guideDotNaturalGap(renderer, fontId, leftWord, rightWord, leftStyle) + extraGap;
   }
   if (noSpaceBefore) {
     return 0;
@@ -361,7 +377,9 @@ int naturalGapBeforeToken(const GfxRenderer& renderer, const int fontId, const s
   if (continues) {
     return renderer.getKerning(fontId, lastCodepoint(leftWord), firstCodepoint(rightWord), leftStyle);
   }
-  return renderer.getSpaceAdvance(fontId, lastCodepoint(leftWord), firstCodepoint(rightWord), leftStyle);
+  const int naturalGap =
+      renderer.getSpaceAdvance(fontId, lastCodepoint(leftWord), firstCodepoint(rightWord), leftStyle);
+  return naturalGap + wordSpacingExtraFromGap(naturalGap, wordSpacing);
 }
 
 size_t gapSlotsBeforeToken(const std::string& rightWord, const bool continues, const bool noSpaceBefore,
@@ -740,8 +758,9 @@ bool ParsedText::calculateGapMetrics(ArenaVector<int16_t>& naturalGaps, ArenaVec
     const bool continues = wordContinues[i];
     const bool noSpaceBefore = wordNoSpaceBefore[i];
     const bool guideDotBefore = wordGuideDotBefore[i];
-    naturalGaps[i] = static_cast<int16_t>(naturalGapBeforeToken(
-        renderer, fontId, words[i - 1], words[i], wordStyles[i - 1], continues, noSpaceBefore, guideDotBefore));
+    naturalGaps[i] =
+        static_cast<int16_t>(naturalGapBeforeToken(renderer, fontId, words[i - 1], words[i], wordStyles[i - 1],
+                                                   continues, noSpaceBefore, guideDotBefore, wordSpacing));
     gapSlots[i] = static_cast<uint8_t>(
         std::min<size_t>(UINT8_MAX, gapSlotsBeforeToken(words[i], continues, noSpaceBefore, guideDotBefore)));
   }
@@ -897,7 +916,7 @@ bool ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& renderer, const 
       if (!isFirstWord) {
         spacing = naturalGapBeforeToken(renderer, fontId, words[currentIndex - 1], words[currentIndex],
                                         wordStyles[currentIndex - 1], continuesVec[currentIndex],
-                                        noSpaceBeforeVec[currentIndex], wordGuideDotBefore[currentIndex]);
+                                        noSpaceBeforeVec[currentIndex], wordGuideDotBefore[currentIndex], wordSpacing);
       }
       const int candidateWidth = spacing + wordWidths[currentIndex];
 
@@ -1262,10 +1281,10 @@ bool ParsedText::extractLine(Arena& scratchArena, const size_t breakIndex, const
         reorderedGapCount +=
             gapSlotsBeforeToken(reorderedWordsScratch[wordIdx], reorderedContinuesScratch[wordIdx],
                                 reorderedNoSpaceBeforeScratch[wordIdx], reorderedGuideDotBeforeScratch[wordIdx]);
-        reorderedNaturalGaps +=
-            naturalGapBeforeToken(renderer, fontId, reorderedWordsScratch[wordIdx - 1], reorderedWordsScratch[wordIdx],
-                                  reorderedStylesScratch[wordIdx - 1], reorderedContinuesScratch[wordIdx],
-                                  reorderedNoSpaceBeforeScratch[wordIdx], reorderedGuideDotBeforeScratch[wordIdx]);
+        reorderedNaturalGaps += naturalGapBeforeToken(
+            renderer, fontId, reorderedWordsScratch[wordIdx - 1], reorderedWordsScratch[wordIdx],
+            reorderedStylesScratch[wordIdx - 1], reorderedContinuesScratch[wordIdx],
+            reorderedNoSpaceBeforeScratch[wordIdx], reorderedGuideDotBeforeScratch[wordIdx], wordSpacing);
       }
     }
 
@@ -1306,9 +1325,9 @@ bool ParsedText::extractLine(Arena& scratchArena, const size_t breakIndex, const
         const bool nextContinues = reorderedContinuesScratch[wordIdx + 1];
         const bool nextNoSpace = reorderedNoSpaceBeforeScratch[wordIdx + 1];
         const bool nextGuideDot = reorderedGuideDotBeforeScratch[wordIdx + 1];
-        int gap =
-            naturalGapBeforeToken(renderer, fontId, reorderedWordsScratch[wordIdx], reorderedWordsScratch[wordIdx + 1],
-                                  reorderedStylesScratch[wordIdx], nextContinues, nextNoSpace, nextGuideDot);
+        int gap = naturalGapBeforeToken(renderer, fontId, reorderedWordsScratch[wordIdx],
+                                        reorderedWordsScratch[wordIdx + 1], reorderedStylesScratch[wordIdx],
+                                        nextContinues, nextNoSpace, nextGuideDot, wordSpacing);
         gap += reorderedJustifyExtra * static_cast<int>(gapSlotsBeforeToken(reorderedWordsScratch[wordIdx + 1],
                                                                             nextContinues, nextNoSpace, nextGuideDot));
         xpos += gap;

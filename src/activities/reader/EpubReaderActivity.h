@@ -29,6 +29,7 @@ class EpubReaderActivity final : public Activity {
     uint8_t fontFamily = 0;
     uint8_t fontSize = 0;
     uint8_t lineHeightPercent = 100;
+    uint8_t wordSpacing = 0;
     uint8_t orientation = 0;
     uint8_t screenMargin = 5;
     uint8_t publisherPageNumbers = 0;

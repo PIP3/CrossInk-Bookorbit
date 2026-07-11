@@ -94,6 +94,7 @@ STR_FONT_PREVIEW_TEXT: "Jove xef, porti whisky amb quinze glaçons d'hidrogen, c
 STR_FONT_FAMILY: "Família de fonts"
 STR_FONT_SIZE: "Grandària de la lletra (UI)"
 STR_LINE_SPACING: "Interlineat del lector"
+STR_WORD_SPACING: "Espaiat entre paraules"
 STR_SCREEN_MARGIN: "Marge de pantalla del lector"
 STR_PUBLISHER_PAGE_NUMBERS: "Números de pàgina de l'editorial"
 STR_PARA_ALIGNMENT: "Alineació de paràgrafs del lector"

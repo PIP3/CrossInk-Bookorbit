@@ -32,6 +32,7 @@ struct ReaderLayoutSettingsSnapshot {
   uint8_t fontFamily;
   uint8_t fontSize;
   uint8_t lineHeightPercent;
+  uint8_t wordSpacing;
   uint8_t orientation;
   uint8_t screenMargin;
   uint8_t publisherPageNumbers;
@@ -50,12 +51,12 @@ struct ReaderLayoutSettingsSnapshot {
 
   bool operator==(const ReaderLayoutSettingsSnapshot& other) const {
     return fontFamily == other.fontFamily && fontSize == other.fontSize &&
-           lineHeightPercent == other.lineHeightPercent && orientation == other.orientation &&
-           screenMargin == other.screenMargin && publisherPageNumbers == other.publisherPageNumbers &&
-           paragraphAlignment == other.paragraphAlignment && embeddedStyle == other.embeddedStyle &&
-           hyphenationEnabled == other.hyphenationEnabled && textAntiAliasing == other.textAntiAliasing &&
-           readerDarkMode == other.readerDarkMode && imageRendering == other.imageRendering &&
-           extraParagraphSpacing == other.extraParagraphSpacing &&
+           lineHeightPercent == other.lineHeightPercent && wordSpacing == other.wordSpacing &&
+           orientation == other.orientation && screenMargin == other.screenMargin &&
+           publisherPageNumbers == other.publisherPageNumbers && paragraphAlignment == other.paragraphAlignment &&
+           embeddedStyle == other.embeddedStyle && hyphenationEnabled == other.hyphenationEnabled &&
+           textAntiAliasing == other.textAntiAliasing && readerDarkMode == other.readerDarkMode &&
+           imageRendering == other.imageRendering && extraParagraphSpacing == other.extraParagraphSpacing &&
            forceParagraphIndents == other.forceParagraphIndents && bionicReadingEnabled == other.bionicReadingEnabled &&
            guideReadingEnabled == other.guideReadingEnabled && epubRenderMode == other.epubRenderMode &&
            std::strncmp(sdFontFamilyName, other.sdFontFamilyName, sizeof(sdFontFamilyName)) == 0;
@@ -68,6 +69,7 @@ ReaderLayoutSettingsSnapshot captureReaderLayoutSettings() {
       SETTINGS.fontFamily,
       SETTINGS.fontSize,
       SETTINGS.lineHeightPercent,
+      SETTINGS.wordSpacing,
       SETTINGS.orientation,
       SETTINGS.screenMargin,
       SETTINGS.publisherPageNumbers,
