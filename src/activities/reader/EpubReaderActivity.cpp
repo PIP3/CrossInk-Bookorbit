@@ -1981,6 +1981,22 @@ void EpubReaderActivity::loop() {
     return;
   }
 
+  if (goHomeAfterBuildCancel.load(std::memory_order_relaxed) && !RenderLock::peek()) {
+    goHomeAfterBuildCancel.store(false, std::memory_order_relaxed);
+    sectionBuildCancelRequested.store(false, std::memory_order_relaxed);
+    onGoHome();
+    return;
+  }
+
+  if (RenderLock::peek() && mappedInput.wasReleased(MappedInputManager::Button::Back) &&
+      mappedInput.getHeldTime() < ReaderUtils::GO_HOME_MS) {
+    sectionBuildCancelRequested.store(true, std::memory_order_relaxed);
+    goHomeAfterBuildCancel.store(true, std::memory_order_relaxed);
+    automaticPageTurnActive = false;
+    LOG_DBG("ERS", "Back requested while EPUB indexing is busy; cancelling build");
+    return;
+  }
+
   // Lazily resume a partial's extension build once the reader nears its watermark. Far from it the
   // rebuild is all cost (whole-chapter re-layout from page 0) and no benefit this session.
   if (section && !section->isBuilding() && section->isPartial() && !RenderLock::peek() && buildViewportWidth > 0 &&
@@ -3849,6 +3865,20 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     pagesUntilFullRefresh = 1;
   };
 
+  bool buildCancelledForBack = false;
+  const auto cancelBuildForBack = [this, &buildCancelledForBack]() {
+    if (!sectionBuildCancelRequested.load(std::memory_order_relaxed)) {
+      return false;
+    }
+    if (section && section->isBuilding()) {
+      section->suspendBuild();
+    }
+    buildCancelledForBack = true;
+    automaticPageTurnActive = false;
+    LOG_DBG("ERS", "EPUB section build cancelled by Back");
+    return true;
+  };
+
   // edge case handling for sub-zero spine index
   if (currentSpineIndex < 0) {
     currentSpineIndex = 0;
@@ -4009,6 +4039,9 @@ void EpubReaderActivity::render(RenderLock&& lock) {
               bool buildFailed = false;
               while (!section->isBuildComplete() &&
                      (anchorJump ? !anchorPageReady() : static_cast<int>(section->pageCount) <= target)) {
+                if (cancelBuildForBack()) {
+                  break;
+                }
                 if (!section->buildSomeMore(BUILD_PAGES_PER_CHUNK)) {
                   LOG_ERR("ERS", "Failed during incremental section build");
                   buildFailed = true;
@@ -4020,12 +4053,16 @@ void EpubReaderActivity::render(RenderLock&& lock) {
                   attemptLayoutAbortedForLowMemory || section->lastBuildLayoutAbortedForLowMemory();
               const bool requestedPageAvailable =
                   anchorJump ? anchorPageReady() : target >= 0 && target < static_cast<int>(section->pageCount);
+              if (buildCancelledForBack) {
+                buildFailed = false;
+              }
               if (buildFailed && attemptLayoutAbortedForLowMemory && requestedPageAvailable) {
                 LOG_ERR("ERS", "Incremental section build paused for low heap after reaching requested page");
                 attemptLayoutAbortedForLowMemory = false;
                 buildFailed = false;
               }
-              buildSucceeded = !buildFailed && (section->pageCount > 0 || section->isBuildComplete());
+              buildSucceeded =
+                  buildCancelledForBack || (!buildFailed && (section->pageCount > 0 || section->isBuildComplete()));
             } else {
               attemptImagesWereSuppressed = attemptImagesWereSuppressed || section->lastBuildImagesWereSuppressed();
               attemptLayoutAbortedForLowMemory =
@@ -4066,11 +4103,19 @@ void EpubReaderActivity::render(RenderLock&& lock) {
         fallbackBuildSucceeded = buildSectionWithProfile(readerFontId, buildProfileForRenderMode(attemptMode));
       }
 
+      if (buildCancelledForBack) {
+        return;
+      }
+
       if (!fallbackBuildSucceeded && layoutAbortedForLowMemory && shouldAttemptSafeModeFallback()) {
         LOG_ERR("ERS", "EPUB section layout aborted for low heap; retrying Safe Mode");
         releaseReaderSdFontCachesForLowMemory(renderer, "ERS", "safe mode section rebuild");
         layoutAbortedForLowMemory = false;
         fallbackBuildSucceeded = buildSectionWithProfile(readerFontId, safeModeBuildProfile());
+      }
+
+      if (buildCancelledForBack) {
+        return;
       }
 
       if (!fallbackBuildSucceeded) {
@@ -4244,6 +4289,9 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       }
     }
     while (!section->isBuildComplete() && section->currentPage >= static_cast<int>(section->pageCount)) {
+      if (cancelBuildForBack()) {
+        return;
+      }
       if (!section->buildSomeMore(BUILD_PAGES_PER_CHUNK)) {
         LOG_ERR("ERS", "Failed during incremental section build");
         section.reset();
@@ -4255,6 +4303,9 @@ void EpubReaderActivity::render(RenderLock&& lock) {
 
   if (section->isBuilding()) {
     while (!section->isBuildComplete() && section->currentPage >= static_cast<int>(section->pageCount)) {
+      if (cancelBuildForBack()) {
+        return;
+      }
       if (!section->buildSomeMore(BUILD_PAGES_PER_CHUNK)) {
         LOG_ERR("ERS", "Failed during incremental section build");
         section.reset();

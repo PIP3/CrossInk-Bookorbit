@@ -5,6 +5,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
+#include <atomic>
 #include <memory>
 #include <optional>
 #include <string>
@@ -160,6 +161,8 @@ class EpubReaderActivity final : public Activity {
   uint16_t buildViewportHeight = 0;
   // Set when the lazy extension start failed, so loop() does not retry every tick.
   bool partialRebuildStartFailed = false;
+  std::atomic<bool> sectionBuildCancelRequested{false};
+  std::atomic<bool> goHomeAfterBuildCancel{false};
 
   // Last position successfully persisted by saveProgress, used to skip redundant
   // writeAtomic calls on no-op re-renders.
