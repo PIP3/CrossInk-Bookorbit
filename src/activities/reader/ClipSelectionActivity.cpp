@@ -100,10 +100,11 @@ bool ClipSelectionActivity::allocateSavedBuffer() {
     const size_t chunkSize = std::min(BUFFER_CHUNK_SIZE, savedBufferSize - offset);
     auto chunk = makeUniqueNoThrow<uint8_t[]>(chunkSize);
     if (!chunk) {
-      LOG_ERR("CLIP", "OOM: clipping page snapshot chunk %u (%u bytes)", static_cast<unsigned>(i),
-              static_cast<unsigned>(chunkSize));
+      LOG_ERR("CLIP", "OOM: clipping page snapshot chunk %u (%u bytes); using rerender fallback",
+              static_cast<unsigned>(i), static_cast<unsigned>(chunkSize));
       savedBufferChunks.clear();
-      return false;
+      savedBufferSize = 0;
+      return true;
     }
     savedBufferChunks.push_back(std::move(chunk));
   }
@@ -111,6 +112,11 @@ bool ClipSelectionActivity::allocateSavedBuffer() {
 }
 
 void ClipSelectionActivity::storeCurrentBuffer() {
+  if (savedBufferChunks.empty()) {
+    hasSavedBuffer = false;
+    return;
+  }
+
   const uint8_t* frameBuffer = renderer.getFrameBuffer();
   for (size_t i = 0; i < savedBufferChunks.size(); i++) {
     const size_t offset = i * BUFFER_CHUNK_SIZE;
@@ -121,6 +127,8 @@ void ClipSelectionActivity::storeCurrentBuffer() {
 }
 
 void ClipSelectionActivity::restoreSavedBuffer() const {
+  if (!hasSavedBuffer) return;
+
   uint8_t* frameBuffer = renderer.getFrameBuffer();
   for (size_t i = 0; i < savedBufferChunks.size(); i++) {
     const size_t offset = i * BUFFER_CHUNK_SIZE;
@@ -218,13 +226,13 @@ void ClipSelectionActivity::loop() {
 }
 
 void ClipSelectionActivity::render(RenderLock&&) {
-  if (!hasSavedBuffer) return;
-
   if (needsPageSwitch) {
     switchToPage(words[readingOrder[cursorIdx]].pageIdx);
     needsPageSwitch = false;
-  } else {
+  } else if (hasSavedBuffer) {
     restoreSavedBuffer();
+  } else if (!switchToPage(currentDisplayPage)) {
+    return;
   }
 
   if (!prewarmHighlightedWords() && renderer.isSdCardFont(renderFontId)) {
