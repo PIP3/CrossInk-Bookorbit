@@ -642,6 +642,11 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
         }
       }
     }
+    // Release the resolved CSS rule map: it is only needed transiently while building
+    // section caches, and createSectionFile reloads it from cache on demand. Holding it
+    // resident pins tens of KB for the whole reading session (more on warm resume into
+    // an already-cached chapter, where createSectionFile never runs to clear it).
+    cssParser->clear();
     loadXLocations();
     LOG_DBG("EBP", "Loaded ePub: %s", filepath.c_str());
     return true;
