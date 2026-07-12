@@ -147,6 +147,9 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
       LOG_ERR("COF", "Couldn't open temp items file for reading. This is probably going to be a fatal error.");
     }
 
+    // Sort the compact item index so every idref lookup uses binary search.
+    // The temp file stores hash/length plus href, avoiding a second full copy
+    // of every manifest ID.
     std::sort(self->itemIndex.begin(), self->itemIndex.end(), [](const ItemIndexEntry& a, const ItemIndexEntry& b) {
       return a.idHash < b.idHash || (a.idHash == b.idHash && a.idLen < b.idLen);
     });
