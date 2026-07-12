@@ -4021,10 +4021,11 @@ void EpubReaderActivity::render(RenderLock&& lock) {
           } else {
             bool showPopup = false;
             if (anchorJump) {
-              showPopup = !anchorPageReady() && spineBytes > BUILD_POPUP_BYTE_THRESHOLD;
+              showPopup = !anchorPageReady() && (!loadedSection || spineBytes > BUILD_POPUP_BYTE_THRESHOLD);
             } else {
               const bool targetAvailable = target < static_cast<int>(section->pageCount);
-              showPopup = !targetAvailable && ((spineBytes > BUILD_POPUP_BYTE_THRESHOLD && willInflate) ||
+              showPopup = !targetAvailable && (!loadedSection ||
+                                               (spineBytes > BUILD_POPUP_BYTE_THRESHOLD && willInflate) ||
                                                target > BUILD_POPUP_PAGE_THRESHOLD);
             }
             if (showPopup) {
