@@ -4173,7 +4173,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
                                SETTINGS.wordSpacing, profile.renderMode)) {
         LOG_ERR("ERS", "Failed to start partial extension build");
         section.reset();
-        showPendingSyncSaveError();
+        showBuildError();
         return;
       }
     }
@@ -4181,7 +4181,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       if (!section->buildSomeMore(BUILD_PAGES_PER_CHUNK)) {
         LOG_ERR("ERS", "Failed during incremental section build");
         section.reset();
-        showPendingSyncSaveError();
+        showBuildError();
         return;
       }
     }
@@ -4192,7 +4192,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       if (!section->buildSomeMore(BUILD_PAGES_PER_CHUNK)) {
         LOG_ERR("ERS", "Failed during incremental section build");
         section.reset();
-        showPendingSyncSaveError();
+        showBuildError();
         return;
       }
     }
