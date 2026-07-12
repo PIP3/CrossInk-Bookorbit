@@ -60,7 +60,7 @@ static constexpr const char* const BOLD_TAGS[] = {"b", "strong"};
 static constexpr const char* const ITALIC_TAGS[] = {"i", "em"};
 static constexpr const char* const UNDERLINE_TAGS[] = {"u", "ins"};
 static constexpr const char* const STRIKETHROUGH_TAGS[] = {"s", "strike", "del"};
-static constexpr const char* const IMAGE_TAGS[] = {"img"};
+static constexpr const char* const IMAGE_TAGS[] = {"img", "image"};
 static constexpr const char* const SKIP_TAGS[] = {"head"};
 
 bool isWhitespace(const char c) { return c == ' ' || c == '\r' || c == '\n' || c == '\t'; }
@@ -1517,6 +1517,8 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       for (int i = 0; atts[i]; i += 2) {
         if (strcmp(atts[i], "src") == 0) {
           src = atts[i + 1];
+        } else if (src.empty() && (strcmp(atts[i], "href") == 0 || strcmp(atts[i], "xlink:href") == 0)) {
+          src = atts[i + 1];
         } else if (strcmp(atts[i], "alt") == 0) {
           alt = atts[i + 1];
         } else if (strncmp(atts[i], "data-AmznRemoved-M8", 19) == 0) {
@@ -1528,6 +1530,11 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         LOG_DBG("EHP", "Skipping Kindle M8 low-res fallback image");
         self->skipCurrentElement();
         return;
+      }
+
+      const size_t fragmentPos = src.find('#');
+      if (fragmentPos != std::string::npos) {
+        src.resize(fragmentPos);
       }
 
       // imageRendering: 0=display, 1=placeholder (alt text only), 2=suppress entirely
