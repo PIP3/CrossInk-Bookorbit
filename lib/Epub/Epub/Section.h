@@ -73,6 +73,7 @@ class Section {
                               bool bionicReadingEnabled, bool guideReadingEnabled, uint8_t wordSpacing,
                               EpubRenderMode renderMode);
   uint32_t onPageComplete(std::unique_ptr<Page> page);
+  bool ensureBuildFileOpen();
   bool finalizeBuild();
   // Write the LUTs/anchor map (and, for a partial, the watermark trailer), patch the
   // header, stamp the version byte, and swap the tmp .bin over filePath.
@@ -111,6 +112,7 @@ class Section {
                   uint8_t wordSpacing, EpubRenderMode renderMode = EpubRenderMode::CrossInkDefault,
                   SectionBuildOptions buildOptions = {});
   bool buildSomeMore(int maxPages);
+  void releaseBuildFile();
   bool lastBuildImagesWereSuppressed() const { return lastImagesWereSuppressed_; }
   bool lastBuildLayoutAbortedForLowMemory() const { return lastLayoutAbortedForLowMemory_; }
   bool isBuilding() const { return static_cast<bool>(build_); }

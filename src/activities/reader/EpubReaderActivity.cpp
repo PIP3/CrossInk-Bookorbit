@@ -4359,6 +4359,11 @@ bool EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageC
   if (activeFootnotePreview) {
     return true;
   }
+  if (section && section->isBuilding() && spineIndex == currentSpineIndex) {
+    // Free lazy-build cache files before opening progress.bin; X4/SdFat can reject
+    // another file open while a still-building EPUB section keeps files open.
+    section->releaseBuildFile();
+  }
   return EpubReaderUtils::saveProgress(*epub, spineIndex, currentPage, pageCount);
 }
 

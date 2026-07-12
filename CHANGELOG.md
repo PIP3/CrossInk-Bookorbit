@@ -15,6 +15,7 @@
 - Chapter openers whose decorative image sits inside the heading (chapter number, ornament, then title) now stay together on one page instead of splitting the chapter number onto its own page.
 - Chapter openers with an inline ornament image no longer stack an oversized gap between the chapter number, the ornament, and the title.
 - Unsupported EPUB chapter image formats no longer trigger the low-memory image warning.
+- EPUB progress now keeps saving while long chapters are still being indexed.
 
 ## [v1.4.0] - 2026-07-10
 

@@ -101,7 +101,7 @@ Section::Section(const std::shared_ptr<Epub>& epub, const int spineIndex, GfxRen
 Section::~Section() { suspendBuild(); }
 
 uint32_t Section::onPageComplete(std::unique_ptr<Page> page) {
-  if (!file) {
+  if (!ensureBuildFileOpen()) {
     LOG_ERR("SCT", "File not open for writing page %d", builtPageCount_);
     return 0;
   }
@@ -127,6 +127,47 @@ uint32_t Section::onPageComplete(std::unique_ptr<Page> page) {
     pageCount = builtPageCount_;
   }
   return position;
+}
+
+bool Section::ensureBuildFileOpen() {
+  if (!build_) {
+    return false;
+  }
+  if (file) {
+    return true;
+  }
+  if (build_->tmpSectionPath.empty()) {
+    return false;
+  }
+  file = Storage.open(build_->tmpSectionPath.c_str(), O_RDWR);
+  if (!file) {
+    LOG_ERR("SCT", "Failed to reopen incremental section temp file");
+    return false;
+  }
+  if (!file.seek(file.size())) {
+    LOG_ERR("SCT", "Failed to seek incremental section temp file");
+    file.close();
+    return false;
+  }
+  return true;
+}
+
+void Section::releaseBuildFile() {
+  if (!build_) {
+    return;
+  }
+  if (file) {
+    file.flush();
+    if (!file.sync()) {
+      LOG_ERR("SCT", "Failed to sync incremental section temp file before release");
+    }
+    if (!file.close()) {
+      LOG_ERR("SCT", "Failed to close incremental section temp file before progress save");
+    }
+  }
+  if (build_->parser) {
+    build_->parser->releaseInputFile();
+  }
 }
 
 bool Section::writeSectionFileHeader(const int fontId, const float lineCompression, const bool extraParagraphSpacing,
@@ -980,6 +1021,10 @@ bool Section::commitBuildFile(const uint8_t version, const uint32_t bytesConsume
     return false;
   };
 
+  if (!ensureBuildFileOpen()) {
+    return failCommit();
+  }
+
   const uint32_t lutOffset = file.position();
   for (uint16_t i = 0; i < build_->lutCount; i++) {
     if (build_->lut[i].fileOffset == 0 || !serialization::tryWritePod(file, build_->lut[i].fileOffset)) {
@@ -1120,6 +1165,8 @@ void Section::suspendBuild() {
   if (!committed && file) {
     // Explicit close() required before remove (member variable, O_RDWR handle).
     file.close();
+  }
+  if (!committed && Storage.exists(binTmpPath().c_str())) {
     Storage.remove(binTmpPath().c_str());
   }
   if (!build_->reusedHtml && Storage.exists(build_->tmpHtmlPath.c_str())) {
@@ -1141,9 +1188,9 @@ void Section::abandonBuild() {
   }
   if (file) {
     file.close();
-    if (!build_->tmpSectionPath.empty()) {
-      Storage.remove(build_->tmpSectionPath.c_str());
-    }
+  }
+  if (!build_->tmpSectionPath.empty() && Storage.exists(build_->tmpSectionPath.c_str())) {
+    Storage.remove(build_->tmpSectionPath.c_str());
   }
   // A parse error would recur against the same HTML, so drop any partial too -- resuming
   // from it would just re-enter the failing build every open.
@@ -1162,12 +1209,20 @@ void Section::abandonBuild() {
 }
 
 std::unique_ptr<Page> Section::loadPageDuringBuild(const int page) {
-  if (!build_ || page < 0 || page >= static_cast<int>(build_->lutCount) || !file) {
+  if (!build_ || page < 0 || page >= static_cast<int>(build_->lutCount)) {
     return nullptr;
   }
   const uint32_t pos = build_->lut[page].fileOffset;
   if (pos == 0) {
     return nullptr;
+  }
+
+  if (!file) {
+    HalFile tmp;
+    if (!Storage.openFileForRead("SCT", build_->tmpSectionPath, tmp) || !tmp.seek(pos)) {
+      return nullptr;
+    }
+    return Page::deserialize(tmp);
   }
 
   const uint32_t writePos = file.position();

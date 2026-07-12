@@ -2703,8 +2703,36 @@ void ChapterHtmlSlimParser::prewarmSectionAdvanceTable(FsFile& file) const {
 
 ChapterHtmlSlimParser::~ChapterHtmlSlimParser() { abortParse(); }
 
+bool ChapterHtmlSlimParser::ensureInputFileOpen() {
+  if (parseFile_) {
+    return true;
+  }
+  if (!Storage.openFileForRead("EHP", filepath, parseFile_)) {
+    return false;
+  }
+  if (parseFileOffset_ > 0 && !parseFile_.seek(parseFileOffset_)) {
+    LOG_ERR("EHP", "Failed to seek parser input to %u", static_cast<unsigned>(parseFileOffset_));
+    parseFile_.close();
+    return false;
+  }
+  if (parseFileSize_ == 0) {
+    parseFileSize_ = parseFile_.size();
+  }
+  return true;
+}
+
+void ChapterHtmlSlimParser::releaseInputFile() {
+  if (!parseFile_) {
+    return;
+  }
+  parseFileOffset_ = parseFile_.position();
+  parseFile_.close();
+}
+
 bool ChapterHtmlSlimParser::beginParse() {
   malformedMarkupTruncated = false;
+  parseFileOffset_ = 0;
+  parseFileSize_ = 0;
   // Initialize block style stack with a root entry representing "no ancestor block elements".
   // The user's paragraph alignment is set as the default so child elements without explicit
   // text-align inherit it correctly through getCombinedBlockStyle.
@@ -2766,9 +2794,10 @@ bool ChapterHtmlSlimParser::beginParse() {
     blockStyleBuf_ = nullptr;
     return false;
   }
+  parseFileSize_ = parseFile_.size();
 
   // Get file size to decide whether to show indexing popup.
-  if (popupFn && parseFile_.size() >= MIN_SIZE_FOR_POPUP) {
+  if (popupFn && parseFileSize_ >= MIN_SIZE_FOR_POPUP) {
     popupFn();
   }
 
@@ -2787,6 +2816,10 @@ ChapterHtmlSlimParser::ParseStatus ChapterHtmlSlimParser::parseStep() {
     LOG_ERR("EHP", "parseStep called without an active parser");
     return ParseStatus::Error;
   }
+  if (!ensureInputFileOpen()) {
+    LOG_ERR("EHP", "Failed to reopen parser input");
+    return ParseStatus::Error;
+  }
 
   void* const buf = XML_GetBuffer(activeParser, PARSE_BUFFER_SIZE);
   if (!buf) {
@@ -2795,6 +2828,7 @@ ChapterHtmlSlimParser::ParseStatus ChapterHtmlSlimParser::parseStep() {
   }
 
   const size_t len = parseFile_.read(buf, PARSE_BUFFER_SIZE);
+  parseFileOffset_ = parseFile_.position();
   if (len == 0 && parseFile_.available() > 0) {
     LOG_ERR("EHP", "File read error");
     return ParseStatus::Error;
@@ -2831,6 +2865,8 @@ void ChapterHtmlSlimParser::abortParse() {
   if (parseFile_) {
     parseFile_.close();
   }
+  parseFileOffset_ = 0;
+  parseFileSize_ = 0;
   parseArena_.release();
   inlineStyleBuf_ = nullptr;
   inlineStyleCount_ = 0;
@@ -2846,6 +2882,8 @@ bool ChapterHtmlSlimParser::finishParse() {
     activeParser = nullptr;
   }
   parseFile_.close();
+  parseFileOffset_ = 0;
+  parseFileSize_ = 0;
 
   if (malformedMarkupTruncated) {
     LOG_DBG("EHP", "Malformed markup encountered; finalizing partial chapter content");
