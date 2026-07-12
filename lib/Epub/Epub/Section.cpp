@@ -130,22 +130,21 @@ uint32_t Section::onPageComplete(std::unique_ptr<Page> page) {
 }
 
 bool Section::ensureBuildFileOpen() {
-  if (!build_) {
-    return false;
-  }
   if (file) {
     return true;
   }
-  if (build_->tmpSectionPath.empty()) {
+  const std::string& tmpSectionPath =
+      build_ && !build_->tmpSectionPath.empty() ? build_->tmpSectionPath : activeBuildTmpSectionPath_;
+  if (tmpSectionPath.empty()) {
     return false;
   }
-  file = Storage.open(build_->tmpSectionPath.c_str(), O_RDWR);
+  file = Storage.open(tmpSectionPath.c_str(), O_RDWR);
   if (!file) {
-    LOG_ERR("SCT", "Failed to reopen incremental section temp file");
+    LOG_ERR("SCT", "Failed to reopen section temp file");
     return false;
   }
   if (!file.seek(file.size())) {
-    LOG_ERR("SCT", "Failed to seek incremental section temp file");
+    LOG_ERR("SCT", "Failed to seek section temp file");
     file.close();
     return false;
   }
@@ -380,6 +379,11 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
   const auto htmlPath = htmlDir + "/" + std::to_string(spineIndex) + ".html";
   const auto tmpHtmlPath = htmlDir + "/.tmp_" + std::to_string(spineIndex) + ".html";
   const auto tmpSectionPath = filePath + ".tmp";
+  activeBuildTmpSectionPath_ = tmpSectionPath;
+  struct ClearActiveBuildTmpPath {
+    std::string& path;
+    ~ClearActiveBuildTmpPath() { path.clear(); }
+  } clearActiveBuildTmpPath{activeBuildTmpSectionPath_};
   pageCount = 0;
   if (layoutAbortedForLowMemory) *layoutAbortedForLowMemory = false;
   const bool effectiveBionicReadingEnabled = bionicReadingEnabled;

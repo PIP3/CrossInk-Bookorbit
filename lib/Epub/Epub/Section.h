@@ -66,6 +66,7 @@ class Section {
   uint16_t partialPageCount_ = 0;
   uint32_t partialBytesConsumed_ = 0;
   uint32_t partialTotalBytes_ = 0;
+  std::string activeBuildTmpSectionPath_;
 
   bool writeSectionFileHeader(int fontId, float lineCompression, bool extraParagraphSpacing, bool forceParagraphIndents,
                               uint8_t paragraphAlignment, uint16_t viewportWidth, uint16_t viewportHeight,
