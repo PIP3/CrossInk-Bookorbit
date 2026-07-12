@@ -8,6 +8,8 @@
 
 ### Changed
 
+- Large EPUB indexing now borrows temporary display memory and uses faster ZIP/PNG decompression to reduce memory pressure while opening or rebuilding chapters.
+
 ### Fixed
 
 - Underlined EPUB text now draws a continuous line across the spaces between adjacent underlined words.

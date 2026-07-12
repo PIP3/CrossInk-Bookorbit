@@ -154,6 +154,13 @@ class EpubReaderActivity final : public Activity {
   SavedPosition savedPositions[MAX_FOOTNOTE_DEPTH] = {};
   int footnoteDepth = 0;
 
+  // Viewport of the last render(), captured so loop()'s lazy partial-extension start
+  // builds with identical layout parameters to the pages already rendered.
+  uint16_t buildViewportWidth = 0;
+  uint16_t buildViewportHeight = 0;
+  // Set when the lazy extension start failed, so loop() does not retry every tick.
+  bool partialRebuildStartFailed = false;
+
   void renderContents(std::unique_ptr<Page> page, int fontId, int orientedMarginTop, int orientedMarginRight,
                       int orientedMarginBottom, int orientedMarginLeft);
   void drawClippingHighlights(const Page& page, int fontId, int orientedMarginTop, int orientedMarginLeft) const;
@@ -174,6 +181,9 @@ class EpubReaderActivity final : public Activity {
   // in one sitting -- instant reopen comes from Section::suspendBuild() persisting the pages
   // already laid out as a partial file on exit/sleep.
   static constexpr int BUILD_WINDOW_AHEAD = 5;
+  // Reopening a partial does not immediately restart its whole-chapter extension build.
+  // Start it only when the reader is close enough to need pages past the watermark.
+  static constexpr int PARTIAL_REBUILD_START_MARGIN = 15;
   // Show the indexing popup when an initial build must lay out more than this many pages up front
   // (a deep resume/jump into a not-yet-built section), so it isn't a silent wait. Kept independent
   // of the small look-ahead window so ordinary landings stay popup-free.
@@ -266,6 +276,7 @@ class EpubReaderActivity final : public Activity {
   void loop() override;
   void render(RenderLock&& lock) override;
   bool preventAutoSleep() override { return automaticPageTurnActive; }
+  bool skipLoopDelay() override { return section && section->isBuilding(); }
   bool isReaderActivity() const override { return true; }
   bool canSnapshotForSleepOverlay() const override { return true; }
   std::string getCurrentBookPath() const override { return epub ? epub->getPath() : std::string{}; }

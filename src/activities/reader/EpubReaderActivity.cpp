@@ -1953,18 +1953,44 @@ void EpubReaderActivity::loop() {
     return;
   }
 
+  // Lazily resume a partial's extension build once the reader nears its watermark. Far from it the
+  // rebuild is all cost (whole-chapter re-layout from page 0) and no benefit this session.
+  if (section && !section->isBuilding() && section->isPartial() && !RenderLock::peek() && buildViewportWidth > 0 &&
+      !partialRebuildStartFailed &&
+      section->currentPage + PARTIAL_REBUILD_START_MARGIN >= static_cast<int>(section->pageCount)) {
+    RenderLock lock(*this);
+    if (section && !section->isBuilding() && section->isPartial()) {
+      const int renderFontId = activeSectionFontId != 0 ? activeSectionFontId : SETTINGS.getReaderFontId();
+      const SectionBuildProfile profile = buildProfileForRenderMode(normalizeRenderMode(SETTINGS.epubRenderMode));
+      if (!section->startBuild(renderFontId, SETTINGS.getReaderLineCompression(), SETTINGS.extraParagraphSpacing,
+                               SETTINGS.forceParagraphIndents, SETTINGS.paragraphAlignment, buildViewportWidth,
+                               buildViewportHeight, SETTINGS.hyphenationEnabled, profile.embeddedStyle,
+                               SETTINGS.imageRendering, profile.bionicReadingEnabled, profile.guideReadingEnabled,
+                               SETTINGS.wordSpacing, profile.renderMode)) {
+        partialRebuildStartFailed = true;
+        LOG_ERR("ERS", "Failed to start deferred partial extension build");
+      } else {
+        LOG_DBG("ERS", "Reader near partial watermark (%d/%d), resuming extension build", section->currentPage,
+                section->pageCount);
+      }
+    }
+  }
+
   // Drive any in-progress incremental section build forward, off the page-turn critical path,
   // but only within a small window ahead of the reader: an unbounded build monopolized the
   // RenderLock and locked out page turns. The build follows the reader instead, and instant
   // reopen comes from suspendBuild() persisting the laid-out pages as a partial on exit.
   // Skip while the render mutex is busy so we never delay a pending render; re-check
   // isBuilding() under the lock since render() may have just finished it.
-  if (section && section->isBuilding() && !RenderLock::peek() && section->activeBuildHasCaughtReadablePages() &&
-      static_cast<int>(section->pageCount) < section->currentPage + BUILD_WINDOW_AHEAD) {
+  // While extending a partial, pageCount is pinned at the partial watermark until the rebuild
+  // catches up, so keep ticking it even before activeBuildHasCaughtReadablePages() turns true.
+  if (section && section->isBuilding() && !RenderLock::peek() &&
+      (section->isPartial() || section->activeBuildHasCaughtReadablePages()) &&
+      (section->isPartial() || static_cast<int>(section->pageCount) < section->currentPage + BUILD_WINDOW_AHEAD)) {
     RenderLock lock(*this);
     // Re-check under the lock: render() may have finalized the build between the outer
     // isBuilding() check and acquiring the lock here.
-    if (section && section->isBuilding() && section->activeBuildHasCaughtReadablePages()) {
+    if (section && section->isBuilding() && (section->isPartial() || section->activeBuildHasCaughtReadablePages())) {
       if (!section->buildSomeMore(BACKGROUND_BUILD_PAGES_PER_TICK)) {
         LOG_ERR("ERS", "Background section build failed");
         if (section->lastBuildLayoutAbortedForLowMemory() && section->pageCount > 0) {
@@ -3819,6 +3845,8 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   const ReaderViewportLayout layout = computeReaderViewportLayout(renderer, automaticPageTurnActive);
   const uint16_t viewportWidth = layout.viewportWidth;
   const uint16_t viewportHeight = layout.viewportHeight;
+  buildViewportWidth = viewportWidth;
+  buildViewportHeight = viewportHeight;
 
   if (!section) {
     const auto filepath = epub->getSpineItem(currentSpineIndex).href;
@@ -3830,6 +3858,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     const bool buildingFootnotePreview = !pendingFootnotePreviewAnchor.empty();
     bool loadedSection = false;
     bool safeModeBuildSucceeded = false;
+    partialRebuildStartFailed = false;
     auto loadSectionWithFont = [&](const int fontId, const EpubRenderMode renderMode) {
       const std::string cacheSuffix = buildingFootnotePreview
                                           ? footnotePreviewCacheSuffix(renderMode, pendingFootnotePreviewAnchor)
@@ -3867,7 +3896,9 @@ void EpubReaderActivity::render(RenderLock&& lock) {
         LOG_DBG("ERS", "Cache not found, building... (free=%u, maxAlloc=%u)", ESP.getFreeHeap(), ESP.getMaxAllocHeap());
       }
 
-      const auto popupFn = [this]() { GUI.drawPopup(renderer, tr(STR_INDEXING)); };
+      const auto popupFn = [this]() {
+        if (renderer.hasFrameBuffer()) GUI.drawPopup(renderer, tr(STR_INDEXING));
+      };
 
       bool imagesWereSuppressed = false;
       bool layoutAbortedForLowMemory = false;
@@ -3903,12 +3934,15 @@ void EpubReaderActivity::render(RenderLock&& lock) {
           // The popup's own refresh is a plain FAST, so force the page that replaces it onto the HALF
           // ghost-cleanup path -- otherwise the "INDEXING" text ghosts under the rendered page.
           pagesUntilFullRefresh = 1;
-          buildSucceeded = section->createSectionFile(
-              fontId, SETTINGS.getReaderLineCompression(), SETTINGS.extraParagraphSpacing,
-              SETTINGS.forceParagraphIndents, SETTINGS.paragraphAlignment, viewportWidth, viewportHeight,
-              SETTINGS.hyphenationEnabled, profile.embeddedStyle, SETTINGS.imageRendering, profile.bionicReadingEnabled,
-              profile.guideReadingEnabled, SETTINGS.wordSpacing, popupFn, &attemptImagesWereSuppressed,
-              &attemptLayoutAbortedForLowMemory, profile.renderMode, buildOptions);
+          {
+            GfxRenderer::FrameBufferLoan loan(renderer);
+            buildSucceeded = section->createSectionFile(
+                fontId, SETTINGS.getReaderLineCompression(), SETTINGS.extraParagraphSpacing,
+                SETTINGS.forceParagraphIndents, SETTINGS.paragraphAlignment, viewportWidth, viewportHeight,
+                SETTINGS.hyphenationEnabled, profile.embeddedStyle, SETTINGS.imageRendering,
+                profile.bionicReadingEnabled, profile.guideReadingEnabled, SETTINGS.wordSpacing, popupFn,
+                &attemptImagesWereSuppressed, &attemptLayoutAbortedForLowMemory, profile.renderMode, buildOptions);
+          }
         } else {
           const int target = pendingPageJump.has_value() ? *pendingPageJump : (nextPageNumber < 0 ? 0 : nextPageNumber);
           const size_t spineBytes =
@@ -3921,47 +3955,57 @@ void EpubReaderActivity::render(RenderLock&& lock) {
             return page.has_value() &&
                    (static_cast<int>(*page) < static_cast<int>(section->pageCount) || section->isBuildComplete());
           };
-          bool showPopup = false;
-          if (anchorJump) {
-            showPopup = !anchorPageReady() && spineBytes > BUILD_POPUP_BYTE_THRESHOLD;
+          const bool deferPartialBuild =
+              section->isPartial() &&
+              (anchorJump ? anchorPageReady()
+                          : target + PARTIAL_REBUILD_START_MARGIN < static_cast<int>(section->pageCount));
+          if (deferPartialBuild) {
+            LOG_DBG("ERS", "Partial covers target %d of %d; deferring extension build", target, section->pageCount);
+            buildSucceeded = true;
           } else {
-            const bool targetAvailable = target < static_cast<int>(section->pageCount);
-            showPopup = !targetAvailable && ((spineBytes > BUILD_POPUP_BYTE_THRESHOLD && willInflate) ||
-                                             target > BUILD_POPUP_PAGE_THRESHOLD);
-          }
-          if (showPopup) {
-            GUI.drawPopup(renderer, tr(STR_INDEXING));
-            pagesUntilFullRefresh = 1;
-          }
-          if (section->startBuild(fontId, SETTINGS.getReaderLineCompression(), SETTINGS.extraParagraphSpacing,
-                                  SETTINGS.forceParagraphIndents, SETTINGS.paragraphAlignment, viewportWidth,
-                                  viewportHeight, SETTINGS.hyphenationEnabled, profile.embeddedStyle,
-                                  SETTINGS.imageRendering, profile.bionicReadingEnabled, profile.guideReadingEnabled,
-                                  SETTINGS.wordSpacing, profile.renderMode, buildOptions)) {
-            bool buildFailed = false;
-            while (!section->isBuildComplete() &&
-                   (anchorJump ? !anchorPageReady() : static_cast<int>(section->pageCount) <= target)) {
-              if (!section->buildSomeMore(BUILD_PAGES_PER_CHUNK)) {
-                LOG_ERR("ERS", "Failed during incremental section build");
-                buildFailed = true;
-                break;
+            bool showPopup = false;
+            if (anchorJump) {
+              showPopup = !anchorPageReady() && spineBytes > BUILD_POPUP_BYTE_THRESHOLD;
+            } else {
+              const bool targetAvailable = target < static_cast<int>(section->pageCount);
+              showPopup = !targetAvailable && ((spineBytes > BUILD_POPUP_BYTE_THRESHOLD && willInflate) ||
+                                               target > BUILD_POPUP_PAGE_THRESHOLD);
+            }
+            if (showPopup) {
+              GUI.drawPopup(renderer, tr(STR_INDEXING));
+              pagesUntilFullRefresh = 1;
+            }
+            GfxRenderer::FrameBufferLoan loan(renderer);
+            if (section->startBuild(fontId, SETTINGS.getReaderLineCompression(), SETTINGS.extraParagraphSpacing,
+                                    SETTINGS.forceParagraphIndents, SETTINGS.paragraphAlignment, viewportWidth,
+                                    viewportHeight, SETTINGS.hyphenationEnabled, profile.embeddedStyle,
+                                    SETTINGS.imageRendering, profile.bionicReadingEnabled, profile.guideReadingEnabled,
+                                    SETTINGS.wordSpacing, profile.renderMode, buildOptions)) {
+              bool buildFailed = false;
+              while (!section->isBuildComplete() &&
+                     (anchorJump ? !anchorPageReady() : static_cast<int>(section->pageCount) <= target)) {
+                if (!section->buildSomeMore(BUILD_PAGES_PER_CHUNK)) {
+                  LOG_ERR("ERS", "Failed during incremental section build");
+                  buildFailed = true;
+                  break;
+                }
               }
+              attemptImagesWereSuppressed = attemptImagesWereSuppressed || section->lastBuildImagesWereSuppressed();
+              attemptLayoutAbortedForLowMemory =
+                  attemptLayoutAbortedForLowMemory || section->lastBuildLayoutAbortedForLowMemory();
+              const bool requestedPageAvailable =
+                  anchorJump ? anchorPageReady() : target >= 0 && target < static_cast<int>(section->pageCount);
+              if (buildFailed && attemptLayoutAbortedForLowMemory && requestedPageAvailable) {
+                LOG_ERR("ERS", "Incremental section build paused for low heap after reaching requested page");
+                attemptLayoutAbortedForLowMemory = false;
+                buildFailed = false;
+              }
+              buildSucceeded = !buildFailed && (section->pageCount > 0 || section->isBuildComplete());
+            } else {
+              attemptImagesWereSuppressed = attemptImagesWereSuppressed || section->lastBuildImagesWereSuppressed();
+              attemptLayoutAbortedForLowMemory =
+                  attemptLayoutAbortedForLowMemory || section->lastBuildLayoutAbortedForLowMemory();
             }
-            attemptImagesWereSuppressed = attemptImagesWereSuppressed || section->lastBuildImagesWereSuppressed();
-            attemptLayoutAbortedForLowMemory =
-                attemptLayoutAbortedForLowMemory || section->lastBuildLayoutAbortedForLowMemory();
-            const bool requestedPageAvailable =
-                anchorJump ? anchorPageReady() : target >= 0 && target < static_cast<int>(section->pageCount);
-            if (buildFailed && attemptLayoutAbortedForLowMemory && requestedPageAvailable) {
-              LOG_ERR("ERS", "Incremental section build paused for low heap after reaching requested page");
-              attemptLayoutAbortedForLowMemory = false;
-              buildFailed = false;
-            }
-            buildSucceeded = !buildFailed && (section->pageCount > 0 || section->isBuildComplete());
-          } else {
-            attemptImagesWereSuppressed = attemptImagesWereSuppressed || section->lastBuildImagesWereSuppressed();
-            attemptLayoutAbortedForLowMemory =
-                attemptLayoutAbortedForLowMemory || section->lastBuildLayoutAbortedForLowMemory();
           }
         }
         imagesWereSuppressed = imagesWereSuppressed || attemptImagesWereSuppressed;
@@ -4161,6 +4205,10 @@ void EpubReaderActivity::render(RenderLock&& lock) {
 
   // Extend the build to the requested page if needed. This covers a partial cache that is
   // already loaded but not actively building; pages already available do no work here.
+  if (!activeFootnotePreview && section->isPartial() && section->currentPage >= static_cast<int>(section->pageCount)) {
+    GUI.drawPopup(renderer, tr(STR_INDEXING));
+    pagesUntilFullRefresh = 1;
+  }
   while (!activeFootnotePreview && section->isPartial() &&
          section->currentPage >= static_cast<int>(section->pageCount)) {
     if (!section->isBuilding()) {
