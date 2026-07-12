@@ -495,6 +495,12 @@ uint16_t clampSectionPage(const uint32_t page, const uint16_t pageCount) {
   return static_cast<uint16_t>(std::min<uint32_t>(page, pageCount - 1));
 }
 
+uint16_t pageFromStoredProgress(const float progress, const uint16_t pageCount) {
+  if (pageCount == 0 || progress <= 0.0f) return 0;
+  if (progress >= 1.0f) return static_cast<uint16_t>(pageCount - 1);
+  return clampSectionPage(static_cast<uint32_t>(progress * static_cast<float>(pageCount) + 0.001f), pageCount);
+}
+
 uint16_t approximateRelayoutPage(const Clipping& clipping, const uint16_t currentPageCount) {
   if (currentPageCount == 0) return 0;
   if (clipping.pageCount <= 1) return 0;
@@ -504,6 +510,27 @@ uint16_t approximateRelayoutPage(const Clipping& clipping, const uint16_t curren
   const uint32_t scaledPage =
       (static_cast<uint32_t>(clipping.startPage) * newLastPage + oldLastPage / 2U) / oldLastPage;
   return clampSectionPage(scaledPage, currentPageCount);
+}
+
+uint16_t resolveParagraphJumpPage(const Section& section, const uint16_t paragraphIndex, const uint16_t fallbackPage) {
+  if (section.pageCount == 0 || paragraphIndex == UINT16_MAX) return fallbackPage;
+
+  const uint16_t pageCount = static_cast<uint16_t>(section.pageCount);
+  const uint16_t clampedFallback = clampSectionPage(fallbackPage, pageCount);
+  const auto paragraphPage = section.getPageForParagraphIndex(paragraphIndex);
+  if (!paragraphPage.has_value()) return clampedFallback;
+
+  const uint16_t startPage = clampSectionPage(*paragraphPage, pageCount);
+  if (clampedFallback < startPage) return startPage;
+
+  if (paragraphIndex < UINT16_MAX - 1) {
+    const auto nextParagraphPage = section.getPageForParagraphIndex(static_cast<uint16_t>(paragraphIndex + 1));
+    if (nextParagraphPage.has_value() && *nextParagraphPage > startPage && clampedFallback >= *nextParagraphPage) {
+      return static_cast<uint16_t>(*nextParagraphPage - 1);
+    }
+  }
+
+  return clampedFallback;
 }
 
 bool pageContainsClippingText(Section& section, const Clipping& clipping, const uint16_t page) {
@@ -2894,20 +2921,15 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
               clearFootnotePreviewState();
               if (section && currentSpineIndex == bm.spineIndex) {
                 bool resolved = false;
+                const uint16_t fallbackPage =
+                    pageFromStoredProgress(bm.progress, static_cast<uint16_t>(section->estimatedTotalPages()));
                 if (bm.paragraphIndex != UINT16_MAX) {
-                  if (const auto paragraphPage = section->getPageForParagraphIndex(bm.paragraphIndex)) {
-                    section->currentPage = *paragraphPage;
-                    resolved = true;
-                    LOG_DBG("ERS", "Resolved bookmark paragraph %u to page %u", bm.paragraphIndex, *paragraphPage);
-                  }
+                  section->currentPage = resolveParagraphJumpPage(*section, bm.paragraphIndex, fallbackPage);
+                  resolved = true;
+                  LOG_DBG("ERS", "Resolved bookmark paragraph %u to page %d", bm.paragraphIndex, section->currentPage);
                 }
                 if (!resolved) {
-                  const int estimatedPages = section->estimatedTotalPages();
-                  int targetPage = static_cast<int>(bm.progress * static_cast<float>(estimatedPages));
-                  if (estimatedPages > 0 && targetPage >= estimatedPages) {
-                    targetPage = estimatedPages - 1;
-                  }
-                  section->currentPage = std::max(0, targetPage);
+                  section->currentPage = fallbackPage;
                 }
                 nextPageNumber = section->currentPage;
                 pendingPercentJump = false;
@@ -4138,12 +4160,9 @@ void EpubReaderActivity::render(RenderLock&& lock) {
         section->currentPage = resolveClippingJumpPage(*section, clipping, fallbackPage);
         LOG_DBG("ERS", "Resolved clipping %u to page %d", pendingClippingIndex, section->currentPage);
       } else if (pendingParagraphIndex != UINT16_MAX) {
-        if (const auto paragraphPage = section->getPageForParagraphIndex(pendingParagraphIndex)) {
-          section->currentPage = *paragraphPage;
-          LOG_DBG("ERS", "Resolved paragraph %u to page %u", pendingParagraphIndex, *paragraphPage);
-        } else {
-          LOG_DBG("ERS", "Paragraph %u not found; using saved section page", pendingParagraphIndex);
-        }
+        const uint16_t fallbackPage = static_cast<uint16_t>(std::max(0, section->currentPage));
+        section->currentPage = resolveParagraphJumpPage(*section, pendingParagraphIndex, fallbackPage);
+        LOG_DBG("ERS", "Resolved paragraph %u to page %d", pendingParagraphIndex, section->currentPage);
       }
       pendingClippingIndex = UINT16_MAX;
       pendingParagraphIndex = UINT16_MAX;
@@ -4184,12 +4203,9 @@ void EpubReaderActivity::render(RenderLock&& lock) {
         section->currentPage = resolveClippingJumpPage(*section, clipping, fallbackPage);
         LOG_DBG("ERS", "Resolved clipping %u to page %d", pendingClippingIndex, section->currentPage);
       } else if (pendingParagraphIndex != UINT16_MAX) {
-        if (const auto paragraphPage = section->getPageForParagraphIndex(pendingParagraphIndex)) {
-          section->currentPage = *paragraphPage;
-          LOG_DBG("ERS", "Resolved paragraph %u to page %u", pendingParagraphIndex, *paragraphPage);
-        } else {
-          LOG_DBG("ERS", "Paragraph %u not found; using saved chapter progress", pendingParagraphIndex);
-        }
+        const uint16_t fallbackPage = static_cast<uint16_t>(std::max(0, section->currentPage));
+        section->currentPage = resolveParagraphJumpPage(*section, pendingParagraphIndex, fallbackPage);
+        LOG_DBG("ERS", "Resolved paragraph %u to page %d", pendingParagraphIndex, section->currentPage);
       }
       pendingClippingIndex = UINT16_MAX;
       pendingParagraphIndex = UINT16_MAX;
