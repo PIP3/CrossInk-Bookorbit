@@ -3843,6 +3843,12 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     automaticPageTurnActive = false;
   };
 
+  const auto showIndexingPopup = [this]() {
+    GUI.drawPopup(renderer, tr(STR_INDEXING));
+    renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+    pagesUntilFullRefresh = 1;
+  };
+
   // edge case handling for sub-zero spine index
   if (currentSpineIndex < 0) {
     currentSpineIndex = 0;
@@ -3953,10 +3959,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
                                     pendingRelayoutReposition;
         bool buildSucceeded = false;
         if (needsFullBuild) {
-          GUI.drawPopup(renderer, tr(STR_INDEXING));
-          // The popup's own refresh is a plain FAST, so force the page that replaces it onto the HALF
-          // ghost-cleanup path -- otherwise the "INDEXING" text ghosts under the rendered page.
-          pagesUntilFullRefresh = 1;
+          showIndexingPopup();
           {
             GfxRenderer::FrameBufferLoan loan(renderer);
             buildSucceeded = section->createSectionFile(
@@ -3995,8 +3998,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
                                                target > BUILD_POPUP_PAGE_THRESHOLD);
             }
             if (showPopup) {
-              GUI.drawPopup(renderer, tr(STR_INDEXING));
-              pagesUntilFullRefresh = 1;
+              showIndexingPopup();
             }
             GfxRenderer::FrameBufferLoan loan(renderer);
             if (section->startBuild(fontId, SETTINGS.getReaderLineCompression(), SETTINGS.extraParagraphSpacing,
@@ -4223,8 +4225,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   // Extend the build to the requested page if needed. This covers a partial cache that is
   // already loaded but not actively building; pages already available do no work here.
   if (!activeFootnotePreview && section->isPartial() && section->currentPage >= static_cast<int>(section->pageCount)) {
-    GUI.drawPopup(renderer, tr(STR_INDEXING));
-    pagesUntilFullRefresh = 1;
+    showIndexingPopup();
   }
   while (!activeFootnotePreview && section->isPartial() &&
          section->currentPage >= static_cast<int>(section->pageCount)) {
