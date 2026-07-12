@@ -1609,16 +1609,23 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                     self->epub->readItemContentsToStream(resolvedPath, cachedImageFile, IMAGE_EXTRACT_CHUNK_SIZE);
                 cachedImageFile.flush();
                 cachedImageFile.close();
-                delay(50);  // Give SD card time to sync
               }
 
               if (extractSuccess) {
                 LOG_DBG("EHP", "Heap after image extraction: free=%u maxAlloc=%u path=%s", ESP.getFreeHeap(),
                         ESP.getMaxAllocHeap(), cachedImagePath.c_str());
-                // Get image dimensions
+                // Retry dimension reads only if needed. This avoids a blanket per-image delay while still
+                // tolerating slow SD-card sync on the rare path where the first read is too early.
                 ImageDimensions dims = {0, 0};
                 ImageToFramebufferDecoder* decoder = ImageDecoderFactory::getDecoder(cachedImagePath);
-                if (decoder && decoder->getDimensions(cachedImagePath, dims)) {
+                bool gotDimensions = false;
+                for (int attempt = 0; attempt < 3 && !gotDimensions; attempt++) {
+                  if (attempt > 0) {
+                    delay(50);
+                  }
+                  gotDimensions = decoder && decoder->getDimensions(cachedImagePath, dims);
+                }
+                if (gotDimensions) {
                   LOG_DBG("EHP", "Image dimensions: %dx%d", dims.width, dims.height);
 
                   if (!MemoryBudget::hasHeapForEpubInlineImage("EHP", cachedImagePath.c_str())) {
