@@ -1755,6 +1755,7 @@ void EpubReaderActivity::onEnter() {
   epub->setupCacheDir();
   loadBookReaderSettings();
   sdFontSystem.ensureLoaded(renderer);
+  ImageBlock::clearSessionRenderFailures();
 
   // Configure screen orientation based on settings
   // NOTE: This affects layout math and must be applied before any render calls.
@@ -4510,6 +4511,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int fo
       largestBlockPercent(heapBefore), largestBlockPercent(heapAfter));
 
   const bool pageHasImages = page->hasImages();
+  const bool pageHasImagesNeedingDecode = pageHasImages && page->hasImagesNeedingDecode();
   const bool foregroundBlack = ReaderUtils::readerForegroundBlack();
   const bool needsImageGrayscale = pageHasImages;
   const bool needsTextGrayscale = SETTINGS.textAntiAliasing && foregroundBlack;
@@ -4534,6 +4536,14 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int fo
     }
     finalizeBufferComposition();
   };
+
+  if (pageHasImagesNeedingDecode) {
+    page->renderWithImagePlaceholders(renderer, fontId, orientedMarginLeft, orientedMarginTop, foregroundBlack);
+    finalizeBufferComposition();
+    renderStatusBar();
+    renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+    renderer.clearScreen();
+  }
 
   composePageBuffer();
   renderStatusBar();
