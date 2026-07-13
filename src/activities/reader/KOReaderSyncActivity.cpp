@@ -315,6 +315,17 @@ void KOReaderSyncActivity::performUpload() {
   progress.percentage = localProgress.percentage;
   progress.device = SETTINGS.getEffectiveDeviceName();
 
+  // Optionally include document metadata (KOReader PR #15306)
+  if (KOREADER_STORE.getSendMetadata()) {
+    KOReaderMetadata meta;
+    // Extract filename from path
+    const auto lastSlash = epubPath.rfind('/');
+    meta.filename = (lastSlash != std::string::npos) ? epubPath.substr(lastSlash + 1) : epubPath;
+    meta.title = epub->getTitle();
+    meta.authors = epub->getAuthor();
+    progress.metadata = std::move(meta);
+  }
+
   const auto result = KOReaderSyncClient::updateProgress(progress);
 
   // Drop the radio while user reads the result; full teardown happens at silent reboot.
