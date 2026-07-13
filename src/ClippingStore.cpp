@@ -316,8 +316,15 @@ bool ClippingStore::writeToFile(const std::string* replacementText, const size_t
 
   const std::string tmpPath = storeFilePath + ".tmp";
   const std::string backupPath = storeFilePath + ".bak";
+  if (!Storage.exists(storeFilePath.c_str()) && Storage.exists(backupPath.c_str())) {
+    if (!Storage.rename(backupPath.c_str(), storeFilePath.c_str())) {
+      LOG_ERR("CLIP", "Failed to recover clipping backup: %s", backupPath.c_str());
+      return false;
+    }
+    LOG_INF("CLIP", "Recovered clipping backup: %s", storeFilePath.c_str());
+  }
   if (Storage.exists(tmpPath.c_str())) Storage.remove(tmpPath.c_str());
-  if (Storage.exists(backupPath.c_str())) Storage.remove(backupPath.c_str());
+  if (Storage.exists(backupPath.c_str()) && Storage.exists(storeFilePath.c_str())) Storage.remove(backupPath.c_str());
 
   FsFile source;
   const bool hasSource = Storage.exists(storeFilePath.c_str());
