@@ -372,7 +372,12 @@ void Page::renderWithImagePlaceholders(GfxRenderer& renderer, const int fontId, 
                                        const int yOffset, const bool foregroundBlack) const {
   for (const auto& element : elements) {
     if (element->getTag() == TAG_PageImage) {
-      static_cast<const PageImage&>(*element).renderPlaceholder(renderer, xOffset, yOffset);
+      auto& pageImage = static_cast<PageImage&>(*element);
+      if (pageImage.getImageBlock().needsDecode()) {
+        pageImage.renderPlaceholder(renderer, xOffset, yOffset);
+      } else {
+        pageImage.render(renderer, fontId, xOffset, yOffset, foregroundBlack);
+      }
     } else {
       element->render(renderer, fontId, xOffset, yOffset, foregroundBlack);
     }
