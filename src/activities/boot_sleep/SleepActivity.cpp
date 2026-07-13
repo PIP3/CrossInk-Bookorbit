@@ -512,6 +512,10 @@ void SleepActivity::renderCustomSleepScreen() const {
   renderDefaultSleepScreen();
 }
 
+// Sleep screens paint with a single HALF refresh (stock parity): the OEM X4
+// firmware's only clean refresh in normal operation is the single-pass 0xD7
+// sequence, used once for the sleep image. It never runs the multi-flash GC
+// waveform (0xF7) that FULL_REFRESH selects (#2471's blinking complaint).
 void SleepActivity::renderDefaultSleepScreen() const {
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
@@ -534,7 +538,7 @@ void SleepActivity::renderDefaultSleepScreen() const {
   renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + 118, visibleBuildInfo.c_str(), lightSleepScreen);
 #endif
 
-  renderer.displayBuffer(HalDisplay::FULL_REFRESH, TURN_OFF_SCREEN_AFTER_SLEEP_REFRESH);
+  renderer.displayBuffer(HalDisplay::HALF_REFRESH, TURN_OFF_SCREEN_AFTER_SLEEP_REFRESH);
 }
 
 void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
@@ -590,11 +594,13 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
   }
 
   if (hasGreyscale) {
-    // OEM grayscale pipeline base: use a full sleep-screen paint so the panel
-    // enters deep sleep from a clean B/W baseline before the gray nudge refresh.
-    renderer.displayGrayscaleBase(HalDisplay::FULL_REFRESH);
+    // OEM grayscale pipeline base. Must stay HALF: the gray nudge LUT is
+    // calibrated against the pixel state the single-pass HALF waveform leaves
+    // behind. A FULL (GC) base parks pixels in a different charge state and
+    // the differential nudge then lands unevenly (blotchy noise in gray areas).
+    renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
   } else {
-    renderer.displayBuffer(HalDisplay::FULL_REFRESH, TURN_OFF_SCREEN_AFTER_SLEEP_REFRESH);
+    renderer.displayBuffer(HalDisplay::HALF_REFRESH, TURN_OFF_SCREEN_AFTER_SLEEP_REFRESH);
   }
 
   if (hasGreyscale) {
@@ -680,7 +686,7 @@ void SleepActivity::renderReadingStatsSleepScreen() const {
   if (!sleepCoverFilterInvertsGeneratedScreen()) {
     renderer.invertScreen();
   }
-  renderer.displayBuffer(HalDisplay::FULL_REFRESH, TURN_OFF_SCREEN_AFTER_SLEEP_REFRESH);
+  renderer.displayBuffer(HalDisplay::HALF_REFRESH, TURN_OFF_SCREEN_AFTER_SLEEP_REFRESH);
 }
 
 void SleepActivity::renderMinimalSleepScreen() const {
@@ -699,7 +705,7 @@ void SleepActivity::renderMinimalSleepScreen() const {
   const float progressPercent = RecentBookProgress::loadPercent(book);
   MinimalTheme theme;
   theme.drawSleepScreen(renderer, book, &bookStats, progressPercent, sleepCoverFilterInvertsGeneratedScreen());
-  renderer.displayBuffer(HalDisplay::FULL_REFRESH, TURN_OFF_SCREEN_AFTER_SLEEP_REFRESH);
+  renderer.displayBuffer(HalDisplay::HALF_REFRESH, TURN_OFF_SCREEN_AFTER_SLEEP_REFRESH);
 }
 
 void SleepActivity::renderMinimalStatsSleepScreen() const {
@@ -720,7 +726,7 @@ void SleepActivity::renderMinimalStatsSleepScreen() const {
   MinimalTheme theme;
   theme.drawStatsSleepScreen(renderer, book, &bookStats, &globalStats, progressPercent,
                              sleepCoverFilterInvertsGeneratedScreen());
-  renderer.displayBuffer(HalDisplay::FULL_REFRESH, TURN_OFF_SCREEN_AFTER_SLEEP_REFRESH);
+  renderer.displayBuffer(HalDisplay::HALF_REFRESH, TURN_OFF_SCREEN_AFTER_SLEEP_REFRESH);
 }
 
 void SleepActivity::renderDashboardSleepScreen() const {
@@ -746,7 +752,7 @@ void SleepActivity::renderDashboardSleepScreen() const {
   DashboardTheme theme;
   theme.drawSleepScreen(renderer, book, &bookStats, &globalStats, progressPercent, chapterTitle.c_str(),
                         sleepCoverFilterInvertsGeneratedScreen());
-  renderer.displayBuffer(HalDisplay::FULL_REFRESH, TURN_OFF_SCREEN_AFTER_SLEEP_REFRESH);
+  renderer.displayBuffer(HalDisplay::HALF_REFRESH, TURN_OFF_SCREEN_AFTER_SLEEP_REFRESH);
 }
 
 void SleepActivity::renderLastScreenSleepScreen() const {
@@ -756,12 +762,12 @@ void SleepActivity::renderLastScreenSleepScreen() const {
   } else {
     renderer.drawImage(MoonIcon, 0, pageHeight - MOONICON_HEIGHT, MOONICON_WIDTH, MOONICON_HEIGHT);
   }
-  renderer.displayBuffer(HalDisplay::FULL_REFRESH);
+  renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 }
 
 void SleepActivity::renderBlankSleepScreen() const {
   renderer.clearScreen();
-  renderer.displayBuffer(HalDisplay::FULL_REFRESH, TURN_OFF_SCREEN_AFTER_SLEEP_REFRESH);
+  renderer.displayBuffer(HalDisplay::HALF_REFRESH, TURN_OFF_SCREEN_AFTER_SLEEP_REFRESH);
 }
 
 void SleepActivity::renderOverlaySleepScreen() const {
@@ -974,7 +980,7 @@ void SleepActivity::renderOverlaySleepScreen() const {
   // over the sleep image.
   const bool shouldRunGrayscalePass = shouldUseReaderPageBackground && backgroundSupportsGrayscale && !overlayDrawn &&
                                       (backgroundWasRebuilt || (overlayBackgroundBufferStored && !path.empty()));
-  renderer.displayBuffer(HalDisplay::FULL_REFRESH, !shouldRunGrayscalePass && TURN_OFF_SCREEN_AFTER_SLEEP_REFRESH);
+  renderer.displayBuffer(HalDisplay::HALF_REFRESH, !shouldRunGrayscalePass && TURN_OFF_SCREEN_AFTER_SLEEP_REFRESH);
 
   if (!shouldRunGrayscalePass) {
     return;
