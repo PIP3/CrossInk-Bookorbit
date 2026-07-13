@@ -274,7 +274,7 @@ void SavedItemsHomeActivity::openClippingList(const SavedBookEntry& entry) {
   CLIPPINGS.loadForBook(entry.bookPath, entry.bookTitle, entry.bookAuthor, entry.bookType);
 
   startActivityForResult(
-      std::make_unique<EpubReaderClippingListActivity>(renderer, mappedInput, CLIPPINGS.getClippings()),
+      std::make_unique<EpubReaderClippingListActivity>(renderer, mappedInput),
       [this, entry](const ActivityResult& result) {
         if (!result.isCancelled) {
           const auto* clipping = std::get_if<ClippingJumpResult>(&result.data);

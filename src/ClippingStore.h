@@ -1,12 +1,14 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <vector>
 
 inline constexpr size_t CLIPPING_CHAPTER_TITLE_MAX = 48;
 inline constexpr size_t CLIPPING_TEXT_MAX = 512;
-inline constexpr uint16_t CLIPPING_MAX_PER_BOOK = 64;
+inline constexpr uint16_t CLIPPING_MAX_PER_BOOK = 256;
+inline constexpr uint16_t CLIPPING_MAX_PAGE_MATCHES = 16;
 
 struct Clipping {
   uint16_t spineIndex = 0;
@@ -18,8 +20,9 @@ struct Clipping {
   uint16_t wordCount = 0;
   uint16_t paragraphIndex = UINT16_MAX;
   uint32_t timestamp = 0;
+  uint32_t textOffset = 0;
+  uint16_t textLength = 0;
   char chapterTitle[CLIPPING_CHAPTER_TITLE_MAX] = {};
-  std::string text;
 };
 
 struct ClippedBookEntry {
@@ -53,7 +56,11 @@ class ClippingStore {
 
   bool hasClippings() const { return !clippings.empty(); }
   bool hasClippingForPage(uint16_t spineIndex, uint16_t page) const;
+  size_t clippingCount() const { return clippings.size(); }
+  const Clipping* clippingAt(size_t index) const;
   const std::vector<Clipping>& getClippings() const { return clippings; }
+  bool readClippingText(size_t index, std::string& out) const;
+  bool readClippingText(const Clipping& clipping, std::string& out) const;
 
   static bool hasAnyClippings();
   static bool getAllClippedBooks(std::vector<ClippedBookEntry>& out);
@@ -73,7 +80,7 @@ class ClippingStore {
 
   bool readFromFile();
   bool readFromFile(const std::string& path, std::vector<Clipping>& out) const;
-  bool writeToFile() const;
+  bool writeToFile(const std::string* replacementText = nullptr, size_t replacementIndex = SIZE_MAX);
 };
 
 #define CLIPPINGS ClippingStore::getInstance()

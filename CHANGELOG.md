@@ -10,6 +10,7 @@
 ### Changed
 
 - Large EPUB indexing now borrows temporary display memory and uses faster ZIP/PNG decompression to reduce memory pressure while opening or rebuilding chapters.
+- EPUB books can now keep more saved clippings without loading every clipping's text into memory while reading.
 
 ### Fixed
 

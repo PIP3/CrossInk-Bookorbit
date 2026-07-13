@@ -193,18 +193,24 @@ void EpubReaderClippingListActivity::closeDetail() {
 }
 
 void EpubReaderClippingListActivity::jumpToSelectedClipping() {
-  if (clippings.empty() || selectedIndex < 0 || selectedIndex >= static_cast<int>(clippings.size())) return;
+  if (selectedIndex < 0 || selectedIndex >= static_cast<int>(CLIPPINGS.clippingCount())) return;
 
-  const Clipping& clipping = clippings[selectedIndex];
-  setResult(ClippingJumpResult{clipping.spineIndex, clipping.startPage, clipping.pageCount, clipping.paragraphIndex,
+  const Clipping* clipping = CLIPPINGS.clippingAt(static_cast<size_t>(selectedIndex));
+  if (!clipping) return;
+  setResult(ClippingJumpResult{clipping->spineIndex, clipping->startPage, clipping->pageCount, clipping->paragraphIndex,
                                static_cast<uint16_t>(selectedIndex)});
   finish();
 }
 
 void EpubReaderClippingListActivity::openSelectedDetail() {
-  if (clippings.empty() || selectedIndex < 0 || selectedIndex >= static_cast<int>(clippings.size())) return;
+  if (selectedIndex < 0 || selectedIndex >= static_cast<int>(CLIPPINGS.clippingCount())) return;
 
-  buildOneLineSnippetText(clippings[selectedIndex].text, detailText);
+  std::string text;
+  text.reserve(CLIPPING_TEXT_MAX);
+  if (!CLIPPINGS.readClippingText(static_cast<size_t>(selectedIndex), text)) {
+    text.clear();
+  }
+  buildOneLineSnippetText(text, detailText);
   detailMode = true;
   detailPage = 0;
   detailLayoutWidth = 0;
@@ -226,7 +232,7 @@ void EpubReaderClippingListActivity::rebuildDetailLayoutIfNeeded() {
 }
 
 void EpubReaderClippingListActivity::deleteSelectedClipping() {
-  if (clippings.empty() || selectedIndex < 0 || selectedIndex >= static_cast<int>(clippings.size())) return;
+  if (selectedIndex < 0 || selectedIndex >= static_cast<int>(CLIPPINGS.clippingCount())) return;
 
   if (!CLIPPINGS.removeClippingAt(static_cast<size_t>(selectedIndex))) return;
 
@@ -235,20 +241,24 @@ void EpubReaderClippingListActivity::deleteSelectedClipping() {
   detailLines.clear();
   detailLayoutWidth = 0;
   detailLinesPerPage = 0;
-  clippings = CLIPPINGS.getClippings();
-  if (clippings.empty()) {
+  if (CLIPPINGS.clippingCount() == 0) {
     selectedIndex = 0;
-  } else if (selectedIndex >= static_cast<int>(clippings.size())) {
-    selectedIndex = static_cast<int>(clippings.size()) - 1;
+  } else if (selectedIndex >= static_cast<int>(CLIPPINGS.clippingCount())) {
+    selectedIndex = static_cast<int>(CLIPPINGS.clippingCount()) - 1;
   }
   requestUpdate();
 }
 
 void EpubReaderClippingListActivity::showClippingActionMenu(const bool ignoreInitialConfirmRelease) {
-  if (clippings.empty() || selectedIndex < 0 || selectedIndex >= static_cast<int>(clippings.size())) return;
+  if (selectedIndex < 0 || selectedIndex >= static_cast<int>(CLIPPINGS.clippingCount())) return;
 
-  const Clipping selectedClipping = clippings[selectedIndex];
-  const char* title = selectedClipping.chapterTitle[0] != '\0' ? selectedClipping.chapterTitle : tr(STR_CLIPPINGS);
+  const Clipping* selectedClipping = CLIPPINGS.clippingAt(static_cast<size_t>(selectedIndex));
+  if (!selectedClipping) return;
+  const char* title = selectedClipping->chapterTitle[0] != '\0' ? selectedClipping->chapterTitle : tr(STR_CLIPPINGS);
+  const uint16_t selectedSpineIndex = selectedClipping->spineIndex;
+  const uint16_t selectedStartPage = selectedClipping->startPage;
+  const uint16_t selectedStartWordIndex = selectedClipping->startWordIndex;
+  const uint32_t selectedTimestamp = selectedClipping->timestamp;
   std::vector<FileBrowserActionActivity::MenuItem> items;
   items.reserve(1);
   items.push_back({FileBrowserAction::Delete, StrId::STR_DELETE});
@@ -256,7 +266,8 @@ void EpubReaderClippingListActivity::showClippingActionMenu(const bool ignoreIni
   startActivityForResult(
       std::make_unique<FileBrowserActionActivity>(renderer, mappedInput, title, std::move(items),
                                                   ignoreInitialConfirmRelease),
-      [this, selectedClipping](const ActivityResult& result) {
+      [this, selectedSpineIndex, selectedStartPage, selectedStartWordIndex,
+       selectedTimestamp](const ActivityResult& result) {
         longPressConfirmHandled = false;
         if (result.isCancelled) {
           requestUpdate();
@@ -269,18 +280,17 @@ void EpubReaderClippingListActivity::showClippingActionMenu(const bool ignoreIni
           return;
         }
 
-        const auto it = std::find_if(clippings.begin(), clippings.end(), [&selectedClipping](const Clipping& clipping) {
-          return clipping.spineIndex == selectedClipping.spineIndex &&
-                 clipping.startPage == selectedClipping.startPage &&
-                 clipping.startWordIndex == selectedClipping.startWordIndex &&
-                 clipping.timestamp == selectedClipping.timestamp;
-        });
-        if (it != clippings.end()) {
-          selectedIndex = static_cast<int>(std::distance(clippings.begin(), it));
-          deleteSelectedClipping();
-        } else {
-          requestUpdate();
+        for (size_t i = 0; i < CLIPPINGS.clippingCount(); ++i) {
+          const Clipping* clipping = CLIPPINGS.clippingAt(i);
+          if (!clipping) continue;
+          if (clipping->spineIndex == selectedSpineIndex && clipping->startPage == selectedStartPage &&
+              clipping->startWordIndex == selectedStartWordIndex && clipping->timestamp == selectedTimestamp) {
+            selectedIndex = static_cast<int>(i);
+            deleteSelectedClipping();
+            return;
+          }
         }
+        requestUpdate();
       });
 }
 
@@ -297,7 +307,8 @@ void EpubReaderClippingListActivity::loop() {
     return;
   }
 
-  if (!clippings.empty() && !longPressConfirmHandled && mappedInput.isPressed(MappedInputManager::Button::Confirm) &&
+  if (CLIPPINGS.clippingCount() > 0 && !longPressConfirmHandled &&
+      mappedInput.isPressed(MappedInputManager::Button::Confirm) &&
       mappedInput.getHeldTime() >= CLIPPING_DELETE_HOLD_MS) {
     longPressConfirmHandled = true;
     showClippingActionMenu(true);
@@ -309,7 +320,8 @@ void EpubReaderClippingListActivity::loop() {
       longPressConfirmHandled = false;
       return;
     }
-    if (!clippings.empty() && selectedIndex >= 0 && selectedIndex < static_cast<int>(clippings.size())) {
+    if (CLIPPINGS.clippingCount() > 0 && selectedIndex >= 0 &&
+        selectedIndex < static_cast<int>(CLIPPINGS.clippingCount())) {
       if (detailMode) {
         jumpToSelectedClipping();
       } else {
@@ -319,7 +331,7 @@ void EpubReaderClippingListActivity::loop() {
     return;
   }
 
-  const int total = static_cast<int>(clippings.size());
+  const int total = static_cast<int>(CLIPPINGS.clippingCount());
   if (total == 0) return;
 
   if (detailMode) {
@@ -386,9 +398,10 @@ void EpubReaderClippingListActivity::renderDetail() {
   const int contentY = hintGutterHeight;
 
   const char* chapter = tr(STR_CLIPPINGS);
-  if (!clippings.empty() && selectedIndex >= 0 && selectedIndex < static_cast<int>(clippings.size()) &&
-      clippings[selectedIndex].chapterTitle[0] != '\0') {
-    chapter = clippings[selectedIndex].chapterTitle;
+  const Clipping* selectedClipping =
+      selectedIndex >= 0 ? CLIPPINGS.clippingAt(static_cast<size_t>(selectedIndex)) : nullptr;
+  if (selectedClipping && selectedClipping->chapterTitle[0] != '\0') {
+    chapter = selectedClipping->chapterTitle;
   }
 
   const std::string title =
@@ -435,7 +448,7 @@ void EpubReaderClippingListActivity::render(RenderLock&&) {
   const int hintGutterHeight = isPortraitInverted ? 50 : 0;
   const int contentY = hintGutterHeight;
 
-  if (clippings.empty()) {
+  if (CLIPPINGS.clippingCount() == 0) {
     const int titleX =
         contentX + (contentWidth - renderer.getTextWidth(UI_12_FONT_ID, tr(STR_CLIPPINGS), EpdFontFamily::BOLD)) / 2;
     renderer.drawText(UI_12_FONT_ID, titleX, 15 + contentY, tr(STR_CLIPPINGS), true, EpdFontFamily::BOLD);
@@ -457,10 +470,12 @@ void EpubReaderClippingListActivity::render(RenderLock&&) {
   renderer.drawText(UI_12_FONT_ID, titleX, 15 + contentY, tr(STR_CLIPPINGS), true, EpdFontFamily::BOLD);
 
   const int pageItems = getPageItems();
-  const int total = static_cast<int>(clippings.size());
+  const int total = static_cast<int>(CLIPPINGS.clippingCount());
   const int pageStartIndex = (selectedIndex / pageItems) * pageItems;
   const int marginLeft = contentX + 20;
+  std::string clippingText;
   std::string snippetText;
+  clippingText.reserve(CLIPPING_TEXT_MAX);
   snippetText.reserve(CLIPPING_TEXT_MAX);
 
   for (int i = 0; i < pageItems; i++) {
@@ -473,12 +488,18 @@ void EpubReaderClippingListActivity::render(RenderLock&&) {
       renderer.fillRect(contentX, rowY, contentWidth - 1, ROW_HEIGHT, true);
     }
 
-    const Clipping& clipping = clippings[itemIndex];
-    buildOneLineSnippetText(clipping.text, snippetText);
+    const Clipping* clipping = CLIPPINGS.clippingAt(static_cast<size_t>(itemIndex));
+    if (!clipping) continue;
+
+    clippingText.clear();
+    if (!CLIPPINGS.readClippingText(static_cast<size_t>(itemIndex), clippingText)) {
+      clippingText.clear();
+    }
+    buildOneLineSnippetText(clippingText, snippetText);
     const std::string snippetTrunc = renderer.truncatedText(UI_10_FONT_ID, snippetText.c_str(), contentWidth - 40);
     renderer.drawText(UI_10_FONT_ID, marginLeft, rowY + 5, snippetTrunc.c_str(), !isSelected);
 
-    const char* chapter = clipping.chapterTitle[0] != '\0' ? clipping.chapterTitle : tr(STR_UNKNOWN_CHAPTER);
+    const char* chapter = clipping->chapterTitle[0] != '\0' ? clipping->chapterTitle : tr(STR_UNKNOWN_CHAPTER);
     const std::string chapterTrunc = renderer.truncatedText(SMALL_FONT_ID, chapter, contentWidth - 40);
     renderer.drawText(SMALL_FONT_ID, marginLeft, rowY + 31, chapterTrunc.c_str(), !isSelected);
   }

@@ -9,16 +9,14 @@
 
 class EpubReaderClippingListActivity final : public Activity {
  public:
-  EpubReaderClippingListActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                 std::vector<Clipping> clippings)
-      : Activity("EpubClippingList", renderer, mappedInput), clippings(std::move(clippings)) {}
+  EpubReaderClippingListActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
+      : Activity("EpubClippingList", renderer, mappedInput) {}
 
   void onEnter() override;
   void loop() override;
   void render(RenderLock&&) override;
 
  private:
-  std::vector<Clipping> clippings;
   std::string detailText;
   std::vector<std::string> detailLines;
   ButtonNavigator buttonNavigator;

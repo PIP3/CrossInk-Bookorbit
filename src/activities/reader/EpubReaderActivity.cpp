@@ -362,12 +362,12 @@ bool forEachVisiblePageWord(const Page& page, Callback&& callback) {
   return true;
 }
 
-bool matchClipRunFromPageWord(const Page& page, const Clipping& clipping, const uint16_t startPageWord,
+bool matchClipRunFromPageWord(const Page& page, const std::string& clippingText, const uint16_t startPageWord,
                               const uint16_t startClipToken, const uint16_t minPartialMatch, ClippingPageMatch& match) {
   const char* cursor = nullptr;
   const char* token = nullptr;
   size_t tokenLen = 0;
-  if (!advanceClipCursorToToken(clipping.text, startClipToken, cursor, token, tokenLen)) {
+  if (!advanceClipCursorToToken(clippingText, startClipToken, cursor, token, tokenLen)) {
     return false;
   }
 
@@ -419,10 +419,10 @@ bool matchClipRunFromPageWord(const Page& page, const Clipping& clipping, const 
   return true;
 }
 
-bool findClippingTextOnPage(const Page& page, const Clipping& clipping, ClippingPageMatch& match) {
-  if (clipping.text.empty()) return false;
+bool findClippingTextOnPage(const Page& page, const std::string& clippingText, ClippingPageMatch& match) {
+  if (clippingText.empty()) return false;
 
-  const uint16_t tokenCount = countClipTokens(clipping.text);
+  const uint16_t tokenCount = countClipTokens(clippingText);
   if (tokenCount == 0) return false;
   const uint16_t minPartialMatch = std::min<uint16_t>(tokenCount, 3);
 
@@ -430,7 +430,7 @@ bool findClippingTextOnPage(const Page& page, const Clipping& clipping, Clipping
 
   forEachVisiblePageWord(page, [&](const uint16_t wordIndex, const PageLine&, const TextBlock& block, const size_t i) {
     const char* word = block.wordText(static_cast<uint16_t>(i));
-    const char* cursor = clipping.text.c_str();
+    const char* cursor = clippingText.c_str();
     const char* token = nullptr;
     size_t tokenLen = 0;
     uint16_t tokenIndex = 0;
@@ -439,7 +439,7 @@ bool findClippingTextOnPage(const Page& page, const Clipping& clipping, Clipping
         break;
       }
       if (wordMatchesToken(word, token, tokenLen) &&
-          matchClipRunFromPageWord(page, clipping, wordIndex, tokenIndex, minPartialMatch, match)) {
+          matchClipRunFromPageWord(page, clippingText, wordIndex, tokenIndex, minPartialMatch, match)) {
         found = true;
         return false;
       }
@@ -533,22 +533,22 @@ uint16_t resolveParagraphJumpPage(const Section& section, const uint16_t paragra
   return clampedFallback;
 }
 
-bool pageContainsClippingText(Section& section, const Clipping& clipping, const uint16_t page) {
+bool pageContainsClippingText(Section& section, const std::string& clippingText, const uint16_t page) {
   section.currentPage = page;
   auto loadedPage = section.loadPage(page);
   if (!loadedPage) return false;
 
   ClippingPageMatch match;
-  return findClippingTextOnPage(*loadedPage, clipping, match);
+  return findClippingTextOnPage(*loadedPage, clippingText, match);
 }
 
-bool findClippingPageNear(Section& section, const Clipping& clipping, const uint16_t center, const uint16_t radius,
-                          uint16_t& outPage) {
+bool findClippingPageNear(Section& section, const std::string& clippingText, const uint16_t center,
+                          const uint16_t radius, uint16_t& outPage) {
   if (section.pageCount == 0) return false;
 
   const uint16_t pageCount = static_cast<uint16_t>(section.pageCount);
   const uint16_t clampedCenter = clampSectionPage(center, pageCount);
-  if (pageContainsClippingText(section, clipping, clampedCenter)) {
+  if (pageContainsClippingText(section, clippingText, clampedCenter)) {
     outPage = clampedCenter;
     return true;
   }
@@ -556,13 +556,13 @@ bool findClippingPageNear(Section& section, const Clipping& clipping, const uint
   for (uint16_t distance = 1; distance <= radius; ++distance) {
     if (clampedCenter >= distance) {
       const uint16_t before = static_cast<uint16_t>(clampedCenter - distance);
-      if (pageContainsClippingText(section, clipping, before)) {
+      if (pageContainsClippingText(section, clippingText, before)) {
         outPage = before;
         return true;
       }
     }
     const uint32_t after = static_cast<uint32_t>(clampedCenter) + distance;
-    if (after < pageCount && pageContainsClippingText(section, clipping, static_cast<uint16_t>(after))) {
+    if (after < pageCount && pageContainsClippingText(section, clippingText, static_cast<uint16_t>(after))) {
       outPage = static_cast<uint16_t>(after);
       return true;
     }
@@ -570,27 +570,31 @@ bool findClippingPageNear(Section& section, const Clipping& clipping, const uint
   return false;
 }
 
-uint16_t resolveClippingJumpPage(Section& section, const Clipping& clipping, const uint16_t fallbackPage) {
+uint16_t resolveClippingJumpPage(Section& section, const Clipping& clipping, const std::string& clippingText,
+                                 const uint16_t fallbackPage) {
   constexpr uint16_t SEARCH_RADIUS = 8;
   if (section.pageCount == 0) return fallbackPage;
 
   const uint16_t pageCount = static_cast<uint16_t>(section.pageCount);
   uint16_t resolvedPage = clampSectionPage(fallbackPage, pageCount);
   const uint16_t approximatePage = approximateRelayoutPage(clipping, pageCount);
-  if (findClippingPageNear(section, clipping, approximatePage, SEARCH_RADIUS, resolvedPage)) {
+  if (!clippingText.empty() &&
+      findClippingPageNear(section, clippingText, approximatePage, SEARCH_RADIUS, resolvedPage)) {
     return resolvedPage;
   }
 
   if (clipping.paragraphIndex != UINT16_MAX) {
     const auto paragraphPage = section.getPageForParagraphIndex(clipping.paragraphIndex);
-    if (paragraphPage.has_value() &&
-        findClippingPageNear(section, clipping, clampSectionPage(*paragraphPage, pageCount), SEARCH_RADIUS,
+    if (paragraphPage.has_value() && !clippingText.empty() &&
+        findClippingPageNear(section, clippingText, clampSectionPage(*paragraphPage, pageCount), SEARCH_RADIUS,
                              resolvedPage)) {
       return resolvedPage;
     }
   }
 
-  findClippingPageNear(section, clipping, resolvedPage, SEARCH_RADIUS, resolvedPage);
+  if (!clippingText.empty()) {
+    findClippingPageNear(section, clippingText, resolvedPage, SEARCH_RADIUS, resolvedPage);
+  }
   return resolvedPage;
 }
 
@@ -2970,7 +2974,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
     case EpubReaderMenuActivity::MenuAction::VIEW_CLIPPINGS: {
       pauseReadingPaceTimer("clipping_list");
       startActivityForResult(
-          std::make_unique<EpubReaderClippingListActivity>(renderer, mappedInput, CLIPPINGS.getClippings()),
+          std::make_unique<EpubReaderClippingListActivity>(renderer, mappedInput),
           [this](const ActivityResult& result) {
             if (!result.isCancelled) {
               const auto& clipping = std::get<ClippingJumpResult>(result.data);
@@ -3198,7 +3202,7 @@ void EpubReaderActivity::startClipSelection() {
         if (!result.isCancelled) {
           const auto& clip = std::get<ClippingResult>(result.data);
           if (!clip.text.empty()) {
-            const size_t clippingIndex = CLIPPINGS.getClippings().size();
+            const size_t clippingIndex = CLIPPINGS.clippingCount();
             const auto addResult =
                 CLIPPINGS.addClipping(static_cast<uint16_t>(currentSpineIndex), clip.sectionPage, clip.endSectionPage,
                                       clip.sectionPageCount, clip.startPageWordIndex, clip.endPageWordIndex,
@@ -4209,10 +4213,14 @@ void EpubReaderActivity::render(RenderLock&& lock) {
 
     if (pendingPageJump.has_value()) {
       section->currentPage = *pendingPageJump;
-      if (pendingClippingIndex != UINT16_MAX && pendingClippingIndex < CLIPPINGS.getClippings().size()) {
-        const Clipping& clipping = CLIPPINGS.getClippings()[pendingClippingIndex];
+      if (pendingClippingIndex != UINT16_MAX && pendingClippingIndex < CLIPPINGS.clippingCount()) {
+        const Clipping* clipping = CLIPPINGS.clippingAt(pendingClippingIndex);
         const uint16_t fallbackPage = static_cast<uint16_t>(std::max(0, section->currentPage));
-        section->currentPage = resolveClippingJumpPage(*section, clipping, fallbackPage);
+        std::string clippingText;
+        clippingText.reserve(CLIPPING_TEXT_MAX);
+        if (clipping) CLIPPINGS.readClippingText(*clipping, clippingText);
+        section->currentPage =
+            clipping ? resolveClippingJumpPage(*section, *clipping, clippingText, fallbackPage) : fallbackPage;
         LOG_DBG("ERS", "Resolved clipping %u to page %d", pendingClippingIndex, section->currentPage);
       } else if (pendingParagraphIndex != UINT16_MAX) {
         const uint16_t fallbackPage = static_cast<uint16_t>(std::max(0, section->currentPage));
@@ -4252,10 +4260,14 @@ void EpubReaderActivity::render(RenderLock&& lock) {
         newPage = section->pageCount - 1;
       }
       section->currentPage = newPage;
-      if (pendingClippingIndex != UINT16_MAX && pendingClippingIndex < CLIPPINGS.getClippings().size()) {
-        const Clipping& clipping = CLIPPINGS.getClippings()[pendingClippingIndex];
+      if (pendingClippingIndex != UINT16_MAX && pendingClippingIndex < CLIPPINGS.clippingCount()) {
+        const Clipping* clipping = CLIPPINGS.clippingAt(pendingClippingIndex);
         const uint16_t fallbackPage = static_cast<uint16_t>(std::max(0, section->currentPage));
-        section->currentPage = resolveClippingJumpPage(*section, clipping, fallbackPage);
+        std::string clippingText;
+        clippingText.reserve(CLIPPING_TEXT_MAX);
+        if (clipping) CLIPPINGS.readClippingText(*clipping, clippingText);
+        section->currentPage =
+            clipping ? resolveClippingJumpPage(*section, *clipping, clippingText, fallbackPage) : fallbackPage;
         LOG_DBG("ERS", "Resolved clipping %u to page %d", pendingClippingIndex, section->currentPage);
       } else if (pendingParagraphIndex != UINT16_MAX) {
         const uint16_t fallbackPage = static_cast<uint16_t>(std::max(0, section->currentPage));
@@ -4787,12 +4799,14 @@ void EpubReaderActivity::drawClippingHighlights(const Page& page, const int font
     return;
   }
 
-  std::array<ClippingPageMatch, CLIPPING_MAX_PER_BOOK> matches;
+  std::array<ClippingPageMatch, CLIPPING_MAX_PAGE_MATCHES> matches;
   uint16_t matchCount = 0;
   const bool canUseStoredRanges = section->pageCount > 0 && section->pageCount <= UINT16_MAX &&
                                   section->currentPage >= 0 && section->currentPage < section->pageCount;
   const uint16_t currentPage = canUseStoredRanges ? static_cast<uint16_t>(section->currentPage) : 0;
   const uint16_t currentPageCount = canUseStoredRanges ? static_cast<uint16_t>(section->pageCount) : 0;
+  std::string clippingText;
+  clippingText.reserve(CLIPPING_TEXT_MAX);
   for (const Clipping& clipping : CLIPPINGS.getClippings()) {
     if (clipping.spineIndex != static_cast<uint16_t>(currentSpineIndex)) {
       continue;
@@ -4802,7 +4816,14 @@ void EpubReaderActivity::drawClippingHighlights(const Page& page, const int font
         canUseStoredRanges && findClippingStoredRangeOnPage(page, clipping, currentPage, currentPageCount, match);
     const bool shouldSearchText = !canUseStoredRanges || clipping.pageCount != currentPageCount ||
                                   (currentPage >= clipping.startPage && currentPage <= clipping.endPage);
-    if (matchedStoredRange || (shouldSearchText && findClippingTextOnPage(page, clipping, match))) {
+    bool matchedText = false;
+    if (!matchedStoredRange && shouldSearchText) {
+      clippingText.clear();
+      if (CLIPPINGS.readClippingText(clipping, clippingText)) {
+        matchedText = findClippingTextOnPage(page, clippingText, match);
+      }
+    }
+    if (matchedStoredRange || matchedText) {
       matches[matchCount++] = match;
       if (matchCount >= matches.size()) {
         break;

@@ -341,7 +341,7 @@ void EpubReaderMenuActivity::loop() {
 
     if (selectedAction == MenuAction::VIEW_CLIPPINGS) {
       startActivityForResult(
-          std::make_unique<EpubReaderClippingListActivity>(renderer, mappedInput, CLIPPINGS.getClippings()),
+          std::make_unique<EpubReaderClippingListActivity>(renderer, mappedInput),
           [this](const ActivityResult& result) {
             if (result.isCancelled) {
               requestUpdate();
