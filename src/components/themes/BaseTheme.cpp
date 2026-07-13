@@ -1102,7 +1102,10 @@ void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, 
   const int visibleEnd = visibleStart + maxVisibleOptions;
   const int visibleCount = visibleEnd - visibleStart;
   const int listHeight = rowHeight * visibleCount + itemSpacing * (visibleCount - 1);
-  const int dialogW = std::min((maxTextWidth + innerPadding * 2 + selectionHPadding * 2) * 12 / 10,
+  const bool hasHiddenOptions = visibleCount < optionCount;
+  const int scrollBarGutter =
+      hasHiddenOptions ? metrics.scrollBarWidth + metrics.scrollBarRightOffset + selectionHPadding : 0;
+  const int dialogW = std::min((maxTextWidth + innerPadding * 2 + selectionHPadding * 2 + scrollBarGutter) * 12 / 10,
                                pageWidth - metrics.optionPopupDialogSideMargin * 2);
   const int contentHeight = titleLineHeight + metrics.optionPopupTitleGap + listHeight;
   const int dialogH = contentHeight + innerPadding * 2;
@@ -1138,8 +1141,18 @@ void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, 
   y += metrics.optionPopupTitleGap;
 
   const int itemRectX = dialogX + innerPadding;
-  const int itemRectW = dialogW - innerPadding * 2;
+  const int itemRectW = std::max(1, dialogW - innerPadding * 2 - scrollBarGutter);
   const int selectionRadius = metrics.optionPopupSelectionRadius;
+
+  if (hasHiddenOptions) {
+    const int scrollBarX = dialogX + dialogW - innerPadding - metrics.scrollBarRightOffset;
+    const int scrollBarHeight = std::max(metrics.scrollBarWidth, (listHeight * visibleCount) / optionCount);
+    const int scrollRange = std::max(0, listHeight - scrollBarHeight);
+    const int scrollSteps = std::max(1, optionCount - visibleCount);
+    const int scrollBarY = y + (scrollRange * visibleStart) / scrollSteps;
+    renderer.drawLine(scrollBarX, y, scrollBarX, y + listHeight, true);
+    renderer.fillRect(scrollBarX - metrics.scrollBarWidth, scrollBarY, metrics.scrollBarWidth, scrollBarHeight, true);
+  }
 
   for (int visibleIndex = 0; visibleIndex < visibleCount; visibleIndex++) {
     const int optionIndex = visibleStart + visibleIndex;

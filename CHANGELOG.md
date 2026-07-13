@@ -14,6 +14,7 @@
 
 ### Fixed
 
+- Popup option menus now show a scrollbar when more choices are available than can fit on screen.
 - EPUB indexing now shows the on-screen indexing popup before rebuilding image-heavy chapters.
 - Pressing Back while EPUB indexing is busy now cancels the build and returns home instead of waiting for indexing to finish.
 - EPUB clipping selection no longer reboots when opening highlights on memory-tight pages.
