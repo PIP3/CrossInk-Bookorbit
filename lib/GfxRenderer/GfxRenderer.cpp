@@ -810,11 +810,43 @@ void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
 }
 
 namespace {
-bool isSmallCapsAsciiLowercase(const EpdFontFamily::Style style, const uint32_t cp) {
-  return (style & EpdFontFamily::SMALL_CAPS) != 0 && cp >= 'a' && cp <= 'z';
+
+// Recognizes lowercase codepoints eligible for small-caps scaling: ASCII plus the
+// accented Latin (Latin-1 Supplement, Latin Extended-A), Greek, and Cyrillic
+// letters actually shipped in this repo's font builds (see EpdFont/scripts/
+// fontconvert.py and fontconvert_sdcard.py's latin-ext/greek/cyrillic intervals).
+// Ranges without a clean, single-codepoint uppercase pair (e.g. ß, digraphs) are
+// left unscaled rather than guessed at.
+bool isSmallCapsLowercase(const EpdFontFamily::Style style, const uint32_t cp) {
+  if ((style & EpdFontFamily::SMALL_CAPS) == 0) return false;
+  if (cp >= 'a' && cp <= 'z') return true;
+  // Latin-1 Supplement: à-ö, ø-þ (÷ at 0x00F7 is not a letter), plus ÿ (paired below).
+  if ((cp >= 0x00E0 && cp <= 0x00F6) || (cp >= 0x00F8 && cp <= 0x00FE) || cp == 0x00FF) return true;
+  // Latin Extended-A: alternating lower/upper pairs, plus the ź/ż/ž tail whose
+  // parity flips after the standalone Ÿ at 0x0178.
+  if (cp >= 0x0101 && cp <= 0x0177 && (cp & 1) != 0) return true;
+  if (cp == 0x017A || cp == 0x017C || cp == 0x017E) return true;
+  // Greek: α-ω, including final sigma ς (mapped to Σ, not the unassigned 0x03A2).
+  if (cp >= 0x03B1 && cp <= 0x03C9) return true;
+  // Cyrillic: а-я, the ѐ-џ supplement row (Ukrainian є/і/ї among them), and ґ.
+  if ((cp >= 0x0430 && cp <= 0x044F) || (cp >= 0x0450 && cp <= 0x045F) || cp == 0x0491) return true;
+  return false;
 }
 
-uint32_t smallCapsUppercaseCodepoint(const uint32_t cp) { return cp - ('a' - 'A'); }
+uint32_t smallCapsUppercaseCodepoint(const uint32_t cp) {
+  if (cp >= 'a' && cp <= 'z') return cp - ('a' - 'A');
+  if (cp == 0x00FF) return 0x0178;                        // ÿ -> Ÿ (not contiguous with à-þ)
+  if (cp >= 0x00E0 && cp <= 0x00FE) return cp - 0x20;      // à-þ
+  if (cp >= 0x0101 && cp <= 0x0177) return cp - 1;         // Latin Extended-A pairs
+  if (cp == 0x017A) return 0x0179;                         // ź -> Ź
+  if (cp == 0x017C) return 0x017B;                         // ż -> Ż
+  if (cp == 0x017E) return 0x017D;                         // ž -> Ž
+  if (cp == 0x03C2) return 0x03A3;                         // ς -> Σ (final sigma)
+  if (cp >= 0x03B1 && cp <= 0x03C9) return cp - 0x20;      // Greek base letters
+  if (cp == 0x0491) return 0x0490;                         // ґ -> Ґ
+  if (cp >= 0x0450 && cp <= 0x045F) return cp - 0x50;      // Cyrillic supplement row
+  return cp - 0x20;                                        // Cyrillic main block (а-я)
+}
 
 const char* resolveVisualText(const char* text, std::string& visualBuffer, const BidiUtils::BidiBaseDir baseDir) {
   if (!text || *text == '\0') return text;
@@ -926,7 +958,7 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
       continue;
     }
 
-    const bool scaledSmallCap = isSmallCapsAsciiLowercase(style, cp);
+    const bool scaledSmallCap = isSmallCapsLowercase(style, cp);
     if (scaledSmallCap) {
       cp = smallCapsUppercaseCodepoint(cp);
     } else {
@@ -2362,7 +2394,7 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
     }
     const auto& font = fontIt->second;
     while (uint32_t cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text))) {
-      const bool scaledSmallCap = isSmallCapsAsciiLowercase(style, cp);
+      const bool scaledSmallCap = isSmallCapsLowercase(style, cp);
       if (scaledSmallCap) {
         cp = smallCapsUppercaseCodepoint(cp);
       }
@@ -2394,7 +2426,7 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
     if (utf8IsCombiningMark(cp)) {
       continue;
     }
-    const bool scaledSmallCap = isSmallCapsAsciiLowercase(style, cp);
+    const bool scaledSmallCap = isSmallCapsLowercase(style, cp);
     if (scaledSmallCap) {
       cp = smallCapsUppercaseCodepoint(cp);
     } else {
