@@ -246,14 +246,14 @@ bool ImageBlock::needsDecode() const { return !imageFailedThisSession(imagePath)
 
 void ImageBlock::clearSessionRenderFailures() { failedImageCount = 0; }
 
-void ImageBlock::renderPlaceholder(GfxRenderer& renderer, const int x, const int y) const {
-  renderer.fillRect(x, y, width, height, true);
+void ImageBlock::renderPlaceholder(GfxRenderer& renderer, const int x, const int y, const bool foregroundBlack) const {
+  renderer.fillRect(x, y, width, height, foregroundBlack);
   if (width > 2 && height > 2) {
-    renderer.fillRect(x + 1, y + 1, width - 2, height - 2, false);
+    renderer.fillRect(x + 1, y + 1, width - 2, height - 2, !foregroundBlack);
   }
 }
 
-void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
+void ImageBlock::render(GfxRenderer& renderer, const int x, const int y, const bool foregroundBlack) {
   // The font-prewarm scan pass only accumulates glyphs; an image contributes
   // none, and its DirectPixelWriter output bypasses the renderer's scan-mode
   // suppression, so it would otherwise do a full (discarded) cache render every
@@ -292,7 +292,7 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
   }
 
   if (imageFailedThisSession(imagePath)) {
-    renderPlaceholder(renderer, x, y);
+    renderPlaceholder(renderer, x, y, foregroundBlack);
     return;
   }
 
@@ -308,7 +308,7 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
   if (!Storage.openFileForRead("IMG", imagePath, file)) {
     LOG_ERR("IMG", "Image file not found: %s", imagePath.c_str());
     rememberImageFailure(imagePath);
-    renderPlaceholder(renderer, x, y);
+    renderPlaceholder(renderer, x, y, foregroundBlack);
     return;
   }
   size_t fileSize = file.size();
@@ -317,7 +317,7 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
   if (fileSize == 0) {
     LOG_ERR("IMG", "Image file is empty: %s", imagePath.c_str());
     rememberImageFailure(imagePath);
-    renderPlaceholder(renderer, x, y);
+    renderPlaceholder(renderer, x, y, foregroundBlack);
     return;
   }
 
@@ -340,7 +340,7 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
   if (!decoder) {
     LOG_ERR("IMG", "No decoder found for image: %s", imagePath.c_str());
     rememberImageFailure(imagePath);
-    renderPlaceholder(renderer, x, y);
+    renderPlaceholder(renderer, x, y, foregroundBlack);
     return;
   }
 
@@ -350,7 +350,7 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
   if (!success) {
     LOG_ERR("IMG", "Failed to decode image: %s", imagePath.c_str());
     rememberImageFailure(imagePath);
-    renderPlaceholder(renderer, x, y);
+    renderPlaceholder(renderer, x, y, foregroundBlack);
     return;
   }
 

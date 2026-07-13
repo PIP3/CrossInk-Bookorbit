@@ -18,13 +18,13 @@ class ImageBlock final : public Block {
   bool imageExists() const;
   bool hasValidCache() const;
   bool needsDecode() const;
-  void renderPlaceholder(GfxRenderer& renderer, int x, int y) const;
+  void renderPlaceholder(GfxRenderer& renderer, int x, int y, bool foregroundBlack) const;
   static void clearSessionRenderFailures();
 
   BlockType getType() override { return IMAGE_BLOCK; }
   bool isEmpty() override { return false; }
 
-  void render(GfxRenderer& renderer, const int x, const int y);
+  void render(GfxRenderer& renderer, const int x, const int y, const bool foregroundBlack);
   bool serialize(FsFile& file);
   static std::unique_ptr<ImageBlock> deserialize(FsFile& file);
 
