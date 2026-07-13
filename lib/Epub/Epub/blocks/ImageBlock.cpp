@@ -231,13 +231,15 @@ bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x,
 
 bool ImageBlock::hasValidCache() const {
   const auto cachePath = getCachePath(imagePath);
-  HalFile cacheFile;
+  FsFile cacheFile;
   if (!Storage.openFileForRead("IMG", cachePath, cacheFile)) {
     return false;
   }
 
   uint16_t cachedWidth, cachedHeight;
-  return readValidCacheHeader(cacheFile, width, height, cachedWidth, cachedHeight);
+  const bool valid = readValidCacheHeader(cacheFile, width, height, cachedWidth, cachedHeight);
+  cacheFile.close();
+  return valid;
 }
 
 bool ImageBlock::needsDecode() const { return !imageFailedThisSession(imagePath) && !hasValidCache(); }
