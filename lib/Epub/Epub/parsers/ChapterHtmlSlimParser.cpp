@@ -1273,6 +1273,14 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     cssStyle.defined.direction = 1;
   }
 
+  // font-variant-caps is inherited in CSS; propagate the parent's small-caps
+  // state to this element's style unless it sets its own (including "normal",
+  // which explicitly opts back out).
+  if (!cssStyle.hasFontVariantCaps() && self->effectiveSmallCaps) {
+    cssStyle.fontVariantCaps = CssFontVariantCaps::SmallCaps;
+    cssStyle.defined.fontVariantCaps = 1;
+  }
+
   const char* roleAttr = getAttribute(atts, "role");
   const char* epubTypeAttr = getAttribute(atts, "epub:type");
   const bool isPublisherPageBreak =
