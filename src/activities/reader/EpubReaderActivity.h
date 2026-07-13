@@ -161,6 +161,12 @@ class EpubReaderActivity final : public Activity {
   uint16_t buildViewportHeight = 0;
   // Set when the lazy extension start failed, so loop() does not retry every tick.
   bool partialRebuildStartFailed = false;
+  // Set when a background extension build aborted for low heap. startBuild() still succeeds in
+  // that state -- it is the layout inside buildSomeMore() that runs out of memory -- so without
+  // this flag loop() would restart the same doomed build every tick, and skipLoopDelay() would
+  // hold the loop at full speed while it did. The reader keeps the pages already laid out; a
+  // build is only re-attempted from render() if the reader actually pages past the watermark.
+  bool partialRebuildAbortedForLowMemory = false;
   std::atomic<bool> sectionBuildCancelRequested{false};
   std::atomic<bool> goHomeAfterBuildCancel{false};
 

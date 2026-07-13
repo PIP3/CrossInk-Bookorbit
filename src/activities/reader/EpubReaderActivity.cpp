@@ -2009,7 +2009,7 @@ void EpubReaderActivity::loop() {
   // Lazily resume a partial's extension build once the reader nears its watermark. Far from it the
   // rebuild is all cost (whole-chapter re-layout from page 0) and no benefit this session.
   if (section && !section->isBuilding() && section->isPartial() && !RenderLock::peek() && buildViewportWidth > 0 &&
-      !partialRebuildStartFailed &&
+      !partialRebuildStartFailed && !partialRebuildAbortedForLowMemory &&
       section->currentPage + PARTIAL_REBUILD_START_MARGIN >= static_cast<int>(section->pageCount)) {
     RenderLock lock(*this);
     if (section && !section->isBuilding() && section->isPartial()) {
@@ -2047,7 +2047,8 @@ void EpubReaderActivity::loop() {
       if (!section->buildSomeMore(BACKGROUND_BUILD_PAGES_PER_TICK)) {
         LOG_ERR("ERS", "Background section build failed");
         if (section->lastBuildLayoutAbortedForLowMemory() && section->pageCount > 0) {
-          LOG_ERR("ERS", "Background section build suspended for low heap");
+          partialRebuildAbortedForLowMemory = true;
+          LOG_ERR("ERS", "Background section build suspended for low heap; not retrying for this section");
           return;
         }
         section.reset();
@@ -3932,6 +3933,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     bool loadedSection = false;
     bool safeModeBuildSucceeded = false;
     partialRebuildStartFailed = false;
+    partialRebuildAbortedForLowMemory = false;
     auto loadSectionWithFont = [&](const int fontId, const EpubRenderMode renderMode) {
       const std::string cacheSuffix = buildingFootnotePreview
                                           ? footnotePreviewCacheSuffix(renderMode, pendingFootnotePreviewAnchor)
@@ -4038,9 +4040,9 @@ void EpubReaderActivity::render(RenderLock&& lock) {
               showPopup = !anchorPageReady() && (!loadedSection || spineBytes > BUILD_POPUP_BYTE_THRESHOLD);
             } else {
               const bool targetAvailable = target < static_cast<int>(section->pageCount);
-              showPopup = !targetAvailable && (!loadedSection ||
-                                               (spineBytes > BUILD_POPUP_BYTE_THRESHOLD && willInflate) ||
-                                               target > BUILD_POPUP_PAGE_THRESHOLD);
+              showPopup =
+                  !targetAvailable && (!loadedSection || (spineBytes > BUILD_POPUP_BYTE_THRESHOLD && willInflate) ||
+                                       target > BUILD_POPUP_PAGE_THRESHOLD);
             }
             if (showPopup) {
               showIndexingPopup();
