@@ -49,7 +49,7 @@ void ClipSelectionActivity::onEnter() {
     return;
   }
   buildReadingOrder();
-  if (readingOrder.empty()) {
+  if (readingOrderSize == 0) {
     LOG_ERR("CLIP", "No readable word order available");
     ActivityResult result;
     result.isCancelled = true;
@@ -80,7 +80,7 @@ void ClipSelectionActivity::onEnter() {
 
 void ClipSelectionActivity::onExit() {
   section.currentPage = savedSectionPage;
-  savedBufferChunks.clear();
+  resetSavedBufferChunks();
   hasSavedBuffer = false;
   if (usingFallbackFont) {
     if (auto* fcm = renderer.getFontCacheManager()) {
@@ -93,7 +93,13 @@ void ClipSelectionActivity::onExit() {
 bool ClipSelectionActivity::allocateSavedBuffer() {
   savedBufferSize = renderer.getBufferSize();
   const size_t chunkCount = (savedBufferSize + BUFFER_CHUNK_SIZE - 1) / BUFFER_CHUNK_SIZE;
-  savedBufferChunks.reserve(chunkCount);
+  savedBufferChunkCount = 0;
+
+  if (chunkCount > savedBufferChunks.size()) {
+    LOG_ERR("CLIP", "Framebuffer snapshot needs %u chunks; using rerender fallback", static_cast<unsigned>(chunkCount));
+    savedBufferSize = 0;
+    return true;
+  }
 
   for (size_t i = 0; i < chunkCount; i++) {
     const size_t offset = i * BUFFER_CHUNK_SIZE;
@@ -102,23 +108,31 @@ bool ClipSelectionActivity::allocateSavedBuffer() {
     if (!chunk) {
       LOG_ERR("CLIP", "OOM: clipping page snapshot chunk %u (%u bytes); using rerender fallback",
               static_cast<unsigned>(i), static_cast<unsigned>(chunkSize));
-      savedBufferChunks.clear();
+      resetSavedBufferChunks();
       savedBufferSize = 0;
       return true;
     }
-    savedBufferChunks.push_back(std::move(chunk));
+    savedBufferChunks[i] = std::move(chunk);
   }
+  savedBufferChunkCount = chunkCount;
   return true;
 }
 
+void ClipSelectionActivity::resetSavedBufferChunks() {
+  for (auto& chunk : savedBufferChunks) {
+    chunk.reset();
+  }
+  savedBufferChunkCount = 0;
+}
+
 void ClipSelectionActivity::storeCurrentBuffer() {
-  if (savedBufferChunks.empty()) {
+  if (savedBufferChunkCount == 0) {
     hasSavedBuffer = false;
     return;
   }
 
   const uint8_t* frameBuffer = renderer.getFrameBuffer();
-  for (size_t i = 0; i < savedBufferChunks.size(); i++) {
+  for (size_t i = 0; i < savedBufferChunkCount; i++) {
     const size_t offset = i * BUFFER_CHUNK_SIZE;
     const size_t chunkSize = std::min(BUFFER_CHUNK_SIZE, savedBufferSize - offset);
     memcpy(savedBufferChunks[i].get(), frameBuffer + offset, chunkSize);
@@ -130,7 +144,7 @@ void ClipSelectionActivity::restoreSavedBuffer() const {
   if (!hasSavedBuffer) return;
 
   uint8_t* frameBuffer = renderer.getFrameBuffer();
-  for (size_t i = 0; i < savedBufferChunks.size(); i++) {
+  for (size_t i = 0; i < savedBufferChunkCount; i++) {
     const size_t offset = i * BUFFER_CHUNK_SIZE;
     const size_t chunkSize = std::min(BUFFER_CHUNK_SIZE, savedBufferSize - offset);
     memcpy(frameBuffer + offset, savedBufferChunks[i].get(), chunkSize);
@@ -138,8 +152,7 @@ void ClipSelectionActivity::restoreSavedBuffer() const {
 }
 
 void ClipSelectionActivity::buildReadingOrder() {
-  readingOrder.clear();
-  readingOrder.reserve(words.size());
+  readingOrderSize = 0;
 
   int lineStart = 0;
   const int total = static_cast<int>(words.size());
@@ -152,11 +165,21 @@ void ClipSelectionActivity::buildReadingOrder() {
 
     if (words[lineStart].lineIsRtl) {
       for (int i = lineEnd - 1; i >= lineStart; --i) {
-        readingOrder.push_back(i);
+        if (readingOrderSize >= readingOrder.size()) {
+          LOG_ERR("CLIP", "Reading order cap hit (%u words); clipping range truncated",
+                  static_cast<unsigned>(readingOrder.size()));
+          return;
+        }
+        readingOrder[readingOrderSize++] = static_cast<uint16_t>(i);
       }
     } else {
       for (int i = lineStart; i < lineEnd; ++i) {
-        readingOrder.push_back(i);
+        if (readingOrderSize >= readingOrder.size()) {
+          LOG_ERR("CLIP", "Reading order cap hit (%u words); clipping range truncated",
+                  static_cast<unsigned>(readingOrder.size()));
+          return;
+        }
+        readingOrder[readingOrderSize++] = static_cast<uint16_t>(i);
       }
     }
     lineStart = lineEnd;
@@ -164,11 +187,11 @@ void ClipSelectionActivity::buildReadingOrder() {
 }
 
 void ClipSelectionActivity::loop() {
-  const int total = static_cast<int>(readingOrder.size());
+  const int total = static_cast<int>(readingOrderSize);
   using Button = MappedInputManager::Button;
 
   auto moveCursor = [this](const int nextOrderIdx) {
-    if (nextOrderIdx == cursorIdx || nextOrderIdx < 0 || nextOrderIdx >= static_cast<int>(readingOrder.size())) return;
+    if (nextOrderIdx == cursorIdx || nextOrderIdx < 0 || nextOrderIdx >= static_cast<int>(readingOrderSize)) return;
     const int previousPage = words[readingOrder[cursorIdx]].pageIdx;
     cursorIdx = nextOrderIdx;
     if (words[readingOrder[cursorIdx]].pageIdx != previousPage) {
@@ -201,7 +224,8 @@ void ClipSelectionActivity::loop() {
     } else {
       const int from = std::min(startMarkIdx, cursorIdx);
       const int to = std::max(startMarkIdx, cursorIdx);
-      auto result = ClipTextBuilder::build(words, readingOrder, from, to, total, startPageInSection, section.pageCount);
+      auto result =
+          ClipTextBuilder::build(words, readingOrder.data(), from, to, total, startPageInSection, section.pageCount);
       if (const auto paragraphIndex = section.getParagraphIndexForPage(result.sectionPage)) {
         result.paragraphIndex = *paragraphIndex;
       }

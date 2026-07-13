@@ -78,7 +78,7 @@ bool areWordsVisuallyAttached(const WordRef& previousWord, const WordRef& word) 
 
 }  // namespace
 
-ClippingResult build(const std::vector<WordRef>& words, const std::vector<int>& wordOrder, const int fromOrder,
+ClippingResult build(const std::vector<WordRef>& words, const uint16_t* wordOrder, const int fromOrder,
                      const int toOrder, const int totalOrder, const int startPageInSection,
                      const int sectionPageCount) {
   std::string text;

@@ -3184,11 +3184,17 @@ void EpubReaderActivity::startClipSelection() {
   }
 
   pauseReadingPaceTimer("clip_selection");
+  auto clipSelection = makeUniqueNoThrow<ClipSelectionActivity>(
+      renderer, mappedInput, std::move(words), readerFontId, *section, startPage, layout.marginTop, layout.marginLeft);
+  if (!clipSelection) {
+    LOG_ERR("CLIP", "OOM: failed to allocate clip selection activity");
+    resumeReadingPaceTimer("clip_selection_alloc_failed");
+    requestUpdate();
+    return;
+  }
   startActivityForResult(
-      std::make_unique<ClipSelectionActivity>(renderer, mappedInput, std::move(words), readerFontId, *section,
-                                              startPage, layout.marginTop, layout.marginLeft),
-      [this, bookTitle = std::move(bookTitle), author = std::move(author),
-       chapterTitle = std::move(chapterTitle)](const ActivityResult& result) {
+      std::move(clipSelection), [this, bookTitle = std::move(bookTitle), author = std::move(author),
+                                 chapterTitle = std::move(chapterTitle)](const ActivityResult& result) {
         if (!result.isCancelled) {
           const auto& clip = std::get<ClippingResult>(result.data);
           if (!clip.text.empty()) {

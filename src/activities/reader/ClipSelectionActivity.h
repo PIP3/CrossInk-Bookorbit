@@ -40,6 +40,8 @@ class ClipSelectionActivity final : public Activity {
 
  private:
   static constexpr size_t BUFFER_CHUNK_SIZE = 4096;
+  static constexpr size_t MAX_SAVED_BUFFER_CHUNKS = 16;
+  static constexpr size_t MAX_READING_ORDER_WORDS = 240;
 
   std::vector<WordRef> words;
   int renderFontId = 0;
@@ -48,7 +50,8 @@ class ClipSelectionActivity final : public Activity {
   int marginTop = 0;
   int marginLeft = 0;
 
-  std::vector<std::unique_ptr<uint8_t[]>> savedBufferChunks;
+  std::array<std::unique_ptr<uint8_t[]>, MAX_SAVED_BUFFER_CHUNKS> savedBufferChunks;
+  size_t savedBufferChunkCount = 0;
   size_t savedBufferSize = 0;
   int currentDisplayPage = 0;
   int savedSectionPage = 0;
@@ -59,11 +62,13 @@ class ClipSelectionActivity final : public Activity {
   bool hasSavedBuffer = false;
   bool usingFallbackFont = false;
   mutable std::array<std::string, 4> prewarmTextByStyle;
-  std::vector<int> readingOrder;
+  std::array<uint16_t, MAX_READING_ORDER_WORDS> readingOrder{};
+  size_t readingOrderSize = 0;
 
   ButtonNavigator buttonNavigator;
 
   void buildReadingOrder();
+  void resetSavedBufferChunks();
   bool allocateSavedBuffer();
   void storeCurrentBuffer();
   void restoreSavedBuffer() const;
