@@ -1466,21 +1466,23 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       tableCellBlockStyle.directionDefined = true;
     }
     self->currentTableCellIsHeader = strcmp(name, "th") == 0;
-    if (self->currentTableCellIsHeader) {
-      StyleStackEntry headerStyle;
-      headerStyle.depth = self->depth;
-      headerStyle.hasBold = true;
-      headerStyle.bold = true;
-      if (cssStyle.hasBackgroundBlack()) {
-        headerStyle.hasBackgroundBlack = true;
-        headerStyle.backgroundBlack = cssStyle.backgroundBlack;
+    {
+      StyleStackEntry cellStyle;
+      cellStyle.depth = self->depth;
+      if (self->currentTableCellIsHeader) {
+        cellStyle.hasBold = true;
+        cellStyle.bold = true;
       }
-      ChapterHtmlSlimParser::applyDirectionToEntry(headerStyle, cssStyle);
-      ChapterHtmlSlimParser::applySmallCapsToEntry(headerStyle, cssStyle);
+      if (cssStyle.hasBackgroundBlack()) {
+        cellStyle.hasBackgroundBlack = true;
+        cellStyle.backgroundBlack = cssStyle.backgroundBlack;
+      }
+      ChapterHtmlSlimParser::applyDirectionToEntry(cellStyle, cssStyle);
+      ChapterHtmlSlimParser::applySmallCapsToEntry(cellStyle, cssStyle);
       if (self->inlineStyleCount_ < MAX_INLINE_STYLE_DEPTH) {
-        self->inlineStyleBuf_[self->inlineStyleCount_++] = headerStyle;
+        self->inlineStyleBuf_[self->inlineStyleCount_++] = cellStyle;
       } else {
-        LOG_ERR("EHP", "inline style stack overflow (table header)");
+        LOG_ERR("EHP", "inline style stack overflow (table cell)");
       }
       self->updateEffectiveInlineStyle();
     }
