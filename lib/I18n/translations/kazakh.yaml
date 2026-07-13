@@ -468,3 +468,5 @@ STR_NEARBY_POSITION_NO_READER: "Жақын оқу құрылғысы табыл�
 STR_NEARBY_LABEL: "Жақын:"
 STR_APPLY_NEARBY_POSITION: "Жақын позицияны қолдану"
 STR_NEARBY_POSITION_SIMULATOR_UNAVAILABLE: "Жақын позиция синхрондауы симуляторда қолжетімді емес"
+STR_ADD_HIDDEN_NETWORK: "Жасырын желіні қосу..."
+STR_ENTER_WIFI_SSID: "Желі атауын енгізіңіз (SSID)"

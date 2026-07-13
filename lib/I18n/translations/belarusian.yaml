@@ -468,3 +468,5 @@ STR_NEARBY_POSITION_NO_READER: "Чыталка побач не знойдзен�
 STR_NEARBY_LABEL: "Побач:"
 STR_APPLY_NEARBY_POSITION: "Ужыць пазіцыю побач"
 STR_NEARBY_POSITION_SIMULATOR_UNAVAILABLE: "Сінхранізацыя пазіцыі побач недаступная ў сімулятары"
+STR_ADD_HIDDEN_NETWORK: "Дадаць схаваную сетку..."
+STR_ENTER_WIFI_SSID: "Увядзіце назву сеткі (SSID)"
