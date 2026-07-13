@@ -2973,17 +2973,16 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
     }
     case EpubReaderMenuActivity::MenuAction::VIEW_CLIPPINGS: {
       pauseReadingPaceTimer("clipping_list");
-      startActivityForResult(
-          std::make_unique<EpubReaderClippingListActivity>(renderer, mappedInput),
-          [this](const ActivityResult& result) {
-            if (!result.isCancelled) {
-              const auto& clipping = std::get<ClippingJumpResult>(result.data);
-              handleClippingJump(clipping);
-            } else {
-              resumeReadingPaceTimer("clipping_list_cancel");
-            }
-            requestUpdate();
-          });
+      startActivityForResult(std::make_unique<EpubReaderClippingListActivity>(renderer, mappedInput),
+                             [this](const ActivityResult& result) {
+                               if (!result.isCancelled) {
+                                 const auto& clipping = std::get<ClippingJumpResult>(result.data);
+                                 handleClippingJump(clipping);
+                               } else {
+                                 resumeReadingPaceTimer("clipping_list_cancel");
+                               }
+                               requestUpdate();
+                             });
       break;
     }
     case EpubReaderMenuActivity::MenuAction::DELETE_BOOKMARKS: {
@@ -4607,15 +4606,13 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int fo
     }
     finalizeBufferComposition();
   };
-
   if (pageHasImagesNeedingDecode) {
     page->renderWithImagePlaceholders(renderer, fontId, orientedMarginLeft, orientedMarginTop, foregroundBlack);
     finalizeBufferComposition();
     renderStatusBar();
     renderer.displayBuffer(HalDisplay::FAST_REFRESH);
-    renderer.clearScreen();
+    renderer.clearScreen(ReaderUtils::readerBackgroundColor());
   }
-
   composePageBuffer();
   renderStatusBar();
   if (pendingBookmarkFeedback) {
