@@ -835,17 +835,17 @@ bool isSmallCapsLowercase(const EpdFontFamily::Style style, const uint32_t cp) {
 
 uint32_t smallCapsUppercaseCodepoint(const uint32_t cp) {
   if (cp >= 'a' && cp <= 'z') return cp - ('a' - 'A');
-  if (cp == 0x00FF) return 0x0178;                        // ÿ -> Ÿ (not contiguous with à-þ)
-  if (cp >= 0x00E0 && cp <= 0x00FE) return cp - 0x20;      // à-þ
-  if (cp >= 0x0101 && cp <= 0x0177) return cp - 1;         // Latin Extended-A pairs
-  if (cp == 0x017A) return 0x0179;                         // ź -> Ź
-  if (cp == 0x017C) return 0x017B;                         // ż -> Ż
-  if (cp == 0x017E) return 0x017D;                         // ž -> Ž
-  if (cp == 0x03C2) return 0x03A3;                         // ς -> Σ (final sigma)
-  if (cp >= 0x03B1 && cp <= 0x03C9) return cp - 0x20;      // Greek base letters
-  if (cp == 0x0491) return 0x0490;                         // ґ -> Ґ
-  if (cp >= 0x0450 && cp <= 0x045F) return cp - 0x50;      // Cyrillic supplement row
-  return cp - 0x20;                                        // Cyrillic main block (а-я)
+  if (cp == 0x00FF) return 0x0178;                     // ÿ -> Ÿ (not contiguous with à-þ)
+  if (cp >= 0x00E0 && cp <= 0x00FE) return cp - 0x20;  // à-þ
+  if (cp >= 0x0101 && cp <= 0x0177) return cp - 1;     // Latin Extended-A pairs
+  if (cp == 0x017A) return 0x0179;                     // ź -> Ź
+  if (cp == 0x017C) return 0x017B;                     // ż -> Ż
+  if (cp == 0x017E) return 0x017D;                     // ž -> Ž
+  if (cp == 0x03C2) return 0x03A3;                     // ς -> Σ (final sigma)
+  if (cp >= 0x03B1 && cp <= 0x03C9) return cp - 0x20;  // Greek base letters
+  if (cp == 0x0491) return 0x0490;                     // ґ -> Ґ
+  if (cp >= 0x0450 && cp <= 0x045F) return cp - 0x50;  // Cyrillic supplement row
+  return cp - 0x20;                                    // Cyrillic main block (а-я)
 }
 
 const char* resolveVisualText(const char* text, std::string& visualBuffer, const BidiUtils::BidiBaseDir baseDir) {

@@ -127,8 +127,8 @@ struct CssPropertyFlags {
   [[nodiscard]] bool anySet() const {
     return textAlign || fontStyle || fontWeight || textDecoration || textIndent || marginTop || marginBottom ||
            marginLeft || marginRight || paddingTop || paddingBottom || paddingLeft || paddingRight || imageHeight ||
-           imageWidth || display || backgroundBlack || verticalAlign || direction || pageBreakBefore || pageBreakAfter ||
-           fontVariantCaps;
+           imageWidth || display || backgroundBlack || verticalAlign || direction || pageBreakBefore ||
+           pageBreakAfter || fontVariantCaps;
   }
 
   void clearAll() {

@@ -256,8 +256,8 @@ void ChapterHtmlSlimParser::updateEffectiveInlineStyle() {
   effectiveDirection = currentCssStyle.direction;
   effectiveSup = currentCssStyle.hasVerticalAlign() && currentCssStyle.verticalAlign == CssVerticalAlign::Super;
   effectiveSub = currentCssStyle.hasVerticalAlign() && currentCssStyle.verticalAlign == CssVerticalAlign::Sub;
-  effectiveSmallCaps = currentCssStyle.hasFontVariantCaps() &&
-                       currentCssStyle.fontVariantCaps == CssFontVariantCaps::SmallCaps;
+  effectiveSmallCaps =
+      currentCssStyle.hasFontVariantCaps() && currentCssStyle.fontVariantCaps == CssFontVariantCaps::SmallCaps;
 
   // Apply inline style stack in order
   for (size_t i = 0; i < inlineStyleCount_; ++i) {

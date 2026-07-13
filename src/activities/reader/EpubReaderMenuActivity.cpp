@@ -340,26 +340,25 @@ void EpubReaderMenuActivity::loop() {
     }
 
     if (selectedAction == MenuAction::VIEW_CLIPPINGS) {
-      startActivityForResult(
-          std::make_unique<EpubReaderClippingListActivity>(renderer, mappedInput),
-          [this](const ActivityResult& result) {
-            if (result.isCancelled) {
-              requestUpdate();
-              return;
-            }
+      startActivityForResult(std::make_unique<EpubReaderClippingListActivity>(renderer, mappedInput),
+                             [this](const ActivityResult& result) {
+                               if (result.isCancelled) {
+                                 requestUpdate();
+                                 return;
+                               }
 
-            const auto* clipping = std::get_if<ClippingJumpResult>(&result.data);
-            if (clipping == nullptr) {
-              requestUpdate();
-              return;
-            }
+                               const auto* clipping = std::get_if<ClippingJumpResult>(&result.data);
+                               if (clipping == nullptr) {
+                                 requestUpdate();
+                                 return;
+                               }
 
-            ClippingJumpResult menuResult = *clipping;
-            menuResult.orientation = pendingOrientation;
-            menuResult.settingsChanged = settingsChanged;
-            setResult(std::move(menuResult));
-            finish();
-          });
+                               ClippingJumpResult menuResult = *clipping;
+                               menuResult.orientation = pendingOrientation;
+                               menuResult.settingsChanged = settingsChanged;
+                               setResult(std::move(menuResult));
+                               finish();
+                             });
       return;
     }
 
