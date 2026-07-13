@@ -492,12 +492,31 @@ bool ClippingStore::migrateForFilePath(const std::string& oldFilePath, const std
   }
 
   const std::string newStorePath = storeFilePathForBook(newFilePath, bookType);
-  if (Storage.exists(newStorePath.c_str())) {
-    Storage.remove(newStorePath.c_str());
+  if (oldStorePath == newStorePath) {
+    return true;
+  }
+
+  const std::string backupPath = newStorePath + ".bak";
+  const bool hasDestination = Storage.exists(newStorePath.c_str());
+  if (hasDestination) {
+    if (Storage.exists(backupPath.c_str()) && !Storage.remove(backupPath.c_str())) {
+      LOG_ERR("CLIP", "Failed to remove stale clipping migration backup: %s", backupPath.c_str());
+      return false;
+    }
+    if (!Storage.rename(newStorePath.c_str(), backupPath.c_str())) {
+      LOG_ERR("CLIP", "Failed to back up destination clippings: %s", newStorePath.c_str());
+      return false;
+    }
   }
   if (!Storage.rename(oldStorePath.c_str(), newStorePath.c_str())) {
     LOG_ERR("CLIP", "Failed to rename migrated clippings: %s -> %s", oldStorePath.c_str(), newStorePath.c_str());
+    if (hasDestination && !Storage.rename(backupPath.c_str(), newStorePath.c_str())) {
+      LOG_ERR("CLIP", "Failed to restore destination clipping backup: %s", backupPath.c_str());
+    }
     return false;
+  }
+  if (hasDestination && Storage.exists(backupPath.c_str())) {
+    Storage.remove(backupPath.c_str());
   }
   return true;
 }
