@@ -405,8 +405,13 @@ bool matchClipRunFromPageWord(const Page& page, const std::string& clippingText,
   }
 
   // A relayout can split a saved clipping so this page starts mid-clipping.
-  // Accept complete runs or page-boundary partial runs.
-  if (!reachedClipEnd && matchedTokens < minPartialMatch) {
+  // Accept complete runs (the whole clipping matched, start to end) or
+  // page-boundary partial runs of a meaningful length. Reaching the end of the
+  // clip text is not enough on its own: starting the search at a late token
+  // (e.g. the clipping's last word) trivially "reaches the end" after matching
+  // a single coincidental word, which must not be treated as a full match.
+  const bool completeClipMatch = startClipToken == 0 && reachedClipEnd;
+  if (!completeClipMatch && matchedTokens < minPartialMatch) {
     const bool startsAtClipBoundary = startClipToken == 0;
     const bool startsAtPageBoundary = startPageWord == 0;
     if (!startsAtClipBoundary && !startsAtPageBoundary) {
