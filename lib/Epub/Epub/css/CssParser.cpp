@@ -571,6 +571,11 @@ bool CssParser::selectorMatchesElement(std::string_view selector, std::string_vi
 // Rule processing
 
 bool CssParser::processRuleBlockWithStyle(std::string_view selectorGroup, const CssStyle& style) {
+  // Skip rules that don't define any supported properties to save RAM.
+  if (!style.defined.anySet()) {
+    return true;
+  }
+
   // Check if we've reached the rule limit before processing
   if (rulesBySelector_.size() >= MAX_RULES) {
     LOG_ERR("CSS", "Reached max rules limit (%zu), treating CSS parse as incomplete", MAX_RULES);
