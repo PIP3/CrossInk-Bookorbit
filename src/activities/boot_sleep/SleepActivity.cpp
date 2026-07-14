@@ -440,10 +440,10 @@ void SleepActivity::onEnter() {
   overlayBackgroundBufferStored =
       SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::OVERLAY && renderer.storeBwBuffer();
 
-  // Show the popup in the reader's orientation when sleep starts from an open book.
-  // Reset to portrait afterwards so the sleep screen renderer keeps its existing layout.
+  // Show the popup in the orientation that was visible before reader exit restores
+  // global settings. Reset to portrait afterwards so sleep screen layout stays unchanged.
   if (APP_STATE.lastSleepFromReader) {
-    ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
+    renderer.setOrientation(sleepPopupOrientation);
     GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
     renderer.setOrientation(GfxRenderer::Orientation::Portrait);
   } else {
