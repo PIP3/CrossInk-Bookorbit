@@ -77,7 +77,7 @@ void TextBlock::bindArenaPointers() {
   xposArr = reinterpret_cast<const int16_t*>(base + wc * 2);
   size_t off = wc * 4;
   if (bionicPresent) {
-    bionicSuffixXArr = reinterpret_cast<const uint16_t*>(base + off);
+    bionicRunOffsetArr = reinterpret_cast<const uint16_t*>(base + off);
     off += wc * 2;
   }
   if (guideDotsPresent) {
@@ -99,22 +99,22 @@ void TextBlock::bindArenaPointers() {
 
 TextBlock::TextBlock(const std::vector<std::string>& words, const std::vector<int16_t>& wordXpos,
                      const std::vector<EpdFontFamily::Style>& wordStyles, const std::vector<uint8_t>& bionicBoundary,
-                     const std::vector<uint16_t>& bionicSuffixX, const std::vector<uint16_t>& guideDotXOffset,
+                     const std::vector<uint16_t>& bionicRunOffset, const std::vector<uint16_t>& guideDotXOffset,
                      const std::vector<uint8_t>& wordFlags, const BlockStyle& blockStyle)
     : blockStyle(blockStyle) {
   const bool hasBionic = !bionicBoundary.empty();
   const bool hasGuideDots = !guideDotXOffset.empty();
   const bool hasWordFlags = !wordFlags.empty();
   if (words.size() != wordXpos.size() || words.size() != wordStyles.size() || words.size() > MAX_WORDS_PER_TEXT_BLOCK ||
-      (hasBionic && (words.size() != bionicBoundary.size() || words.size() != bionicSuffixX.size())) ||
-      (!hasBionic && !bionicSuffixX.empty()) || (hasGuideDots && words.size() != guideDotXOffset.size()) ||
+      (hasBionic && (words.size() != bionicBoundary.size() || words.size() != bionicRunOffset.size())) ||
+      (!hasBionic && !bionicRunOffset.empty()) || (hasGuideDots && words.size() != guideDotXOffset.size()) ||
       (hasWordFlags && words.size() != wordFlags.size())) {
     LOG_ERR("TXB",
-            "Construction failed: size mismatch (words=%u, xpos=%u, styles=%u, boundary=%u, suffixX=%u, "
+            "Construction failed: size mismatch (words=%u, xpos=%u, styles=%u, boundary=%u, runOffset=%u, "
             "dotX=%u, flags=%u)",
             static_cast<uint32_t>(words.size()), static_cast<uint32_t>(wordXpos.size()),
             static_cast<uint32_t>(wordStyles.size()), static_cast<uint32_t>(bionicBoundary.size()),
-            static_cast<uint32_t>(bionicSuffixX.size()), static_cast<uint32_t>(guideDotXOffset.size()),
+            static_cast<uint32_t>(bionicRunOffset.size()), static_cast<uint32_t>(guideDotXOffset.size()),
             static_cast<uint32_t>(wordFlags.size()));
     isValid = false;
     return;
@@ -171,10 +171,10 @@ TextBlock::TextBlock(const std::vector<std::string>& words, const std::vector<in
     text[off++] = '\0';
   }
   if (bionicPresent) {
-    auto* suffixX = const_cast<uint16_t*>(bionicSuffixXArr);
+    auto* runOffset = const_cast<uint16_t*>(bionicRunOffsetArr);
     auto* boundary = const_cast<uint8_t*>(bionicBoundaryArr);
     for (uint16_t i = 0; i < numWords; i++) {
-      suffixX[i] = bionicSuffixX[i];
+      runOffset[i] = bionicRunOffset[i];
       boundary[i] = bionicBoundary[i];
     }
   }
@@ -231,9 +231,14 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
           std::min<size_t>({static_cast<size_t>(boundary), static_cast<size_t>(wordLen), sizeof(boldBuf) - 1});
       memcpy(boldBuf, word, boldLen);
       boldBuf[boldLen] = '\0';
-      renderer.drawText(fontId, wordX, wordY, boldBuf, foregroundBlack, boldStyle, baseDir);
-      renderer.drawText(fontId, wordX + bionicSuffixX(i), wordY, word + boldLen, foregroundBlack, currentStyle,
-                        baseDir);
+      const int secondRunX = wordX + bionicRunOffset(i);
+      if (baseDir == BidiUtils::BidiBaseDir::RTL) {
+        renderer.drawText(fontId, wordX, wordY, word + boldLen, foregroundBlack, currentStyle, baseDir);
+        renderer.drawText(fontId, secondRunX, wordY, boldBuf, foregroundBlack, boldStyle, baseDir);
+      } else {
+        renderer.drawText(fontId, wordX, wordY, boldBuf, foregroundBlack, boldStyle, baseDir);
+        renderer.drawText(fontId, secondRunX, wordY, word + boldLen, foregroundBlack, currentStyle, baseDir);
+      }
     } else {
       renderer.drawText(fontId, wordX, wordY, word, foregroundBlack, currentStyle, baseDir);
     }

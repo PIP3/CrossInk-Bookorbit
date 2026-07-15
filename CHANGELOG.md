@@ -14,6 +14,7 @@
 
 ### Fixed
 
+- Bionic Reading now keeps Hebrew and other right-to-left EPUB text in the correct reading order.
 - EPUB clipping selection no longer replaces selected text with corrupted glyphs as the selection grows.
 - Popup option menus now show a scrollbar when more choices are available than can fit on screen.
 - The “Entering sleep” message now follows the reader's current orientation, including book-specific orientation overrides.
