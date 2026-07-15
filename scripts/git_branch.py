@@ -96,20 +96,15 @@ def _read_ini(project_dir):
     return config
 
 
-def get_base_version(project_dir):
-    config = _read_ini(project_dir)
-    if not config.has_option('crosspoint', 'version'):
-        warn('No [crosspoint] version in platformio.ini; base version will be "0.0.0"')
-        return '0.0.0'
-    return config.get('crosspoint', 'version')
-
-
 def get_crossink_version(project_dir):
     config = _read_ini(project_dir)
-    if not config.has_option('crosspoint', 'crossink_version'):
-        warn('No [crosspoint] crossink_version in platformio.ini; falling back to version')
-        return get_base_version(project_dir)
-    return config.get('crosspoint', 'crossink_version')
+    if not config.has_option('crossink', 'version'):
+        warn(
+            'No [crossink] version in platformio.ini; '
+            'build version will be "0.0.0"'
+        )
+        return '0.0.0'
+    return config.get('crossink', 'version')
 
 
 def inject_version(env):
