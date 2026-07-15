@@ -2,6 +2,7 @@
 
 ### Added
 
+- KOReader Sync can now automatically keep whichever reading position is furthest ahead, while retaining an ask-every-time option.
 - Web uploads can now remember EPUB optimization settings in the browser and optionally name EPUBs from their title and author metadata.
 - OPDS downloads can now be saved to a configurable folder selected under Settings > System > OPDS Servers.
 - Large EPUB chapters can now open to the first readable page sooner while the rest of the chapter continues indexing in smaller chunks.
