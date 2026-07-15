@@ -2,6 +2,7 @@
 
 ### Added
 
+- Web uploads can now remember EPUB optimization settings in the browser and optionally name EPUBs from their title and author metadata.
 - OPDS downloads can now be saved to a configurable folder selected under Settings > System > OPDS Servers.
 - Large EPUB chapters can now open to the first readable page sooner while the rest of the chapter continues indexing in smaller chunks.
 - EPUB readers can now choose from five word-spacing levels, from normal through extra-wide.

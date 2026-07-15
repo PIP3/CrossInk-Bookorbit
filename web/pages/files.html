@@ -60,6 +60,23 @@
 
           <div id="convertInfo" style="display: none; margin-bottom: 10px; font-size: 0.9em"></div>
 
+          <div class="advanced-setting-row">
+            <div class="setting-label">
+              <div class="setting-title">Rename from Book Metadata</div>
+              <div class="setting-desc">Use Title - Author.epub when available</div>
+            </div>
+            <div class="setting-controls">
+              <label class="toggle-switch">
+                <input
+                  type="checkbox"
+                  id="renameFromMetadataToggle"
+                  onchange="updateUploadSettingsPersistence()"
+                />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+
           <div class="convert-settings" id="convertSettings" style="display: block">
             <span>⚫ True-Grayscale</span>
             <span id="convertSizeSummary">📏 Max 480×800px</span>
@@ -120,6 +137,7 @@
                   max="10000"
                   step="1"
                   value="1500"
+                  onchange="updateUploadSettingsPersistence()"
                 />
               </div>
             </div>
@@ -169,7 +187,19 @@
               </div>
               <div class="setting-controls">
                 <label class="toggle-switch">
-                  <input type="checkbox" id="export-log-checkbox" />
+                  <input type="checkbox" id="export-log-checkbox" onchange="updateUploadSettingsPersistence()" />
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+            </div>
+            <div class="advanced-setting-row">
+              <div class="setting-label">
+                <div class="setting-title">Remember Settings</div>
+                <div class="setting-desc">Store these upload options in this browser</div>
+              </div>
+              <div class="setting-controls">
+                <label class="toggle-switch">
+                  <input type="checkbox" id="rememberUploadSettings" onchange="updateUploadSettingsPersistence()" />
                   <span class="toggle-slider"></span>
                 </label>
               </div>
