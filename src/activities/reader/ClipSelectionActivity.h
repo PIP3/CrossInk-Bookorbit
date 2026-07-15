@@ -17,13 +17,11 @@ struct ClipWordStyle {
   enum Flags : uint8_t {
     NONE = 0,
     FILL = 1 << 0,
-    INVERT = 1 << 1,
     UNDERLINE = 1 << 2,
     BORDER = 1 << 3,
   };
 
   uint8_t flags = FILL;
-  Color fillColor = Color::LightGray;
 };
 
 class ClipSelectionActivity final : public Activity {
@@ -61,7 +59,6 @@ class ClipSelectionActivity final : public Activity {
   bool needsPageSwitch = false;
   bool hasSavedBuffer = false;
   bool usingFallbackFont = false;
-  mutable std::array<std::string, 4> prewarmTextByStyle;
   std::array<uint16_t, MAX_READING_ORDER_WORDS> readingOrder{};
   size_t readingOrderSize = 0;
 
@@ -73,7 +70,6 @@ class ClipSelectionActivity final : public Activity {
   void storeCurrentBuffer();
   void restoreSavedBuffer() const;
   bool switchToPage(int pageIdx);
-  bool prewarmHighlightedWords() const;
   void drawHighlights();
   void applyWordStyle(const WordRef& word, const ClipWordStyle& style) const;
   void useFallbackFont(const char* reason);
