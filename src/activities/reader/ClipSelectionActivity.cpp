@@ -259,10 +259,6 @@ void ClipSelectionActivity::render(RenderLock&&) {
     return;
   }
 
-  if (!prewarmHighlightedWords() && renderer.isSdCardFont(renderFontId)) {
-    useFallbackFont("highlight prewarm");
-    if (!switchToPage(currentDisplayPage)) return;
-  }
   drawHighlights();
 
   const auto confirmLabel = startMarkIdx == -1 ? tr(STR_SELECT) : tr(STR_DONE);
@@ -319,67 +315,26 @@ void ClipSelectionActivity::applyWordStyle(const WordRef& word, const ClipWordSt
   const int drawW = word.w - skipX;
   if (drawW <= 0) return;
 
-  const bool invert = (style.flags & ClipWordStyle::INVERT) != 0;
-  const bool fill = !invert && (style.flags & ClipWordStyle::FILL) != 0;
-  if (invert) {
-    renderer.fillRect(drawX, word.y, drawW, word.h, true);
-  } else if (fill) {
-    renderer.fillRectDither(drawX, word.y, drawW, word.h, style.fillColor);
+  const bool fill = (style.flags & ClipWordStyle::FILL) != 0;
+  if (fill) {
+    // Add the dither's black pixels without clearing the word's existing black
+    // pixels. This preserves the snapshotted glyphs and avoids a font-cache
+    // allocation/redraw on every selection step.
+    for (int y = word.y; y < word.y + word.h; y += 2) {
+      for (int x = drawX; x < drawX + drawW; x += 2) {
+        renderer.drawPixel(x, y, true);
+      }
+    }
   }
 
   if ((style.flags & ClipWordStyle::BORDER) != 0) {
-    renderer.drawRect(drawX, word.y, drawW, word.h, !invert);
-  }
-
-  if (word.text.find_first_not_of(" \t") != std::string::npos) {
-    const bool textBlack = !invert;
-    renderer.drawText(renderFontId, drawX, word.y, hasEmSpace(word.text) ? word.text.c_str() + 3 : word.text.c_str(),
-                      textBlack, textStyle);
+    renderer.drawRect(drawX, word.y, drawW, word.h, true);
   }
 
   if ((style.flags & ClipWordStyle::UNDERLINE) != 0) {
     const int underlineY = word.y + renderer.getFontAscenderSize(renderFontId) + 2;
     renderer.drawLine(drawX, underlineY, drawX + drawW, underlineY, true);
   }
-}
-
-bool ClipSelectionActivity::prewarmHighlightedWords() const {
-  if (!renderer.isSdCardFont(renderFontId)) return true;
-
-  auto* fcm = renderer.getFontCacheManager();
-  if (!fcm) return true;
-
-  for (auto& text : prewarmTextByStyle) {
-    text.clear();
-  }
-
-  const auto appendWord = [this](const WordRef& word) {
-    if (word.pageIdx != currentDisplayPage) return;
-    const uint8_t styleIdx = static_cast<uint8_t>(word.style) & 0x03;
-    if (styleIdx >= prewarmTextByStyle.size()) return;
-    prewarmTextByStyle[styleIdx] += word.text;
-    prewarmTextByStyle[styleIdx].push_back(' ');
-  };
-
-  if (startMarkIdx != -1) {
-    const int from = std::min(startMarkIdx, cursorIdx);
-    const int to = std::max(startMarkIdx, cursorIdx);
-    for (int i = from; i <= to; i++) {
-      appendWord(words[readingOrder[i]]);
-    }
-  }
-
-  appendWord(words[readingOrder[cursorIdx]]);
-
-  bool ok = true;
-  for (uint8_t styleIdx = 0; styleIdx < prewarmTextByStyle.size(); styleIdx++) {
-    if (!prewarmTextByStyle[styleIdx].empty()) {
-      ok =
-          fcm->prewarmCache(renderFontId, prewarmTextByStyle[styleIdx].c_str(), static_cast<uint8_t>(1u << styleIdx)) &&
-          ok;
-    }
-  }
-  return ok;
 }
 
 void ClipSelectionActivity::useFallbackFont(const char* reason) {
@@ -391,8 +346,8 @@ void ClipSelectionActivity::useFallbackFont(const char* reason) {
 }
 
 void ClipSelectionActivity::drawHighlights() {
-  static constexpr ClipWordStyle selectionStyle{ClipWordStyle::FILL | ClipWordStyle::UNDERLINE, Color::LightGray};
-  static constexpr ClipWordStyle cursorStyle{ClipWordStyle::INVERT, Color::LightGray};
+  static constexpr ClipWordStyle selectionStyle{ClipWordStyle::FILL | ClipWordStyle::UNDERLINE};
+  static constexpr ClipWordStyle cursorStyle{ClipWordStyle::BORDER | ClipWordStyle::UNDERLINE};
 
   if (startMarkIdx != -1) {
     const int from = std::min(startMarkIdx, cursorIdx);
