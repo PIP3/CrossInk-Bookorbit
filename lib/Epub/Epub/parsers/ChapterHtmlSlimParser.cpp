@@ -44,6 +44,15 @@ constexpr size_t COMBINED_READING_AID_BUFFERED_WORDS_BEFORE_LAYOUT = 175;
 constexpr uint16_t COMBINED_READING_AID_TEXT_RUN_BYTES_BEFORE_LAYOUT = 1024;
 constexpr size_t SECTION_ADVANCE_PREWARM_READ_BUFFER_SIZE = 512;
 constexpr uint32_t SECTION_ADVANCE_PREWARM_MAX_CODEPOINTS = 4096;
+// The whole-section advance prewarm is a batch-I/O optimization, not a requirement:
+// layout falls back to per-paragraph advance loads (ParsedText loads glyph metrics per
+// block, masked to the styles that block uses). Running it costs a 16KB contiguous
+// codepoint scratch array plus the resident per-style advance tables (~30KB total
+// observed), on top of the 44KB layout floor. 80KB keeps the prewarm for ordinary
+// chapter opens (observed surviving from 81KB free) and skips it for low-heap
+// extension starts (observed aborting the build when run from 70KB free).
+constexpr uint32_t MIN_FREE_HEAP_FOR_SECTION_PREWARM = 80 * 1024;
+constexpr uint32_t MIN_MAX_ALLOC_FOR_SECTION_PREWARM = 24 * 1024;
 constexpr uint8_t INITIAL_PAGE_ELEMENT_RESERVE = 8;
 constexpr uint8_t INITIAL_TABLE_FRAGMENT_ROW_RESERVE = 8;
 constexpr uint32_t PAGE_ELEMENT_RESERVE_MIN_MAX_ALLOC = 1024;
@@ -2657,6 +2666,13 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
 
 void ChapterHtmlSlimParser::prewarmSectionAdvanceTable(FsFile& file) const {
   if (!renderer.isSdCardFont(fontId) || isPreviewBuild()) {
+    return;
+  }
+
+  const auto heap = MemoryBudget::snapshot();
+  if (!MemoryBudget::hasHeap(heap, MIN_FREE_HEAP_FOR_SECTION_PREWARM, MIN_MAX_ALLOC_FOR_SECTION_PREWARM)) {
+    LOG_DBG("EHP", "Skipping section advance prewarm: low heap (free=%u, maxAlloc=%u, need %u/%u)", heap.freeHeap,
+            heap.maxAllocHeap, MIN_FREE_HEAP_FOR_SECTION_PREWARM, MIN_MAX_ALLOC_FOR_SECTION_PREWARM);
     return;
   }
 

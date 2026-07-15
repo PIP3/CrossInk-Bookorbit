@@ -23,6 +23,14 @@ Keep this file focused on repo-specific gotchas that are worth reusing in future
 - Kindle EPUBs may contain paired high-res and old-Kindle fallback images. `ChapterHtmlSlimParser` should skip `<img>` nodes with `data-AmznRemoved-M8` to avoid duplicate stacked images.
 - After image/layout pipeline changes that affect cached EPUB output, clear the affected `.crosspoint/epub_<hash>/` cache if behavior looks stale.
 
+## Heap Baselines (X4 hardware, SD card font)
+
+- A normal resume-into-partial reading session runs at ~85-90KB free / ~49KB maxAlloc by
+  the first watermark crossing (Epub metadata + x-locations + resident glyph caches).
+  Do not read mid-range heap numbers as session degradation without checking the scenario.
+- SD-font section builds cost ~38-50KB at cold start; the 4-style advance-table prewarm
+  (~30KB incl. 16KB contiguous scratch) dominates and is skipped below 80KB free.
+
 ## Misc Repo Gotchas
 
 - POSIX TZ signs are inverted from ISO 8601 in `TimeStore::applyTimezone()`: `"UTC-1"` means UTC+1.
