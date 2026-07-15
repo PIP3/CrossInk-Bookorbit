@@ -757,8 +757,10 @@ void setup() {
     case HalGPIO::WakeupReason::PowerButton:
       LOG_INF("BOOT", "Power-button wake: verifying duration required=%u shortAllowed=%d",
               SETTINGS.getPowerButtonWakeDuration(), SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP);
-      gpio.verifyPowerButtonWakeup(SETTINGS.getPowerButtonWakeDuration(),
-                                   SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP);
+      if (!gpio.verifyPowerButtonWakeup(SETTINGS.getPowerButtonWakeDuration(),
+                                        SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP)) {
+        powerManager.startDeepSleep(gpio);
+      }
       break;
     case HalGPIO::WakeupReason::AfterUSBPower:
       // TEMP: continue booting while diagnosing post-flash/reset behavior.
