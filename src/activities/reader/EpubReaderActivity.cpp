@@ -3804,7 +3804,7 @@ void EpubReaderActivity::pageTurn(bool isForwardTurn, const char* source) {
     // beyond the current watermark and render()'s ensure-built pump will lay them out. Only when
     // the section is fully built AND we're on its last page do we move to the next spine -- using
     // the live pageCount alone would mistake the build watermark for the end of a giant spine.
-    if (section->currentPage < section->pageCount - 1 || section->isBuilding()) {
+    if (section->currentPage < section->pageCount - 1 || section->isBuilding() || section->isPartial()) {
       section->currentPage++;
     } else {
       if (shouldQueueCompletionPromptOnChapterExit()) {

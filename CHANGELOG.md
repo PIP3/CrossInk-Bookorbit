@@ -29,6 +29,7 @@
 - Unsupported EPUB chapter image formats no longer trigger the low-memory image warning.
 - EPUB progress now keeps saving while long chapters are still being indexed.
 - The reader no longer stops responding to buttons during very long reading sessions. Once memory ran low, background chapter indexing would fail, restart, and fail again without pause, leaving the device awake but unable to turn the page. It now stops retrying and keeps the pages it already indexed.
+- Low-memory EPUB indexing no longer mistakes a partially indexed page for the end of a chapter and skips forward.
 
 ## [v1.4.0] - 2026-07-10
 
