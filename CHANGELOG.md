@@ -2,6 +2,7 @@
 
 ### Added
 
+- On Home themes without a dedicated Read button, pressing Back now opens the most recently read book.
 - KOReader Sync can now automatically keep whichever reading position is furthest ahead, while retaining an ask-every-time option.
 - Web uploads can now remember EPUB optimization settings in the browser and optionally name EPUBs from their title and author metadata.
 - OPDS downloads can now be saved to a configurable folder selected under Settings > System > OPDS Servers.

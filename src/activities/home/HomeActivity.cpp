@@ -41,7 +41,7 @@
 
 namespace {
 constexpr uint32_t CAROUSEL_CACHE_MAGIC = 0x43434152;  // "CCAR"
-constexpr uint16_t CAROUSEL_CACHE_VERSION = 4;
+constexpr uint16_t CAROUSEL_CACHE_VERSION = 5;
 constexpr char CAROUSEL_CACHE_PATH[] = "/.crosspoint/home_carousel_cache.bin";
 constexpr char CAROUSEL_CACHE_TMP_PATH[] = "/.crosspoint/home_carousel_cache.tmp";
 constexpr uint32_t CAROUSEL_FRAME_MIN_FREE_AFTER_ALLOC = 64U * 1024U;
@@ -872,6 +872,7 @@ void HomeActivity::onEnter() {
   lastCarouselBookIndex = 0;
   minimalMenuOpen = false;
   minimalSuppressInitialFrontRelease = usesMinimalHomeInteraction();
+  backPressSeen = false;
   minimalMenuIndex = 0;
   minimalHomeNavIndex = -1;
   carouselFramesReady = false;
@@ -1143,7 +1144,7 @@ void HomeActivity::renderCarouselFrameToCurrentBuffer(int bookIdx, BookReadingSt
       static_cast<int>(menuItems.size()), -1, [&menuItems](int index) { return menuItems[index].label; },
       [&menuItems](int index) { return menuItems[index].icon; });
 
-  const auto labels = mappedInput.mapLabels("", tr(STR_SELECT), tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
+  const auto labels = mappedInput.mapLabels(tr(STR_READ), tr(STR_SELECT), tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   if (outStats) *outStats = frameStats;
@@ -1549,6 +1550,19 @@ void HomeActivity::loop() {
     return;
   }
 
+  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+    backPressSeen = true;
+  }
+
+  // Minimal and Dashboard already returned through their dedicated home
+  // interaction path above. On other themes, Back opens the most recent book.
+  // Requiring a press observed on Home ignores the stale release that can
+  // arrive after Back closed the previous activity.
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back) && backPressSeen && !recentBooks.empty()) {
+    onContinueReading();
+    return;
+  }
+
   const bool isCarousel =
       static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme) == CrossPointSettings::UI_THEME::LYRA_CAROUSEL;
   const int previousHighlightedBookIdx = getHighlightedBookIndex();
@@ -1814,8 +1828,10 @@ void HomeActivity::render(RenderLock&&) {
 
   const bool isCarouselTheme =
       static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme) == CrossPointSettings::UI_THEME::LYRA_CAROUSEL;
-  const auto labels = isCarouselTheme ? mappedInput.mapLabels("", tr(STR_SELECT), tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT))
-                                      : mappedInput.mapLabels("", tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  const char* readLabel = recentBooks.empty() ? "" : tr(STR_READ);
+  const auto labels = isCarouselTheme
+                          ? mappedInput.mapLabels(readLabel, tr(STR_SELECT), tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT))
+                          : mappedInput.mapLabels(readLabel, tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
