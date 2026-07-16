@@ -1843,6 +1843,9 @@ void EpubReaderActivity::onEnter() {
 }
 
 void EpubReaderActivity::onExit() {
+  // SD-font caches live in the renderer singleton, so leaving them resident after
+  // the reader exits can fragment the contiguous heap needed for Home cover images.
+  releaseReaderSdFontCachesForLowMemory(renderer, "ERS", "reader exit");
   Activity::onExit();
 
   // Deactivate reader-specific front button mapping.
