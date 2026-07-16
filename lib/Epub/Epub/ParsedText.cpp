@@ -354,13 +354,11 @@ int wordSpacingExtraFromGap(const int gap, const uint8_t wordSpacing) {
   if (gap <= 0) {
     return 0;
   }
-  // Each level widens the natural inter-word gap by ~75%, so the top level (4)
-  // adds ~3x. This is deliberately large: on justified text the per-line gap
-  // sum is fixed by justification, so word spacing only becomes visible by making
-  // the line breaker pack fewer words per line, and a smaller nudge rarely crosses
-  // that threshold. On ragged (left/center/right) text it just widens each space.
+  // Add a fixed pixel amount per level instead of scaling from the font's
+  // natural space width, so narrow-space fonts still visibly widen.
+  constexpr int WORD_SPACING_LEVEL_PX = 6;
   const int level = std::min<uint8_t>(wordSpacing, 4);
-  return (gap * level * 7 + 4) / 8;
+  return level * WORD_SPACING_LEVEL_PX;
 }
 
 int naturalGapBeforeToken(const GfxRenderer& renderer, const int fontId, const std::string& leftWord,
