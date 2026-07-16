@@ -19,6 +19,7 @@
 
 ### Fixed
 
+- CSS-heavy EPUB chapters now use less temporary memory while parsing, reducing failures when opening them.
 - EPUB chapter headings with several images now continue onto the next page instead of dropping images or clipping them behind the status bar.
 - X4 sleep entry no longer flashes through multiple full-screen transitions before showing the sleep screen.
 - Bionic Reading now keeps Hebrew and other right-to-left EPUB text in the correct reading order.

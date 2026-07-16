@@ -37,6 +37,7 @@ constexpr uint32_t MIN_MAX_ALLOC_FOR_TEXT_LAYOUT = 32 * 1024;
 constexpr uint32_t MIN_FREE_HEAP_FOR_TABLE_BUFFERING = 64 * 1024;
 constexpr uint32_t MIN_MAX_ALLOC_FOR_TABLE_BUFFERING = 40 * 1024;
 constexpr size_t DEFAULT_BUFFERED_WORDS_BEFORE_LAYOUT = 350;
+constexpr size_t CSS_BUFFERED_WORDS_BEFORE_LAYOUT = 320;
 constexpr uint16_t DEFAULT_TEXT_RUN_BYTES_BEFORE_LAYOUT = 2048;
 constexpr size_t SINGLE_READING_AID_BUFFERED_WORDS_BEFORE_LAYOUT = 240;
 constexpr uint16_t SINGLE_READING_AID_TEXT_RUN_BYTES_BEFORE_LAYOUT = 1536;
@@ -528,7 +529,7 @@ size_t ChapterHtmlSlimParser::bufferedWordsBeforeLayoutLimit() const {
   if (bionicReadingEnabled || guideReadingEnabled) {
     return SINGLE_READING_AID_BUFFERED_WORDS_BEFORE_LAYOUT;
   }
-  return DEFAULT_BUFFERED_WORDS_BEFORE_LAYOUT;
+  return embeddedStyle ? CSS_BUFFERED_WORDS_BEFORE_LAYOUT : DEFAULT_BUFFERED_WORDS_BEFORE_LAYOUT;
 }
 
 uint16_t ChapterHtmlSlimParser::textRunBytesBeforeLayoutLimit() const {
