@@ -308,8 +308,8 @@ BionicTokenMetadata computeBionicMetadata(const std::string_view segment, const 
   return {baseStyle, static_cast<uint8_t>(std::min<size_t>(splitByteOffset, UINT8_MAX))};
 }
 
-int measureBionicSuffixX(const GfxRenderer& renderer, const int fontId, const std::string& word,
-                         const EpdFontFamily::Style style, const uint8_t boundary) {
+int measureBionicRunOffset(const GfxRenderer& renderer, const int fontId, const std::string& word,
+                           const EpdFontFamily::Style style, const uint8_t boundary, const bool rtl) {
   if (boundary == 0 || boundary >= word.size()) {
     return 0;
   }
@@ -320,10 +320,11 @@ int measureBionicSuffixX(const GfxRenderer& renderer, const int fontId, const st
   memcpy(prefixBuf, word.c_str(), prefixLen);
   prefixBuf[prefixLen] = '\0';
 
-  const int prefixWidth = renderer.getTextAdvanceX(fontId, prefixBuf, boldStyle);
+  const int firstVisualRunWidth = rtl ? renderer.getTextAdvanceX(fontId, word.c_str() + boundary, style)
+                                      : renderer.getTextAdvanceX(fontId, prefixBuf, boldStyle);
   const int kern = renderer.getKerning(fontId, lastCodepointBeforeByteOffset(word, boundary),
                                        firstCodepointAtByteOffset(word, boundary), boldStyle);
-  return prefixWidth + kern;
+  return firstVisualRunWidth + kern;
 }
 
 uint16_t measureTokenWidth(const GfxRenderer& renderer, const int fontId, const std::string& word,
@@ -333,7 +334,7 @@ uint16_t measureTokenWidth(const GfxRenderer& renderer, const int fontId, const 
     return measureWordWidth(renderer, fontId, word, style, appendHyphen);
   }
 
-  const int suffixX = measureBionicSuffixX(renderer, fontId, word, style, bionicBoundary);
+  const int suffixX = measureBionicRunOffset(renderer, fontId, word, style, bionicBoundary, false);
   const int suffixWidth = renderer.getTextAdvanceX(fontId, word.c_str() + bionicBoundary, style);
   return static_cast<uint16_t>(std::max(0, suffixX + suffixWidth));
 }
@@ -1418,7 +1419,7 @@ bool ParsedText::extractLine(Arena& scratchArena, const size_t breakIndex, const
   std::vector<int16_t> outXPos;
   std::vector<EpdFontFamily::Style> outStyles;
   std::vector<uint8_t> outBoundaries;
-  std::vector<uint16_t> outSuffixX;
+  std::vector<uint16_t> outRunOffsets;
   std::vector<uint16_t> outGuideDotXOffset;
   std::vector<uint8_t> outBackgroundBlack;
   outWords.reserve(lineWordCount);
@@ -1426,7 +1427,7 @@ bool ParsedText::extractLine(Arena& scratchArena, const size_t breakIndex, const
   outStyles.reserve(lineWordCount);
   if (lineHasBionicSplit) {
     outBoundaries.reserve(lineWordCount);
-    outSuffixX.reserve(lineWordCount);
+    outRunOffsets.reserve(lineWordCount);
   }
   if (lineHasGuideDot) {
     outGuideDotXOffset.reserve(lineWordCount);
@@ -1437,17 +1438,20 @@ bool ParsedText::extractLine(Arena& scratchArena, const size_t breakIndex, const
 
   for (size_t i = 0; i < lineWordCount; i++) {
     const uint8_t boundary = lineBionicBoundary[i];
-    const uint16_t suffixX =
-        boundary > 0 ? static_cast<uint16_t>(std::max(
-                           0, measureBionicSuffixX(renderer, fontId, lineWords[i], lineWordStyles[i], boundary)))
-                     : 0;
+    const bool wordIsRtl = BidiUtils::detectParagraphLevel(lineWords[i].c_str(), blockStyle.isRtl ? 1 : 0) ==
+                           static_cast<int>(BidiUtils::BidiBaseDir::RTL);
+    const uint16_t runOffset =
+        boundary > 0
+            ? static_cast<uint16_t>(std::max(
+                  0, measureBionicRunOffset(renderer, fontId, lineWords[i], lineWordStyles[i], boundary, wordIsRtl)))
+            : 0;
 
     outWords.push_back(std::move(lineWords[i]));
     outXPos.push_back(lineXPos[i]);
     outStyles.push_back(lineWordStyles[i]);
     if (lineHasBionicSplit) {
       outBoundaries.push_back(boundary);
-      outSuffixX.push_back(suffixX);
+      outRunOffsets.push_back(runOffset);
     }
     if (lineHasGuideDot) {
       outGuideDotXOffset.push_back(0);
@@ -1466,8 +1470,8 @@ bool ParsedText::extractLine(Arena& scratchArena, const size_t breakIndex, const
     }
   }
 
-  auto block = std::make_shared<TextBlock>(outWords, outXPos, outStyles, outBoundaries, outSuffixX, outGuideDotXOffset,
-                                           outBackgroundBlack, blockStyle);
+  auto block = std::make_shared<TextBlock>(outWords, outXPos, outStyles, outBoundaries, outRunOffsets,
+                                           outGuideDotXOffset, outBackgroundBlack, blockStyle);
   if (!block->valid()) {
     LOG_ERR("PTX", "Dropping line: TextBlock arena allocation failed");
     return false;

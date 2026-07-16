@@ -25,7 +25,9 @@ class TextBlock final : public Block {
 
   const uint16_t* textOffArr = nullptr;
   const int16_t* xposArr = nullptr;
-  const uint16_t* bionicSuffixXArr = nullptr;    // null when !bionicPresent
+  // Distance from the word's left edge to the second visual run. The suffix is
+  // second for LTR words; the bold logical prefix is second for RTL words.
+  const uint16_t* bionicRunOffsetArr = nullptr;  // null when !bionicPresent
   const uint16_t* guideDotXOffsetArr = nullptr;  // null when !guideDotsPresent
   const uint8_t* stylesArr = nullptr;
   const uint8_t* bionicBoundaryArr = nullptr;  // null when !bionicPresent
@@ -42,7 +44,7 @@ class TextBlock final : public Block {
 
   explicit TextBlock(const std::vector<std::string>& words, const std::vector<int16_t>& wordXpos,
                      const std::vector<EpdFontFamily::Style>& wordStyles, const std::vector<uint8_t>& bionicBoundary,
-                     const std::vector<uint16_t>& bionicSuffixX, const std::vector<uint16_t>& guideDotXOffset,
+                     const std::vector<uint16_t>& bionicRunOffset, const std::vector<uint16_t>& guideDotXOffset,
                      const std::vector<uint8_t>& wordFlags, const BlockStyle& blockStyle = BlockStyle());
   ~TextBlock() override = default;
   TextBlock(const TextBlock&) = delete;
@@ -61,7 +63,7 @@ class TextBlock final : public Block {
   int16_t wordXpos(const uint16_t i) const { return xposArr[i]; }
   EpdFontFamily::Style wordStyle(const uint16_t i) const { return static_cast<EpdFontFamily::Style>(stylesArr[i]); }
   uint8_t bionicBoundary(const uint16_t i) const { return bionicPresent ? bionicBoundaryArr[i] : 0; }
-  uint16_t bionicSuffixX(const uint16_t i) const { return bionicPresent ? bionicSuffixXArr[i] : 0; }
+  uint16_t bionicRunOffset(const uint16_t i) const { return bionicPresent ? bionicRunOffsetArr[i] : 0; }
   uint16_t guideDotXOffset(const uint16_t i) const { return guideDotsPresent ? guideDotXOffsetArr[i] : 0; }
   uint8_t wordFlags(const uint16_t i) const { return wordFlagsPresent ? wordFlagsArr[i] : 0; }
   bool wordEndsWithInsertedHyphen(const uint16_t i) const { return (wordFlags(i) & WORD_FLAG_INSERTED_HYPHEN) != 0; }
