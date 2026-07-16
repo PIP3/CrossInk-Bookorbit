@@ -790,10 +790,11 @@ inline std::vector<SettingInfo> buildReaderSettingsParentList(const std::vector<
 
 inline std::vector<SettingInfo> buildReaderFontSettingsList(const std::vector<SettingInfo>& allSettings) {
   std::vector<SettingInfo> settings;
-  settings.reserve(6);
+  settings.reserve(7);
   addSettingByName(settings, allSettings, StrId::STR_FONT_FAMILY);
   addSettingByName(settings, allSettings, StrId::STR_FONT_SIZE);
   addSettingByName(settings, allSettings, StrId::STR_LINE_SPACING);
+  addSettingByName(settings, allSettings, StrId::STR_WORD_SPACING);
   settings.push_back(SettingInfo::Action(StrId::STR_MANAGE_FONTS, SettingAction::DownloadFonts));
   addSettingByName(settings, allSettings, StrId::STR_SD_FONT_SIZE_RANGE);
   addSettingByName(settings, allSettings, StrId::STR_TEXT_AA);
@@ -802,10 +803,9 @@ inline std::vector<SettingInfo> buildReaderFontSettingsList(const std::vector<Se
 
 inline std::vector<SettingInfo> buildReaderPageLayoutSettingsList(const std::vector<SettingInfo>& allSettings) {
   std::vector<SettingInfo> settings;
-  settings.reserve(7);
+  settings.reserve(6);
   addSettingByName(settings, allSettings, StrId::STR_ORIENTATION);
   addSettingByName(settings, allSettings, StrId::STR_SCREEN_MARGIN);
-  addSettingByName(settings, allSettings, StrId::STR_WORD_SPACING);
   addSettingByName(settings, allSettings, StrId::STR_PARA_ALIGNMENT);
   addSettingByName(settings, allSettings, StrId::STR_HYPHENATION);
   addSettingByName(settings, allSettings, StrId::STR_EXTRA_SPACING);
