@@ -241,7 +241,7 @@ Version 49 stores Bionic Reading split-run offsets in visual order so RTL word
 prefixes render on the right. Version 48 changed Arabic contextual shaping and text measurement, so cached
 word positions from version 47 no longer match what `drawText` renders.
 
-Version 47 makes the EPUB word-spacing level widen the natural inter-word gap
+Version 48 makes the EPUB word-spacing level widen the natural inter-word gap
 (each level adds ~75% of the gap), which changes laid-out word positions, so
 older sections must rebuild. Version 46 added the EPUB word-spacing level to the
 cache-busting header. It retains the flat `TextBlock` arena and chapter-opener
