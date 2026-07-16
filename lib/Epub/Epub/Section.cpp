@@ -17,9 +17,9 @@
 
 namespace {
 constexpr uint32_t SECTION_CACHE_MAGIC = 0x535843FF;  // bytes: 0xFF, "CXS"
-// v49: Bionic Reading stores split-run offsets in visual order so RTL word
-// prefixes render on the right.
-constexpr uint8_t SECTION_FILE_VERSION = 49;
+// v50: heading image runs paginate within the reader viewport instead of
+// overflowing into the reserved status-bar area.
+constexpr uint8_t SECTION_FILE_VERSION = 50;
 // Suspended incremental build: valid pages plus LUTs and a parse-watermark trailer.
 constexpr uint8_t SECTION_FILE_PARTIAL_VERSION = 0xFE;
 constexpr uint16_t INITIAL_SECTION_PAGE_LUT_ENTRIES = 1024;
