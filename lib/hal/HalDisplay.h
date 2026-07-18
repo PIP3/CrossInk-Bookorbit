@@ -65,7 +65,9 @@ class HalDisplay {
   // Display the framebuffer as the base frame for a grayscale overlay that
   // follows. X3 uses the OEM differential base waveform ("AA-pre-BW(mid)");
   // other panels display normally with `fallback` mode (previous behavior).
-  // Deliberately does NOT force the X3 resync that displayBuffer(HALF) does.
+  // Forces the same X3 resync that displayBuffer(HALF)/displayBuffer(FULL) do
+  // whenever `fallback` isn't FAST_REFRESH, so a HALF/FULL caller gets a clean
+  // base instead of ghosting through the differential waveform.
   void displayGrayscaleBase(RefreshMode fallback = HALF_REFRESH, bool turnOffScreen = false);
 
   void copyGrayscaleBuffers(const uint8_t* lsbBuffer, const uint8_t* msbBuffer);
