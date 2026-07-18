@@ -1799,7 +1799,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                   // Keep a chapter number with its first ornament, but let later heading images continue on the
                   // next page instead of overflowing the viewport (including the reserved status-bar area).
                   const bool keepFirstOpenerImageWithHeading =
-                      self->headingOpenerActive && !self->currentPage->hasImages();
+                      self->headingOpenerActive && (!self->currentPage || !self->currentPage->hasImages());
                   if (!keepFirstOpenerImageWithHeading && self->currentPage && !self->currentPage->elements.empty() &&
                       (self->currentPageNextY + imageMarginTop + displayHeight + imageMarginBottom >
                        self->viewportHeight)) {
