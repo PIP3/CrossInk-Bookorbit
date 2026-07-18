@@ -101,8 +101,11 @@ String normalizeWebPath(const String& inputPath) {
 }
 
 bool isProtectedPath(const String& path) {
-  // Check every segment of the path, not just the last one.
-  // This prevents access to e.g. /.hidden/somefile or /System Volume Information/foo
+  // Hidden/system items stay out of the default file-manager view. Enabling
+  // Show Hidden Files intentionally makes them fully manageable.
+  if (SETTINGS.showHiddenFiles) return false;
+
+  // Check every segment so a hidden parent also protects its descendants.
   int start = 0;
   while (start < (int)path.length()) {
     if (path.charAt(start) == '/') {
@@ -114,7 +117,7 @@ bool isProtectedPath(const String& path) {
 
     String segment = path.substring(start, end);
 
-    if (!SETTINGS.showHiddenFiles && segment.startsWith(".")) return true;
+    if (segment.startsWith(".")) return true;
 
     for (const auto* item : HIDDEN_ITEMS) {
       if (segment.equals(item)) return true;
@@ -490,8 +493,9 @@ void CrossPointWebServer::scanFiles(const char* path, const std::function<void(F
     // Skip hidden items (starting with ".")
     bool shouldHide = !SETTINGS.showHiddenFiles && fileName.startsWith(".");
 
-    // Check against explicitly hidden items list
-    if (!shouldHide) {
+    // Treat OS/device metadata like other hidden items: keep it out of the
+    // default view, but let users manage it when Show Hidden Files is enabled.
+    if (!shouldHide && !SETTINGS.showHiddenFiles) {
       for (const auto* item : HIDDEN_ITEMS) {
         if (fileName.equals(item)) {
           shouldHide = true;
@@ -1090,23 +1094,11 @@ void CrossPointWebServer::handleDelete() const {
   String failedItems;
 
   for (const auto& p : paths) {
-    auto itemPath = p.as<String>();
+    auto itemPath = normalizeWebPath(p.as<String>());
 
     // Validate path
     if (itemPath.isEmpty() || itemPath == "/") {
       failedItems += itemPath + " (cannot delete root); ";
-      allSuccess = false;
-      continue;
-    }
-
-    // Ensure path starts with /
-    if (!itemPath.startsWith("/")) {
-      itemPath = "/" + itemPath;
-    }
-
-    // Security check: prevent deletion of protected items
-    if (isProtectedPath(itemPath)) {
-      failedItems += itemPath + " (protected path); ";
       allSuccess = false;
       continue;
     }
@@ -1122,17 +1114,8 @@ void CrossPointWebServer::handleDelete() const {
     bool success = false;
     HalFile f = Storage.open(itemPath.c_str());
     if (f && f.isDirectory()) {
-      // For folders, ensure empty before removing
-      HalFile entry = f.openNextFile();
-      if (entry) {
-        entry.close();
-        f.close();
-        failedItems += itemPath + " (folder not empty); ";
-        allSuccess = false;
-        continue;
-      }
       f.close();
-      success = Storage.rmdir(itemPath.c_str());
+      success = Storage.removeDir(itemPath.c_str());
     } else {
       // It's a file (or couldn't open as dir) — remove file
       if (f) f.close();
@@ -1141,6 +1124,7 @@ void CrossPointWebServer::handleDelete() const {
     }
 
     if (!success) {
+      LOG_ERR("WEB", "Failed to delete item: %s", itemPath.c_str());
       failedItems += itemPath + " (deletion failed); ";
       allSuccess = false;
     }
