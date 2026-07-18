@@ -312,9 +312,37 @@ Behavior notes:
 CrossInk can sync reading progress with KOReader-compatible sync servers.
 It also interoperates with KOReader apps/devices when they use the same server and credentials.
 
-##### Option A: Free Public Server (`sync.koreader.rocks`)
+##### Option A: CrossPoint Sync Server (`sync.crosspointreader.com`, default)
 
-1. Register a user once (only if needed):
+When **Sync Server URL** is left empty, CrossInk uses the free CrossPoint sync server at `https://sync.crosspointreader.com`. It speaks the standard KOReader sync protocol (so KOReader apps can use it too) and additionally stores an exact spine/page position for lossless CrossInk-to-CrossInk sync.
+
+1. On each CrossInk device:
+
+   - Go to **Settings -> System -> KOReader Sync**.
+
+   - Set **Username** and **Password** (enter the plain password; CrossInk computes MD5 internally, and use the same values on all devices).
+
+   - Leave **Sync Server URL** empty (or set it to `https://sync.crosspointreader.com`).
+
+   - On the first device, run **Sign Up** once to create the account directly from the device. On every other device, just run **Authenticate**.
+
+Accounts are per server. Existing `sync.koreader.rocks` credentials do not exist on the CrossPoint server; either sign up again with the same username/password or use Option B to keep using the legacy server.
+
+##### Option B: Legacy Public KOReader Server (`sync.koreader.rocks`)
+
+Use this if you already sync KOReader devices against the official public server.
+
+1. On each CrossInk device:
+
+   - Go to **Settings -> System -> KOReader Sync**.
+
+   - Set **Sync Server URL** to `https://sync.koreader.rocks` (required; an empty URL now points at the CrossPoint server instead).
+
+   - Set **Username** and **Password** to your existing KOReader Sync credentials.
+
+   - Run **Authenticate**.
+
+2. If you do not have an account yet, run **Sign Up** on the device, or register once with curl:
 
 ```bash
 USERNAME="user"
@@ -327,25 +355,9 @@ curl -i "https://sync.koreader.rocks/users/create" \
   --data "{\"username\":\"$USERNAME\",\"password\":\"$PASSWORD_MD5\"}"
 ```
 
-Already have KOReader Sync credentials? Skip registration; basic sync only requires using the same existing username/password on all devices.
-
 When this returns `HTTP 402` with `{"code":2002,"message":"Username is already registered."}`, pick a different username or use that existing account.
 
-2. On each device:
-   - Go to **Settings -> System -> KOReader Sync**.
-
-   - Set **Username** and **Password** (enter the plain password; CrossInk computes MD5 internally, and use the same values on all devices).
-
-   - Set **Sync Server URL** to `https://sync.koreader.rocks`, or leave it empty (both use the same default KOReader sync server).
-
-   - Run **Authenticate**.
-
-3. While reading, press **Confirm** to open the reader menu, then select **Sync Progress**. Alternatively, set **Settings -> Controls -> Long-press Menu** to **KOSync** and hold Confirm to launch sync directly.
-
-   - With **Sync Behavior** set to **Ask every time**, choose **Apply Remote** to jump to remote progress or **Upload Local** to push current progress.
-   - With **Sync Behavior** set to **Smart sync**, CrossInk auto-resolves simple cases: upload when no remote progress exists, confirm and leave both unchanged when local and remote progress are already synchronized, upload when local progress is further ahead, or apply remote when remote progress is further ahead.
-
-##### Option B: Self-Hosted Server (Docker Compose)
+##### Option C: Self-Hosted Server (Docker Compose)
 
 1. Start a sync server:
 
@@ -417,10 +429,12 @@ If this returns `HTTP 402` with `{"code":2002,"message":"Username is already reg
 
 If you use the HTTPS listener, use `https://<server-ip>:7200` (`curl -k` only for self-signed certificate testing).
 
-5. While reading, press **Confirm** to open the reader menu, then select **Sync Progress**. Alternatively, set **Settings -> Controls -> Long-press Menu** to **KOSync** and hold Confirm to launch sync directly.
+##### Syncing While Reading
 
-   - With **Sync Behavior** set to **Ask every time**, choose **Apply Remote** to jump to remote progress or **Upload Local** to push current progress.
-   - With **Sync Behavior** set to **Smart sync**, CrossInk auto-resolves simple cases: upload when no remote progress exists, confirm and leave both unchanged when local and remote progress are already synchronized, upload when local progress is further ahead, or apply remote when remote progress is further ahead.
+Once any of the options above is set up, press **Confirm** while reading to open the reader menu, then select **Sync Progress**. Alternatively, set **Settings -> Controls -> Long-press Menu** to **KOSync** and hold Confirm to launch sync directly.
+
+- With **Sync Behavior** set to **Ask every time**, choose **Apply Remote** to jump to remote progress or **Upload Local** to push current progress.
+- With **Sync Behavior** set to **Smart sync**, CrossInk auto-resolves simple cases: upload when no remote progress exists, confirm and leave both unchanged when local and remote progress are already synchronized, upload when local progress is further ahead, or apply remote when remote progress is further ahead.
 
 ### 3.7 Sleep Screen
 

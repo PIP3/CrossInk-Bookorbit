@@ -301,12 +301,22 @@ void KOReaderSyncActivity::performSync() {
 
   hasRemoteProgress = true;
 
-  KOReaderPosition koPos = {remoteProgress.progress, remoteProgress.percentage};
   const PositionCoordinateSpace remoteCoordinateSpace = remoteMatchMethod == DocumentMatchMethod::FILENAME
                                                             ? PositionCoordinateSpace::SourceDocument
                                                             : PositionCoordinateSpace::CurrentDocument;
-  remotePosition =
-      ProgressMapper::toCrossPoint(epub, koPos, currentSpineIndex, totalPagesInSpine, remoteCoordinateSpace);
+  bool usedRichPosition = false;
+  if (remoteCoordinateSpace == PositionCoordinateSpace::CurrentDocument && remoteProgress.position.has_value()) {
+    const auto richMapped = ProgressMapper::fromRichPosition(epub, *remoteProgress.position, renderer);
+    if (richMapped.has_value()) {
+      remotePosition = *richMapped;
+      usedRichPosition = true;
+    }
+  }
+  if (!usedRichPosition) {
+    const KOReaderPosition koPos = {remoteProgress.progress, remoteProgress.percentage};
+    remotePosition =
+        ProgressMapper::toCrossPoint(epub, koPos, currentSpineIndex, totalPagesInSpine, remoteCoordinateSpace);
+  }
   if (!remotePosition.valid) {
     {
       RenderLock lock(*this);
@@ -318,7 +328,8 @@ void KOReaderSyncActivity::performSync() {
   }
 
   // Refine page using section cache LUTs: li index, anchor, or paragraph index.
-  if (remotePosition.hasLiIndex || remotePosition.xpathAnchorId[0] != '\0' || remotePosition.hasParagraphIndex) {
+  if (!usedRichPosition &&
+      (remotePosition.hasLiIndex || remotePosition.xpathAnchorId[0] != '\0' || remotePosition.hasParagraphIndex)) {
     Section tempSection(epub, remotePosition.spineIndex, renderer);
     bool refined = false;
     if (remotePosition.hasLiIndex) {
@@ -435,6 +446,22 @@ void KOReaderSyncActivity::performUpload() {
   progress.progress = localProgress.xpath;
   progress.percentage = localProgress.percentage;
   progress.device = SETTINGS.getEffectiveDeviceName();
+
+  // Rich CrossPoint position for crosspoint-sync servers (lossless
+  // CrossPoint<->CrossPoint sync); plain kosync servers ignore the extra field.
+  {
+    KOReaderRichPosition pos;
+    const float pct = localProgress.percentage < 0.0f   ? 0.0f
+                      : localProgress.percentage > 1.0f ? 1.0f
+                                                        : localProgress.percentage;
+    pos.pctQ = static_cast<uint32_t>(pct * 1000000.0f + 0.5f);
+    pos.spineIndex = static_cast<uint16_t>(currentSpineIndex);
+    pos.pageNumber = static_cast<uint16_t>(currentPage);
+    pos.totalPages = static_cast<uint16_t>(totalPagesInSpine > 0 ? totalPagesInSpine : 1);
+    pos.paragraphIndex = currentParagraphIndex;
+    pos.xpath = localProgress.xpath;
+    progress.position = std::move(pos);
+  }
 
   // Optionally include document metadata (KOReader PR #15306)
   if (KOREADER_STORE.getSendMetadata()) {

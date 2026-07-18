@@ -29,7 +29,7 @@ void KOReaderAuthActivity::onWifiSelectionComplete(const bool success) {
   {
     RenderLock lock(*this);
     state = AUTHENTICATING;
-    statusMessage = tr(STR_AUTHENTICATING);
+    statusMessage = mode == Mode::SIGN_UP ? tr(STR_CREATING_ACCOUNT) : tr(STR_AUTHENTICATING);
   }
   requestUpdate();
 
@@ -37,16 +37,17 @@ void KOReaderAuthActivity::onWifiSelectionComplete(const bool success) {
 }
 
 void KOReaderAuthActivity::performAuthentication() {
-  const auto result = KOReaderSyncClient::authenticate();
+  const auto result = mode == Mode::SIGN_UP ? KOReaderSyncClient::createUser() : KOReaderSyncClient::authenticate();
 
   {
     RenderLock lock(*this);
     if (result == KOReaderSyncClient::OK) {
       state = SUCCESS;
-      statusMessage = tr(STR_AUTH_SUCCESS);
+      statusMessage = mode == Mode::SIGN_UP ? tr(STR_ACCOUNT_CREATED) : tr(STR_AUTH_SUCCESS);
     } else {
       state = FAILED;
-      errorMessage = KOReaderSyncClient::errorString(result);
+      errorMessage =
+          result == KOReaderSyncClient::USER_EXISTS ? tr(STR_USERNAME_TAKEN) : KOReaderSyncClient::errorString(result);
     }
   }
   requestUpdate();
@@ -87,17 +88,21 @@ void KOReaderAuthActivity::render(RenderLock&&) {
   const auto pageHeight = renderer.getScreenHeight();
   const Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_KOREADER_AUTH));
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight},
+                 mode == Mode::SIGN_UP ? tr(STR_SIGN_UP) : tr(STR_KOREADER_AUTH));
   const auto height = renderer.getLineHeight(UI_10_FONT_ID);
   const auto top = (pageHeight - height) / 2;
 
   if (state == AUTHENTICATING) {
     renderer.drawCenteredText(UI_10_FONT_ID, top, statusMessage.c_str());
   } else if (state == SUCCESS) {
-    renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_AUTH_SUCCESS), true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, top,
+                              mode == Mode::SIGN_UP ? tr(STR_ACCOUNT_CREATED) : tr(STR_AUTH_SUCCESS), true,
+                              EpdFontFamily::BOLD);
     renderer.drawCenteredText(UI_10_FONT_ID, top + height + 10, tr(STR_SYNC_READY));
   } else if (state == FAILED) {
-    renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_AUTH_FAILED), true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, top, mode == Mode::SIGN_UP ? tr(STR_SIGNUP_FAILED) : tr(STR_AUTH_FAILED),
+                              true, EpdFontFamily::BOLD);
     const int messageWidth = screen.width - metrics.contentSidePadding * 2;
     const auto errorLines = renderer.wrappedText(UI_10_FONT_ID, errorMessage.c_str(), messageWidth, 3);
     int messageY = top + height + 10;

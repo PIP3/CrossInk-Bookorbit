@@ -886,7 +886,9 @@ void setup() {
         launched = startGlobalSyncProgress(true);
         break;
       case NetworkBootTarget::KOREADER_AUTH: {
-        auto authActivity = makeUniqueNoThrow<KOReaderAuthActivity>(renderer, mappedInputManager);
+        const auto mode =
+            snapshotPayload == 1 ? KOReaderAuthActivity::Mode::SIGN_UP : KOReaderAuthActivity::Mode::AUTHENTICATE;
+        auto authActivity = makeUniqueNoThrow<KOReaderAuthActivity>(renderer, mappedInputManager, mode);
         if (authActivity) {
           activityManager.replaceActivity(std::move(authActivity));
           launched = true;
