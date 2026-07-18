@@ -2577,10 +2577,29 @@ function isHeadingElement(node) {
   return node && node.nodeType === Node.ELEMENT_NODE && /^h[1-6]$/i.test(localName(node));
 }
 
+function isIgnorableSectionSplitNode(node) {
+  return node?.nodeType === Node.TEXT_NODE && !(node.textContent || "").trim();
+}
+
 function shouldKeepSectionSplitCluster(node) {
   if (!node || node.nodeType !== Node.ELEMENT_NODE) return false;
   const name = localName(node);
   return ["table", "figure", "svg"].includes(name) || !!node.querySelector?.("table,figure,svg");
+}
+
+function findSectionSplitContainer(body) {
+  let container = body;
+  const childPath = [];
+  while (true) {
+    const children = Array.from(container.childNodes);
+    const elementChildren = children
+      .map((child, index) => ({ child, index }))
+      .filter(({ child }) => child.nodeType === Node.ELEMENT_NODE);
+    if (elementChildren.length >= 2) return { container, childPath };
+    if (elementChildren.length !== 1 || shouldKeepSectionSplitCluster(elementChildren[0].child)) return null;
+    childPath.push(elementChildren[0].index);
+    container = elementChildren[0].child;
+  }
 }
 
 function makeSectionSplitPath(path, partIndex) {
@@ -2616,35 +2635,46 @@ function splitLongXhtmlSections(xhtmlFiles, opfContent, opfPath) {
     }
 
     const doc = parser.parseFromString(content, "application/xhtml+xml");
-    if (doc.querySelector("parsererror") || !doc.body || doc.body.childNodes.length < 2) {
+    if (doc.querySelector("parsererror") || !doc.body) {
       out[path] = content;
       continue;
     }
+    const splitContainer = findSectionSplitContainer(doc.body);
+    if (!splitContainer) {
+      out[path] = content;
+      continue;
+    }
+    const splitChildren = Array.from(splitContainer.container.childNodes);
+    const fixedBytes = Math.max(
+      0,
+      totalBytes - splitChildren.reduce((sum, child) => sum + utf8ByteLength(serializer.serializeToString(child)), 0),
+    );
 
     const chunks = [];
     let current = [];
     let currentWords = 0;
-    let currentBytes = 0;
+    let currentBytes = fixedBytes;
     const flush = () => {
       if (current.length === 0) return;
       chunks.push(current);
       current = [];
       currentWords = 0;
-      currentBytes = 0;
+      currentBytes = fixedBytes;
     };
 
-    for (const child of Array.from(doc.body.childNodes)) {
+    for (const child of splitChildren) {
       const childWords = countLocationWords(child.textContent || "");
       const childBytes = utf8ByteLength(serializer.serializeToString(child));
+      const lastContentNode = [...current].reverse().find((node) => !isIgnorableSectionSplitNode(node));
       const wouldExceed =
-        current.length > 0 &&
+        !!lastContentNode &&
         (currentWords + childWords > SECTION_SPLIT_WORD_THRESHOLD ||
           currentBytes + childBytes > SECTION_SPLIT_BYTE_THRESHOLD);
       const canBreakBefore =
-        current.length > 0 &&
+        !!lastContentNode &&
         isSafeSectionSplitElement(child) &&
         !shouldKeepSectionSplitCluster(child) &&
-        !isHeadingElement(current[current.length - 1]);
+        !isHeadingElement(lastContentNode);
       if (wouldExceed && canBreakBefore) flush();
 
       current.push(child);
@@ -2652,7 +2682,7 @@ function splitLongXhtmlSections(xhtmlFiles, opfContent, opfPath) {
       currentBytes += childBytes;
 
       const canBreakAfter =
-        current.length > 1 &&
+        !isIgnorableSectionSplitNode(child) &&
         isSafeSectionSplitElement(child) &&
         !shouldKeepSectionSplitCluster(child) &&
         !isHeadingElement(child);
@@ -2669,8 +2699,10 @@ function splitLongXhtmlSections(xhtmlFiles, opfContent, opfPath) {
     chunks.forEach((chunk, partIndex) => {
       const partPath = makeSectionSplitPath(path, partIndex);
       const partDoc = doc.cloneNode(true);
-      while (partDoc.body.firstChild) partDoc.body.removeChild(partDoc.body.firstChild);
-      for (const node of chunk) partDoc.body.appendChild(partDoc.importNode(node, true));
+      let partContainer = partDoc.body;
+      for (const childIndex of splitContainer.childPath) partContainer = partContainer.childNodes[childIndex];
+      while (partContainer.firstChild) partContainer.removeChild(partContainer.firstChild);
+      for (const node of chunk) partContainer.appendChild(partDoc.importNode(node, true));
       out[partPath] = safeSerialize(partDoc, content);
       splitSections[path].push(partPath);
     });
