@@ -2009,6 +2009,11 @@ const DEFENSIVE_STYLE =
   '<style type="text/css">img,svg{max-width:100%;height:auto}body{overflow-wrap:break-word}table{max-width:100%;table-layout:fixed}pre,code{white-space:pre-wrap;word-wrap:break-word}*{box-sizing:border-box}</style>';
 const X_LOCATION_MANIFEST_PATH = "META-INF/x-locations.json";
 const X_LOCATION_WORDS_PER_UNIT = 64;
+const SECTION_SPLIT_ENABLED = true;
+const SECTION_SPLIT_WORD_THRESHOLD = 8000;
+const SECTION_SPLIT_BYTE_THRESHOLD = 32768;
+const SECTION_SPLIT_HARD_BYTE_LIMIT = 49152;
+const SECTION_SPLIT_SUFFIX_RE = /__ci_section_\d{3}(?=\.[^.]+$)/i;
 const XHTML_NS = "http://www.w3.org/1999/xhtml";
 const OPF_NS = "http://www.idpf.org/2007/opf";
 const DEFLATE_OPTS = { compression: "DEFLATE", compressionOptions: { level: 8 }, createFolders: false };
@@ -2542,6 +2547,223 @@ function countReferenceCharacters(text) {
   return Array.from(text.replace(/\s+/g, " ").trim()).length;
 }
 
+function utf8ByteLength(text) {
+  return new TextEncoder().encode(text).length;
+}
+
+function isSafeSectionSplitElement(node) {
+  if (!node || node.nodeType !== Node.ELEMENT_NODE) return true;
+  return [
+    "p",
+    "div",
+    "section",
+    "article",
+    "aside",
+    "blockquote",
+    "ul",
+    "ol",
+    "li",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "hr",
+  ].includes(localName(node));
+}
+
+function isHeadingElement(node) {
+  return node && node.nodeType === Node.ELEMENT_NODE && /^h[1-6]$/i.test(localName(node));
+}
+
+function isIgnorableSectionSplitNode(node) {
+  return node?.nodeType === Node.TEXT_NODE && !(node.textContent || "").trim();
+}
+
+function shouldKeepSectionSplitCluster(node) {
+  if (!node || node.nodeType !== Node.ELEMENT_NODE) return false;
+  const name = localName(node);
+  return ["table", "figure", "svg"].includes(name) || !!node.querySelector?.("table,figure,svg");
+}
+
+function findSectionSplitContainer(body) {
+  let container = body;
+  const childPath = [];
+  while (true) {
+    const children = Array.from(container.childNodes);
+    const elementChildren = children
+      .map((child, index) => ({ child, index }))
+      .filter(({ child }) => child.nodeType === Node.ELEMENT_NODE);
+    if (elementChildren.length >= 2) return { container, childPath };
+    if (elementChildren.length !== 1 || shouldKeepSectionSplitCluster(elementChildren[0].child)) return null;
+    childPath.push(elementChildren[0].index);
+    container = elementChildren[0].child;
+  }
+}
+
+function makeSectionSplitPath(path, partIndex) {
+  if (partIndex === 0) return path;
+  const dot = path.lastIndexOf(".");
+  const suffix = `__ci_section_${String(partIndex + 1).padStart(3, "0")}`;
+  return dot > 0 ? `${path.substring(0, dot)}${suffix}${path.substring(dot)}` : `${path}${suffix}.xhtml`;
+}
+
+function splitBaseHref(href) {
+  return href.replace(SECTION_SPLIT_SUFFIX_RE, "");
+}
+
+function splitLongXhtmlSections(xhtmlFiles, opfContent, opfPath) {
+  if (!SECTION_SPLIT_ENABLED) return { files: xhtmlFiles, splitSections: {} };
+
+  const parser = new DOMParser();
+  const serializer = new XMLSerializer();
+  const out = {};
+  const splitSections = {};
+  const spinePaths = new Set(parseOpfSpineHrefs(opfContent, opfPath));
+
+  for (const [path, content] of Object.entries(xhtmlFiles)) {
+    if (!spinePaths.has(path)) {
+      out[path] = content;
+      continue;
+    }
+    const totalWords = countLocationWords(extractLocationText(content));
+    const totalBytes = utf8ByteLength(content);
+    if (totalWords <= SECTION_SPLIT_WORD_THRESHOLD && totalBytes <= SECTION_SPLIT_BYTE_THRESHOLD) {
+      out[path] = content;
+      continue;
+    }
+
+    const doc = parser.parseFromString(content, "application/xhtml+xml");
+    if (doc.querySelector("parsererror") || !doc.body) {
+      out[path] = content;
+      continue;
+    }
+    const splitContainer = findSectionSplitContainer(doc.body);
+    if (!splitContainer) {
+      out[path] = content;
+      continue;
+    }
+    const splitChildren = Array.from(splitContainer.container.childNodes);
+    const fixedBytes = Math.max(
+      0,
+      totalBytes - splitChildren.reduce((sum, child) => sum + utf8ByteLength(serializer.serializeToString(child)), 0),
+    );
+
+    const chunks = [];
+    let current = [];
+    let currentWords = 0;
+    let currentBytes = fixedBytes;
+    const flush = () => {
+      if (current.length === 0) return;
+      chunks.push(current);
+      current = [];
+      currentWords = 0;
+      currentBytes = fixedBytes;
+    };
+
+    for (const child of splitChildren) {
+      const childWords = countLocationWords(child.textContent || "");
+      const childBytes = utf8ByteLength(serializer.serializeToString(child));
+      const lastContentNode = [...current].reverse().find((node) => !isIgnorableSectionSplitNode(node));
+      const wouldExceed =
+        !!lastContentNode &&
+        (currentWords + childWords > SECTION_SPLIT_WORD_THRESHOLD ||
+          currentBytes + childBytes > SECTION_SPLIT_BYTE_THRESHOLD);
+      const canBreakBefore =
+        !!lastContentNode &&
+        isSafeSectionSplitElement(child) &&
+        !shouldKeepSectionSplitCluster(child) &&
+        !isHeadingElement(lastContentNode);
+      if (wouldExceed && canBreakBefore) flush();
+
+      current.push(child);
+      currentWords += childWords;
+      currentBytes += childBytes;
+
+      const canBreakAfter =
+        !isIgnorableSectionSplitNode(child) &&
+        isSafeSectionSplitElement(child) &&
+        !shouldKeepSectionSplitCluster(child) &&
+        !isHeadingElement(child);
+      if (currentBytes >= SECTION_SPLIT_HARD_BYTE_LIMIT && canBreakAfter) flush();
+    }
+    flush();
+
+    if (chunks.length < 2) {
+      out[path] = content;
+      continue;
+    }
+
+    splitSections[path] = [];
+    chunks.forEach((chunk, partIndex) => {
+      const partPath = makeSectionSplitPath(path, partIndex);
+      const partDoc = doc.cloneNode(true);
+      let partContainer = partDoc.body;
+      for (const childIndex of splitContainer.childPath) partContainer = partContainer.childNodes[childIndex];
+      while (partContainer.firstChild) partContainer.removeChild(partContainer.firstChild);
+      for (const node of chunk) partContainer.appendChild(partDoc.importNode(node, true));
+      out[partPath] = safeSerialize(partDoc, content);
+      splitSections[path].push(partPath);
+    });
+  }
+
+  return { files: out, splitSections };
+}
+
+function addSplitSectionsToOpf(opfContent, opfPath, splitSections) {
+  if (Object.keys(splitSections).length === 0) return opfContent;
+
+  const doc = new DOMParser().parseFromString(opfContent, "application/xml");
+  if (doc.querySelector("parsererror")) return opfContent;
+  const manifest = doc.getElementsByTagNameNS("*", "manifest")[0];
+  const spine = doc.getElementsByTagNameNS("*", "spine")[0];
+  if (!manifest || !spine) return opfContent;
+
+  const byPath = new Map();
+  const items = Array.from(doc.getElementsByTagNameNS("*", "item"));
+  for (const item of items) {
+    const id = item.getAttribute("id");
+    const href = item.getAttribute("href");
+    if (id && href) byPath.set(resolvePath(opfPath, decodeHref(href.split("#")[0])), { id, item });
+  }
+  const usedIds = new Set(items.map((item) => item.getAttribute("id") || ""));
+
+  for (const [originalPath, parts] of Object.entries(splitSections)) {
+    const original = byPath.get(originalPath);
+    if (!original || parts.length < 2) continue;
+
+    const addedIds = [];
+    for (let index = 1; index < parts.length; index++) {
+      let id = `${original.id}-ci-${index + 1}`;
+      while (usedIds.has(id)) id += "x";
+      usedIds.add(id);
+
+      const item = doc.createElementNS(manifest.namespaceURI || OPF_NS, "item");
+      item.setAttribute("id", id);
+      item.setAttribute("href", relativeZipPath(opfPath, parts[index]));
+      item.setAttribute("media-type", "application/xhtml+xml");
+      manifest.appendChild(item);
+      addedIds.push(id);
+    }
+
+    const itemref = Array.from(doc.getElementsByTagNameNS("*", "itemref")).find(
+      (ref) => ref.getAttribute("idref") === original.id,
+    );
+    if (!itemref) continue;
+    let insertAfter = itemref;
+    for (const id of addedIds) {
+      const ref = doc.createElementNS(spine.namespaceURI || OPF_NS, "itemref");
+      ref.setAttribute("idref", id);
+      if (insertAfter.nextSibling) spine.insertBefore(ref, insertAfter.nextSibling);
+      else spine.appendChild(ref);
+      insertAfter = ref;
+    }
+  }
+
+  return safeSerialize(doc, opfContent);
+}
+
 function resolveXhtmlContentForLocation(path, xhtmlFiles) {
   if (xhtmlFiles[path]) return xhtmlFiles[path];
   const decoded = decodeHref(path);
@@ -2564,6 +2786,9 @@ function buildXLocationManifest(opfContent, opfPath, xhtmlFiles, charactersPerRe
   if (spineHrefs.length === 0) return null;
 
   const spine = [];
+  const splitBases = new Set(spineHrefs.map(splitBaseHref).filter((base, index) => base !== spineHrefs[index]));
+  const groupByBase = new Map(Array.from(splitBases).sort().map((base, index) => [base, index]));
+  const chapterGroups = new Map();
   let totalWords = 0;
   let totalCharacters = 0;
   let nextLocation = 1;
@@ -2581,7 +2806,7 @@ function buildXLocationManifest(opfContent, opfPath, xhtmlFiles, charactersPerRe
     const endReferencePage =
       characterCount > 0 ? Math.ceil((totalCharacters + characterCount) / charactersPerReferencePage) : 0;
 
-    spine.push({
+    const spineEntry = {
       index,
       href,
       wordStart: totalWords,
@@ -2592,14 +2817,50 @@ function buildXLocationManifest(opfContent, opfPath, xhtmlFiles, charactersPerRe
       endLocation,
       startReferencePage,
       endReferencePage,
-    });
+    };
+    const baseHref = splitBaseHref(href);
+    const chapterGroup = groupByBase.get(baseHref);
+    if (chapterGroup !== undefined) {
+      spineEntry.chapterGroup = chapterGroup;
+      const group = chapterGroups.get(chapterGroup) || {
+        index: chapterGroup,
+        title: basename(baseHref).replace(/\.[^.]+$/, ""),
+        firstSpineIndex: index,
+        lastSpineIndex: index,
+        startLocation,
+        endLocation,
+        wordStart: totalWords,
+        wordCount: 0,
+        characterStart: totalCharacters,
+        characterCount: 0,
+        referencePageStart: startReferencePage,
+        referencePageEnd: endReferencePage,
+      };
+      group.firstSpineIndex = Math.min(group.firstSpineIndex, index);
+      group.lastSpineIndex = Math.max(group.lastSpineIndex, index);
+      if (startLocation > 0 && (group.startLocation === 0 || startLocation < group.startLocation)) {
+        group.startLocation = startLocation;
+      }
+      group.endLocation = Math.max(group.endLocation, endLocation);
+      group.wordCount += wordCount;
+      group.characterCount += characterCount;
+      if (
+        startReferencePage > 0 &&
+        (group.referencePageStart === 0 || startReferencePage < group.referencePageStart)
+      ) {
+        group.referencePageStart = startReferencePage;
+      }
+      group.referencePageEnd = Math.max(group.referencePageEnd, endReferencePage);
+      chapterGroups.set(chapterGroup, group);
+    }
+    spine.push(spineEntry);
 
     totalWords += wordCount;
     totalCharacters += characterCount;
     nextLocation += locationCount;
   }
 
-  return {
+  const manifest = {
     format: "x-locations",
     version: 1,
     generator: "crossink-web-uploader",
@@ -2613,6 +2874,10 @@ function buildXLocationManifest(opfContent, opfPath, xhtmlFiles, charactersPerRe
     totalReferencePages: Math.ceil(totalCharacters / charactersPerReferencePage),
     spine,
   };
+  if (chapterGroups.size > 0) {
+    manifest.chapterGroups = Array.from(chapterGroups.values()).sort((a, b) => a.index - b.index);
+  }
+  return manifest;
 }
 
 /**
@@ -3815,6 +4080,19 @@ async function convertEpubFile(file, progressCallback) {
     processedXhtmlFiles[xhtmlPath] = t;
   }
 
+  const sectionSplitResult = splitLongXhtmlSections(processedXhtmlFiles, opfContent, opfPath);
+  processedXhtmlFiles = sectionSplitResult.files;
+  if (Object.keys(sectionSplitResult.splitSections).length > 0) {
+    const splitPartCount = Object.values(sectionSplitResult.splitSections).reduce(
+      (sum, parts) => sum + parts.length,
+      0,
+    );
+    logFix(
+      "EPUB sections",
+      `${splitPartCount} parts from ${Object.keys(sectionSplitResult.splitSections).length} long sections`,
+    );
+  }
+
   // Extract main identifier from OPF using DOMParser with regex fallback
   if (opfContent) {
     mainIdentifier = extractIdentifier(opfContent);
@@ -3836,6 +4114,7 @@ async function convertEpubFile(file, progressCallback) {
     }
     const opfDir = opfPath.includes("/") ? opfPath.substring(0, opfPath.lastIndexOf("/")) : "";
     t = fixOPF(t, opfContent, opfDir, splitImages);
+    t = addSplitSectionsToOpf(t, opfPath, sectionSplitResult.splitSections);
     if (t !== opfContent) logFix("OPF", "manifest updated");
     out.file(opfPath, t, DEFLATE_OPTS);
 
