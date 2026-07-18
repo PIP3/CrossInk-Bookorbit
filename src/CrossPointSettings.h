@@ -395,6 +395,8 @@ class CrossPointSettings {
   char opdsServerUrl[128] = "";
   char opdsUsername[64] = "";
   char opdsPassword[64] = "";
+  // OPDS download destination (empty = SD root). Edited from the OPDS server list.
+  char opdsDownloadFolder[64] = "";
   // Hide battery percentage
   uint8_t hideBatteryPercentage = HIDE_NEVER;
   // Long-press page turn button behavior

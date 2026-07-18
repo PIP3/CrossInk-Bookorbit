@@ -2,20 +2,36 @@
 
 #include <GfxRenderer.h>
 #include <I18n.h>
+#include <Logging.h>
 
+#include <cstring>
+
+#include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
 #include "OpdsSettingsActivity.h"
 #include "activities/ActivityManager.h"
 #include "activities/browser/OpdsBookBrowserActivity.h"
+#include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
+namespace {
+std::string normalizeDownloadFolder(std::string folder) {
+  while (!folder.empty() && (folder.front() == ' ' || folder.front() == '\t')) folder.erase(folder.begin());
+  while (!folder.empty() && (folder.back() == ' ' || folder.back() == '\t')) folder.pop_back();
+  if (folder.empty() || folder == "/") return "";
+  if (folder.front() != '/') folder.insert(folder.begin(), '/');
+  while (folder.size() > 1 && folder.back() == '/') folder.pop_back();
+  return folder;
+}
+}  // namespace
+
 int OpdsServerListActivity::getItemCount() const {
   int count = static_cast<int>(OPDS_STORE.getCount());
-  // In settings mode, append a virtual "Add Server" item; in picker mode, only show real servers
+  // In settings mode, append virtual "Add Server" and "Download Folder" items.
   if (!pickerMode) {
-    count++;
+    count += 2;
   }
   return count;
 }
@@ -74,6 +90,27 @@ void OpdsServerListActivity::handleSelection() {
     return;
   }
 
+  // Item layout: configured servers, Add Server, Download Folder.
+  if (selectedIndex == serverCount + 1) {
+    auto resultHandler = [this](const ActivityResult& result) {
+      if (result.isCancelled) return;
+
+      const auto& keyboardResult = std::get<KeyboardResult>(result.data);
+      const std::string folder = normalizeDownloadFolder(keyboardResult.text);
+      strncpy(SETTINGS.opdsDownloadFolder, folder.c_str(), sizeof(SETTINGS.opdsDownloadFolder) - 1);
+      SETTINGS.opdsDownloadFolder[sizeof(SETTINGS.opdsDownloadFolder) - 1] = '\0';
+      if (!SETTINGS.saveToFile()) {
+        LOG_ERR("OPDS", "Could not save download folder setting");
+      }
+      requestUpdate();
+    };
+    startActivityForResult(std::make_unique<KeyboardEntryActivity>(
+                               renderer, mappedInput, tr(STR_OPDS_DOWNLOAD_FOLDER), SETTINGS.opdsDownloadFolder,
+                               sizeof(SETTINGS.opdsDownloadFolder) - 1, InputType::Text),
+                           resultHandler);
+    return;
+  }
+
   // Settings mode: open editor for selected server, or create a new one
   auto resultHandler = [this](const ActivityResult&) {
     // Reload server list when returning from editor
@@ -111,16 +148,21 @@ void OpdsServerListActivity::render(RenderLock&&) {
     // Secondary label: server URL (shown as subtitle when name is set).
     GUI.drawList(
         renderer, Rect{0, contentTop, pageWidth, contentHeight}, itemCount, selectedIndex,
-        [&servers, serverCount](int index) {
+        [&servers, serverCount](int index) -> std::string {
           if (index < serverCount) {
             const auto& server = servers[index];
             return server.name.empty() ? server.url : server.name;
           }
-          return std::string(I18n::getInstance().get(StrId::STR_ADD_SERVER));
+          const StrId label = index == serverCount ? StrId::STR_ADD_SERVER : StrId::STR_OPDS_DOWNLOAD_FOLDER;
+          return std::string(I18n::getInstance().get(label));
         },
-        [&servers, serverCount](int index) {
+        [&servers, serverCount](int index) -> std::string {
           if (index < serverCount && !servers[index].name.empty()) {
             return servers[index].url;
+          }
+          if (index == serverCount + 1) {
+            return SETTINGS.opdsDownloadFolder[0] ? std::string(SETTINGS.opdsDownloadFolder)
+                                                  : std::string(I18n::getInstance().get(StrId::STR_OPDS_SD_ROOT));
           }
           return std::string("");
         });

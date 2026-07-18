@@ -581,6 +581,10 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                             "moveFinishedToReadFolder", StrId::STR_CAT_SYSTEM));
     add(SettingInfo::Toggle(StrId::STR_AUTO_BACKUP_STATS, &CrossPointSettings::autoBackupStats, "autoBackupStats",
                             StrId::STR_CAT_SYSTEM));
+    // Persisted and available to the web settings API, but category-less because
+    // the on-device editor lives under System > OPDS Servers.
+    add(SettingInfo::String(StrId::STR_OPDS_DOWNLOAD_FOLDER, SETTINGS.opdsDownloadFolder,
+                            sizeof(SETTINGS.opdsDownloadFolder), "opdsDownloadFolder"));
     add(SettingInfo::Value(StrId::STR_IDLE_TIME_THRESHOLD, &CrossPointSettings::readingIdleTimeThresholdUnits,
                            {CrossPointSettings::MIN_READING_IDLE_TIME_THRESHOLD_UNITS,
                             CrossPointSettings::MAX_READING_IDLE_TIME_THRESHOLD_UNITS, 1},

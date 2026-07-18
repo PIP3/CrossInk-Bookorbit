@@ -1,12 +1,14 @@
 #include "OpdsBookBrowserActivity.h"
 
 #include <GfxRenderer.h>
+#include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
 #include <Memory.h>
 #include <OpdsStream.h>
 #include <WiFi.h>
 
+#include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "SdCardFontSystem.h"
 #include "SilentRestart.h"
@@ -343,8 +345,22 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   // Build full download URL relative to the current feed, not the root server URL
   const std::string feedUrl = UrlUtils::buildUrl(server.url, currentPath);
   std::string downloadUrl = UrlUtils::buildUrl(feedUrl, book.href);
-  std::string filename =
-      "/" + StringUtils::sanitizeFilename(buildBookFilenameBase(book, server.filenameFormat)) + ".epub";
+  const char* downloadFolder = SETTINGS.opdsDownloadFolder;
+  bool useDownloadFolder = downloadFolder[0] != '\0';
+  if (useDownloadFolder && !Storage.exists(downloadFolder) && !Storage.mkdir(downloadFolder)) {
+    LOG_ERR("OPDS", "Could not create download folder %s", downloadFolder);
+    state = BrowserState::ERROR;
+    errorMessage = tr(STR_DOWNLOAD_FAILED);
+    requestUpdate();
+    return;
+  }
+
+  std::string filename;
+  filename.reserve(96);
+  if (useDownloadFolder) filename += downloadFolder;
+  filename += '/';
+  filename += StringUtils::sanitizeFilename(buildBookFilenameBase(book, server.filenameFormat));
+  filename += ".epub";
   LOG_DBG("OPDS", "Downloading: %s -> %s", downloadUrl.c_str(), filename.c_str());
 
   bool cancelRequested = false;
