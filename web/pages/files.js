@@ -2587,6 +2587,10 @@ function shouldKeepSectionSplitCluster(node) {
   return ["table", "figure", "svg"].includes(name) || !!node.querySelector?.("table,figure,svg");
 }
 
+function isAtomicSectionSplitContainer(node) {
+  return node?.nodeType === Node.ELEMENT_NODE && ["table", "figure", "svg"].includes(localName(node));
+}
+
 function findSectionSplitContainer(body) {
   let container = body;
   const childPath = [];
@@ -2596,7 +2600,7 @@ function findSectionSplitContainer(body) {
       .map((child, index) => ({ child, index }))
       .filter(({ child }) => child.nodeType === Node.ELEMENT_NODE);
     if (elementChildren.length >= 2) return { container, childPath };
-    if (elementChildren.length !== 1 || shouldKeepSectionSplitCluster(elementChildren[0].child)) return null;
+    if (elementChildren.length !== 1 || isAtomicSectionSplitContainer(elementChildren[0].child)) return null;
     childPath.push(elementChildren[0].index);
     container = elementChildren[0].child;
   }
