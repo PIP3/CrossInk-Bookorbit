@@ -20,6 +20,7 @@
 
 ### Fixed
 
+- Pressing the KOReader Sync shortcut again while WiFi is connecting no longer restarts X3 devices.
 - EPUB books with an image as the first content in a chapter heading no longer reboot while indexing.
 - CSS-heavy EPUB chapters now use less temporary memory while parsing, reducing failures when opening them.
 - EPUB chapter headings with several images now continue onto the next page instead of dropping images or clipping them behind the status bar.

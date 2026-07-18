@@ -21,11 +21,13 @@
  */
 class KOReaderSyncActivity final : public Activity {
  public:
+  static constexpr const char* NAME = "KOReaderSync";
+
   explicit KOReaderSyncActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& epubPath,
                                 int currentSpineIndex, int currentPage, int totalPagesInSpine,
                                 KOReaderPosition localKoPos, std::string localChapterName,
                                 std::optional<uint16_t> currentParagraphIndex = std::nullopt)
-      : Activity("KOReaderSync", renderer, mappedInput),
+      : Activity(NAME, renderer, mappedInput),
         epubPath(epubPath),
         currentSpineIndex(currentSpineIndex),
         currentPage(currentPage),
