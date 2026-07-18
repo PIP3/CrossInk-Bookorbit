@@ -2171,7 +2171,11 @@ function buildMetadataFilename(title, author) {
   if (!title) return "";
   let base = author ? `${title} - ${author}` : title;
   if (base.length > 180) {
-    base = base.substring(0, 180).replace(/\s+\S*$/g, "").trim() || base.substring(0, 180).trim();
+    base =
+      base
+        .substring(0, 180)
+        .replace(/\s+\S*$/g, "")
+        .trim() || base.substring(0, 180).trim();
   }
   return `${base}.epub`;
 }
@@ -2194,7 +2198,8 @@ async function getMetadataFilenameForEpub(file) {
       element.getAttributeNS("http://www.idpf.org/2007/opf", "role") ||
       ""
     ).toLowerCase();
-  const authorElement = creators.find((element) => getCreatorRole(element) === "aut") ||
+  const authorElement =
+    creators.find((element) => getCreatorRole(element) === "aut") ||
     creators.find((element) => !getCreatorRole(element));
   const authorText = authorElement?.textContent?.trim();
   const author =
@@ -2294,13 +2299,16 @@ function renamedImageSrc(src, xhtmlPath, renamed, splitImages = {}) {
 
 function rewriteImageSrcReferences(content, xhtmlPath, renamed, splitImages = {}) {
   let changed = false;
-  const rewritten = content.replace(/(<(?:\w+:)?img\b[^>]*?\bsrc\s*=\s*)(["'])([^"']+)\2/gi, (match, prefix, quote, src) => {
-    const renamedSrc = renamedImageSrc(src, xhtmlPath, renamed, splitImages);
-    if (!renamedSrc.changed) return match;
+  const rewritten = content.replace(
+    /(<(?:\w+:)?img\b[^>]*?\bsrc\s*=\s*)(["'])([^"']+)\2/gi,
+    (match, prefix, quote, src) => {
+      const renamedSrc = renamedImageSrc(src, xhtmlPath, renamed, splitImages);
+      if (!renamedSrc.changed) return match;
 
-    changed = true;
-    return `${prefix}${quote}${renamedSrc.src}${quote}`;
-  });
+      changed = true;
+      return `${prefix}${quote}${renamedSrc.src}${quote}`;
+    },
+  );
 
   return { content: rewritten, changed };
 }
@@ -2587,6 +2595,10 @@ function shouldKeepSectionSplitCluster(node) {
   return ["table", "figure", "svg"].includes(name) || !!node.querySelector?.("table,figure,svg");
 }
 
+function isAtomicSectionSplitContainer(node) {
+  return node?.nodeType === Node.ELEMENT_NODE && ["table", "figure", "svg"].includes(localName(node));
+}
+
 function findSectionSplitContainer(body) {
   let container = body;
   const childPath = [];
@@ -2596,7 +2608,7 @@ function findSectionSplitContainer(body) {
       .map((child, index) => ({ child, index }))
       .filter(({ child }) => child.nodeType === Node.ELEMENT_NODE);
     if (elementChildren.length >= 2) return { container, childPath };
-    if (elementChildren.length !== 1 || shouldKeepSectionSplitCluster(elementChildren[0].child)) return null;
+    if (elementChildren.length !== 1 || isAtomicSectionSplitContainer(elementChildren[0].child)) return null;
     childPath.push(elementChildren[0].index);
     container = elementChildren[0].child;
   }
@@ -2780,14 +2792,23 @@ function normalizedReferenceCharactersPerPage(value) {
   return Number.isFinite(parsed) ? Math.max(1, Math.min(10000, parsed)) : X_DEFAULT_REFERENCE_CHARACTERS_PER_PAGE;
 }
 
-function buildXLocationManifest(opfContent, opfPath, xhtmlFiles, charactersPerReferencePage = X_DEFAULT_REFERENCE_CHARACTERS_PER_PAGE) {
+function buildXLocationManifest(
+  opfContent,
+  opfPath,
+  xhtmlFiles,
+  charactersPerReferencePage = X_DEFAULT_REFERENCE_CHARACTERS_PER_PAGE,
+) {
   charactersPerReferencePage = normalizedReferenceCharactersPerPage(charactersPerReferencePage);
   const spineHrefs = parseOpfSpineHrefs(opfContent, opfPath);
   if (spineHrefs.length === 0) return null;
 
   const spine = [];
   const splitBases = new Set(spineHrefs.map(splitBaseHref).filter((base, index) => base !== spineHrefs[index]));
-  const groupByBase = new Map(Array.from(splitBases).sort().map((base, index) => [base, index]));
+  const groupByBase = new Map(
+    Array.from(splitBases)
+      .sort()
+      .map((base, index) => [base, index]),
+  );
   const chapterGroups = new Map();
   let totalWords = 0;
   let totalCharacters = 0;
@@ -2844,10 +2865,7 @@ function buildXLocationManifest(opfContent, opfPath, xhtmlFiles, charactersPerRe
       group.endLocation = Math.max(group.endLocation, endLocation);
       group.wordCount += wordCount;
       group.characterCount += characterCount;
-      if (
-        startReferencePage > 0 &&
-        (group.referencePageStart === 0 || startReferencePage < group.referencePageStart)
-      ) {
+      if (startReferencePage > 0 && (group.referencePageStart === 0 || startReferencePage < group.referencePageStart)) {
         group.referencePageStart = startReferencePage;
       }
       group.referencePageEnd = Math.max(group.referencePageEnd, endReferencePage);
