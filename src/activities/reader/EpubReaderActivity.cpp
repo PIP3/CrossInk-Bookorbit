@@ -1678,7 +1678,6 @@ void EpubReaderActivity::loadBookReaderSettings() {
   }
   SETTINGS.epubRenderMode = data.hasRenderModeOverride ? normalizeRenderModeRaw(data.renderMode)
                                                        : static_cast<uint8_t>(EpubRenderMode::CrossInkDefault);
-  sdFontSystem.ensureLoaded(renderer);
 }
 
 void EpubReaderActivity::saveCurrentBookReaderSettings() {

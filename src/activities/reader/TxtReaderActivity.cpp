@@ -103,6 +103,7 @@ void TxtReaderActivity::onEnter() {
     return;
   }
 
+  sdFontSystem.ensureLoaded(renderer);
   ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
 
   // Activate reader-specific front button mapping (if configured).
