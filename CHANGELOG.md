@@ -20,6 +20,7 @@
 
 ### Fixed
 
+- EPUB layouts using SD-card fonts now release unused font-menu metadata before indexing, reducing unnecessary Safe Mode fallbacks.
 - Opening an EPUB with a book-specific built-in font no longer loads the global SD-card font first.
 - Pressing the KOReader Sync shortcut again while WiFi is connecting no longer re-triggers the shortcut.
 - EPUB books with an image as the first content in a chapter heading no longer reboot while indexing.

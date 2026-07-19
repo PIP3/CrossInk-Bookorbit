@@ -7,6 +7,7 @@
 
 void SdCardFontSystem::begin(GfxRenderer& renderer) {
   registry_.discover();
+  registryLoaded_ = true;
 
   // Register this system as the SD font ID resolver in settings.
   // Uses a static trampoline since CrossPointSettings stores a plain function pointer.
@@ -41,11 +42,7 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
   // Track whether we just re-discovered so we can force a reload below even
   // when the wanted family/size still maps to the same point size — the file
   // contents on disk may have changed (e.g. user re-uploaded a new build).
-  const bool registryWasDirty = registryDirty_.exchange(false, std::memory_order_acquire);
-  if (registryWasDirty) {
-    LOG_DBG("SDFS", "Registry dirty — re-discovering fonts");
-    registry_.discover();
-  }
+  const bool registryWasDirty = registryDirty_.load(std::memory_order_acquire);
 
   const char* wantedFamily = SETTINGS.sdFontFamilyName;
   const std::string& currentFamily = manager_.currentFamilyName();
@@ -58,6 +55,8 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
     }
     return;
   }
+
+  ensureRegistry();
 
   // Reload if family changed OR if the user-selected size maps to a
   // different file than what's currently loaded OR if the registry was
@@ -108,15 +107,26 @@ void SdCardFontSystem::releaseLoadedFont(GfxRenderer& renderer) {
   LOG_DBG("SDFS", "Released SD card font before low-memory operation: %s", familyName.c_str());
 }
 
+void SdCardFontSystem::ensureRegistry() {
+  const bool dirty = registryDirty_.exchange(false, std::memory_order_acq_rel);
+  if (registryLoaded_ && !dirty) return;
+  if (dirty) LOG_DBG("SDFS", "Registry dirty — re-discovering fonts");
+  registry_.discover();
+  registryLoaded_ = true;
+}
+
+void SdCardFontSystem::releaseRegistry() {
+  if (!registryLoaded_) return;
+  LOG_DBG("SDFS", "Releasing SD font catalog (%d families)", registry_.getFamilyCount());
+  registry_.clear();
+  registryLoaded_ = false;
+}
+
 void SdCardFontSystem::releaseForNetwork(GfxRenderer& renderer) {
   releaseLoadedFont(renderer);
 
-  const int familyCount = registry_.getFamilyCount();
-  if (familyCount == 0) return;
-
-  registry_.clear();
+  releaseRegistry();
   registryDirty_.store(true, std::memory_order_release);
-  LOG_DBG("SDFS", "Released SD font registry before network operation (%d families)", familyCount);
 }
 
 int SdCardFontSystem::resolveFontId(const char* familyName, uint8_t /*fontSizeEnum*/) const {

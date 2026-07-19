@@ -208,6 +208,13 @@ SectionBuildProfile safeModeBuildProfile() {
   return SectionBuildProfile{EpubRenderMode::Light, false, false, false, "safe", true};
 }
 
+void ensureReaderSdFontLoaded(GfxRenderer& renderer) {
+  sdFontSystem.ensureLoaded(renderer);
+  // Layout only needs the active font. Release the settings-only family metadata
+  // before building a section so it does not consume reader heap headroom.
+  sdFontSystem.releaseRegistry();
+}
+
 void applySafeModeReaderSettings() {
   SETTINGS.epubRenderMode = static_cast<uint8_t>(EpubRenderMode::Light);
   SETTINGS.embeddedStyle = 0;
@@ -1762,7 +1769,7 @@ void EpubReaderActivity::onEnter() {
   captureGlobalReaderSettings();
   epub->setupCacheDir();
   loadBookReaderSettings();
-  sdFontSystem.ensureLoaded(renderer);
+  ensureReaderSdFontLoaded(renderer);
   ImageBlock::clearSessionRenderFailures();
 
   // Configure screen orientation based on settings
@@ -1950,7 +1957,7 @@ void EpubReaderActivity::openReaderMenu() {
         if (const auto* clipping = std::get_if<ClippingJumpResult>(&result.data)) {
           applyOrientation(clipping->orientation);
           if (clipping->settingsChanged) {
-            sdFontSystem.ensureLoaded(renderer);
+            ensureReaderSdFontLoaded(renderer);
             RenderLock lock(*this);
             if (section) {
               cacheCurrentSectionPosition();
@@ -1971,7 +1978,7 @@ void EpubReaderActivity::openReaderMenu() {
         }
         applyOrientation(menu->orientation);
         if (menu->settingsChanged) {
-          sdFontSystem.ensureLoaded(renderer);
+          ensureReaderSdFontLoaded(renderer);
           RenderLock lock(*this);
           if (section) {
             cacheCurrentSectionPosition();
@@ -3020,7 +3027,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
 
 void EpubReaderActivity::reindexCurrentSection() {
   saveCurrentBookReaderSettings();
-  sdFontSystem.ensureLoaded(renderer);
+  ensureReaderSdFontLoaded(renderer);
   if (activeFootnotePreview) {
     restoreSavedPosition();
     return;
@@ -5057,7 +5064,7 @@ bool EpubReaderActivity::drawCurrentPageToBuffer(const std::string& filePath, Gf
   SETTINGS.epubRenderMode = readerSettings.hasRenderModeOverride
                                 ? normalizeRenderModeRaw(readerSettings.renderMode)
                                 : static_cast<uint8_t>(EpubRenderMode::CrossInkDefault);
-  sdFontSystem.ensureLoaded(renderer);
+  ensureReaderSdFontLoaded(renderer);
 
   // Load CSS when embeddedStyle is enabled, as createSectionFile may need it to rebuild the cache.
   if (!epub->load(true, SETTINGS.embeddedStyle == 0)) {
