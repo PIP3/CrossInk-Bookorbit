@@ -616,9 +616,6 @@ void setupDisplayAndFonts(const bool seamless = false, const bool loadReaderReso
   display.begin(seamless);
 #endif
   renderer.begin();
-  if (loadReaderResources && !ScratchWorkspace::initialize()) {
-    LOG_ERR("MAIN", "Scratch workspace init failed");
-  }
   activityManager.begin(loadReaderResources ? 16384 : 4096);
   LOG_DBG("MAIN", "Display initialized");
 
