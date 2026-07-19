@@ -24,23 +24,31 @@ class KOReaderSyncActivity final : public Activity {
  public:
   static constexpr const char* NAME = "KOReaderSync";
 
-  explicit KOReaderSyncActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& epubPath,
-                                int currentSpineIndex, int currentPage, int totalPagesInSpine,
-                                KOReaderPosition localKoPos, std::string localChapterName,
-                                DocumentMatchMethod matchMethod,
-                                std::optional<uint16_t> currentParagraphIndex = std::nullopt)
+  explicit KOReaderSyncActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
       : Activity(NAME, renderer, mappedInput),
-        epubPath(epubPath),
-        currentSpineIndex(currentSpineIndex),
-        currentPage(currentPage),
-        totalPagesInSpine(totalPagesInSpine),
-        currentParagraphIndex(currentParagraphIndex),
-        primaryMatchMethod(matchMethod),
-        remoteMatchMethod(matchMethod),
-        localChapterName(std::move(localChapterName)),
+        currentSpineIndex(0),
+        currentPage(0),
+        totalPagesInSpine(1),
+        primaryMatchMethod(DocumentMatchMethod::FILENAME),
+        remoteMatchMethod(DocumentMatchMethod::FILENAME),
         remoteProgress{},
         remotePosition{},
-        localProgress(std::move(localKoPos)) {}
+        localProgress{},
+        restartBeforeNetwork(true) {}
+
+  explicit KOReaderSyncActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string epubPath,
+                                DocumentMatchMethod matchMethod)
+      : Activity(NAME, renderer, mappedInput),
+        epubPath(std::move(epubPath)),
+        currentSpineIndex(0),
+        currentPage(0),
+        totalPagesInSpine(1),
+        primaryMatchMethod(matchMethod),
+        remoteMatchMethod(matchMethod),
+        remoteProgress{},
+        remotePosition{},
+        localProgress{},
+        localProgressDeferred(true) {}
 
   void onEnter() override;
   void onExit() override;
@@ -83,8 +91,10 @@ class KOReaderSyncActivity final : public Activity {
   KOReaderProgress remoteProgress;
   CrossPointPosition remotePosition;
 
-  // Local progress as KOReader format (pre-computed before Epub was released)
+  // Loaded from saved reader progress after the remote TLS probe completes.
   KOReaderPosition localProgress;
+  bool localProgressDeferred = false;
+  bool restartBeforeNetwork = false;
 
   // Selection in result screen (0=Apply, 1=Upload)
   int selectedOption = 0;
@@ -108,6 +118,7 @@ class KOReaderSyncActivity final : public Activity {
   void markAutoReturn();
   void completeAlreadySynced();
   void ensureEpubLoaded();
+  bool ensureLocalProgressLoaded();
   void saveProgressAndReturn(const CrossPointPosition& position);
   void returnToReader();
 };

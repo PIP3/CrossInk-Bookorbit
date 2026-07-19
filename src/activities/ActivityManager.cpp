@@ -2,11 +2,14 @@
 
 #include <FontCacheManager.h>
 #include <HalPowerManager.h>
+#include <Logging.h>
+#include <Memory.h>
 
 #include <algorithm>
 
 #include "CrossPointState.h"
 #include "OpdsServerStore.h"
+#include "SilentRestart.h"
 #include "boot_sleep/BootActivity.h"
 #include "boot_sleep/SleepActivity.h"
 #include "browser/OpdsBookBrowserActivity.h"
@@ -23,16 +26,15 @@
 #include "settings/SettingsActivity.h"
 #include "util/FullScreenMessageActivity.h"
 
-void ActivityManager::begin() {
-  xTaskCreatePinnedToCore(&renderTaskTrampoline, "ActivityManagerRender",
-                          16384,  // Stack size - createSectionFile() puts ChapterHtmlSlimParser on stack during
-                                  // silentIndexNextChapterIfNeeded
-                          this,   // Parameters
-                          1,      // Priority
+void ActivityManager::begin(const uint32_t renderTaskStackBytes) {
+  xTaskCreatePinnedToCore(&renderTaskTrampoline, "ActivityManagerRender", renderTaskStackBytes,
+                          this,               // Parameters
+                          1,                  // Priority
                           &renderTaskHandle,  // Task handle
                           0                   // Pin to core 0 (PRO_CPU)
   );
   assert(renderTaskHandle != nullptr && "Failed to create render task");
+  LOG_DBG("ACT", "Render task started with %lu-byte stack", static_cast<unsigned long>(renderTaskStackBytes));
 }
 
 void ActivityManager::renderTaskTrampoline(void* param) {
@@ -227,10 +229,35 @@ void ActivityManager::goToBrowser() {
   const auto& servers = OPDS_STORE.getServers();
   // Skip the server picker when there's only one server configured
   if (servers.size() == 1) {
-    replaceActivity(std::make_unique<OpdsBookBrowserActivity>(renderer, mappedInput, servers[0]));
+    goToOpdsServer(0);
   } else {
     replaceActivity(std::make_unique<OpdsServerListActivity>(renderer, mappedInput, true));
   }
+}
+
+bool ActivityManager::goToOpdsServer(const uint32_t serverIndex, const bool networkBootReady) {
+  if (!networkBootReady) {
+    silentRestartToNetwork(NetworkBootTarget::OPDS, serverIndex);
+    return true;
+  }
+
+  OPDS_STORE.loadFromFile();
+  const auto* storedServer = OPDS_STORE.getServer(serverIndex);
+  if (!storedServer) {
+    LOG_ERR("ACT", "OPDS network boot server index out of range: %lu", static_cast<unsigned long>(serverIndex));
+    return false;
+  }
+
+  OpdsServer server = *storedServer;
+  OPDS_STORE.release();
+  auto browser = makeUniqueNoThrow<OpdsBookBrowserActivity>(renderer, mappedInput, std::move(server));
+  if (!browser) {
+    LOG_ERR("ACT", "OOM: OPDS browser after minimal boot (free=%u maxAlloc=%u)", ESP.getFreeHeap(),
+            ESP.getMaxAllocHeap());
+    return false;
+  }
+  replaceActivity(std::move(browser));
+  return true;
 }
 
 void ActivityManager::goToReader(std::string path, const bool suppressBackRelease) {

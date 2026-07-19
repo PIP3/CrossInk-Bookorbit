@@ -5,9 +5,9 @@
 
 #include <cstring>
 
-#include "KOReaderAuthActivity.h"
 #include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
+#include "SilentRestart.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -117,7 +117,7 @@ void KOReaderSettingsActivity::handleSelection() {
       // Can't authenticate without credentials - just show message briefly
       return;
     }
-    startActivityForResult(std::make_unique<KOReaderAuthActivity>(renderer, mappedInput), [](const ActivityResult&) {});
+    silentRestartToNetwork(NetworkBootTarget::KOREADER_AUTH);
   }
 }
 

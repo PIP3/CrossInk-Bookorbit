@@ -43,6 +43,7 @@ class OpdsServerStore : public PersistableStore<OpdsServerStore> {
   void toJson(JsonDocument& doc) const;
   bool fromJson(JsonVariantConst doc);
   bool loadFromFile();
+  void release();
 
   bool addServer(const OpdsServer& server);
   bool updateServer(size_t index, const OpdsServer& server);

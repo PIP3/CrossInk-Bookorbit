@@ -11,7 +11,6 @@
 #include "OpdsServerStore.h"
 #include "OpdsSettingsActivity.h"
 #include "activities/ActivityManager.h"
-#include "activities/browser/OpdsBookBrowserActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -82,10 +81,7 @@ void OpdsServerListActivity::handleSelection() {
   if (pickerMode) {
     // Picker mode: selecting a server navigates to the OPDS browser
     if (selectedIndex < serverCount) {
-      const auto* server = OPDS_STORE.getServer(static_cast<size_t>(selectedIndex));
-      if (server) {
-        activityManager.replaceActivity(std::make_unique<OpdsBookBrowserActivity>(renderer, mappedInput, *server));
-      }
+      activityManager.goToOpdsServer(static_cast<uint32_t>(selectedIndex));
     }
     return;
   }

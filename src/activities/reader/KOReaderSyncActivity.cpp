@@ -92,6 +92,31 @@ void KOReaderSyncActivity::ensureEpubLoaded() {
   }
 }
 
+bool KOReaderSyncActivity::ensureLocalProgressLoaded() {
+  if (!localProgressDeferred) return localProgress.valid;
+
+  ensureEpubLoaded();
+  if (!epub) return false;
+
+  EpubReaderUtils::Progress progress;
+  if (EpubReaderUtils::loadProgress(*epub, progress, "KOSync")) {
+    currentSpineIndex = progress.spineIndex;
+    currentPage = progress.pageNumber;
+    if (progress.hasPageCount) totalPagesInSpine = std::max(1, progress.pageCount);
+  }
+
+  if (currentSpineIndex < 0 || currentSpineIndex >= epub->getSpineItemsCount()) currentSpineIndex = 0;
+  const CrossPointPosition localPos = {currentSpineIndex, currentPage, totalPagesInSpine};
+  const PositionCoordinateSpace coordinateSpace = primaryMatchMethod == DocumentMatchMethod::FILENAME
+                                                      ? PositionCoordinateSpace::SourceDocument
+                                                      : PositionCoordinateSpace::CurrentDocument;
+  localProgress = ProgressMapper::toKOReader(epub, localPos, coordinateSpace);
+  const int tocIdx = epub->getTocIndexForSpineIndex(currentSpineIndex);
+  localChapterName = tocIdx >= 0 ? epub->getTocItem(tocIdx).title : "";
+  localProgressDeferred = false;
+  return localProgress.valid;
+}
+
 void KOReaderSyncActivity::saveProgressAndReturn(const CrossPointPosition& position) {
   // epub is guaranteed non-null here: ensureEpubLoaded() was called in performSync() before
   // SHOWING_RESULT state is entered, and this method is only called from that state.
@@ -209,9 +234,9 @@ void KOReaderSyncActivity::performSync() {
   // local upload when another KOReader device synced the same book with a
   // different document matching method.
   auto result = KOReaderSyncClient::getProgress(documentHash, remoteProgress);
-  LOG_DBG("KOSync", "Primary remote (%s): result=%d http=%d doc=%s local=%.6f remote=%.6f xpath=%s",
+  LOG_DBG("KOSync", "Primary remote (%s): result=%d http=%d doc=%s remote=%.6f xpath=%s",
           matchMethodName(primaryMethod), result, KOReaderSyncClient::lastHttpCode, documentHash.c_str(),
-          localProgress.percentage, remoteProgress.percentage, remoteProgress.progress.c_str());
+          remoteProgress.percentage, remoteProgress.progress.c_str());
 
   if (smartSyncEnabled()) {
     const DocumentMatchMethod altMethod = alternateMatchMethod(primaryMethod);
@@ -219,9 +244,9 @@ void KOReaderSyncActivity::performSync() {
     if (!altHash.empty() && altHash != documentHash) {
       KOReaderProgress altProgress;
       const auto altResult = KOReaderSyncClient::getProgress(altHash, altProgress);
-      LOG_DBG("KOSync", "Alternate remote (%s): result=%d http=%d doc=%s local=%.6f remote=%.6f xpath=%s",
+      LOG_DBG("KOSync", "Alternate remote (%s): result=%d http=%d doc=%s remote=%.6f xpath=%s",
               matchMethodName(altMethod), altResult, KOReaderSyncClient::lastHttpCode, altHash.c_str(),
-              localProgress.percentage, altProgress.percentage, altProgress.progress.c_str());
+              altProgress.percentage, altProgress.progress.c_str());
 
       if (altResult == KOReaderSyncClient::OK &&
           (result == KOReaderSyncClient::NOT_FOUND || altProgress.percentage > remoteProgress.percentage)) {
@@ -231,6 +256,19 @@ void KOReaderSyncActivity::performSync() {
         result = KOReaderSyncClient::OK;
       }
     }
+  }
+
+  // A minimal network boot intentionally reaches this point without loading the EPUB.
+  // Reconstruct local progress only after all remote TLS probes have completed.
+  if (!ensureLocalProgressLoaded()) {
+    LOG_ERR("KOSync", "Failed to reconstruct local progress after network boot");
+    {
+      RenderLock lock(*this);
+      state = SYNC_FAILED;
+      statusMessage = tr(STR_SYNC_REOPTIMIZE_REQUIRED);
+    }
+    requestUpdate(true);
+    return;
   }
 
   if (result == KOReaderSyncClient::NOT_FOUND) {
@@ -261,18 +299,7 @@ void KOReaderSyncActivity::performSync() {
     return;
   }
 
-  // Epub was released before sync to free RAM for the TLS handshake — reload it now.
   hasRemoteProgress = true;
-  ensureEpubLoaded();
-  if (!epub) {
-    {
-      RenderLock lock(*this);
-      state = SYNC_FAILED;
-      statusMessage = "";
-    }
-    requestUpdate(true);
-    return;
-  }
 
   KOReaderPosition koPos = {remoteProgress.progress, remoteProgress.percentage};
   const PositionCoordinateSpace remoteCoordinateSpace = remoteMatchMethod == DocumentMatchMethod::FILENAME
@@ -365,8 +392,6 @@ void KOReaderSyncActivity::performSync() {
     saveProgressAndReturn(remotePosition);
     return;
   }
-  // localProgress was pre-computed in EpubReaderActivity before the Epub was released.
-
   {
     RenderLock lock(*this);
     state = SHOWING_RESULT;
@@ -461,16 +486,16 @@ void KOReaderSyncActivity::performUpload() {
 
 void KOReaderSyncActivity::onEnter() {
   Activity::onEnter();
-  ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
-  lockInitialConfirmRelease = mappedInput.isPressed(MappedInputManager::Button::Confirm);
 
-  if (!localProgress.valid) {
-    LOG_ERR("KOSync", "Source position map unavailable; re-optimize the EPUB before filename-based sync");
-    state = SYNC_FAILED;
-    statusMessage = tr(STR_SYNC_REOPTIMIZE_REQUIRED);
-    requestUpdate();
+  // The reader uses this activity as a tiny handoff so ActivityManager can run
+  // reader onExit() before rebooting. Network boot uses the other constructor.
+  if (restartBeforeNetwork) {
+    silentRestartToNetwork(NetworkBootTarget::KOREADER_SYNC);
     return;
   }
+
+  ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
+  lockInitialConfirmRelease = mappedInput.isPressed(MappedInputManager::Button::Confirm);
 
   // Check for credentials first
   if (!KOREADER_STORE.hasCredentials()) {

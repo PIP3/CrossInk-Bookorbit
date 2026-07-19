@@ -2821,37 +2821,6 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       if (KOREADER_STORE.hasCredentials()) {
         const int currentPage = section ? section->currentPage : nextPageNumber;
         const int totalPages = section ? section->estimatedTotalPages() : cachedChapterTotalPageCount;
-        std::optional<uint16_t> paragraphIndex;
-        std::optional<uint16_t> listItemIndex;
-        if (section) {
-          getSyncPageAnchors(*section, currentPage, paragraphIndex, listItemIndex);
-        }
-
-        // Pre-compute local KO position and chapter name while Epub is still in RAM.
-        CrossPointPosition localPos = {currentSpineIndex, currentPage, totalPages};
-        if (paragraphIndex.has_value()) {
-          localPos.paragraphIndex = *paragraphIndex;
-          localPos.hasParagraphIndex = true;
-        }
-        if (listItemIndex.has_value()) {
-          localPos.liIndex = *listItemIndex;
-          localPos.hasLiIndex = true;
-        }
-        const DocumentMatchMethod matchMethod = KOREADER_STORE.getMatchMethod();
-        const PositionCoordinateSpace coordinateSpace = matchMethod == DocumentMatchMethod::FILENAME
-                                                            ? PositionCoordinateSpace::SourceDocument
-                                                            : PositionCoordinateSpace::CurrentDocument;
-        KOReaderPosition localKoPos = ProgressMapper::toKOReader(epub, localPos, coordinateSpace);
-        if (!localKoPos.valid) {
-          LOG_ERR("KOSync", "Exact filename sync needs a source map; re-optimize this split EPUB");
-          drawToast(renderer, tr(STR_SYNC_REOPTIMIZE_REQUIRED));
-          delay(1200);
-          requestUpdate();
-          break;
-        }
-        const int tocIdx = epub->getTocIndexForSpineIndex(currentSpineIndex);
-        std::string localChapterName = (tocIdx >= 0) ? epub->getTocItem(tocIdx).title : "";
-        const std::string savedEpubPath = epub->getPath();
 
         // Persist current position so the reader resumes at the right page on return.
         // goToReader() depends on this file, so abort the sync if the write fails.
@@ -2862,22 +2831,18 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
           return;
         }
 
-        // Release the heavy Section now. Keep Epub alive until onExit(), which still
-        // needs it for stats/cache cleanup before the sync activity starts.
-        LOG_DBG("KOSync", "Releasing section for sync (heap before: %u)", (unsigned)ESP.getFreeHeap());
-        {
-          RenderLock lock(*this);
-          if (section) {
-            nextPageNumber = section->currentPage;
-          }
-          section.reset();
+        // ActivityManager owns this one-shot handoff across deferred reader teardown.
+        auto restartActivity = makeUniqueNoThrow<KOReaderSyncActivity>(renderer, mappedInput);
+        if (!restartActivity) {
+          LOG_ERR("KOSync", "OOM: restart handoff (free=%u maxAlloc=%u)", ESP.getFreeHeap(), ESP.getMaxAllocHeap());
+          drawToast(renderer, tr(STR_KOREADER_SYNC_LOW_MEMORY));
+          delay(1200);
+          requestUpdate();
+          break;
         }
-        LOG_DBG("KOSync", "Section released for sync (heap after: %u)", (unsigned)ESP.getFreeHeap());
 
         pauseReadingPaceTimer("sync_progress");
-        activityManager.replaceActivity(std::make_unique<KOReaderSyncActivity>(
-            renderer, mappedInput, savedEpubPath, currentSpineIndex, currentPage, totalPages, std::move(localKoPos),
-            std::move(localChapterName), matchMethod, paragraphIndex));
+        activityManager.replaceActivity(std::move(restartActivity));
       }
       break;
     }

@@ -1,5 +1,4 @@
 #include <Arduino.h>
-#include <Epub.h>
 #include <FontCacheManager.h>
 #include <FontDecompressor.h>
 #include <FsHelpers.h>
@@ -13,6 +12,7 @@
 #include <HalTiltSensor.h>
 #include <I18n.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <SPI.h>
 #include <ScratchWorkspace.h>
 #include <builtinFonts/all.h>
@@ -72,13 +72,15 @@ inline esp_sleep_wakeup_cause_t esp_sleep_get_wakeup_cause() { return ESP_SLEEP_
 #include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
+#include "SilentRestart.h"
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
-#include "activities/reader/EpubReaderUtils.h"
 #include "activities/reader/KOReaderSyncActivity.h"
 #include "activities/reader/ReadingStatsUtils.h"
 #include "activities/reader/StatsBackup.h"
+#include "activities/settings/KOReaderAuthActivity.h"
 #include "activities/settings/KOReaderSettingsActivity.h"
+#include "activities/settings/OtaUpdateActivity.h"
 #include "activities/settings/SdFirmwareUpdateActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -328,9 +330,11 @@ const char* wakeupRouteName(const HalGPIO::WakeupReason reason) {
 // Definitions for SilentRestart.h. RTC_NOINIT survives ESP.restart() but not power loss.
 RTC_NOINIT_ATTR uint32_t silentRebootMagic;
 RTC_NOINIT_ATTR uint32_t silentRebootTarget;
+RTC_NOINIT_ATTR uint32_t silentRebootPayload;
 constexpr uint32_t SILENT_REBOOT_MAGIC = 0xC1EAB007;
 constexpr uint32_t SILENT_REBOOT_TARGET_HOME = 0;
 constexpr uint32_t SILENT_REBOOT_TARGET_READER = 1;
+constexpr uint32_t SILENT_REBOOT_TARGET_NETWORK_MAX = static_cast<uint32_t>(NetworkBootTarget::KOREADER_AUTH);
 
 // How the device is coming back to life, resolved once at boot. Both resume
 // flows suppress the splash and leave the panel holding its pre-boot frame; a
@@ -338,6 +342,7 @@ constexpr uint32_t SILENT_REBOOT_TARGET_READER = 1;
 enum class BootResume : uint8_t {
   Splash,       // cold boot, flash, panic, or plain reboot
   Silent,       // heap-defrag ESP.restart() (RTC flag; lost on power loss)
+  Network,      // minimal boot directly into a memory-intensive network activity
   QuickResume,  // wake from a quick-resume deep sleep (SD flag; survives power loss)
 };
 
@@ -352,6 +357,7 @@ static bool deepSleepInProgress = false;
 void silentRestart() {
   if (deepSleepInProgress) return;  // sleeping supersedes the heap-defrag reboot
   silentRebootTarget = SILENT_REBOOT_TARGET_HOME;
+  silentRebootPayload = 0;
   silentRebootMagic = SILENT_REBOOT_MAGIC;
   LOG_DBG("MAIN", "Silent restart (target=home)");
   // E-ink retains the previous frame until Home's first paint lands (~2-3s).
@@ -366,8 +372,21 @@ void silentRestart() {
 void silentRestartToReader() {
   if (deepSleepInProgress) return;  // sleeping supersedes the heap-defrag reboot
   silentRebootTarget = SILENT_REBOOT_TARGET_READER;
+  silentRebootPayload = 0;
   silentRebootMagic = SILENT_REBOOT_MAGIC;
   LOG_DBG("MAIN", "Silent restart (target=reader)");
+  GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
+  delay(50);
+  ESP.restart();
+}
+
+void silentRestartToNetwork(const NetworkBootTarget target, const uint32_t payload) {
+  if (deepSleepInProgress) return;
+  silentRebootTarget = static_cast<uint32_t>(target);
+  silentRebootPayload = payload;
+  silentRebootMagic = SILENT_REBOOT_MAGIC;
+  LOG_DBG("MAIN", "Silent restart (target=network/%lu payload=%lu)", static_cast<unsigned long>(silentRebootTarget),
+          static_cast<unsigned long>(payload));
   GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
   delay(50);
   ESP.restart();
@@ -385,61 +404,39 @@ bool isGlobalPowerButtonAction(const CrossPointSettings::SHORT_PWRBTN action) {
   return isPowerButtonActionAvailableOutsideReader(action);
 }
 
-bool startGlobalSyncProgress() {
+bool startGlobalSyncProgress(const bool networkBootReady = false) {
   if (activityManager.hasActivityNamed(KOReaderSyncActivity::NAME)) {
     LOG_DBG("MAIN", "Ignoring KOReader sync shortcut while sync is already active");
     return true;
   }
 
   if (!KOREADER_STORE.hasCredentials()) {
+    if (networkBootReady) return false;
     activityManager.pushActivity(std::make_unique<KOReaderSettingsActivity>(renderer, mappedInputManager));
     return true;
   }
 
-  const std::string epubPath = APP_STATE.openEpubPath;
+  std::string epubPath = APP_STATE.openEpubPath;
   if (epubPath.empty() || !FsHelpers::hasEpubExtension(epubPath) || !Storage.exists(epubPath.c_str())) {
+    if (networkBootReady) return false;
     LOG_DBG("MAIN", "No syncable EPUB open, opening KOReader settings instead");
     activityManager.pushActivity(std::make_unique<KOReaderSettingsActivity>(renderer, mappedInputManager));
     return true;
   }
 
-  auto epub = std::make_shared<Epub>(epubPath, "/.crosspoint");
-  if (!epub->load(true, SETTINGS.embeddedStyle == 0)) {
-    LOG_ERR("MAIN", "Failed to load EPUB for global sync: %s", epubPath.c_str());
-    activityManager.pushActivity(std::make_unique<KOReaderSettingsActivity>(renderer, mappedInputManager));
+  if (!networkBootReady) {
+    silentRestartToNetwork(NetworkBootTarget::KOREADER_SYNC);
     return true;
   }
 
-  epub->setupCacheDir();
-
-  int spineIndex = 0;
-  int pageNumber = 0;
-  int totalPagesInSpine = 1;
-  EpubReaderUtils::Progress progress;
-  if (EpubReaderUtils::loadProgress(*epub, progress, "MAIN")) {
-    spineIndex = progress.spineIndex;
-    pageNumber = progress.pageNumber;
-    if (progress.hasPageCount) {
-      totalPagesInSpine = std::max(1, progress.pageCount);
-    }
-  }
-
-  if (spineIndex < 0 || spineIndex >= epub->getSpineItemsCount()) {
-    spineIndex = 0;
-  }
-
-  CrossPointPosition localPos = {spineIndex, pageNumber, totalPagesInSpine};
   const DocumentMatchMethod matchMethod = KOREADER_STORE.getMatchMethod();
-  const PositionCoordinateSpace coordinateSpace = matchMethod == DocumentMatchMethod::FILENAME
-                                                      ? PositionCoordinateSpace::SourceDocument
-                                                      : PositionCoordinateSpace::CurrentDocument;
-  KOReaderPosition localKoPos = ProgressMapper::toKOReader(epub, localPos, coordinateSpace);
-  const int tocIdx = epub->getTocIndexForSpineIndex(spineIndex);
-  std::string localChapterName = (tocIdx >= 0) ? epub->getTocItem(tocIdx).title : "";
-
-  activityManager.pushActivity(std::make_unique<KOReaderSyncActivity>(
-      renderer, mappedInputManager, epubPath, spineIndex, pageNumber, totalPagesInSpine, std::move(localKoPos),
-      std::move(localChapterName), matchMethod));
+  auto syncActivity =
+      makeUniqueNoThrow<KOReaderSyncActivity>(renderer, mappedInputManager, std::move(epubPath), matchMethod);
+  if (!syncActivity) {
+    LOG_ERR("MAIN", "OOM: KOReader sync activity (free=%u maxAlloc=%u)", ESP.getFreeHeap(), ESP.getMaxAllocHeap());
+    return false;
+  }
+  activityManager.replaceActivity(std::move(syncActivity));
   return true;
 }
 
@@ -611,7 +608,7 @@ void enterDeepSleep(bool fromTimeout) {
   powerManager.startDeepSleep(gpio);
 }
 
-void setupDisplayAndFonts(bool seamless = false) {
+void setupDisplayAndFonts(const bool seamless = false, const bool loadReaderResources = true) {
 #ifdef SIMULATOR
   (void)seamless;
   display.begin();
@@ -619,10 +616,10 @@ void setupDisplayAndFonts(bool seamless = false) {
   display.begin(seamless);
 #endif
   renderer.begin();
-  if (!ScratchWorkspace::initialize()) {
+  if (loadReaderResources && !ScratchWorkspace::initialize()) {
     LOG_ERR("MAIN", "Scratch workspace init failed");
   }
-  activityManager.begin();
+  activityManager.begin(loadReaderResources ? 16384 : 4096);
   LOG_DBG("MAIN", "Display initialized");
 
   // Initialize font decompressor for compressed reader fonts
@@ -685,8 +682,11 @@ void setupDisplayAndFonts(bool seamless = false) {
   renderer.insertFont(UI_12_FONT_ID, ui12FontFamily);
   renderer.insertFont(SMALL_FONT_ID, smallFontFamily);
 
-  // Discover and load SD card fonts
-  sdFontSystem.begin(renderer);
+  if (loadReaderResources) {
+    sdFontSystem.begin(renderer);
+  } else {
+    LOG_DBG("MAIN", "Skipping EPUB scratch workspace and SD fonts for minimal network boot");
+  }
 
   LOG_DBG("MAIN", "Fonts setup");
 }
@@ -723,9 +723,12 @@ void setup() {
   // Bound the target range too — RTC_NOINIT memory is uninitialized on cold boot.
   const bool isSilentReboot = (silentRebootMagic == SILENT_REBOOT_MAGIC);
   const uint32_t snapshotTarget =
-      (isSilentReboot && silentRebootTarget <= SILENT_REBOOT_TARGET_READER) ? silentRebootTarget : 0;
+      (isSilentReboot && silentRebootTarget <= SILENT_REBOOT_TARGET_NETWORK_MAX) ? silentRebootTarget : 0;
+  const uint32_t snapshotPayload = isSilentReboot ? silentRebootPayload : 0;
+  const bool isNetworkResume = snapshotTarget >= static_cast<uint32_t>(NetworkBootTarget::OTA);
   silentRebootMagic = 0;
   silentRebootTarget = 0;
+  silentRebootPayload = 0;
 
   gpio.begin();
   powerManager.begin();
@@ -741,7 +744,7 @@ void setup() {
   // We need 6 open files concurrently when parsing a new chapter
   if (!Storage.begin()) {
     LOG_ERR("MAIN", "SD card initialization failed");
-    setupDisplayAndFonts(isSilentReboot);
+    setupDisplayAndFonts(isSilentReboot, !isNetworkResume);
     activityManager.goToFullScreenMessage("SD card error", EpdFontFamily::BOLD);
     return;
   }
@@ -751,10 +754,15 @@ void setup() {
   SETTINGS.loadFromFile();
   Storage.installDateTimeCallback(&SETTINGS.clockUtcOffsetQ);
   APP_STATE.loadFromFile();
-  RECENT_BOOKS.loadFromFile();
   I18N.setLanguage(static_cast<Language>(SETTINGS.language));
-  KOREADER_STORE.loadFromFile();
-  OPDS_STORE.loadFromFile();
+  if (!isNetworkResume) {
+    RECENT_BOOKS.loadFromFile();
+    KOREADER_STORE.loadFromFile();
+    OPDS_STORE.loadFromFile();
+  } else if (snapshotTarget == static_cast<uint32_t>(NetworkBootTarget::KOREADER_SYNC) ||
+             snapshotTarget == static_cast<uint32_t>(NetworkBootTarget::KOREADER_AUTH)) {
+    KOREADER_STORE.loadFromFile();
+  }
   UITheme::getInstance().reload();
   ButtonNavigator::setMappedInputManager(mappedInputManager);
 
@@ -812,16 +820,21 @@ void setup() {
   // skips the panel-clearing pass and the X3 initial-full-sync arming (see
   // HalDisplay::begin), so the first paint is FAST_REFRESH (~500ms) over the
   // retained frame and input dispatches against a visible UI.
-  const BootResume resume = isSilentReboot              ? BootResume::Silent
+  const BootResume resume = isNetworkResume             ? BootResume::Network
+                            : isSilentReboot            ? BootResume::Silent
                             : !APP_STATE.showBootScreen ? BootResume::QuickResume
                                                         : BootResume::Splash;
 
-  setupDisplayAndFonts(resume != BootResume::Splash);
+  setupDisplayAndFonts(resume != BootResume::Splash, resume != BootResume::Network);
 
   switch (resume) {
     case BootResume::Silent:
       // Splash skipped: the routing block below picks the target activity; the
       // panel keeps showing the pre-reboot popup until that first paint lands.
+      break;
+    case BootResume::Network:
+      LOG_INF("BOOT", "Minimal network boot ready: target=%lu free=%u maxAlloc=%u",
+              static_cast<unsigned long>(snapshotTarget), ESP.getFreeHeap(), ESP.getMaxAllocHeap());
       break;
     case BootResume::QuickResume:
       // One-shot flag: re-arm the splash for the next non-quick-resume boot. Save
@@ -855,6 +868,42 @@ void setup() {
   } else if (HalSystem::isRebootFromPanic()) {
     // If we rebooted from a panic, go to crash report screen to show the panic info
     activityManager.goToCrashReport();
+  } else if (resume == BootResume::Network) {
+    bool launched = false;
+    switch (static_cast<NetworkBootTarget>(snapshotTarget)) {
+      case NetworkBootTarget::OTA: {
+        auto otaActivity = makeUniqueNoThrow<OtaUpdateActivity>(renderer, mappedInputManager);
+        if (otaActivity) {
+          activityManager.replaceActivity(std::move(otaActivity));
+          launched = true;
+        } else {
+          LOG_ERR("MAIN", "OOM: OTA activity after minimal boot (free=%u maxAlloc=%u)", ESP.getFreeHeap(),
+                  ESP.getMaxAllocHeap());
+        }
+        break;
+      }
+      case NetworkBootTarget::OPDS:
+        launched = activityManager.goToOpdsServer(snapshotPayload, true);
+        break;
+      case NetworkBootTarget::KOREADER_SYNC:
+        launched = startGlobalSyncProgress(true);
+        break;
+      case NetworkBootTarget::KOREADER_AUTH: {
+        auto authActivity = makeUniqueNoThrow<KOReaderAuthActivity>(renderer, mappedInputManager);
+        if (authActivity) {
+          activityManager.replaceActivity(std::move(authActivity));
+          launched = true;
+        } else {
+          LOG_ERR("MAIN", "OOM: KOReader auth activity after minimal boot (free=%u maxAlloc=%u)", ESP.getFreeHeap(),
+                  ESP.getMaxAllocHeap());
+        }
+        break;
+      }
+    }
+    if (!launched) {
+      LOG_ERR("MAIN", "Minimal network boot target failed; returning home");
+      silentRestart();
+    }
   } else if (resume == BootResume::Silent && snapshotTarget == SILENT_REBOOT_TARGET_READER &&
              !APP_STATE.openEpubPath.empty()) {
     activityManager.goToReader(APP_STATE.openEpubPath);
@@ -877,7 +926,7 @@ void setup() {
     activityManager.goToReader(path);
   }
 
-  if (resume == BootResume::Silent) {
+  if (resume == BootResume::Silent || resume == BootResume::Network) {
     // Block until the first paint physically completes. refreshDisplay()
     // waits on the panel BUSY pin so when this returns the user can see the
     // new activity. Without the wait, an edge captured by gpio.update()

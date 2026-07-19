@@ -102,6 +102,8 @@ bool OpdsServerStore::loadFromFile() {
   return false;
 }
 
+void OpdsServerStore::release() { std::vector<OpdsServer>().swap(servers); }
+
 bool OpdsServerStore::migrateFromSettings() {
   if (strlen(SETTINGS.opdsServerUrl) == 0) {
     return false;

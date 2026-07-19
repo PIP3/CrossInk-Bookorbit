@@ -15,6 +15,7 @@
 
 ### Changed
 
+- KOReader Sync and authentication, OTA updates, and OPDS browsing now restart into a lightweight network mode that leaves reader and Home data unloaded, providing more contiguous memory for WiFi and secure connections.
 - The web file manager can now delete non-empty folders recursively and, when hidden files are shown, remove hidden or system-managed SD card items after confirmation.
 - Large EPUB indexing now borrows temporary display memory and uses faster ZIP/PNG decompression to reduce memory pressure while opening or rebuilding chapters.
 - EPUB books can now keep more saved clippings without loading every clipping's text into memory while reading.

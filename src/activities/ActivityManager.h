@@ -83,7 +83,7 @@ class ActivityManager {
   }
   ~ActivityManager() { assert(false); /* should never be called */ };
 
-  void begin();
+  void begin(uint32_t renderTaskStackBytes = 16384);
   void loop();
 
   // Will replace currentActivity and drop all activities on stack
@@ -99,6 +99,7 @@ class ActivityManager {
   void goToFileBrowser(std::string path = {});
   void goToRecentBooks();
   void goToBrowser();
+  bool goToOpdsServer(uint32_t serverIndex, bool networkBootReady = false);
   void goToReader(std::string path, bool suppressBackRelease = false);
   void goToSleep(bool fromTimeout = false);
   void goToBoot();

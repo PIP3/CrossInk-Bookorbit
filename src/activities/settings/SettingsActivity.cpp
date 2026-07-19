@@ -21,10 +21,10 @@
 #include "KOReaderSettingsActivity.h"
 #include "MappedInputManager.h"
 #include "OpdsServerListActivity.h"
-#include "OtaUpdateActivity.h"
 #include "SdCardFontSystem.h"
 #include "SdFirmwareUpdateActivity.h"
 #include "SettingsList.h"
+#include "SilentRestart.h"
 #include "StatusBarSettingsActivity.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/reader/GlobalReadingStats.h"
@@ -745,7 +745,7 @@ void SettingsActivity::toggleCurrentSetting() {
         startActivityForResult(std::make_unique<ClearCacheActivity>(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::CheckForUpdates:
-        startActivityForResult(std::make_unique<OtaUpdateActivity>(renderer, mappedInput), resultHandler);
+        silentRestartToNetwork(NetworkBootTarget::OTA);
         break;
       case SettingAction::SdFirmwareUpdate:
         startActivityForResult(std::make_unique<SdFirmwareUpdateActivity>(renderer, mappedInput), resultHandler);
