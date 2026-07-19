@@ -304,6 +304,15 @@ bool ActivityManager::isReaderActivity() const {
                      [](const auto& activity) { return activity && activity->isReaderActivity(); });
 }
 
+bool ActivityManager::hasActivityNamed(const char* activityName) const {
+  const auto matches = [activityName](const auto& activity) { return activity && activity->name == activityName; };
+  if (matches(currentActivity) || matches(pendingActivity)) {
+    return true;
+  }
+
+  return std::any_of(stackActivities.begin(), stackActivities.end(), matches);
+}
+
 bool ActivityManager::canSnapshotForSleepOverlay() const {
   return currentActivity && currentActivity->canSnapshotForSleepOverlay();
 }

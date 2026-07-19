@@ -386,6 +386,11 @@ bool isGlobalPowerButtonAction(const CrossPointSettings::SHORT_PWRBTN action) {
 }
 
 bool startGlobalSyncProgress() {
+  if (activityManager.hasActivityNamed(KOReaderSyncActivity::NAME)) {
+    LOG_DBG("MAIN", "Ignoring KOReader sync shortcut while sync is already active");
+    return true;
+  }
+
   if (!KOREADER_STORE.hasCredentials()) {
     activityManager.pushActivity(std::make_unique<KOReaderSettingsActivity>(renderer, mappedInputManager));
     return true;
