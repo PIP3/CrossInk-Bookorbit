@@ -56,6 +56,29 @@ void buildXLocationsJsonFilter(JsonDocument& filter) {
   spineEntry["wordCount"] = true;
   spineEntry["characterStart"] = true;
   spineEntry["characterCount"] = true;
+  spineEntry["chapterGroup"] = true;
+
+  JsonArray chapterGroups = root["chapterGroups"].to<JsonArray>();
+  JsonObject chapterGroup = chapterGroups.add<JsonObject>();
+  chapterGroup["index"] = true;
+  chapterGroup["firstSpineIndex"] = true;
+  chapterGroup["lastSpineIndex"] = true;
+  chapterGroup["startSpineIndex"] = true;
+  chapterGroup["endSpineIndex"] = true;
+
+  JsonObject sourceMap = root["sourceSpineMap"].to<JsonObject>();
+  sourceMap["version"] = true;
+  sourceMap["spineCount"] = true;
+  JsonArray sourceSpine = sourceMap["spine"].to<JsonArray>();
+  JsonObject sourceEntry = sourceSpine.add<JsonObject>();
+  sourceEntry["index"] = true;
+  sourceEntry["sourceSpineIndex"] = true;
+  sourceEntry["containerDepth"] = true;
+  JsonArray ranges = sourceEntry["childRanges"].to<JsonArray>();
+  JsonObject range = ranges.add<JsonObject>();
+  range["name"] = true;
+  range["offset"] = true;
+  range["count"] = true;
 }
 
 float clampUnit(const float value) {
@@ -1114,6 +1137,14 @@ bool Epub::getItemSize(const std::string& itemHref, size_t* size) const {
 
 bool Epub::loadXLocations() {
   locationSpine.clear();
+  locationChapterGroups.reset();
+  locationChapterGroupCount = 0;
+  sourceSpineMap.reset();
+  sourceChildRanges.reset();
+  sourceSpineMapCount = 0;
+  sourceChildRangeCount = 0;
+  sourceSpineCount = 0;
+  sourceSpineMapDeclared = false;
   totalLocations = 0;
   totalWords = 0;
   wordsPerReferencePage = 0;
@@ -1170,6 +1201,8 @@ bool Epub::loadXLocations() {
       useCharacterReferencePages ? parsedCharactersPerReferencePage : parsedWordsPerReferencePage;
   const uint32_t parsedTotalReferencePages = doc["totalReferencePages"] | 0;
   JsonArrayConst spine = doc["spine"];
+  JsonArrayConst chapterGroups = doc["chapterGroups"];
+  JsonObjectConst parsedSourceMap = doc["sourceSpineMap"];
 
   if (!isSupportedLocationsFormat(format) || version != 1 || parsedTotalLocations == 0 || spine.isNull()) {
     LOG_ERR("EBP", "Ignoring unsupported X locations manifest");
@@ -1192,6 +1225,10 @@ bool Epub::loadXLocations() {
         useCharacterReferencePages ? (spineItem["characterStart"] | 0) : (spineItem["wordStart"] | 0);
     const uint32_t wordCount =
         useCharacterReferencePages ? (spineItem["characterCount"] | 0) : (spineItem["wordCount"] | 0);
+    const int chapterGroup = spineItem["chapterGroup"] | -1;
+    const uint16_t parsedChapterGroup =
+        chapterGroup >= 0 && chapterGroup <= UINT16_MAX ? static_cast<uint16_t>(chapterGroup) : UINT16_MAX;
+    locationSpine[static_cast<size_t>(index)].chapterGroup = parsedChapterGroup;
     if (startLocation == 0 && endLocation == 0) {
       continue;
     }
@@ -1200,7 +1237,7 @@ bool Epub::loadXLocations() {
       continue;
     }
 
-    locationSpine[static_cast<size_t>(index)] = {startLocation, endLocation, wordStart, wordCount};
+    locationSpine[static_cast<size_t>(index)] = {startLocation, endLocation, wordStart, wordCount, parsedChapterGroup};
     hasValidEntry = true;
   }
 
@@ -1217,11 +1254,182 @@ bool Epub::loadXLocations() {
   if (totalReferencePages == 0 && totalWords > 0 && wordsPerReferencePage > 0) {
     totalReferencePages = (totalWords + wordsPerReferencePage - 1) / wordsPerReferencePage;
   }
+
+  if (!chapterGroups.isNull() && chapterGroups.size() > 0 && chapterGroups.size() <= static_cast<size_t>(spineCount)) {
+    const size_t groupCount = chapterGroups.size();
+    auto parsedGroups = makeUniqueNoThrow<LocationChapterGroupEntry[]>(groupCount);
+    if (!parsedGroups) {
+      LOG_ERR("EBP", "OOM: chapter groups (%zu bytes)", groupCount * sizeof(LocationChapterGroupEntry));
+    } else {
+      size_t ordinalGroup = 0;
+      for (JsonObjectConst group : chapterGroups) {
+        const int index = group["index"] | static_cast<int>(ordinalGroup);
+        ordinalGroup++;
+        if (index < 0 || index >= static_cast<int>(groupCount)) continue;
+        int firstSpineIndex = group["firstSpineIndex"] | -1;
+        int lastSpineIndex = group["lastSpineIndex"] | -1;
+        if (firstSpineIndex < 0) firstSpineIndex = group["startSpineIndex"] | -1;
+        if (lastSpineIndex < 0) lastSpineIndex = group["endSpineIndex"] | -1;
+        if (firstSpineIndex < 0 || lastSpineIndex < firstSpineIndex || lastSpineIndex >= spineCount) continue;
+        parsedGroups[static_cast<size_t>(index)] = {static_cast<uint16_t>(firstSpineIndex),
+                                                    static_cast<uint16_t>(lastSpineIndex), true};
+      }
+      for (auto& entry : locationSpine) {
+        if (entry.chapterGroup >= groupCount || !parsedGroups[entry.chapterGroup].valid) {
+          entry.chapterGroup = UINT16_MAX;
+        }
+      }
+      locationChapterGroups = std::move(parsedGroups);
+      locationChapterGroupCount = groupCount;
+    }
+  }
+
+  if (!parsedSourceMap.isNull()) {
+    sourceSpineMapDeclared = true;
+    const int mapVersion = parsedSourceMap["version"] | 0;
+    const int parsedSourceSpineCount = parsedSourceMap["spineCount"] | 0;
+    JsonArrayConst mappedSpine = parsedSourceMap["spine"];
+    bool mapValid = mapVersion == 1 && parsedSourceSpineCount > 0 && parsedSourceSpineCount <= UINT16_MAX &&
+                    !mappedSpine.isNull() && mappedSpine.size() == static_cast<size_t>(spineCount);
+    size_t totalRanges = 0;
+    if (mapValid) {
+      for (JsonObjectConst mappedEntry : mappedSpine) {
+        JsonArrayConst childRanges = mappedEntry["childRanges"];
+        if (!childRanges.isNull()) totalRanges += childRanges.size();
+        if (totalRanges > static_cast<size_t>(spineCount) * 16U || totalRanges > UINT16_MAX) {
+          mapValid = false;
+          break;
+        }
+      }
+    }
+
+    auto parsedEntries = mapValid ? makeUniqueNoThrow<SourceSpineMapEntry[]>(static_cast<size_t>(spineCount)) : nullptr;
+    auto parsedRanges = mapValid && totalRanges > 0 ? makeUniqueNoThrow<SourceChildRange[]>(totalRanges) : nullptr;
+    if (mapValid && (!parsedEntries || (totalRanges > 0 && !parsedRanges))) {
+      LOG_ERR("EBP", "OOM: source spine map (%zu bytes)",
+              static_cast<size_t>(spineCount) * sizeof(SourceSpineMapEntry) + totalRanges * sizeof(SourceChildRange));
+      mapValid = false;
+    }
+
+    if (mapValid) {
+      size_t nextRange = 0;
+      auto seen = makeUniqueNoThrow<bool[]>(static_cast<size_t>(spineCount));
+      if (!seen) {
+        LOG_ERR("EBP", "OOM: source spine validation (%d bytes)", spineCount);
+        mapValid = false;
+      } else {
+        size_t ordinalEntry = 0;
+        for (JsonObjectConst mappedEntry : mappedSpine) {
+          const int index = mappedEntry["index"] | static_cast<int>(ordinalEntry);
+          ordinalEntry++;
+          const int sourceIndex = mappedEntry["sourceSpineIndex"] | -1;
+          const int containerDepth = mappedEntry["containerDepth"] | 0;
+          JsonArrayConst childRanges = mappedEntry["childRanges"];
+          const size_t rangeCount = childRanges.isNull() ? 0 : childRanges.size();
+          if (index < 0 || index >= spineCount || seen[static_cast<size_t>(index)] || sourceIndex < 0 ||
+              sourceIndex >= parsedSourceSpineCount || containerDepth < 0 || containerDepth >= 16 ||
+              rangeCount > UINT8_MAX) {
+            mapValid = false;
+            break;
+          }
+          seen[static_cast<size_t>(index)] = true;
+          SourceSpineMapEntry& target = parsedEntries[static_cast<size_t>(index)];
+          target.sourceSpineIndex = static_cast<uint16_t>(sourceIndex);
+          target.firstRange = static_cast<uint16_t>(nextRange);
+          target.rangeCount = static_cast<uint8_t>(rangeCount);
+          target.containerDepth = static_cast<uint8_t>(containerDepth);
+          for (JsonObjectConst childRange : childRanges) {
+            const char* name = childRange["name"] | "";
+            const int offset = childRange["offset"] | -1;
+            const int count = childRange["count"] | 0;
+            const size_t nameLen = std::strlen(name);
+            if (nameLen == 0 || nameLen >= sizeof(SourceChildRange::name) || offset < 0 || offset > UINT16_MAX ||
+                count <= 0 || count > UINT16_MAX || static_cast<uint32_t>(offset) + count > UINT16_MAX) {
+              mapValid = false;
+              break;
+            }
+            SourceChildRange& range = parsedRanges[nextRange++];
+            std::memcpy(range.name, name, nameLen + 1);
+            range.offset = static_cast<uint16_t>(offset);
+            range.count = static_cast<uint16_t>(count);
+          }
+          if (!mapValid) break;
+        }
+      }
+    }
+
+    if (mapValid) {
+      sourceSpineMap = std::move(parsedEntries);
+      sourceChildRanges = std::move(parsedRanges);
+      sourceSpineMapCount = static_cast<size_t>(spineCount);
+      sourceChildRangeCount = totalRanges;
+      sourceSpineCount = static_cast<uint16_t>(parsedSourceSpineCount);
+    } else {
+      LOG_ERR("EBP", "Ignoring malformed source spine map");
+    }
+  }
   xLocationsLoaded = true;
   LOG_INF("EBP", "Loaded X locations: %lu locations, %lu reference pages across %zu spine items",
           static_cast<unsigned long>(totalLocations), static_cast<unsigned long>(totalReferencePages),
           locationSpine.size());
   return true;
+}
+
+bool Epub::resolveChapterGroupRange(const int currentSpineIndex, int& firstSpineIndex, int& lastSpineIndex) const {
+  firstSpineIndex = currentSpineIndex;
+  lastSpineIndex = currentSpineIndex;
+  if (currentSpineIndex < 0 || currentSpineIndex >= static_cast<int>(locationSpine.size()) || !locationChapterGroups) {
+    return false;
+  }
+  const uint16_t groupIndex = locationSpine[static_cast<size_t>(currentSpineIndex)].chapterGroup;
+  if (groupIndex >= locationChapterGroupCount || !locationChapterGroups[groupIndex].valid) return false;
+  const auto& group = locationChapterGroups[groupIndex];
+  if (currentSpineIndex < group.firstSpineIndex || currentSpineIndex > group.lastSpineIndex) return false;
+  firstSpineIndex = group.firstSpineIndex;
+  lastSpineIndex = group.lastSpineIndex;
+  return true;
+}
+
+bool Epub::getSourceSpineMapEntry(const int currentSpineIndex, SourceSpineMapEntry& entry) const {
+  if (!sourceSpineMap || currentSpineIndex < 0 || currentSpineIndex >= static_cast<int>(sourceSpineMapCount)) {
+    return false;
+  }
+  entry = sourceSpineMap[static_cast<size_t>(currentSpineIndex)];
+  return entry.sourceSpineIndex != UINT16_MAX;
+}
+
+const Epub::SourceChildRange* Epub::getSourceChildRange(const SourceSpineMapEntry& entry, const size_t ordinal) const {
+  if (!sourceChildRanges || ordinal >= entry.rangeCount) return nullptr;
+  const size_t index = static_cast<size_t>(entry.firstRange) + ordinal;
+  return index < sourceChildRangeCount ? &sourceChildRanges[index] : nullptr;
+}
+
+bool Epub::findCurrentSpineForSource(const int sourceIndex, const uint8_t containerDepth, const char* childName,
+                                     const uint16_t sourceSiblingIndex, int& currentSpineIndex,
+                                     uint16_t& currentSiblingIndex) const {
+  if (!sourceSpineMap || sourceIndex < 0 || sourceIndex >= sourceSpineCount) return false;
+  for (size_t i = 0; i < sourceSpineMapCount; ++i) {
+    const SourceSpineMapEntry& entry = sourceSpineMap[i];
+    if (entry.sourceSpineIndex != sourceIndex) continue;
+    if (!childName || entry.rangeCount == 0) {
+      currentSpineIndex = static_cast<int>(i);
+      currentSiblingIndex = sourceSiblingIndex;
+      return true;
+    }
+    if (entry.containerDepth != containerDepth) continue;
+    for (size_t rangeIndex = 0; rangeIndex < entry.rangeCount; ++rangeIndex) {
+      const SourceChildRange* range = getSourceChildRange(entry, rangeIndex);
+      if (!range || strcasecmp(range->name, childName) != 0) continue;
+      const uint32_t first = static_cast<uint32_t>(range->offset) + 1U;
+      const uint32_t last = static_cast<uint32_t>(range->offset) + range->count;
+      if (sourceSiblingIndex >= first && sourceSiblingIndex <= last) {
+        currentSpineIndex = static_cast<int>(i);
+        currentSiblingIndex = static_cast<uint16_t>(sourceSiblingIndex - range->offset);
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 int Epub::getSpineItemsCount() const {

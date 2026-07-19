@@ -1374,7 +1374,12 @@ bool EpubReaderActivity::estimateRemainingTimeLeftPages(const bool bookEstimate,
   }
 
   if (!bookEstimate) {
-    const int remainingChapterPages = totalPages - section->currentPage - 1;
+    int groupedCurrentPage = section->currentPage + 1;
+    int groupedPageCount = totalPages;
+    float groupedProgress = 0.0f;
+    bool groupedEstimated = false;
+    resolveChapterGroupPageProgress(groupedCurrentPage, groupedPageCount, groupedProgress, groupedEstimated);
+    const int remainingChapterPages = groupedPageCount - groupedCurrentPage;
     if (remainingChapterPages <= 0) {
       return false;
     }
@@ -2832,7 +2837,18 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
           localPos.liIndex = *listItemIndex;
           localPos.hasLiIndex = true;
         }
-        KOReaderPosition localKoPos = ProgressMapper::toKOReader(epub, localPos);
+        const DocumentMatchMethod matchMethod = KOREADER_STORE.getMatchMethod();
+        const PositionCoordinateSpace coordinateSpace = matchMethod == DocumentMatchMethod::FILENAME
+                                                            ? PositionCoordinateSpace::SourceDocument
+                                                            : PositionCoordinateSpace::CurrentDocument;
+        KOReaderPosition localKoPos = ProgressMapper::toKOReader(epub, localPos, coordinateSpace);
+        if (!localKoPos.valid) {
+          LOG_ERR("KOSync", "Exact filename sync needs a source map; re-optimize this split EPUB");
+          drawToast(renderer, tr(STR_SYNC_REOPTIMIZE_REQUIRED));
+          delay(1200);
+          requestUpdate();
+          break;
+        }
         const int tocIdx = epub->getTocIndexForSpineIndex(currentSpineIndex);
         std::string localChapterName = (tocIdx >= 0) ? epub->getTocItem(tocIdx).title : "";
         const std::string savedEpubPath = epub->getPath();
@@ -2861,7 +2877,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
         pauseReadingPaceTimer("sync_progress");
         activityManager.replaceActivity(std::make_unique<KOReaderSyncActivity>(
             renderer, mappedInput, savedEpubPath, currentSpineIndex, currentPage, totalPages, std::move(localKoPos),
-            std::move(localChapterName), paragraphIndex));
+            std::move(localChapterName), matchMethod, paragraphIndex));
       }
       break;
     }
@@ -2883,7 +2899,18 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
         localPos.liIndex = *listItemIndex;
         localPos.hasLiIndex = true;
       }
-      KOReaderPosition localKoPos = ProgressMapper::toKOReader(epub, localPos);
+      const DocumentMatchMethod matchMethod = KOREADER_STORE.getMatchMethod();
+      const PositionCoordinateSpace coordinateSpace = matchMethod == DocumentMatchMethod::FILENAME
+                                                          ? PositionCoordinateSpace::SourceDocument
+                                                          : PositionCoordinateSpace::CurrentDocument;
+      KOReaderPosition localKoPos = ProgressMapper::toKOReader(epub, localPos, coordinateSpace);
+      if (!localKoPos.valid) {
+        LOG_ERR("NBPS", "Exact filename sync needs a source map; re-optimize this split EPUB");
+        drawToast(renderer, tr(STR_SYNC_REOPTIMIZE_REQUIRED));
+        delay(1200);
+        requestUpdate();
+        break;
+      }
       const int tocIdx = epub->getTocIndexForSpineIndex(currentSpineIndex);
       std::string localChapterName = (tocIdx >= 0) ? epub->getTocItem(tocIdx).title : "";
       const std::string savedEpubPath = epub->getPath();
@@ -2908,7 +2935,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       pauseReadingPaceTimer("nearby_position_sync");
       activityManager.replaceActivity(std::make_unique<NearbyBookPositionSyncActivity>(
           renderer, mappedInput, epub, savedEpubPath, currentSpineIndex, currentPage, totalPages, std::move(localKoPos),
-          std::move(localChapterName), paragraphIndex, listItemIndex));
+          std::move(localChapterName), matchMethod, paragraphIndex, listItemIndex));
       break;
     }
     case EpubReaderMenuActivity::MenuAction::BOOKMARK_TOGGLE: {
@@ -4358,6 +4385,10 @@ void EpubReaderActivity::render(RenderLock&& lock) {
 
   applyDeferredReposition();
 
+  if (!activeFootnotePreview) {
+    refreshChapterGroupEstimate(viewportWidth, viewportHeight);
+  }
+
   renderer.clearScreen(ReaderUtils::readerBackgroundColor());
 
   if (section->pageCount == 0) {
@@ -4908,7 +4939,10 @@ void EpubReaderActivity::renderStatusBar() const {
                                     ? static_cast<float>(section->currentPage) / static_cast<float>(estimatedPageCount)
                                     : 0.0f;
   float chapterProgress = sectionProgress;
-  bool pageCountEstimated = section->isBuilding();
+  bool pageCountEstimated = section->isBuilding() || section->isPartial();
+  if (!activeFootnotePreview) {
+    resolveChapterGroupPageProgress(currentPage, pageCount, chapterProgress, pageCountEstimated);
+  }
 
   uint32_t referencePage = 0;
   uint32_t referencePageCount = 0;
@@ -4937,7 +4971,10 @@ void EpubReaderActivity::renderStatusBar() const {
     title = tr(STR_FOOTNOTES);
   } else if (SETTINGS.statusBarTitle == CrossPointSettings::STATUS_BAR_TITLE::CHAPTER_TITLE) {
     title = tr(STR_UNNAMED);
-    const int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
+    int titleSpineIndex = currentSpineIndex;
+    int groupLastSpineIndex = currentSpineIndex;
+    epub->resolveChapterGroupRange(currentSpineIndex, titleSpineIndex, groupLastSpineIndex);
+    const int tocIndex = epub->getTocIndexForSpineIndex(titleSpineIndex);
     if (tocIndex != -1) {
       const auto tocItem = epub->getTocItem(tocIndex);
       title = tocItem.title;
@@ -4962,6 +4999,126 @@ void EpubReaderActivity::renderStatusBar() const {
                     static_cast<int>(referencePageCount), !activeFootnotePreview, pageCountEstimated);
   GUI.drawTopStatusBarClock(renderer, UITheme::getInstance().getMetrics().topPadding, nullptr, true, 0,
                             ReaderUtils::readerDarkModeEnabled());
+}
+
+void EpubReaderActivity::refreshChapterGroupEstimate(const uint16_t viewportWidth, const uint16_t viewportHeight) {
+  if (!epub || !section) {
+    chapterGroupEstimate = {};
+    return;
+  }
+
+  int firstSpineIndex = currentSpineIndex;
+  int lastSpineIndex = currentSpineIndex;
+  if (!epub->resolveChapterGroupRange(currentSpineIndex, firstSpineIndex, lastSpineIndex) ||
+      firstSpineIndex == lastSpineIndex) {
+    chapterGroupEstimate = {};
+    return;
+  }
+
+  uint32_t signature = 2166136261U;
+  const auto mix = [&signature](const uint32_t value) {
+    signature ^= value;
+    signature *= 16777619U;
+  };
+  mix(static_cast<uint32_t>(activeSectionFontId != 0 ? activeSectionFontId : SETTINGS.getReaderFontId()));
+  mix(viewportWidth);
+  mix(viewportHeight);
+  mix(static_cast<uint32_t>(SETTINGS.getReaderLineCompression() * 1000.0f));
+  mix(SETTINGS.extraParagraphSpacing);
+  mix(SETTINGS.forceParagraphIndents);
+  mix(SETTINGS.paragraphAlignment);
+  mix(SETTINGS.hyphenationEnabled);
+  mix(SETTINGS.embeddedStyle);
+  mix(SETTINGS.imageRendering);
+  mix(SETTINGS.bionicReadingEnabled);
+  mix(SETTINGS.guideReadingEnabled);
+  mix(SETTINGS.wordSpacing);
+  mix(SETTINGS.epubRenderMode);
+  if (chapterGroupEstimate.valid && chapterGroupEstimate.currentSpineIndex == currentSpineIndex &&
+      chapterGroupEstimate.settingsSignature == signature) {
+    return;
+  }
+
+  ChapterGroupEstimateCache refreshed;
+  refreshed.currentSpineIndex = currentSpineIndex;
+  refreshed.firstSpineIndex = firstSpineIndex;
+  refreshed.lastSpineIndex = lastSpineIndex;
+  refreshed.settingsSignature = signature;
+  const int readerFontId = activeSectionFontId != 0 ? activeSectionFontId : SETTINGS.getReaderFontId();
+  const EpubRenderMode renderMode = normalizeRenderMode(SETTINGS.epubRenderMode);
+
+  for (int spineIndex = firstSpineIndex; spineIndex <= lastSpineIndex; ++spineIndex) {
+    if (spineIndex == currentSpineIndex) continue;
+    const size_t previousCumulative = spineIndex > 0 ? epub->getCumulativeSpineItemSize(spineIndex - 1) : 0;
+    const size_t cumulative = epub->getCumulativeSpineItemSize(spineIndex);
+    const uint32_t spineBytes =
+        cumulative > previousCumulative
+            ? static_cast<uint32_t>(std::min<size_t>(cumulative - previousCumulative, UINT32_MAX))
+            : 0;
+
+    Section sibling(epub, spineIndex, renderer, sectionCacheSuffixForRenderMode(renderMode));
+    const bool loaded = sibling.loadSectionFile(
+        readerFontId, SETTINGS.getReaderLineCompression(), SETTINGS.extraParagraphSpacing,
+        SETTINGS.forceParagraphIndents, SETTINGS.paragraphAlignment, viewportWidth, viewportHeight,
+        SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle, SETTINGS.imageRendering, SETTINGS.bionicReadingEnabled,
+        SETTINGS.guideReadingEnabled, SETTINGS.wordSpacing, renderMode);
+    const uint32_t siblingPages = loaded ? sibling.estimatedTotalPages() : 0;
+    if (siblingPages > 0 && spineBytes > 0) {
+      refreshed.knownSiblingPages += siblingPages;
+      refreshed.knownSiblingBytes += spineBytes;
+      refreshed.siblingEstimateUsed = refreshed.siblingEstimateUsed || sibling.isPartial() || sibling.isBuilding();
+      if (spineIndex < currentSpineIndex) refreshed.precedingKnownPages += siblingPages;
+    } else {
+      refreshed.unknownSiblingBytes += spineBytes;
+      refreshed.unknownSiblingCount++;
+      if (spineIndex < currentSpineIndex) {
+        refreshed.precedingUnknownBytes += spineBytes;
+        refreshed.precedingUnknownCount++;
+      }
+    }
+  }
+  refreshed.valid = true;
+  chapterGroupEstimate = refreshed;
+  LOG_DBG("ERS", "Chapter group estimate: spine=%d range=%d-%d known=%lu pages/%lu bytes unknown=%u/%lu bytes",
+          currentSpineIndex, firstSpineIndex, lastSpineIndex, static_cast<unsigned long>(refreshed.knownSiblingPages),
+          static_cast<unsigned long>(refreshed.knownSiblingBytes), refreshed.unknownSiblingCount,
+          static_cast<unsigned long>(refreshed.unknownSiblingBytes));
+}
+
+bool EpubReaderActivity::resolveChapterGroupPageProgress(int& currentPage, int& pageCount, float& chapterProgress,
+                                                         bool& pageCountEstimated) const {
+  if (!chapterGroupEstimate.valid || !section || chapterGroupEstimate.currentSpineIndex != currentSpineIndex) {
+    return false;
+  }
+  const uint32_t currentPages = section->estimatedTotalPages();
+  const size_t previousCumulative = currentSpineIndex > 0 ? epub->getCumulativeSpineItemSize(currentSpineIndex - 1) : 0;
+  const size_t cumulative = epub->getCumulativeSpineItemSize(currentSpineIndex);
+  const uint32_t currentBytes =
+      cumulative > previousCumulative
+          ? static_cast<uint32_t>(std::min<size_t>(cumulative - previousCumulative, UINT32_MAX))
+          : 0;
+  const uint64_t knownPages = static_cast<uint64_t>(chapterGroupEstimate.knownSiblingPages) + currentPages;
+  const uint64_t knownBytes = static_cast<uint64_t>(chapterGroupEstimate.knownSiblingBytes) + currentBytes;
+  if (knownPages == 0 || knownBytes == 0) return false;
+
+  const auto estimateUnknownPages = [knownPages, knownBytes](const uint32_t bytes, const uint16_t itemCount) {
+    if (bytes == 0 || itemCount == 0) return uint32_t{0};
+    const uint64_t projected = (static_cast<uint64_t>(bytes) * knownPages + knownBytes / 2U) / knownBytes;
+    return static_cast<uint32_t>(std::max<uint64_t>(itemCount, projected));
+  };
+  const uint32_t unknownPages =
+      estimateUnknownPages(chapterGroupEstimate.unknownSiblingBytes, chapterGroupEstimate.unknownSiblingCount);
+  const uint32_t precedingUnknownPages =
+      estimateUnknownPages(chapterGroupEstimate.precedingUnknownBytes, chapterGroupEstimate.precedingUnknownCount);
+  const uint64_t groupedTotal = knownPages + unknownPages;
+  const uint64_t groupedCurrent = static_cast<uint64_t>(chapterGroupEstimate.precedingKnownPages) +
+                                  precedingUnknownPages + static_cast<uint32_t>(section->currentPage) + 1U;
+  pageCount = static_cast<int>(std::min<uint64_t>(60000, std::max<uint64_t>(1, groupedTotal)));
+  currentPage = static_cast<int>(std::min<uint64_t>(groupedCurrent, static_cast<uint64_t>(pageCount)));
+  chapterProgress = pageCount > 0 ? static_cast<float>(currentPage - 1) / static_cast<float>(pageCount) : 0.0f;
+  pageCountEstimated = section->isBuilding() || section->isPartial() || chapterGroupEstimate.siblingEstimateUsed ||
+                       chapterGroupEstimate.unknownSiblingCount > 0;
+  return true;
 }
 
 bool EpubReaderActivity::shouldUseFootnotePreview(const int targetSpineIndex, const std::string& anchor) const {

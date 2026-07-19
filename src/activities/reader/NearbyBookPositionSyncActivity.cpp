@@ -31,21 +31,18 @@ float qToPercentage(const uint32_t percentageQ) {
   return static_cast<float>(std::min(percentageQ, SIM_PERCENTAGE_SCALE)) / static_cast<float>(SIM_PERCENTAGE_SCALE);
 }
 
-std::string documentMatchingDetail() {
-  const StrId methodLabel =
-      KOREADER_STORE.getMatchMethod() == DocumentMatchMethod::FILENAME ? StrId::STR_FILENAME : StrId::STR_BINARY;
+std::string documentMatchingDetail(const DocumentMatchMethod matchMethod) {
+  const StrId methodLabel = matchMethod == DocumentMatchMethod::FILENAME ? StrId::STR_FILENAME : StrId::STR_BINARY;
   return std::string(tr(STR_DOCUMENT_MATCHING)) + ": " + I18N.get(methodLabel);
 }
 
 }  // namespace
 
-NearbyBookPositionSyncActivity::NearbyBookPositionSyncActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                                               std::shared_ptr<Epub> epub, const std::string& epubPath,
-                                                               int currentSpineIndex, int currentPage,
-                                                               int totalPagesInSpine, KOReaderPosition localKoPos,
-                                                               std::string localChapterName,
-                                                               std::optional<uint16_t> currentParagraphIndex,
-                                                               std::optional<uint16_t> currentListItemIndex)
+NearbyBookPositionSyncActivity::NearbyBookPositionSyncActivity(
+    GfxRenderer& renderer, MappedInputManager& mappedInput, std::shared_ptr<Epub> epub, const std::string& epubPath,
+    int currentSpineIndex, int currentPage, int totalPagesInSpine, KOReaderPosition localKoPos,
+    std::string localChapterName, const DocumentMatchMethod matchMethod, std::optional<uint16_t> currentParagraphIndex,
+    std::optional<uint16_t> currentListItemIndex)
     : Activity("NearbyBookPositionSync", renderer, mappedInput),
       epub_(std::move(epub)),
       epubPath_(epubPath),
@@ -55,13 +52,14 @@ NearbyBookPositionSyncActivity::NearbyBookPositionSyncActivity(GfxRenderer& rend
       totalPagesInSpine_(totalPagesInSpine),
       currentParagraphIndex_(currentParagraphIndex),
       currentListItemIndex_(currentListItemIndex),
-      localKoPosition_(std::move(localKoPos)) {}
+      localKoPosition_(std::move(localKoPos)),
+      matchMethod_(matchMethod) {}
 
 NearbyBookPositionSyncActivity::~NearbyBookPositionSyncActivity() = default;
 
 void NearbyBookPositionSyncActivity::onEnter() {
   Activity::onEnter();
-  prepareLocalPosition();
+  if (!prepareLocalPosition()) return;
   setState(State::READY);
 }
 
@@ -111,7 +109,7 @@ void NearbyBookPositionSyncActivity::render(RenderLock&&) {
     case State::READY:
       primary = tr(STR_NEARBY_POSITION_READY);
       detail = std::string(tr(STR_DEVICE_NAME)) + ": " + SETTINGS.getEffectiveDeviceName();
-      detailSecondary = documentMatchingDetail();
+      detailSecondary = documentMatchingDetail(matchMethod_);
       break;
     case State::DISCOVERING:
       primary = tr(STR_NEARBY_POSITION_SCANNING);
@@ -158,10 +156,18 @@ void NearbyBookPositionSyncActivity::enqueueEspNowPacket(const uint8_t*, const u
 bool NearbyBookPositionSyncActivity::prepareLocalPosition() {
   if (localPrepared_) return true;
 
+  if (!localKoPosition_.valid) {
+    setError(tr(STR_SYNC_REOPTIMIZE_REQUIRED));
+    return false;
+  }
+
   localPosition_.percentageQ = percentageToQ(localKoPosition_.percentage);
   localPosition_.spineIndex = std::max(0, currentSpineIndex_);
   localPosition_.pageNumber = std::max(0, currentPage_);
   localPosition_.totalPages = std::max(1, totalPagesInSpine_);
+  if (localKoPosition_.xpath.size() <= MAX_XPATH_BYTES) {
+    std::snprintf(localPosition_.xpath.data(), localPosition_.xpath.size(), "%s", localKoPosition_.xpath.c_str());
+  }
   if (currentParagraphIndex_.has_value() && *currentParagraphIndex_ != UINT16_MAX) {
     localPosition_.paragraphIndex = *currentParagraphIndex_;
     localPosition_.hasParagraphIndex = true;
@@ -175,6 +181,7 @@ bool NearbyBookPositionSyncActivity::prepareLocalPosition() {
   peerPosition_.spineIndex = peerCrossPoint_.spineIndex;
   peerPosition_.pageNumber = peerCrossPoint_.pageNumber;
   peerPosition_.totalPages = peerCrossPoint_.totalPages;
+  peerPosition_.xpath = localPosition_.xpath;
   peerName_ = "Simulator X4";
   peerId_ = "simulator";
 
@@ -205,7 +212,27 @@ bool NearbyBookPositionSyncActivity::applyPeerPosition() {
   setState(State::SYNCED);
   return true;
 }
-bool NearbyBookPositionSyncActivity::mapPeerPosition() { return true; }
+bool NearbyBookPositionSyncActivity::mapPeerPosition() {
+  KOReaderPosition koPos{peerPosition_.xpath.data(), qToPercentage(peerPosition_.percentageQ)};
+  const PositionCoordinateSpace coordinateSpace = matchMethod_ == DocumentMatchMethod::FILENAME
+                                                      ? PositionCoordinateSpace::SourceDocument
+                                                      : PositionCoordinateSpace::CurrentDocument;
+  peerCrossPoint_ = ProgressMapper::toCrossPoint(epub_, koPos, currentSpineIndex_, totalPagesInSpine_, coordinateSpace);
+  if (!peerCrossPoint_.valid) {
+    setError(tr(STR_SYNC_REOPTIMIZE_REQUIRED));
+    return false;
+  }
+  if (peerCrossPoint_.totalPages <= 0) {
+    if (matchMethod_ == DocumentMatchMethod::FILENAME) {
+      setError(tr(STR_SYNC_REOPTIMIZE_REQUIRED));
+      return false;
+    }
+    peerCrossPoint_.spineIndex = peerPosition_.spineIndex;
+    peerCrossPoint_.pageNumber = peerPosition_.pageNumber;
+    peerCrossPoint_.totalPages = std::max<uint16_t>(1, peerPosition_.totalPages);
+  }
+  return true;
+}
 void NearbyBookPositionSyncActivity::updateSyncProgress() {
   if (state_ != State::DISCOVERING && state_ != State::SYNCING) return;
 
@@ -216,6 +243,7 @@ void NearbyBookPositionSyncActivity::updateSyncProgress() {
     return;
   }
   if (elapsedMs >= SIM_RESULT_MS) {
+    if (!mapPeerPosition()) return;
     peerPositionReceived_ = true;
     setState(State::SHOWING_RESULT);
   }
@@ -407,9 +435,8 @@ float qToPercentage(const uint32_t percentageQ) {
   return static_cast<float>(std::min(percentageQ, PERCENTAGE_SCALE)) / static_cast<float>(PERCENTAGE_SCALE);
 }
 
-std::string documentMatchingDetail() {
-  const StrId methodLabel =
-      KOREADER_STORE.getMatchMethod() == DocumentMatchMethod::FILENAME ? StrId::STR_FILENAME : StrId::STR_BINARY;
+std::string documentMatchingDetail(const DocumentMatchMethod matchMethod) {
+  const StrId methodLabel = matchMethod == DocumentMatchMethod::FILENAME ? StrId::STR_FILENAME : StrId::STR_BINARY;
   return std::string(tr(STR_DOCUMENT_MATCHING)) + ": " + I18N.get(methodLabel);
 }
 
@@ -522,13 +549,11 @@ void onEspNowReceive(const esp_now_recv_info_t* info, const uint8_t* data, int l
 
 }  // namespace
 
-NearbyBookPositionSyncActivity::NearbyBookPositionSyncActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                                               std::shared_ptr<Epub> epub, const std::string& epubPath,
-                                                               int currentSpineIndex, int currentPage,
-                                                               int totalPagesInSpine, KOReaderPosition localKoPos,
-                                                               std::string localChapterName,
-                                                               std::optional<uint16_t> currentParagraphIndex,
-                                                               std::optional<uint16_t> currentListItemIndex)
+NearbyBookPositionSyncActivity::NearbyBookPositionSyncActivity(
+    GfxRenderer& renderer, MappedInputManager& mappedInput, std::shared_ptr<Epub> epub, const std::string& epubPath,
+    int currentSpineIndex, int currentPage, int totalPagesInSpine, KOReaderPosition localKoPos,
+    std::string localChapterName, const DocumentMatchMethod matchMethod, std::optional<uint16_t> currentParagraphIndex,
+    std::optional<uint16_t> currentListItemIndex)
     : Activity("NearbyBookPositionSync", renderer, mappedInput),
       eventMutex_(xSemaphoreCreateMutex()),
       epub_(std::move(epub)),
@@ -539,7 +564,8 @@ NearbyBookPositionSyncActivity::NearbyBookPositionSyncActivity(GfxRenderer& rend
       totalPagesInSpine_(std::max(1, totalPagesInSpine)),
       currentParagraphIndex_(currentParagraphIndex),
       currentListItemIndex_(currentListItemIndex),
-      localKoPosition_(std::move(localKoPos)) {}
+      localKoPosition_(std::move(localKoPos)),
+      matchMethod_(matchMethod) {}
 
 NearbyBookPositionSyncActivity::~NearbyBookPositionSyncActivity() {
   if (eventMutex_) {
@@ -557,7 +583,13 @@ bool NearbyBookPositionSyncActivity::ensureEpubLoaded() {
 bool NearbyBookPositionSyncActivity::prepareLocalPosition() {
   if (localPrepared_) return true;
 
-  const std::string documentHash = (KOREADER_STORE.getMatchMethod() == DocumentMatchMethod::FILENAME)
+  if (!localKoPosition_.valid) {
+    LOG_ERR(LOG_TAG, "Source position map unavailable; re-optimize the EPUB before filename-based nearby sync");
+    setError(tr(STR_SYNC_REOPTIMIZE_REQUIRED));
+    return false;
+  }
+
+  const std::string documentHash = (matchMethod_ == DocumentMatchMethod::FILENAME)
                                        ? KOReaderDocumentId::calculateFromFilename(epubPath_)
                                        : KOReaderDocumentId::calculate(epubPath_);
   if (documentHash.size() != DOCUMENT_HASH_BYTES) {
@@ -949,8 +981,20 @@ bool NearbyBookPositionSyncActivity::mapPeerPosition() {
   KOReaderPosition koPos;
   koPos.xpath = peerPosition_.xpath.data();
   koPos.percentage = qToPercentage(peerPosition_.percentageQ);
-  peerCrossPoint_ = ProgressMapper::toCrossPoint(epub_, koPos, currentSpineIndex_, totalPagesInSpine_);
+  const PositionCoordinateSpace coordinateSpace = matchMethod_ == DocumentMatchMethod::FILENAME
+                                                      ? PositionCoordinateSpace::SourceDocument
+                                                      : PositionCoordinateSpace::CurrentDocument;
+  peerCrossPoint_ = ProgressMapper::toCrossPoint(epub_, koPos, currentSpineIndex_, totalPagesInSpine_, coordinateSpace);
+  if (!peerCrossPoint_.valid) {
+    setError(tr(STR_SYNC_REOPTIMIZE_REQUIRED));
+    return false;
+  }
   if (peerCrossPoint_.totalPages <= 0) {
+    if (matchMethod_ == DocumentMatchMethod::FILENAME) {
+      LOG_ERR(LOG_TAG, "Refusing optimized raw spine fallback for filename-based nearby sync");
+      setError(tr(STR_SYNC_REOPTIMIZE_REQUIRED));
+      return false;
+    }
     peerCrossPoint_.spineIndex = peerPosition_.spineIndex;
     peerCrossPoint_.pageNumber = peerPosition_.pageNumber;
     peerCrossPoint_.totalPages = std::max<uint16_t>(1, peerPosition_.totalPages);
@@ -1078,7 +1122,7 @@ void NearbyBookPositionSyncActivity::render(RenderLock&&) {
     case State::READY:
       primary = tr(STR_NEARBY_POSITION_READY);
       detail = std::string(tr(STR_DEVICE_NAME)) + ": " + SETTINGS.getEffectiveDeviceName();
-      detailSecondary = documentMatchingDetail();
+      detailSecondary = documentMatchingDetail(matchMethod_);
       break;
     case State::DISCOVERING:
       primary = tr(STR_NEARBY_POSITION_SCANNING);

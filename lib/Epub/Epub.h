@@ -15,6 +15,7 @@ class ZipFile;
 class GfxRenderer;
 
 class Epub {
+ private:
   // the ncx file (EPUB 2)
   std::string tocNcxItem;
   // the nav file (EPUB 3)
@@ -36,13 +37,42 @@ class Epub {
     uint32_t endLocation = 0;
     uint32_t wordStart = 0;
     uint32_t wordCount = 0;
+    uint16_t chapterGroup = UINT16_MAX;
   };
+  struct LocationChapterGroupEntry {
+    uint16_t firstSpineIndex = 0;
+    uint16_t lastSpineIndex = 0;
+    bool valid = false;
+  };
+
+ public:
+  struct SourceChildRange {
+    char name[12] = {};
+    uint16_t offset = 0;
+    uint16_t count = 0;
+  };
+  struct SourceSpineMapEntry {
+    uint16_t sourceSpineIndex = UINT16_MAX;
+    uint16_t firstRange = 0;
+    uint8_t rangeCount = 0;
+    uint8_t containerDepth = 0;
+  };
+
+ private:
   std::vector<LocationSpineEntry> locationSpine;
+  std::unique_ptr<LocationChapterGroupEntry[]> locationChapterGroups;
+  size_t locationChapterGroupCount = 0;
+  std::unique_ptr<SourceSpineMapEntry[]> sourceSpineMap;
+  std::unique_ptr<SourceChildRange[]> sourceChildRanges;
+  size_t sourceSpineMapCount = 0;
+  size_t sourceChildRangeCount = 0;
+  uint16_t sourceSpineCount = 0;
   uint32_t totalLocations = 0;
   uint32_t totalWords = 0;
   uint32_t wordsPerReferencePage = 0;
   uint32_t totalReferencePages = 0;
   bool xLocationsLoaded = false;
+  bool sourceSpineMapDeclared = false;
   enum class CssParseStatus : uint8_t {
     Failed,
     Partial,
@@ -121,6 +151,15 @@ class Epub {
   bool resolveLocationPercentToSpineProgress(int percent, int& spineIndex, float& spineProgress) const;
   bool resolveReferencePage(int currentSpineIndex, float currentSpineRead, uint32_t& currentPage,
                             uint32_t& pageCount) const;
+  bool resolveChapterGroupRange(int currentSpineIndex, int& firstSpineIndex, int& lastSpineIndex) const;
+  bool hasChapterGroups() const { return locationChapterGroupCount > 0; }
+  bool hasSourceSpineMap() const { return sourceSpineMapCount > 0; }
+  bool requiresSourceSpineMap() const { return (hasChapterGroups() || sourceSpineMapDeclared) && !hasSourceSpineMap(); }
+  bool getSourceSpineMapEntry(int currentSpineIndex, SourceSpineMapEntry& entry) const;
+  const SourceChildRange* getSourceChildRange(const SourceSpineMapEntry& entry, size_t ordinal) const;
+  bool findCurrentSpineForSource(int sourceIndex, uint8_t containerDepth, const char* childName,
+                                 uint16_t sourceSiblingIndex, int& currentSpineIndex,
+                                 uint16_t& currentSiblingIndex) const;
   CssParser* getCssParser() const { return cssParser.get(); }
   int resolveHrefToSpineIndex(const std::string& href) const;
 

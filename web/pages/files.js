@@ -2626,13 +2626,18 @@ function splitBaseHref(href) {
 }
 
 function splitLongXhtmlSections(xhtmlFiles, opfContent, opfPath) {
-  if (!SECTION_SPLIT_ENABLED) return { files: xhtmlFiles, splitSections: {} };
+  if (!SECTION_SPLIT_ENABLED) return { files: xhtmlFiles, splitSections: {}, sourceSpineMap: null };
 
   const parser = new DOMParser();
   const serializer = new XMLSerializer();
   const out = {};
   const splitSections = {};
-  const spinePaths = new Set(parseOpfSpineHrefs(opfContent, opfPath));
+  const originalSpineHrefs = parseOpfSpineHrefs(opfContent, opfPath);
+  const spinePaths = new Set(originalSpineHrefs);
+  const sourceByHref = {};
+  originalSpineHrefs.forEach((href, sourceSpineIndex) => {
+    sourceByHref[href] = { sourceSpineIndex };
+  });
 
   for (const [path, content] of Object.entries(xhtmlFiles)) {
     if (!spinePaths.has(path)) {
@@ -2708,6 +2713,7 @@ function splitLongXhtmlSections(xhtmlFiles, opfContent, opfPath) {
     }
 
     splitSections[path] = [];
+    const tagOffsets = new Map();
     chunks.forEach((chunk, partIndex) => {
       const partPath = makeSectionSplitPath(path, partIndex);
       const partDoc = doc.cloneNode(true);
@@ -2717,10 +2723,29 @@ function splitLongXhtmlSections(xhtmlFiles, opfContent, opfPath) {
       for (const node of chunk) partContainer.appendChild(partDoc.importNode(node, true));
       out[partPath] = safeSerialize(partDoc, content);
       splitSections[path].push(partPath);
+      const rangesByName = new Map();
+      for (const node of chunk) {
+        if (node.nodeType !== Node.ELEMENT_NODE) continue;
+        const name = localName(node);
+        const range = rangesByName.get(name) || { name, offset: tagOffsets.get(name) || 0, count: 0 };
+        range.count++;
+        rangesByName.set(name, range);
+        tagOffsets.set(name, (tagOffsets.get(name) || 0) + 1);
+      }
+      sourceByHref[partPath] = {
+        sourceSpineIndex: originalSpineHrefs.indexOf(path),
+        containerDepth: splitContainer.childPath.length,
+        childRanges: Array.from(rangesByName.values()),
+      };
     });
   }
 
-  return { files: out, splitSections };
+  const hasSplits = Object.keys(splitSections).length > 0;
+  return {
+    files: out,
+    splitSections,
+    sourceSpineMap: hasSplits ? { version: 1, spineCount: originalSpineHrefs.length, sourceByHref } : null,
+  };
 }
 
 function addSplitSectionsToOpf(opfContent, opfPath, splitSections) {
@@ -2797,6 +2822,7 @@ function buildXLocationManifest(
   opfPath,
   xhtmlFiles,
   charactersPerReferencePage = X_DEFAULT_REFERENCE_CHARACTERS_PER_PAGE,
+  sourceSpineMap = null,
 ) {
   charactersPerReferencePage = normalizedReferenceCharactersPerPage(charactersPerReferencePage);
   const spineHrefs = parseOpfSpineHrefs(opfContent, opfPath);
@@ -2894,6 +2920,16 @@ function buildXLocationManifest(
   };
   if (chapterGroups.size > 0) {
     manifest.chapterGroups = Array.from(chapterGroups.values()).sort((a, b) => a.index - b.index);
+  }
+  if (sourceSpineMap) {
+    const mappedSpine = spineHrefs.map((href, index) => ({ index, ...sourceSpineMap.sourceByHref[href] }));
+    if (mappedSpine.every((entry) => Number.isInteger(entry.sourceSpineIndex))) {
+      manifest.sourceSpineMap = {
+        version: sourceSpineMap.version,
+        spineCount: sourceSpineMap.spineCount,
+        spine: mappedSpine,
+      };
+    }
   }
   return manifest;
 }
@@ -4139,7 +4175,13 @@ async function convertEpubFile(file, progressCallback) {
     const referenceCharactersInput = document.getElementById("referenceCharactersInput");
     const referenceCharactersPerPage = normalizedReferenceCharactersPerPage(referenceCharactersInput?.value);
     if (referenceCharactersInput) referenceCharactersInput.value = referenceCharactersPerPage;
-    const locationManifest = buildXLocationManifest(t, opfPath, processedXhtmlFiles, referenceCharactersPerPage);
+    const locationManifest = buildXLocationManifest(
+      t,
+      opfPath,
+      processedXhtmlFiles,
+      referenceCharactersPerPage,
+      sectionSplitResult.sourceSpineMap,
+    );
     if (locationManifest) {
       out.file(X_LOCATION_MANIFEST_PATH, JSON.stringify(locationManifest), DEFLATE_OPTS);
       logFix(

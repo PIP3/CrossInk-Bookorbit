@@ -11,6 +11,7 @@
 - EPUB readers can now choose from five word-spacing levels, from normal through extra-wide.
 - EPUB inline-image pages on X3 now use the grayscale-aware display base before the image grayscale overlay, reducing the moment where images appear too dark before settling.
 - EPUB publisher small-caps styling now renders ASCII lowercase text as smaller capital letters without needing extra font files.
+- Split EPUB chapters keep whole-chapter page estimates and translate filename-based KOReader and Nearby positions back to the original book structure.
 
 ### Changed
 

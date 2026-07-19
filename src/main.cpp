@@ -429,13 +429,17 @@ bool startGlobalSyncProgress() {
   }
 
   CrossPointPosition localPos = {spineIndex, pageNumber, totalPagesInSpine};
-  KOReaderPosition localKoPos = ProgressMapper::toKOReader(epub, localPos);
+  const DocumentMatchMethod matchMethod = KOREADER_STORE.getMatchMethod();
+  const PositionCoordinateSpace coordinateSpace = matchMethod == DocumentMatchMethod::FILENAME
+                                                      ? PositionCoordinateSpace::SourceDocument
+                                                      : PositionCoordinateSpace::CurrentDocument;
+  KOReaderPosition localKoPos = ProgressMapper::toKOReader(epub, localPos, coordinateSpace);
   const int tocIdx = epub->getTocIndexForSpineIndex(spineIndex);
   std::string localChapterName = (tocIdx >= 0) ? epub->getTocItem(tocIdx).title : "";
 
-  activityManager.pushActivity(
-      std::make_unique<KOReaderSyncActivity>(renderer, mappedInputManager, epubPath, spineIndex, pageNumber,
-                                             totalPagesInSpine, std::move(localKoPos), std::move(localChapterName)));
+  activityManager.pushActivity(std::make_unique<KOReaderSyncActivity>(
+      renderer, mappedInputManager, epubPath, spineIndex, pageNumber, totalPagesInSpine, std::move(localKoPos),
+      std::move(localChapterName), matchMethod));
   return true;
 }
 

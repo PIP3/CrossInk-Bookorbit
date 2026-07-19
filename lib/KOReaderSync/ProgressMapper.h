@@ -16,6 +16,7 @@ struct CrossPointPosition {
   uint16_t liIndex = 0;            // Running <li> count at the matched XPath element
   bool hasLiIndex = false;         // True when target element is <li> and liIndex was resolved
   char xpathAnchorId[64] = {};     // First <a id> captured inside the matched XPath element
+  bool valid = true;               // False when an exact requested coordinate mapping is unavailable
 };
 
 /**
@@ -24,6 +25,12 @@ struct CrossPointPosition {
 struct KOReaderPosition {
   std::string xpath;  // XPath-like progress string
   float percentage;   // Progress percentage (0.0 to 1.0)
+  bool valid = true;  // False when an exact requested coordinate mapping is unavailable
+};
+
+enum class PositionCoordinateSpace : uint8_t {
+  CurrentDocument,
+  SourceDocument,
 };
 
 /**
@@ -45,7 +52,9 @@ class ProgressMapper {
    * @param pos CrossPoint position
    * @return KOReader position
    */
-  static KOReaderPosition toKOReader(const std::shared_ptr<Epub>& epub, const CrossPointPosition& pos);
+  static KOReaderPosition toKOReader(
+      const std::shared_ptr<Epub>& epub, const CrossPointPosition& pos,
+      PositionCoordinateSpace coordinateSpace = PositionCoordinateSpace::CurrentDocument);
 
   /**
    * Convert KOReader position to CrossPoint format.
@@ -59,8 +68,10 @@ class ProgressMapper {
    * @param totalPagesInCurrentSpine Total pages in the current spine item (for density estimation)
    * @return CrossPoint position
    */
-  static CrossPointPosition toCrossPoint(const std::shared_ptr<Epub>& epub, const KOReaderPosition& koPos,
-                                         int currentSpineIndex = -1, int totalPagesInCurrentSpine = 0);
+  static CrossPointPosition toCrossPoint(
+      const std::shared_ptr<Epub>& epub, const KOReaderPosition& koPos, int currentSpineIndex = -1,
+      int totalPagesInCurrentSpine = 0,
+      PositionCoordinateSpace coordinateSpace = PositionCoordinateSpace::CurrentDocument);
 
  private:
   /**

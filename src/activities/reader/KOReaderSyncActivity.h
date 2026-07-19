@@ -5,6 +5,7 @@
 #include <memory>
 #include <optional>
 
+#include "KOReaderCredentialStore.h"
 #include "KOReaderSyncClient.h"
 #include "ProgressMapper.h"
 #include "activities/Activity.h"
@@ -26,6 +27,7 @@ class KOReaderSyncActivity final : public Activity {
   explicit KOReaderSyncActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& epubPath,
                                 int currentSpineIndex, int currentPage, int totalPagesInSpine,
                                 KOReaderPosition localKoPos, std::string localChapterName,
+                                DocumentMatchMethod matchMethod,
                                 std::optional<uint16_t> currentParagraphIndex = std::nullopt)
       : Activity(NAME, renderer, mappedInput),
         epubPath(epubPath),
@@ -33,6 +35,8 @@ class KOReaderSyncActivity final : public Activity {
         currentPage(currentPage),
         totalPagesInSpine(totalPagesInSpine),
         currentParagraphIndex(currentParagraphIndex),
+        primaryMatchMethod(matchMethod),
+        remoteMatchMethod(matchMethod),
         localChapterName(std::move(localChapterName)),
         remoteProgress{},
         remotePosition{},
@@ -67,6 +71,8 @@ class KOReaderSyncActivity final : public Activity {
   int currentPage;
   int totalPagesInSpine;
   std::optional<uint16_t> currentParagraphIndex;
+  DocumentMatchMethod primaryMatchMethod;
+  DocumentMatchMethod remoteMatchMethod;
 
   State state = WIFI_SELECTION;
   std::string statusMessage;

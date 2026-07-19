@@ -64,6 +64,21 @@ class EpubReaderActivity final : public Activity {
   int cachedSpineIndex = 0;
   int cachedChapterPageNumber = 0;
   int cachedChapterTotalPageCount = 0;
+  struct ChapterGroupEstimateCache {
+    int currentSpineIndex = -1;
+    int firstSpineIndex = -1;
+    int lastSpineIndex = -1;
+    uint32_t settingsSignature = 0;
+    uint32_t knownSiblingPages = 0;
+    uint32_t knownSiblingBytes = 0;
+    uint32_t unknownSiblingBytes = 0;
+    uint32_t precedingKnownPages = 0;
+    uint32_t precedingUnknownBytes = 0;
+    uint16_t unknownSiblingCount = 0;
+    uint16_t precedingUnknownCount = 0;
+    bool siblingEstimateUsed = false;
+    bool valid = false;
+  } chapterGroupEstimate;
   bool pendingRelayoutReposition = false;
   uint16_t cachedPageParagraphIndex = UINT16_MAX;
   uint16_t cachedPageParagraphOffset = 0;
@@ -180,6 +195,9 @@ class EpubReaderActivity final : public Activity {
                       int orientedMarginBottom, int orientedMarginLeft);
   void drawClippingHighlights(const Page& page, int fontId, int orientedMarginTop, int orientedMarginLeft) const;
   void renderStatusBar() const;
+  void refreshChapterGroupEstimate(uint16_t viewportWidth, uint16_t viewportHeight);
+  bool resolveChapterGroupPageProgress(int& currentPage, int& pageCount, float& chapterProgress,
+                                       bool& pageCountEstimated) const;
   bool shouldUseFootnotePreview(int targetSpineIndex, const std::string& anchor) const;
   std::string footnotePreviewCacheSuffix(EpubRenderMode renderMode, const std::string& anchor) const;
   void clearFootnotePreviewState();

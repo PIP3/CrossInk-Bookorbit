@@ -172,7 +172,8 @@ void KOReaderSyncActivity::onWifiSelectionComplete(const bool success) {
 }
 
 void KOReaderSyncActivity::performSync() {
-  const DocumentMatchMethod primaryMethod = KOREADER_STORE.getMatchMethod();
+  const DocumentMatchMethod primaryMethod = primaryMatchMethod;
+  remoteMatchMethod = primaryMethod;
   documentHash = calculateDocumentHashForMethod(epubPath, primaryMethod);
   if (documentHash.empty()) {
     {
@@ -226,6 +227,7 @@ void KOReaderSyncActivity::performSync() {
           (result == KOReaderSyncClient::NOT_FOUND || altProgress.percentage > remoteProgress.percentage)) {
         documentHash = altHash;
         remoteProgress = std::move(altProgress);
+        remoteMatchMethod = altMethod;
         result = KOReaderSyncClient::OK;
       }
     }
@@ -273,7 +275,20 @@ void KOReaderSyncActivity::performSync() {
   }
 
   KOReaderPosition koPos = {remoteProgress.progress, remoteProgress.percentage};
-  remotePosition = ProgressMapper::toCrossPoint(epub, koPos, currentSpineIndex, totalPagesInSpine);
+  const PositionCoordinateSpace remoteCoordinateSpace = remoteMatchMethod == DocumentMatchMethod::FILENAME
+                                                            ? PositionCoordinateSpace::SourceDocument
+                                                            : PositionCoordinateSpace::CurrentDocument;
+  remotePosition =
+      ProgressMapper::toCrossPoint(epub, koPos, currentSpineIndex, totalPagesInSpine, remoteCoordinateSpace);
+  if (!remotePosition.valid) {
+    {
+      RenderLock lock(*this);
+      state = SYNC_FAILED;
+      statusMessage = tr(STR_SYNC_REOPTIMIZE_REQUIRED);
+    }
+    requestUpdate(true);
+    return;
+  }
 
   // Refine page using section cache LUTs: li index, anchor, or paragraph index.
   if (remotePosition.hasLiIndex || remotePosition.xpathAnchorId[0] != '\0' || remotePosition.hasParagraphIndex) {
@@ -448,6 +463,14 @@ void KOReaderSyncActivity::onEnter() {
   Activity::onEnter();
   ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
   lockInitialConfirmRelease = mappedInput.isPressed(MappedInputManager::Button::Confirm);
+
+  if (!localProgress.valid) {
+    LOG_ERR("KOSync", "Source position map unavailable; re-optimize the EPUB before filename-based sync");
+    state = SYNC_FAILED;
+    statusMessage = tr(STR_SYNC_REOPTIMIZE_REQUIRED);
+    requestUpdate();
+    return;
+  }
 
   // Check for credentials first
   if (!KOREADER_STORE.hasCredentials()) {
@@ -662,7 +685,7 @@ void KOReaderSyncActivity::loop() {
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
       // Calculate hash if not done yet
       if (documentHash.empty()) {
-        if (KOREADER_STORE.getMatchMethod() == DocumentMatchMethod::FILENAME) {
+        if (primaryMatchMethod == DocumentMatchMethod::FILENAME) {
           documentHash = KOReaderDocumentId::calculateFromFilename(epubPath);
         } else {
           documentHash = KOReaderDocumentId::calculate(epubPath);
