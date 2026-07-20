@@ -20,6 +20,10 @@
 - Large EPUB indexing now borrows temporary display memory and uses faster ZIP/PNG decompression to reduce memory pressure while opening or rebuilding chapters.
 - EPUB books can now keep more saved clippings without loading every clipping's text into memory while reading.
 
+### Removed
+
+- The font download manager no longer offers a Download All action; fonts can still be downloaded individually or updated together.
+
 ### Fixed
 
 - EPUB layouts using SD-card fonts now release unused font-menu metadata before indexing, reducing unnecessary Safe Mode fallbacks.

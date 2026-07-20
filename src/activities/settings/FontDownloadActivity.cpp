@@ -393,11 +393,7 @@ void FontDownloadActivity::resolveInstalledFamilyName(ManifestFamily& family) co
 
 void FontDownloadActivity::clearManifestFamilies() { std::vector<ManifestFamily>().swap(families_); }
 
-void FontDownloadActivity::downloadAll() { downloadBatch(false); }
-
-void FontDownloadActivity::updateAll() { downloadBatch(true); }
-
-void FontDownloadActivity::downloadBatch(bool updatesOnly) {
+void FontDownloadActivity::updateAll() {
   cancelRequested_ = false;
   hasRetryFamily_ = false;
   retryFamily_ = ManifestFamily();
@@ -407,7 +403,7 @@ void FontDownloadActivity::downloadBatch(bool updatesOnly) {
     int nextFamilyIndex = -1;
     for (int i = 0; i < static_cast<int>(families_.size()); i++) {
       const auto& family = families_[i];
-      if (updatesOnly ? family.hasUpdate : !family.installed) {
+      if (family.hasUpdate) {
         nextFamilyIndex = i;
         break;
       }
@@ -456,13 +452,6 @@ void FontDownloadActivity::downloadBatch(bool updatesOnly) {
   }
 }
 
-bool FontDownloadActivity::showDownloadAllRow() const {
-  for (const auto& f : families_) {
-    if (!f.installed) return true;
-  }
-  return false;
-}
-
 bool FontDownloadActivity::showUpdateAllRow() const {
   for (const auto& f : families_) {
     if (f.hasUpdate) return true;
@@ -470,26 +459,12 @@ bool FontDownloadActivity::showUpdateAllRow() const {
   return false;
 }
 
-int FontDownloadActivity::specialRowCount() const {
-  return (showDownloadAllRow() ? 1 : 0) + (showUpdateAllRow() ? 1 : 0);
-}
+int FontDownloadActivity::specialRowCount() const { return showUpdateAllRow() ? 1 : 0; }
 
-bool FontDownloadActivity::isDownloadAllRow(int index) const { return showDownloadAllRow() && index == 0; }
-
-bool FontDownloadActivity::isUpdateAllRow(int index) const {
-  return showUpdateAllRow() && index == (showDownloadAllRow() ? 1 : 0);
-}
+bool FontDownloadActivity::isUpdateAllRow(int index) const { return showUpdateAllRow() && index == 0; }
 
 int FontDownloadActivity::listItemCount() const {
   return families_.empty() ? 0 : static_cast<int>(families_.size()) + specialRowCount();
-}
-
-size_t FontDownloadActivity::totalDownloadSize() const {
-  size_t total = 0;
-  for (const auto& f : families_) {
-    if (!f.installed) total += f.totalSize;
-  }
-  return total;
 }
 
 size_t FontDownloadActivity::totalUpdateSize() const {
@@ -840,7 +815,7 @@ void FontDownloadActivity::onDeleteConfirmationResult(const ActivityResult& resu
 }
 
 bool FontDownloadActivity::isSelectedFamilyDeletable() const {
-  if (isDownloadAllRow(selectedIndex_) || isUpdateAllRow(selectedIndex_)) return false;
+  if (isUpdateAllRow(selectedIndex_)) return false;
   if (selectedIndex_ < specialRowCount() || selectedIndex_ >= listItemCount()) return false;
   const auto& family = families_[familyIndexFromList(selectedIndex_)];
   return family.installed && !family.hasUpdate;
@@ -880,15 +855,7 @@ void FontDownloadActivity::loop() {
 
     if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
       if (!families_.empty()) {
-        if (isDownloadAllRow(selectedIndex_)) {
-          currentFileIndex_ = 0;
-          currentFileTotal_ = 0;
-          for (const auto& f : families_) {
-            if (!f.installed) currentFileTotal_ += f.files.size();
-          }
-
-          downloadAll();
-        } else if (isUpdateAllRow(selectedIndex_)) {
+        if (isUpdateAllRow(selectedIndex_)) {
           currentFileIndex_ = 0;
           currentFileTotal_ = 0;
           for (const auto& f : families_) {
@@ -1025,7 +992,7 @@ void FontDownloadActivity::drawFontList(Rect rect) {
   for (int index = pageStartIndex; index < pageEndIndex; ++index) {
     const int rowY = rect.y + (index - pageStartIndex) * rowHeight;
     const bool selected = index == selectedIndex_;
-    const bool familyRow = !isDownloadAllRow(index) && !isUpdateAllRow(index);
+    const bool familyRow = !isUpdateAllRow(index);
     const bool dimmed = familyRow && families_[familyIndexFromList(index)].installed &&
                         !families_[familyIndexFromList(index)].hasUpdate;
 
@@ -1038,9 +1005,7 @@ void FontDownloadActivity::drawFontList(Rect rect) {
     std::string languages;
     std::string value;
 
-    if (isDownloadAllRow(index)) {
-      title = std::string(tr(STR_DOWNLOAD_ALL)) + " (" + formatSize(totalDownloadSize()) + ")";
-    } else if (isUpdateAllRow(index)) {
+    if (isUpdateAllRow(index)) {
       title = std::string(tr(STR_UPDATE_ALL)) + " (" + formatSize(totalUpdateSize()) + ")";
     } else {
       const auto& family = families_[familyIndexFromList(index)];

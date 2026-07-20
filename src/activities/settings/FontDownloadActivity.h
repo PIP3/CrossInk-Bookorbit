@@ -108,22 +108,17 @@ class FontDownloadActivity : public Activity {
   void clearManifestFamilies();
   void downloadFamily(ManifestFamily& family);
   void downloadSelectedFamily(int familyIndex);
-  void downloadBatch(bool updatesOnly);
   void returnToFamilyList();
-  void downloadAll();
   void updateAll();
   static bool computeFileCrc32(const char* path, uint32_t& outCrc);
-  bool showDownloadAllRow() const;
   bool showUpdateAllRow() const;
   int specialRowCount() const;
-  bool isDownloadAllRow(int index) const;
   bool isUpdateAllRow(int index) const;
   bool isSelectedFamilyDeletable() const;
   void promptDeleteSelectedFamily();
   void onDeleteConfirmationResult(const ActivityResult& result);
   int familyIndexFromList(int listIndex) const { return listIndex - specialRowCount(); }
   int listItemCount() const;
-  size_t totalDownloadSize() const;
   size_t totalUpdateSize() const;
   static std::string formatSize(size_t bytes);
   int fontListPageItems() const;
