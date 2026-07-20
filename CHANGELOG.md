@@ -11,6 +11,7 @@
 
 ### Changed
 
+- Downloaded-font size range options now show their actual point-size ranges instead of firmware build names.
 - KOReader Sync and authentication, OTA updates, and OPDS browsing now restart into a lightweight network mode that leaves reader and Home data unloaded, providing more contiguous memory for WiFi and secure connections.
 - The web file manager can now delete non-empty folders recursively and, when hidden files are shown, remove hidden or system-managed SD card items after confirmation.
 - SD-font, OPDS catalogs, and other unneeded settings now stay out of memory while reading unless their settings are open.
