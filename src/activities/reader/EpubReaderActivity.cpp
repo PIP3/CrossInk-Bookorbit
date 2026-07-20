@@ -1106,29 +1106,6 @@ class ScopedReaderSettingsRestore {
   EpubReaderActivity::ReaderSettingsSnapshot snapshot;
 };
 
-void formatCompactTimeLeft(const uint32_t seconds, char* out, const size_t outSize) {
-  if (!out || outSize == 0) return;
-  if (seconds < 60) {
-    snprintf(out, outSize, "<1m");
-    return;
-  }
-
-  const uint32_t minutes = (seconds + 30U) / 60U;
-  if (minutes < 60) {
-    snprintf(out, outSize, "%lum", static_cast<unsigned long>(minutes));
-    return;
-  }
-
-  const uint32_t hours = minutes / 60U;
-  const uint32_t remainingMinutes = minutes % 60U;
-  if (remainingMinutes == 0) {
-    snprintf(out, outSize, "%luh", static_cast<unsigned long>(hours));
-  } else {
-    snprintf(out, outSize, "%luh %lum", static_cast<unsigned long>(hours),
-             static_cast<unsigned long>(remainingMinutes));
-  }
-}
-
 // SD card folder finished books are moved into. Single source of truth for the path.
 constexpr char READ_FOLDER[] = "/Read";
 
@@ -1498,7 +1475,7 @@ bool EpubReaderActivity::formatTimeLeftLabel(char* buf, const size_t len) const 
   const bool bookEstimate = SETTINGS.statusBarTimeLeft == CrossPointSettings::STATUS_BAR_TIME_LEFT::TIME_LEFT_BOOK;
   uint32_t seconds = 0;
   if (estimateTimeLeftSeconds(bookEstimate, seconds)) {
-    formatCompactTimeLeft(seconds, buf, len);
+    formatCompactReadingDuration(seconds, buf, len);
     return true;
   }
 

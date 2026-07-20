@@ -51,7 +51,8 @@ class XtcReaderActivity final : public Activity {
   bool currentPageReadingSecondsForStats(uint32_t& seconds, const char* source) const;
   bool forwardPageReadElapsed(uint32_t& seconds, const char* source) const;
   void recordCurrentPageReadingTime(const char* source = "unknown");
-  void recordForwardPageTurn(uint32_t seconds);
+  void recordForwardPageTurn(uint32_t seconds, bool recordPace);
+  bool formatTimeLeftLabel(char* buf, size_t len) const;
   void commitReadingStats();
   void resetCurrentBookStatsAfterDelete();
   void setBookCompleted(bool isCompleted);

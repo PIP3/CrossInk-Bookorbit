@@ -32,6 +32,7 @@
 
 namespace {
 constexpr unsigned long MIN_READING_STATS_PAGE_MS = 2000UL;
+constexpr uint16_t MIN_TIME_LEFT_PACE_SAMPLE_COUNT = 3;
 
 std::string confirmationHeading(const StrId actionLabelId) {
   return std::string(tr(STR_CONFIRM)) + ": " + std::string(I18N.get(actionLabelId));
@@ -282,7 +283,7 @@ void XtcReaderActivity::loop() {
           currentPage = xtc->getPageCount();
         }
         if (shouldRecordForwardRead) {
-          recordForwardPageTurn(forwardReadSeconds);
+          recordForwardPageTurn(forwardReadSeconds, false);
         }
       }
       requestUpdate();
@@ -347,7 +348,7 @@ void XtcReaderActivity::loop() {
       currentPage = xtc->getPageCount();  // Allow showing "End of book"
     }
     if (shouldRecordForwardRead) {
-      recordForwardPageTurn(forwardReadSeconds);
+      recordForwardPageTurn(forwardReadSeconds, !skipPages);
     }
     requestUpdate();
   }
@@ -418,10 +419,37 @@ void XtcReaderActivity::recordCurrentPageReadingTime(const char* source) {
   pageShownAtMs = 0UL;
 }
 
-void XtcReaderActivity::recordForwardPageTurn(uint32_t seconds) {
-  (void)seconds;
+void XtcReaderActivity::recordForwardPageTurn(const uint32_t seconds, const bool recordPace) {
+  if (recordPace) {
+    stats.recordForwardPageRead(seconds);
+  }
   stats.totalPagesTurned++;
   globalStats.totalPagesTurned++;
+}
+
+bool XtcReaderActivity::formatTimeLeftLabel(char* buf, const size_t len) const {
+  if (!buf || len == 0 || !xtc ||
+      SETTINGS.statusBarTimeLeft == CrossPointSettings::STATUS_BAR_TIME_LEFT::TIME_LEFT_HIDE) {
+    return false;
+  }
+
+  const bool bookEstimate = SETTINGS.statusBarTimeLeft == CrossPointSettings::STATUS_BAR_TIME_LEFT::TIME_LEFT_BOOK;
+  const auto pageInfo = getStatusBarInfo();
+  const uint32_t current = bookEstimate ? currentPage + 1U : static_cast<uint32_t>(pageInfo.currentPage);
+  const uint32_t total = bookEstimate ? xtc->getPageCount() : static_cast<uint32_t>(pageInfo.pageCount);
+  if (current >= total) {
+    return false;
+  }
+
+  if (stats.avgSecondsPerForwardPage == 0 || stats.paceSampleCount < MIN_TIME_LEFT_PACE_SAMPLE_COUNT) {
+    snprintf(buf, len, "%s", tr(STR_TIME_LEFT_CALCULATING));
+    return true;
+  }
+
+  const uint64_t estimatedSeconds =
+      static_cast<uint64_t>(total - current) * static_cast<uint64_t>(stats.avgSecondsPerForwardPage);
+  formatCompactReadingDuration(static_cast<uint32_t>(std::min<uint64_t>(estimatedSeconds, UINT32_MAX)), buf, len);
+  return true;
 }
 
 void XtcReaderActivity::commitReadingStats() {
@@ -748,7 +776,10 @@ void XtcReaderActivity::renderStatusBarOverlay(const StatusBarOverlayPosition po
   const int displayPage = static_cast<int>(currentPage) + 1;
   const float progress = pageCount > 0 ? (static_cast<float>(displayPage) * 100.0f) / pageCount : 0.0f;
   const auto pageInfo = getStatusBarInfo();
-  GUI.drawStatusBar(renderer, progress, pageInfo.currentPage, pageInfo.pageCount, pageInfo.title, paddingBottom);
+  char timeLeftLabel[24] = {};
+  const char* timeLeft = formatTimeLeftLabel(timeLeftLabel, sizeof(timeLeftLabel)) ? timeLeftLabel : nullptr;
+  GUI.drawStatusBar(renderer, progress, pageInfo.currentPage, pageInfo.pageCount, pageInfo.title, paddingBottom, 0,
+                    false, timeLeft);
 }
 
 void XtcReaderActivity::renderPage() {

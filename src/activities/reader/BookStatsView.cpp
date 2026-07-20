@@ -148,25 +148,6 @@ const StatsLayout& getNoRtcCombinedLayout(const GfxRenderer& renderer, const boo
   return kCompactLayout;
 }
 
-void formatCompactEstimate(const uint32_t seconds, char* buf, const size_t len) {
-  if (seconds < 60) {
-    snprintf(buf, len, "<1m");
-    return;
-  }
-  const uint32_t minutes = (seconds + 30u) / 60u;
-  if (minutes < 60) {
-    snprintf(buf, len, "%lum", static_cast<unsigned long>(minutes));
-    return;
-  }
-  const uint32_t hours = minutes / 60u;
-  const uint32_t remainder = minutes % 60u;
-  if (remainder == 0) {
-    snprintf(buf, len, "%luh", static_cast<unsigned long>(hours));
-  } else {
-    snprintf(buf, len, "%luh %lum", static_cast<unsigned long>(hours), static_cast<unsigned long>(remainder));
-  }
-}
-
 bool fallbackEstimatedTimeLeft(const BookReadingStats& stats, const float progressPercent, uint32_t& seconds) {
   seconds = 0;
   if (progressPercent <= 0.0f || progressPercent >= 100.0f || stats.totalReadingSeconds < 120) {
@@ -326,10 +307,10 @@ void drawPerBookStatsCard(GfxRenderer& renderer, const int x, const int y, const
   const bool hasCachedEstimate = cachedEstimatedTimeLeft(stats, cachedEstimateSeconds);
   const bool hasFallbackEstimate = fallbackEstimatedTimeLeft(stats, progressPercent, fallbackEstimateSeconds);
   if (!stats.isCompleted && (hasEstimatedTimeLeft || hasCachedEstimate || hasFallbackEstimate)) {
-    formatCompactEstimate(hasEstimatedTimeLeft ? estimatedTimeLeftSeconds
-                          : hasCachedEstimate  ? cachedEstimateSeconds
-                                               : fallbackEstimateSeconds,
-                          buf, sizeof(buf));
+    formatCompactReadingDuration(hasEstimatedTimeLeft ? estimatedTimeLeftSeconds
+                                 : hasCachedEstimate  ? cachedEstimateSeconds
+                                                      : fallbackEstimateSeconds,
+                                 buf, sizeof(buf));
   } else {
     snprintf(buf, sizeof(buf), "-");
   }

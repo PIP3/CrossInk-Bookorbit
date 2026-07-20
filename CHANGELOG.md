@@ -22,6 +22,7 @@
 
 ### Fixed
 
+- XTC and XTCH readers now show the configured chapter or book time-left estimate in the reader status bar.
 - Full Section indexing mode now pre-indexes upcoming chapters more reliably when using SD-card fonts, reducing indexing pauses at chapter boundaries.
 - EPUB layouts using SD-card fonts now release unused font-menu metadata before indexing, reducing unnecessary Safe Mode fallbacks.
 - Opening an EPUB with a book-specific built-in font no longer loads the global SD-card font first.
