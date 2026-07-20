@@ -604,7 +604,7 @@ int ParsedText::resolveFirstLineIndent(const bool isFirstLine, const GfxRenderer
   const bool naturalAlign =
       blockStyle.alignment == CssTextAlign::Justify || blockStyle.alignment == CssTextAlign::None ||
       (blockStyle.isRtl ? blockStyle.alignment == CssTextAlign::Right : blockStyle.alignment == CssTextAlign::Left);
-  if (!isFirstLine || !naturalAlign) {
+  if (!isFirstLine || isContinuation_ || !naturalAlign) {
     return 0;
   }
   if (blockStyle.textIndentDefined) {
@@ -713,6 +713,11 @@ bool ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
     wordBionicBoundary.erase(wordBionicBoundary.begin(), wordBionicBoundary.begin() + consumed);
     wordGuideDotBefore.erase(wordGuideDotBefore.begin(), wordGuideDotBefore.begin() + consumed);
     wordBackgroundBlack.erase(wordBackgroundBlack.begin(), wordBackgroundBlack.begin() + consumed);
+  }
+  if (lineCount > 0) {
+    // A partial flush leaves the remaining words in this same logical
+    // paragraph. Mark them so the next pass starts at the normal left edge.
+    isContinuation_ = !includeLastLine;
   }
   return true;
 }
