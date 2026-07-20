@@ -1,6 +1,6 @@
 ---
 title: Reader Features
-nav_order: 17
+nav_order: 5
 ---
 
 # Reader Features
@@ -38,7 +38,6 @@ The reader can also use SD-card font packs with selectable font-size ranges. Thi
 Related docs:
 
 - [SD Card Fonts](./sd-card-fonts.md)
-- [Font Build Variants](./font-build-variants.md)
 
 ## Dark Reader Mode
 
@@ -118,9 +117,6 @@ clipping from CrossInk removes the saved clipping and highlight from the device
 UI, but it does not rewrite old entries that were already appended to
 `/My Clippings.txt`.
 
-For storage paths and binary format details, see [Data Cache](./data-cache.md)
-and [File Formats](./file-formats.md).
-
 ## Reading Stats
 
 CrossInk tracks per-book reading stats automatically and aggregates them into global stats.
@@ -135,7 +131,7 @@ Tracked stats include:
 
 Recent CrossInk versions expanded this into a larger stats system, including synced totals, richer X3 stats screens, reading-streak and time charts, editable stat dates, idle-time filtering, reset controls, and all-time stats backup options.
 
-Note: Date-related stats require a device with a real-time clock (RTC) module. The X4 does not have an RTC module, therefore will not have as detailed stats as the X3.
+**Note**: Date-related stats require a device with a real-time clock (RTC) module. The X4 does not have an RTC module, therefore will not have as detailed stats as the X3.
 
 Reading stats can also be used as a sleep screen, including the Minimal Stats sleep screen on supported builds.
 

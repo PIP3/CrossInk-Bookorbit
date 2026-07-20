@@ -25,7 +25,7 @@ My goal with this fork was to maintain the core Crosspoint firmware while integr
 
 - New reader fonts: Lexend Deca and Bitter.
 - Unicode emoji and miscellaneous symbols support (a limited subset).
-- Adjusted font sizes: 8 pt, 9 pt, 10 pt, 12 pt, 14 pt, 16 pt, 18 pt, and 20 pt. See [Font Build Variants](./docs/font-build-variants.md) for more details.
+- Adjusted font sizes: 10 pt, 12 pt, 14 pt, 16 pt, 18 pt, and 20 pt. The available sizes depend on the installed build variant.
 - Added ~~strikethrough~~ support.
 - Made <u>underlines</u> thicker for better visibility.
 - Added a custom `Minimal` theme and sleep screen option for the minimalists out there.
@@ -70,7 +70,7 @@ The UI now uses [Inter](https://fonts.google.com/specimen/Inter) as the display 
 
 There are 2 available build variants to choose from due to build size constraints: `tiny`, and `xlarge`.
 
-See [Font Build Variants](./docs/font-build-variants.md) for the full point-size and emoji-support matrix.
+See [SD Card Fonts](./docs/sd-card-fonts.md) for installing additional font families and size ranges.
 
 ---
 
@@ -116,9 +116,9 @@ See [Installation](./docs/installation.md) for step-by-step flashing and revert 
 
 ## Documentation
 
-- [User Guide](./USER_GUIDE.md)
+- [User Guide](./docs/user-guide.md)
 - [Installation](./docs/installation.md)
-- [Font Build Variants](./docs/font-build-variants.md)
+- [SD Card Fonts](./docs/sd-card-fonts.md)
 - [Reader Features](./docs/reader-features.md)
 - [Controls](./docs/controls.md)
 - [Simulator](./docs/simulator.md)
@@ -145,7 +145,7 @@ Connect your Xteink X4 or X3 via USB-C and run:
 pio run -e tiny --target upload
 ```
 
-Replace `tiny` with another build variant if needed. See [Font Build Variants](./docs/font-build-variants.md).
+Replace `tiny` with another build variant if needed. The release variants are `tiny` and `xlarge`; their enabled sizes are defined in [platformio.ini](./platformio.ini).
 
 See [Testing and Debugging](./docs/contributing/testing-debugging.md) for serial logging, simulator checks, static analysis, and bug-report guidance.
 
