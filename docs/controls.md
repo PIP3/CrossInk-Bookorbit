@@ -75,6 +75,7 @@ Available actions include:
 - Footnotes
 - Dark Mode
 - Browse Files
+- Save Clipping
 
 ## Footnote Shortcut
 

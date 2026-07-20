@@ -1,52 +1,14 @@
+---
+title: User Guide
+nav_order: 1.5
+---
+
 # CrossInk User Guide
 
-Welcome to the **CrossInk** firmware. This guide outlines the hardware controls, navigation, and reading features of the device.
-
-- [CrossInk User Guide](#CrossInk-user-guide)
-  - [1. Hardware Overview](#1-hardware-overview)
-    - [Button Layout](#button-layout)
-    - [Taking a Screenshot](#taking-a-screenshot)
-  - [2. Power \& Startup](#2-power--startup)
-    - [Power On / Off](#power-on--off)
-    - [First Launch](#first-launch)
-  - [3. Screens](#3-screens)
-    - [3.1 Home Screen](#31-home-screen)
-    - [3.2 Reading Mode](#32-reading-mode)
-    - [3.3 Browse Files Screen](#33-browse-files-screen)
-    - [3.4 Recent Books Screen](#34-recent-books-screen)
-    - [3.5 File Transfer Screen](#35-file-transfer-screen)
-    - [3.5.1 Calibre Wireless Transfers](#351-calibre-wireless-transfers)
-      - [Installing the Plugin in Calibre](#installing-the-plugin-in-calibre)
-      - [Configuring the CrossPoint Plugin in Calibre](#configuring-the-crosspoint-plugin-in-calibre)
-      - [Uploading Books](#uploading-books)
-      - [Removing a Book](#removing-a-book)
-    - [3.6 Settings](#36-settings)
-      - [3.6.1 Display](#361-display)
-      - [3.6.2 Reader](#362-reader)
-      - [3.6.3 Controls](#363-controls)
-      - [3.6.4 System](#364-system)
-      - [3.6.5 OPDS Servers (Multiple Libraries)](#365-opds-servers-multiple-libraries)
-      - [3.6.6 Web Settings (Wi-Fi + OPDS)](#366-web-settings-wi-fi--opds)
-      - [3.6.7 KOReader Sync Quick Setup](#367-koreader-sync-quick-setup)
-        - [Option A: Free Public Server (`sync.koreader.rocks`)](#option-a-free-public-server-synckoreaderrocks)
-        - [Option B: Self-Hosted Server (Docker Compose)](#option-b-self-hosted-server-docker-compose)
-    - [3.7 Sleep Screen](#37-sleep-screen)
-      - [Cover settings](#cover-settings)
-      - [Custom images](#custom-images)
-    - [3.8 Custom Fonts (SD Card)](#38-custom-fonts-sd-card)
-  - [4. Reading Mode](#4-reading-mode)
-    - [Page Turning](#page-turning)
-    - [Chapter Navigation](#chapter-navigation)
-    - [Auto Page Turn](#auto-page-turn)
-    - [Tilt Page Turn (X3 only)](#tilt-page-turn-x3-only)
-    - [Footnote Navigation](#footnote-navigation)
-    - [System Navigation](#system-navigation)
-    - [Supported Languages](#supported-languages)
-  - [5. Reader Menu](#5-reader-menu)
-    - [5.1 Chapter Selection](#51-chapter-selection)
-    - [5.2 Bookmarks](#52-bookmarks)
-  - [6. Current Limitations & Roadmap](#6-current-limitations--roadmap)
-  - [7. Troubleshooting Issues & Escaping Bootloop](#7-troubleshooting-issues--escaping-bootloop)
+Welcome to the **CrossInk** firmware. This guide covers day-to-day device use.
+For focused reference material, see [Reader Features](./reader-features.md),
+[Controls](./controls.md), [SD Card Fonts](./sd-card-fonts.md),
+[File Transfer](./webserver.md), and [Troubleshooting](./troubleshooting.md).
 
 ## 1. Hardware Overview
 
@@ -59,7 +21,7 @@ The device utilises the standard buttons on the Xteink X4 (in the same layout as
 | **Bottom Edge** | **Back**, **Confirm**, **Left**, **Right**           |
 | **Right Side**  | **Power**, **Volume Up**, **Volume Down**, **Reset** |
 
-Button layout can be customized in the **[Controls Settings](#363-controls)**.
+Button layout can be customized in **Settings > Controls**.
 
 ### Taking a Screenshot
 
@@ -74,7 +36,7 @@ Alternatively, while reading a book, press the **Confirm** button to open the re
 ### Power On / Off
 
 To turn the device on or off, **press and hold the Power button for approximately half a second**.
-In the **[Controls Settings](#363-controls)** you can configure the power button to turn the device off with a short press instead of a long one.
+In **Settings > Controls > Power Button** you can configure the power button to turn the device off with a short press instead of a long one.
 
 To reboot the device (for example after a firmware update or if it's frozen), press and release the Reset button, and then quickly press and hold the Power button for a few seconds.
 
@@ -114,7 +76,7 @@ The Recent Books screen lists the most recently opened books in a chronological 
 
 The File Transfer screen allows you to upload and manage files on the device. When you enter the screen, choose **Join a Network**, **Calibre Wireless**, or **Create Hotspot**. The reader then starts the web server for the selected mode.
 
-See the [web server docs](./docs/webserver.md) for more information on how to connect to the web server and upload files.
+See the [File Transfer guide](./webserver.md) for connection and upload details.
 
 The web file manager can upload, download, rename, move, and delete files on the device.
 
@@ -125,28 +87,27 @@ Download links for files already on the device are available in the web interfac
 A **Wi-Fi signal strength indicator** (dBm) is displayed on-screen during joined-network web server sessions.
 
 > [!TIP]
-> Advanced users can also manage files programmatically or via the command line using `curl`. See the [web server docs](./docs/webserver.md) for details.
+> Advanced users can manage files programmatically with the same HTTP endpoints
+> used by the web interface. The browser interface is the supported path for
+> normal file management.
 
 ### 3.5.1 Calibre Wireless Transfers
 
 CrossInk supports sending books from Calibre using the CrossPoint Reader device plugin.
 
-1. Install the plugin in Calibre:
-   - Head to https://github.com/crosspoint-reader/calibre-plugins/releases to download the latest version of the crosspoint_reader plugin.
-
-   - Download the zip file.
-
-   - Open Calibre → Preferences → Plugins → Load plugin from file → Select the zip file.
-
-2. On the device: File Transfer -> Calibre Wireless, then join a network.
-
-3. Make sure your computer is on the same Wi-Fi network.
-
-4. In Calibre, click "Send to device" to transfer books.
+1. Download the current `crosspoint_reader` plugin ZIP from the
+   [CrossPoint Reader plugin releases](https://github.com/crosspoint-reader/calibre-plugins/releases).
+2. In Calibre, open **Preferences > Plugins > Load plugin from file** and select
+   that ZIP. Restart Calibre if it asks you to.
+3. On the device, open **File Transfer > Calibre Wireless** and join the same
+   2.4 GHz Wi-Fi network as the computer.
+4. Keep the Calibre Wireless screen open, then use Calibre's **Send to device**
+   action. The device screen shows the transfer progress and completion notice.
 
 ### 3.6 Settings
 
-The Settings screen allows you to configure the device's behavior. There are a few settings you can adjust:
+The Settings screen groups options by purpose. The exact choices can vary by
+device model and build.
 
 #### 3.6.1 Display
 
@@ -161,6 +122,7 @@ The Settings screen allows you to configure the device's behavior. There are a f
   - "Reading Stats" - Recent reading stats on the sleep screen
   - "Minimal" - A minimal sleep screen
   - "Minimal Stats" - A minimal stats sleep screen on supported devices
+  - "Dashboard" - A dashboard-style sleep screen based on the Dashboard theme
   - "Quick Resume" - Keeps the current content visible while sleeping
 
 - **Sleep Screen Cover Mode**: How to display the book cover when "Cover" sleep screen is selected:
@@ -179,11 +141,15 @@ The Settings screen allows you to configure the device's behavior. There are a f
   - "In Reader" - Show battery percentage everywhere except in reading mode
   - "Always" - Always hide battery percentage
 
+- **Hide Clock**: On devices with a real-time clock, choose whether the clock is
+  shown everywhere, hidden only in the reader, or always hidden.
+
 - **Refresh Frequency**: Set how often the screen does a full refresh while reading to reduce ghosting; options are every 1, 5, 10, 15, or 30 pages.
 
 - **UI Theme**: Set which UI theme to use:
-  - "Classic" - The original Crosspoint theme
+  - "Classic" - The original CrossInk theme
   - "Minimal" - A minimal theme with a large book cover
+  - "Dashboard" - A dashboard-style home layout
   - "Lyra" - A theme with simple icons featuring your current book
   - "Lyra Extended" - Lyra, but displays 3 books instead of 1 on the **[Home Screen](#31-home-screen)**
   - "Lyra Carousel" - A carousel-based Lyra home layout
@@ -204,15 +170,19 @@ The Settings screen allows you to configure the device's behavior. There are a f
   - "Lexend Deca" (default)
   - "Bitter"
 
-- **Reader Font Size**: Adjust the text size for reading. Available sizes depend on the firmware variant and can include sizes ranging from 8pt to 20pt.
+- **Reader Font Size**: Adjust the text size for reading. The `tiny` release
+  build includes 10, 12, 14, and 16 pt; `xlarge` includes 16, 18, and 20 pt.
 
 - **Reader Line Spacing**: Adjust the line height as a percentage.
+
+- **Word Spacing**: Add one of four wider spacing levels between words.
 
 - **Reader Screen Margin**: Controls the screen margins in Reading Mode between 5 and 40 pixels in 5-pixel increments.
 
 - **Reader Paragraph Alignment**: Set the alignment of paragraphs; options are "Justified" (default), "Left", "Center", "Right", or "Book's Style".
 
-- **Embedded Style**: Whether to use the EPUB file's embedded HTML and CSS stylisation and formatting; options are "ON" or "OFF".
+- **Publisher Page Numbers**: Show page numbers supplied by the EPUB when the
+  book includes them.
 
 - **Hyphenation**: Whether to hyphenate text in Reading Mode; options are "ON" or "OFF".
 
@@ -226,13 +196,9 @@ The Settings screen allows you to configure the device's behavior. There are a f
   - "ON" - Vertical space will be added between paragraphs in Reading Mode
   - "OFF" - Paragraphs will not have vertical space added, but will have first-line indentation
 
-- **Text Anti-Aliasing**: Whether to show smooth grey edges (anti-aliasing) on text in reading mode. Note this slows down page turns slightly.
-
-- **Images**: Whether to display embedded images found in EPUB files; options are "Display" (default), "Placeholder", or "Suppress".
-
-- **Bionic Reading**: Bolds the first part of each word to create visual fixation points. This can help improve reading speed and focus; options are "ON" or "OFF" (default).
-
-- **Guide Dots**: Adds guide dots between words; options are "ON" or "OFF" (default).
+- **Reader Dark Mode**, **Embedded Style**, **Images**, **Bionic Reading**, and
+  **Guide Dots** are directly available from the Reader settings. See
+  [Reader Features](./reader-features.md) for their behavior.
 
 - **Customise Status Bar**: Configure the status bar displayed while reading:
   - Chapter Page Count - Show/Hide the current page in the chapter (ex: 5/25). Page count may change based on the font size and margins set.
@@ -248,7 +214,8 @@ The Settings screen allows you to configure the device's behavior. There are a f
 
 - **Power Button**: Configure short-press and long-press power button actions.
 
-- **Front Buttons**: Configure front-button remapping, orientation awareness, front-button long-press behavior, and the long-press menu action.
+- **Front Buttons**: Configure front-button remapping, orientation awareness,
+  reader-only long-press behavior, Back action, and Menu action.
 
 - **Side Buttons**: Configure side-button layout, orientation awareness, and side-button long-press behavior.
 
@@ -258,11 +225,11 @@ The Settings screen allows you to configure the device's behavior. There are a f
 
 - **Side Button Long-press Action**: Set whether long-pressing side buttons does nothing, skips chapters, changes font size, or changes orientation.
 
-- **Short-press Action / Long-press Action**: Controls the effect of a short or long press of the power button:
+- **Short-press Action / Long-press Action**: Controls the effect of a short or long press of the power button. Available actions include:
   - "Ignore" (default) - Require a long press to turn off the device
   - "Sleep" - A short press puts the device into sleep mode
   - "Page Turn" - A short press in reading mode turns to the next page; a long press turns the device off
-  - "Toggle Bookmark", "Reading Stats", "Mark Finished", "Refresh", "Change Font", "Guide Dots", "Bionic Reading", "Auto Page Turn", "Sync Progress", "File Transfer", "Screenshot", or "Dark Mode" - Run the matching reader action
+  - "Toggle Bookmark", "Reading Stats", "Mark Finished", "Refresh", "Change Font", "Guide Dots", "Bionic Reading", "Auto Page Turn", "Sync Progress", "File Transfer", "Calibre Wireless", "Join a Network", "Create Hotspot", "Screenshot", "Dark Mode", "Browse Files", or "Save Clipping" - Run the matching action
   - "Footnotes" - A short press in reading mode opens the footnotes submenu; if only one footnote is present on the page, the referenced page is opened directly. The short press on the power button can be used to select the footnote in the submenu, and to go back to the original page after finish reading the footnote (like the back button).
 
 - **Quick-return from footnotes**: Toggles on and off the quick return functionality from the footnotes. When the functionality it's active, a short press of the power button will act as the back button from the footnotes page.
@@ -271,17 +238,29 @@ The Settings screen allows you to configure the device's behavior. There are a f
 
 - **Time to Sleep**: Set the duration of inactivity before the device automatically goes to sleep. Values are in minutes, with a "Never" option at the end of the range.
 
+- **Device**: Set the device name and time-to-sleep timeout. Devices with a
+  real-time clock also expose clock format, UTC offset, and a sync action.
+
+- **Files & Cache**: Configure hidden files, file extensions, file-browser view,
+  finished-book behavior, and clear the reading cache.
+
+- **Reading Stats**: Configure stats tracking and idle-time filtering, and
+  access all-time stats backup/reset actions.
+
 - **Wi-Fi Networks**: Connect to Wi-Fi networks for file transfers and firmware updates.
 
 - **KOReader Sync**: Options for setting up KOReader for syncing book progress. **Smart sync** is the default for new configurations and auto-resolves simple push/pull decisions. Existing credential files retain **Ask every time** when migrated; you can switch Sync Behavior at any time if you prefer manual confirmation.
 
 - **OPDS Servers**: Manage one or more OPDS [(Open Publication Distribution System)](https://en.wikipedia.org/wiki/Open_Publication_Distribution_System) libraries for browsing and downloading books. See [OPDS Servers (Multiple Libraries)](#365-opds-servers-multiple-libraries) below.
 
-- **Clear Reading Cache**: Clear the internal SD card cache.
+- **Check for Updates** and **SD Firmware Update**: Check for firmware updates
+  over Wi-Fi or install a `firmware.bin` placed on the SD card.
 
-- **Check for updates**: Check for CrossInk firmware updates over Wi-Fi. Firmware can also be updated without a USB connection by placing a `firmware.bin` file on the SD card.
-
-- **Language**: Set the UI language. CrossInk supports 24 languages: English, Spanish, French, German, Czech, Brazilian Portuguese, Russian, Swedish, Romanian, Catalan, Ukrainian, Belarusian, Italian, Polish, Finnish, Danish, Dutch, Turkish, Kazakh, Hungarian, Lithuanian, Slovenian, Valencian, and Hebrew.
+- **Language**: Set the UI language. CrossInk supports 28 languages: English,
+  Spanish, French, German, Czech, Brazilian Portuguese, Russian, Swedish,
+  Romanian, Catalan, Ukrainian, Belarusian, Italian, Polish, Finnish, Danish,
+  Dutch, Turkish, Kazakh, Hungarian, Lithuanian, Slovenian, Valencian, Hebrew,
+  Vietnamese, Slovak, Portuguese (Portugal), and Arabic.
 
 #### 3.6.5 OPDS Servers (Multiple Libraries)
 
@@ -311,14 +290,14 @@ You can also manage OPDS servers from the web interface while in File Transfer m
 2. Open `http://<device-ip>/settings`.
 3. Use the **OPDS Servers** card to add, edit, or delete entries.
 
-For web-based Wi-Fi network management, see [Web Settings (Wi-Fi + OPDS)](#366-web-settings-wi-fi--opds).
+For web-based Wi-Fi network management, see [File Transfer](./webserver.md).
 
 #### 3.6.6 Web Settings (Wi-Fi + OPDS)
 
 While in **File Transfer** mode, the web settings page includes management cards for both **Wi-Fi Networks** and **OPDS Servers**.
 
 1. On device: open **File Transfer** and connect through **Join a Network** or **Create Hotspot**.
-2. In a browser, open `http://<device-ip>/settings` or `http://crosspoint.local`.
+2. In a browser, open `http://<device-ip>/settings` or `http://crosspoint.local/settings`.
 3. In **Wi-Fi Networks**, add, edit, or delete saved network entries (SSID + optional password).
 4. In **OPDS Servers**, add, edit, or delete OPDS catalogs.
 
@@ -496,7 +475,7 @@ There are three ways to install fonts:
 
 Once installed, custom fonts appear in **Settings -> Reader -> Font Options -> Font Family** alongside the built-in fonts.
 
-See [docs/sd-card-fonts.md](./docs/sd-card-fonts.md) for full installation details and SD card folder structure.
+See [SD Card Fonts](./sd-card-fonts.md) for full installation details and SD card folder structure.
 
 ---
 
@@ -511,7 +490,7 @@ Once you have opened a book, the button layout changes to facilitate reading.
 | **Previous Page** | Press **Left** _or_ **Volume Up**    |
 | **Next Page**     | Press **Right** _or_ **Volume Down** |
 
-The role of the volume (side) buttons can be swapped in the **[Controls Settings](#363-controls)**.
+The role of the volume (side) buttons can be swapped in **Settings > Controls > Side Buttons**.
 
 If the **Short-press Action** setting is set to "Page Turn", you can also turn to the next page by briefly pressing the Power button.
 
@@ -520,7 +499,7 @@ If the **Short-press Action** setting is set to "Page Turn", you can also turn t
 - **Next Chapter:** Press and **hold** the **Right** (or **Volume Down**) button briefly, then release.
 - **Previous Chapter:** Press and **hold** the **Left** (or **Volume Up**) button briefly, then release.
 
-This feature can be disabled in the **[Controls Settings](#363-controls)** to help avoid changing chapters by mistake.
+This feature can be disabled in **Settings > Controls > Front Buttons** to help avoid changing chapters by mistake.
 
 ### Auto Page Turn
 
@@ -602,7 +581,10 @@ Bookmarks are stored as per-book `.bin` files in the `.crosspoint/bookmarks` fol
 
 Please note that this firmware is currently in active development. The following features are **not yet supported** but are planned for future updates:
 
-- **Cover Images:** Large cover images embedded into EPUB require several seconds (~10s for ~2000 pixel tall image) to convert for sleep screen and home screen thumbnail. Consider optimizing the EPUB with e.g. https://github.com/bigbag/epub-to-xtc-converter to speed this up.
+- **Cover Images:** Large cover images embedded into EPUB can take several
+  seconds to convert for the sleep screen and home-screen thumbnail. Use the
+  built-in [EPUB optimization](./webserver.md#epub-optimization) before upload
+  if a book is slow or memory-sensitive.
 - **Unsupported Image Formats:** Most JPG and PNG images in EPUBs render correctly. GIFs and progressive JPEGs are not supported and will fall back to an `[Image]` placeholder.
 - **Dictionary Lookup:** Inline word lookup is not yet implemented.
 

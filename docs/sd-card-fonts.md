@@ -5,19 +5,21 @@ nav_order: 4
 
 # SD Card Fonts
 
-CrossPoint supports loading additional fonts from the SD card, including fonts
+CrossInk supports loading additional fonts from the SD card, including fonts
 with extended Unicode coverage (CJK, Cyrillic, Greek, etc.).
 
 ## Installing Fonts
 
 There are three ways to install fonts:
 
-### Option 1: Download from device (recommended)
+### Option 1: Download from device
 
 1. Connect your CrossInk reader to Wi-Fi
 2. Go to **Settings > Reader > Font Options > Manage Fonts**
-3. Browse available font families and tap to download
-4. Downloaded fonts appear immediately in **Settings > Reader > Font Family**
+3. Browse available font families and select to download
+4. Downloaded fonts appear immediately in **Settings > Reader > Font Options > Font Family**
+
+**Note**: To change the font sizes that are downloaded, change the option for `Download Font Size Range` _before_ downloading.
 
 ### Option 2: Upload via web browser
 
@@ -26,10 +28,11 @@ There are three ways to install fonts:
 3. Navigate to the **Fonts** tab
 4. Upload `.cpfont` files using the upload form
 
-### Option 3: Manual SD card copy
+### Option 3: Manual SD card copy (Fastest)
 
 1.  Download font files from the
-    [crosspoint-fonts repository](https://github.com/crosspoint-reader/crosspoint-fonts)
+    [CrossInk Fonts](https://github.com/uxjulia/crossink-fonts/tree/main/cpfonts) repository.
+    - Click the `.zip` file for the font you want then click on the download icon to download the raw file.
 2.  Copy font family folders to one of two locations on your SD card:
     - `/.fonts/` — hidden directory (preferred; keeps the SD root tidy
       when mounted on a desktop)
@@ -54,16 +57,18 @@ There are three ways to install fonts:
                 ├── Merriweather_12.cpfont
                 └── ...
 
-3.  Insert the SD card and power on your CrossInk reader
+3.  Insert the SD card and power on your CrossInk device
 
 ## Available Pre-Built Fonts
 
 The current list of pre-built fonts is maintained in the
-[crossink-fonts repository](https://github.com/uxjulia/crossink-fonts). Device-initiated downloads use the versioned font manifest published for the current `.cpfont` format.
+[CrossInk Fonts](https://github.com/uxjulia/crossink-fonts) repository. Device-initiated downloads use the versioned font manifest published for the current `.cpfont` format.
 
-## Converting Custom Fonts
+## Converting Custom Fonts with CrossPoint's Font Builder
 
-To convert your own TrueType/OpenType fonts:
+To convert your own TrueType/OpenType fonts use CrossPoint's [Font Builder](https://crosspointreader.com/fonts)
+
+## Converting Custom Fonts with Python
 
 ### Prerequisites
 

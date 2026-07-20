@@ -137,8 +137,8 @@ The Fonts page lists installed SD-card font families and lets you upload
 the font family name, filename, and `.cpfont` magic bytes before accepting the
 upload.
 
-Installed fonts appear in **Settings > Reader > Font Family** after the font
-registry refreshes.
+Installed fonts appear in **Settings > Reader > Font Options > Font Family**
+after the font registry refreshes.
 
 ## Security Notes
 

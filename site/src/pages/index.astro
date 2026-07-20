@@ -4,7 +4,7 @@ import { getDocs } from '../lib/docs';
 
 const docs = await getDocs();
 const featuredDocs = docs.filter((doc) =>
-  ['installation', 'reader-features', 'font-build-variants', 'webserver'].includes(doc.slug)
+  ['user-guide', 'installation', 'reader-features', 'webserver'].includes(doc.slug)
 );
 ---
 

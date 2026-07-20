@@ -38,7 +38,6 @@ The reader can also use SD-card font packs with selectable font-size ranges. Thi
 Related docs:
 
 - [SD Card Fonts](./sd-card-fonts.md)
-- [Font Build Variants](./font-build-variants.md)
 
 ## Dark Reader Mode
 
@@ -132,7 +131,7 @@ Tracked stats include:
 
 Recent CrossInk versions expanded this into a larger stats system, including synced totals, richer X3 stats screens, reading-streak and time charts, editable stat dates, idle-time filtering, reset controls, and all-time stats backup options.
 
-Note: Date-related stats require a device with a real-time clock (RTC) module. The X4 does not have an RTC module, therefore will not have as detailed stats as the X3.
+**Note**: Date-related stats require a device with a real-time clock (RTC) module. The X4 does not have an RTC module, therefore will not have as detailed stats as the X3.
 
 Reading stats can also be used as a sleep screen, including the Minimal Stats sleep screen on supported builds.
 

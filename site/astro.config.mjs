@@ -1,38 +1,43 @@
-import { fileURLToPath } from 'node:url';
-import { defineConfig } from 'astro/config';
+import { fileURLToPath } from "node:url";
+import { defineConfig } from "astro/config";
 
 // Docs live at the repo root (../docs), outside the Astro project root, so Vite's
 // file watcher never sees them and edits to docs/**/*.md don't hot reload in dev.
 // Add the docs directory to the dev watcher so content edits invalidate and refresh.
-const docsDir = fileURLToPath(new URL('../docs', import.meta.url));
+const docsDir = fileURLToPath(new URL("../docs", import.meta.url));
 
 function watchExternalDocs() {
   return {
-    name: 'crossink:watch-external-docs',
-    apply: 'serve',
+    name: "crossink:watch-external-docs",
+    apply: "serve",
     configureServer(server) {
       server.watcher.add(docsDir);
-    }
+    },
   };
 }
 
 function rewriteMarkdownLinks() {
   return (tree) => {
     visit(tree, (node) => {
-      if (node.type !== 'link' && node.type !== 'image') {
+      if (node.type !== "link" && node.type !== "image") {
         return;
       }
 
-      if (typeof node.url !== 'string') {
+      if (typeof node.url !== "string") {
+        return;
+      }
+
+      const rootDocUrl = node.url
+        .replace(/^(\.\.\/)+SCOPE\.md(#.*)?$/i, "https://github.com/uxjulia/CrossInk/blob/main/SCOPE.md$2")
+        .replace(/^(\.\.\/)+GOVERNANCE\.md(#.*)?$/i, "https://github.com/uxjulia/CrossInk/blob/main/GOVERNANCE.md$2");
+      if (rootDocUrl !== node.url) {
+        node.url = rootDocUrl;
         return;
       }
 
       node.url = node.url
-        .replace(/^(\.\.\/)+USER_GUIDE\.md(#.*)?$/i, 'https://github.com/uxjulia/CrossInk/blob/main/USER_GUIDE.md$2')
-        .replace(/^(\.\.\/)+SCOPE\.md(#.*)?$/i, 'https://github.com/uxjulia/CrossInk/blob/main/SCOPE.md$2')
-        .replace(/^(\.\.\/)+GOVERNANCE\.md(#.*)?$/i, 'https://github.com/uxjulia/CrossInk/blob/main/GOVERNANCE.md$2')
-        .replace(/(^|\/)README\.md(#.*)?$/i, '$1index.html$2')
-        .replace(/\.md(#.*)?$/i, '.html$1');
+        .replace(/(^|\/)README\.md(#.*)?$/i, "$1index.html$2")
+        .replace(/\.md(#.*)?$/i, ".html$1");
     });
   };
 }
@@ -49,13 +54,13 @@ function visit(node, visitor) {
 
 export default defineConfig({
   build: {
-    format: 'file'
+    format: "file",
   },
   markdown: {
-    remarkPlugins: [rewriteMarkdownLinks]
+    remarkPlugins: [rewriteMarkdownLinks],
   },
   vite: {
-    plugins: [watchExternalDocs()]
+    plugins: [watchExternalDocs()],
   },
-  site: 'https://crossink.uxj.io'
+  site: "https://www.crossink.dev",
 });
