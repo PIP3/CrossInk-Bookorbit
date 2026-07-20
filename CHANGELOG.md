@@ -2,22 +2,18 @@
 
 ### Added
 
-- On Home themes without a dedicated Read button, pressing Back now opens the most recently read book.
-- KOReader Sync can now automatically keep whichever reading position is furthest ahead, while retaining an ask-every-time option.
-- Web uploads can now remember EPUB optimization settings in the browser and optionally name EPUBs from their title and author metadata.
 - The web EPUB optimizer now splits oversized chapters into memory-friendlier sections before sending them to the reader.
-- OPDS downloads can now be saved to a configurable folder selected under Settings > System > OPDS Servers.
-- Large EPUB chapters can now open to the first readable page sooner while the rest of the chapter continues indexing in smaller chunks.
+- Reader indexing can now use `Incremental` or `Full Section` mode globally or per book; changing modes keeps the current chapter readable and applies when the next chapter needs indexing.
+- Look Up Word can now be assigned to short- and long-press Power button shortcuts.
 - EPUB readers can now choose from five word-spacing levels, from normal through extra-wide.
 - EPUB inline-image pages on X3 now use the grayscale-aware display base before the image grayscale overlay, reducing the moment where images appear too dark before settling.
 - EPUB publisher small-caps styling now renders ASCII lowercase text as smaller capital letters without needing extra font files.
-- Split EPUB chapters keep whole-chapter page estimates and translate filename-based KOReader and Nearby positions back to the original book structure.
 
 ### Changed
 
 - KOReader Sync and authentication, OTA updates, and OPDS browsing now restart into a lightweight network mode that leaves reader and Home data unloaded, providing more contiguous memory for WiFi and secure connections.
 - The web file manager can now delete non-empty folders recursively and, when hidden files are shown, remove hidden or system-managed SD card items after confirmation.
-- Large EPUB indexing now borrows temporary display memory and uses faster ZIP/PNG decompression to reduce memory pressure while opening or rebuilding chapters.
+- SD-font, OPDS catalogs, and other unneeded settings now stay out of memory while reading unless their settings are open.
 - EPUB books can now keep more saved clippings without loading every clipping's text into memory while reading.
 
 ### Removed
@@ -26,6 +22,7 @@
 
 ### Fixed
 
+- Full Section indexing mode now pre-indexes upcoming chapters more reliably when using SD-card fonts, reducing indexing pauses at chapter boundaries.
 - EPUB layouts using SD-card fonts now release unused font-menu metadata before indexing, reducing unnecessary Safe Mode fallbacks.
 - Opening an EPUB with a book-specific built-in font no longer loads the global SD-card font first.
 - Pressing the KOReader Sync shortcut again while WiFi is connecting no longer re-triggers the shortcut.
@@ -37,17 +34,13 @@
 - EPUB clipping selection no longer replaces selected text with corrupted glyphs as the selection grows.
 - Popup option menus now show a scrollbar when more choices are available than can fit on screen.
 - The “Entering sleep” message now follows the reader's current orientation, including book-specific orientation overrides.
-- EPUB indexing now shows the on-screen indexing popup before rebuilding image-heavy chapters.
 - Pressing Back while EPUB indexing is busy now cancels the build and returns home instead of waiting for indexing to finish.
-- EPUB clipping selection no longer reboots when opening highlights on memory-tight pages.
 - Underlined EPUB text now draws a continuous line across the spaces between adjacent underlined words.
-- KOReader Sync authentication errors now wrap on-screen instead of running off the display.
 - Chapter openers whose decorative image sits inside the heading (chapter number, ornament, then title) now stay together on one page instead of splitting the chapter number onto its own page.
 - Chapter openers with an inline ornament image no longer stack an oversized gap between the chapter number, the ornament, and the title.
 - Unsupported EPUB chapter image formats no longer trigger the low-memory image warning.
 - EPUB progress now keeps saving while long chapters are still being indexed.
-- The reader no longer stops responding to buttons during very long reading sessions. Once memory ran low, background chapter indexing would fail, restart, and fail again without pause, leaving the device awake but unable to turn the page. It now stops retrying and keeps the pages it already indexed.
-- Low-memory EPUB indexing no longer mistakes a partially indexed page for the end of a chapter and skips forward.
+- Returning to Home after reading with an SD card font now releases the reader's font caches so covers and thumbnails retain enough contiguous memory to render.
 
 ## [v1.4.0] - 2026-07-10
 
