@@ -23,7 +23,7 @@
 ### Fixed
 
 - XTC and XTCH readers now show the configured chapter or book time-left estimate in the reader status bar.
-- Full Section indexing mode now pre-indexes upcoming chapters more reliably when using SD-card fonts, reducing indexing pauses at chapter boundaries.
+- Long Russian EPUB paragraphs no longer reapply paragraph indents or split continuation words when memory-safe incremental layout flushes are used.
 - EPUB layouts using SD-card fonts now release unused font-menu metadata before indexing, reducing unnecessary Safe Mode fallbacks.
 - Opening an EPUB with a book-specific built-in font no longer loads the global SD-card font first.
 - Pressing the KOReader Sync shortcut again while WiFi is connecting no longer re-triggers the shortcut.

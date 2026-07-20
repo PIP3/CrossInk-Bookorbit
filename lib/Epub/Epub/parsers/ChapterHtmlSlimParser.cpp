@@ -3090,14 +3090,18 @@ void ChapterHtmlSlimParser::makePages() {
     }
   }
 
-  // Apply top spacing before the paragraph (stored in pixels)
+  // Apply top spacing before the paragraph (stored in pixels). An
+  // intermediate text-run flush has already emitted the first lines and
+  // consumed this spacing, so do not apply it again to the remainder.
   const BlockStyle& blockStyle = currentTextBlock->getBlockStyle();
   const int lineHeight = effectiveLineHeight();
-  if (blockStyle.marginTop > 0) {
-    currentPageNextY += blockStyle.marginTop;
-  }
-  if (blockStyle.paddingTop > 0) {
-    currentPageNextY += blockStyle.paddingTop;
+  if (!currentTextBlock->isContinuation()) {
+    if (blockStyle.marginTop > 0) {
+      currentPageNextY += blockStyle.marginTop;
+    }
+    if (blockStyle.paddingTop > 0) {
+      currentPageNextY += blockStyle.paddingTop;
+    }
   }
 
   // Calculate effective width accounting for horizontal margins/padding

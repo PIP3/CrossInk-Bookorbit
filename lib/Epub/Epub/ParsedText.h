@@ -31,6 +31,9 @@ class ParsedText {
   uint8_t wordSpacing;
   BlockStyle blockStyle;
   bool hasRtlWord;
+  // True after an intermediate flush leaves the rest of the same paragraph
+  // buffered. The next layout pass must not apply first-line paragraph rules.
+  bool isContinuation_ = false;
   std::vector<std::string> reorderedWordsScratch;
   std::vector<EpdFontFamily::Style> reorderedStylesScratch;
   std::vector<uint16_t> reorderedWidthsScratch;
@@ -91,6 +94,7 @@ class ParsedText {
   BlockStyle& getBlockStyle() { return blockStyle; }
   size_t size() const { return words.size(); }
   bool isEmpty() const { return words.empty(); }
+  bool isContinuation() const { return isContinuation_; }
   bool layoutAndExtractLines(const GfxRenderer& renderer, int fontId, uint16_t viewportWidth,
                              const std::function<void(std::shared_ptr<TextBlock>)>& processLine,
                              bool includeLastLine = true);
