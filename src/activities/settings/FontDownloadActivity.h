@@ -86,6 +86,7 @@ class FontDownloadActivity : public Activity {
   bool hasRetryFamily_ = false;
   bool manifestReloadNeeded_ = false;
   std::string activeDownloadFamilyName_;
+  bool fontsChanged_ = false;
 
   // Download progress
   size_t currentFileIndex_ = 0;

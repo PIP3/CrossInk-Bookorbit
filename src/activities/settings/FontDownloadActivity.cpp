@@ -130,7 +130,11 @@ void FontDownloadActivity::onExit() {
   if (WiFi.getMode() != WIFI_MODE_NULL) {
     WiFi.disconnect(false);
     delay(30);
-    silentRestart();
+    if (fontsChanged_) {
+      silentRestart();
+    } else {
+      WiFi.mode(WIFI_OFF);
+    }
   }
 
   sdFontSystem.ensureLoaded(renderer);
@@ -765,6 +769,7 @@ void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
     if (hadExistingFile) {
       Storage.remove(backupPath);
     }
+    fontsChanged_ = true;
     currentFileIndex_++;
   }
 
@@ -806,6 +811,7 @@ void FontDownloadActivity::onDeleteConfirmationResult(const ActivityResult& resu
     state_ = ERROR;
     errorMessage_ = "Failed to delete font";
   } else {
+    fontsChanged_ = true;
     fontInstaller_.refreshRegistry();
     family.installed = false;
     family.hasUpdate = false;
