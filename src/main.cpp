@@ -760,7 +760,8 @@ void setup() {
     KOREADER_STORE.loadFromFile();
     OPDS_STORE.loadFromFile();
   } else if (snapshotTarget == static_cast<uint32_t>(NetworkBootTarget::KOREADER_SYNC) ||
-             snapshotTarget == static_cast<uint32_t>(NetworkBootTarget::KOREADER_AUTH)) {
+             snapshotTarget == static_cast<uint32_t>(NetworkBootTarget::KOREADER_AUTH) ||
+             snapshotTarget == static_cast<uint32_t>(NetworkBootTarget::FILE_TRANSFER)) {
     KOREADER_STORE.loadFromFile();
   }
   UITheme::getInstance().reload();
@@ -901,6 +902,9 @@ void setup() {
         }
         break;
       }
+      case NetworkBootTarget::FILE_TRANSFER:
+        launched = activityManager.resumeFileTransferFromNetworkBoot(snapshotPayload);
+        break;
     }
     if (!launched) {
       LOG_ERR("MAIN", "Minimal network boot target failed; returning home");

@@ -94,6 +94,7 @@ class ActivityManager {
   void goToCalibreWireless(std::string returnBookPath = {});
   void goToJoinNetworkFileTransfer(std::string returnBookPath = {});
   void goToHotspotFileTransfer(std::string returnBookPath = {});
+  bool resumeFileTransferFromNetworkBoot(uint32_t payload);
   void goToNearbyStatsSync();
   void goToSettings();
   void goToFileBrowser(std::string path = {});

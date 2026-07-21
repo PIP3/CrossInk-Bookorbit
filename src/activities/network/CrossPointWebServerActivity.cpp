@@ -4,6 +4,7 @@
 #include <ESPmDNS.h>
 #include <GfxRenderer.h>
 #include <I18n.h>
+#include <Memory.h>
 #include <WiFi.h>
 #include <esp_task_wdt.h>
 
@@ -108,7 +109,11 @@ void CrossPointWebServerActivity::onExit() {
   // silentRestart() returns only when deep sleep is already in progress; that
   // path still needs the explicit cleanup below.
   if (WiFi.getMode() != WIFI_MODE_NULL) {
-    silentRestart();
+    if (returnBookPath.empty()) {
+      silentRestart();
+    } else {
+      silentRestartToReader();
+    }
   }
 
   stopDnsServer();
@@ -158,20 +163,50 @@ void CrossPointWebServerActivity::onNetworkModeSelected(const NetworkMode mode) 
     return;
   }
 
-  if (mode == NetworkMode::CONNECT_CALIBRE) {
-    startActivityForResult(
-        std::make_unique<CalibreConnectActivity>(renderer, mappedInput), [this](const ActivityResult& result) {
-          state = WebServerActivityState::MODE_SELECTION;
+  if (!networkBootReady) {
+    switch (mode) {
+      case NetworkMode::JOIN_NETWORK:
+        activityManager.goToJoinNetworkFileTransfer(returnBookPath);
+        break;
+      case NetworkMode::CONNECT_CALIBRE:
+        activityManager.goToCalibreWireless(returnBookPath);
+        break;
+      case NetworkMode::CREATE_HOTSPOT:
+        activityManager.goToHotspotFileTransfer(returnBookPath);
+        break;
+      case NetworkMode::NEARBY_STATS_SYNC:
+        break;
+    }
+    return;
+  }
 
-          startActivityForResult(std::make_unique<NetworkModeSelectionActivity>(renderer, mappedInput),
-                                 [this](const ActivityResult& result) {
-                                   if (result.isCancelled) {
-                                     exitToOrigin();
-                                   } else {
-                                     onNetworkModeSelected(std::get<NetworkModeResult>(result.data).mode);
-                                   }
-                                 });
-        });
+  if (mode == NetworkMode::CONNECT_CALIBRE) {
+    // The child activity must survive this callback; allocate only its small control object on the heap.
+    auto calibreActivity = makeUniqueNoThrow<CalibreConnectActivity>(renderer, mappedInput, !returnBookPath.empty());
+    if (!calibreActivity) {
+      LOG_ERR("WEBACT", "OOM: Calibre activity (size=%u free=%u maxAlloc=%u)",
+              static_cast<unsigned>(sizeof(CalibreConnectActivity)), ESP.getFreeHeap(), ESP.getMaxAllocHeap());
+      exitToOrigin();
+      return;
+    }
+
+    startActivityForResult(std::move(calibreActivity), [this](const ActivityResult& result) {
+      state = WebServerActivityState::MODE_SELECTION;
+
+      if (networkBootReady) {
+        exitToOrigin();
+        return;
+      }
+
+      startActivityForResult(std::make_unique<NetworkModeSelectionActivity>(renderer, mappedInput),
+                             [this](const ActivityResult& result) {
+                               if (result.isCancelled) {
+                                 exitToOrigin();
+                               } else {
+                                 onNetworkModeSelected(std::get<NetworkModeResult>(result.data).mode);
+                               }
+                             });
+    });
     return;
   }
 
@@ -303,6 +338,15 @@ void CrossPointWebServerActivity::startWebServer() {
 }
 
 void CrossPointWebServerActivity::exitToOrigin() {
+  if (networkBootReady) {
+    if (returnBookPath.empty()) {
+      silentRestart();
+    } else {
+      silentRestartToReader();
+    }
+    return;
+  }
+
   if (returnBookPath.empty()) {
     onGoHome();
     return;

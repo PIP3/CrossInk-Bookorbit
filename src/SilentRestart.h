@@ -11,6 +11,7 @@ enum class NetworkBootTarget : uint32_t {
   OPDS = 3,
   KOREADER_SYNC = 4,
   KOREADER_AUTH = 5,
+  FILE_TRANSFER = 6,
 };
 
 void silentRestart();          // home screen
