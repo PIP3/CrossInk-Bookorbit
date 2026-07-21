@@ -279,6 +279,11 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
     } else {
       const uint8_t fieldDefault = s.*(info.valuePtr);  // struct-initializer default, read before we overwrite it
       uint8_t v = doc[info.key] | fieldDefault;
+      if (info.key && strcmp(info.key, "sdFontSizeRange") == 0 &&
+          v == CrossPointSettings::SD_FONT_RANGE_NO_EMOJI_LEGACY) {
+        v = CrossPointSettings::SD_FONT_RANGE_ALL;
+        if (needsResave) *needsResave = true;
+      }
       if (isSleepScreenSetting(info)) {
         const uint8_t storedDefault = CrossPointSettings::sleepScreenModeToStorage(fieldDefault);
         const uint8_t storedValue = doc[info.key] | storedDefault;

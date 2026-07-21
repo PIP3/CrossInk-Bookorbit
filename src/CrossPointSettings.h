@@ -158,7 +158,7 @@ class CrossPointSettings {
     SD_FONT_RANGE_TEENSY = 0,
     SD_FONT_RANGE_TINY = 1,
     SD_FONT_RANGE_XLARGE = 2,
-    SD_FONT_RANGE_NO_EMOJI = 3,
+    SD_FONT_RANGE_NO_EMOJI_LEGACY = 3,
     SD_FONT_RANGE_ALL = 4,
     SD_FONT_SIZE_RANGE_COUNT
   };
@@ -371,7 +371,7 @@ class CrossPointSettings {
   uint8_t fontFamily = LEXENDDECA;
   uint8_t fontSize = MEDIUM;
 #if defined(OMIT_EMOJI_FONTS)
-  uint8_t sdFontSizeRange = SD_FONT_RANGE_NO_EMOJI;
+  uint8_t sdFontSizeRange = SD_FONT_RANGE_ALL;
 #elif defined(OMIT_TINY_FONT) && defined(OMIT_SMALL_FONT)
   uint8_t sdFontSizeRange = SD_FONT_RANGE_XLARGE;
 #elif defined(OMIT_MEDIUM_FONT) && defined(OMIT_LARGE_FONT) && defined(OMIT_XLARGE_FONT) && defined(OMIT_HUGE_FONT)

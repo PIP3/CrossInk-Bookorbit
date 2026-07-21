@@ -65,11 +65,11 @@ constexpr uint8_t SD_FONT_RANGE_POINT_SIZES[CrossPointSettings::SD_FONT_SIZE_RAN
                                            [CrossPointSettings::SD_FONT_MAX_SIZE_STEPS] = {
                                                {8, 9, 10, 12},
                                                {10, 12, 14, 16},
-                                               {16, 18, 20},
-                                               {10, 12, 14, 16, 18},
+                                               {14, 16, 18, 20},
+                                               {8, 9, 10, 12, 14, 16, 18, 20},
                                                {8, 9, 10, 12, 14, 16, 18, 20},
 };
-constexpr uint8_t SD_FONT_RANGE_STEP_COUNTS[CrossPointSettings::SD_FONT_SIZE_RANGE_COUNT] = {4, 4, 3, 5, 8};
+constexpr uint8_t SD_FONT_RANGE_STEP_COUNTS[CrossPointSettings::SD_FONT_SIZE_RANGE_COUNT] = {4, 4, 4, 8, 8};
 
 bool isValidDeviceName(const char* name) {
   if (!name) return false;
@@ -78,6 +78,9 @@ bool isValidDeviceName(const char* name) {
 }
 
 uint8_t normalizedSdFontRange(uint8_t range) {
+  if (range == CrossPointSettings::SD_FONT_RANGE_NO_EMOJI_LEGACY) {
+    return CrossPointSettings::SD_FONT_RANGE_ALL;
+  }
   return range < CrossPointSettings::SD_FONT_SIZE_RANGE_COUNT ? range : CrossPointSettings::SD_FONT_RANGE_TINY;
 }
 
