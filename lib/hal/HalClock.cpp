@@ -251,7 +251,8 @@ bool HalClock::getDate(uint16_t& year, uint8_t& month, uint8_t& day, uint8_t& ho
   return true;
 }
 
-bool HalClock::formatDate(char* buf, size_t bufSize, uint8_t utcOffsetQuarterHoursBiased) const {
+bool HalClock::formatDate(char* buf, size_t bufSize, uint8_t utcOffsetQuarterHoursBiased,
+                          const DateFormat dateFormat) const {
   if (bufSize < 13u) return false;
 
   uint16_t year;
@@ -265,8 +266,42 @@ bool HalClock::formatDate(char* buf, size_t bufSize, uint8_t utcOffsetQuarterHou
   adjustDateByDays(year, month, day, dayDelta);
   if (!isValidDate(year, month, day)) return false;
 
-  snprintf(buf, bufSize, "%s %u, %u", kMonthNames[month - 1], static_cast<unsigned int>(day),
-           static_cast<unsigned int>(year));
+  const unsigned int displayMonth = month;
+  const unsigned int displayDay = day;
+  const unsigned int displayYear = year;
+  switch (dateFormat) {
+    case DAY_MONTH_YEAR_LONG:
+      snprintf(buf, bufSize, "%u %s %u", displayDay, kMonthNames[month - 1], displayYear);
+      break;
+    case MONTH_DAY_YEAR_NUMERIC:
+      snprintf(buf, bufSize, "%02u/%02u/%u", displayMonth, displayDay, displayYear);
+      break;
+    case DAY_MONTH_YEAR_NUMERIC:
+      snprintf(buf, bufSize, "%02u/%02u/%u", displayDay, displayMonth, displayYear);
+      break;
+    case YEAR_MONTH_DAY_ISO:
+      snprintf(buf, bufSize, "%u-%02u-%02u", displayYear, displayMonth, displayDay);
+      break;
+    case YEAR_MONTH_DAY_NUMERIC:
+      snprintf(buf, bufSize, "%u/%02u/%02u", displayYear, displayMonth, displayDay);
+      break;
+    case MONTH_DAY_NUMERIC:
+      snprintf(buf, bufSize, "%02u/%02u", displayMonth, displayDay);
+      break;
+    case DAY_MONTH_NUMERIC:
+      snprintf(buf, bufSize, "%02u/%02u", displayDay, displayMonth);
+      break;
+    case MONTH_DAY_LONG:
+      snprintf(buf, bufSize, "%s %u", kMonthNames[month - 1], displayDay);
+      break;
+    case DAY_MONTH_LONG:
+      snprintf(buf, bufSize, "%u %s", displayDay, kMonthNames[month - 1]);
+      break;
+    case MONTH_DAY_YEAR_LONG:
+    default:
+      snprintf(buf, bufSize, "%s %u, %u", kMonthNames[month - 1], displayDay, displayYear);
+      break;
+  }
   return true;
 }
 
