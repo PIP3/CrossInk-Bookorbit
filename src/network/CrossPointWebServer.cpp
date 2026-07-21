@@ -1155,10 +1155,14 @@ void CrossPointWebServer::handleSettingsPage() const {
 }
 
 void CrossPointWebServer::handleGetSettings() const {
-  // Pass the SD font registry so the fontFamily setting's enumStringValues
-  // includes SD-resident families — otherwise the web API only exposes the
-  // three built-in fonts.
-  const auto& settings = getSettingsList(&sdFontSystem.registry());
+  // The device settings UI needs an owned, mutable copy of the settings list.
+  // The web API only reads it, so iterate the static base list directly rather
+  // than copying its nested vectors and callbacks while WiFi is using the heap.
+  sdFontSystem.refreshIfDirty();
+  const auto& settings = getBaseSettingsList();
+  const auto& fontFamilies = sdFontSystem.registry().getFamilies();
+  const SdCardFontFamilyInfo* selectedSdFamily =
+      SETTINGS.sdFontFamilyName[0] == '\0' ? nullptr : sdFontSystem.registry().findFamily(SETTINGS.sdFontFamilyName);
 
   server->setContentLength(CONTENT_LENGTH_UNKNOWN);
   server->send(200, "application/json", "");
@@ -1187,13 +1191,40 @@ void CrossPointWebServer::handleGetSettings() const {
       }
       case SettingType::ENUM: {
         doc["type"] = "enum";
-        if (s.valuePtr) {
+        if (s.nameId == StrId::STR_FONT_FAMILY && !fontFamilies.empty()) {
+          uint8_t selected = SETTINGS.fontFamily < CrossPointSettings::BUILTIN_FONT_COUNT ? SETTINGS.fontFamily : 0;
+          if (selectedSdFamily) {
+            const auto it = std::find_if(
+                fontFamilies.begin(), fontFamilies.end(),
+                [](const SdCardFontFamilyInfo& family) { return family.name == SETTINGS.sdFontFamilyName; });
+            if (it != fontFamilies.end()) {
+              selected = static_cast<uint8_t>(CrossPointSettings::BUILTIN_FONT_COUNT +
+                                              std::distance(fontFamilies.begin(), it));
+            }
+          }
+          doc["value"] = selected;
+        } else if (s.nameId == StrId::STR_FONT_SIZE && selectedSdFamily) {
+          doc["value"] = SETTINGS.fontSize;
+        } else if (s.valuePtr) {
           doc["value"] = static_cast<int>(enumDisplayIndexForRawValue(s, SETTINGS.*(s.valuePtr)));
         } else if (s.valueGetter) {
           doc["value"] = static_cast<int>(s.valueGetter());
         }
         JsonArray options = doc["options"].to<JsonArray>();
-        if (!s.enumStringValues.empty()) {
+        if (s.nameId == StrId::STR_FONT_FAMILY && !fontFamilies.empty()) {
+          options.add(I18N.get(StrId::STR_LEXEND_DECA));
+          options.add(I18N.get(StrId::STR_BITTER));
+          for (const auto& family : fontFamilies) {
+            options.add(family.name);
+          }
+        } else if (s.nameId == StrId::STR_FONT_SIZE && selectedSdFamily) {
+          const auto sizes = selectedSdFamily->availableSizes();
+          for (const uint8_t pointSize : sizes) {
+            char label[8];
+            snprintf(label, sizeof(label), "%u pt", pointSize);
+            options.add(label);
+          }
+        } else if (!s.enumStringValues.empty()) {
           for (const auto& opt : s.enumStringValues) {
             options.add(opt);
           }
@@ -1227,22 +1258,21 @@ void CrossPointWebServer::handleGetSettings() const {
         continue;
     }
 
-    const size_t written = serializeJson(doc, output, outputSize);
-    if (written >= outputSize) {
+    const size_t prefixSize = seenFirst ? 1 : 0;
+    if (prefixSize != 0) output[0] = ',';
+    const size_t written = serializeJson(doc, output + prefixSize, outputSize - prefixSize);
+    if (written >= outputSize - prefixSize) {
       LOG_DBG("WEB", "Skipping oversized setting JSON for: %s", s.key);
       continue;
     }
 
-    if (seenFirst) {
-      server->sendContent(",");
-    } else {
-      seenFirst = true;
-    }
-    server->sendContent(output);
+    seenFirst = true;
+    server->sendContent(output, written + prefixSize);
   }
 
   server->sendContent("]");
   server->sendContent("");
+  sdFontSystem.releaseRegistry();
   LOG_DBG("WEB", "Served settings API");
 }
 
@@ -1260,6 +1290,7 @@ void CrossPointWebServer::handlePostSettings() {
     return;
   }
 
+  sdFontSystem.refreshIfDirty();
   const auto& settings = getSettingsList(&sdFontSystem.registry());
   int applied = 0;
 
@@ -1325,6 +1356,7 @@ void CrossPointWebServer::handlePostSettings() {
 
   LOG_DBG("WEB", "Applied %d setting(s)", applied);
   server->send(200, "text/plain", String("Applied ") + String(applied) + " setting(s)");
+  sdFontSystem.releaseRegistry();
 }
 
 // ---- OPDS Server API ----

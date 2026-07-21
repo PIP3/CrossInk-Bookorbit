@@ -263,11 +263,10 @@ inline SettingInfo buildSleepScreenSetting() {
 // ACTION-type entries and entries without a key are device-only.
 //
 // The static list is constructed exactly once (master's optimization, #1086 +
-// #1636) so the per-entry SettingInfo cost is paid once. When an
-// SdCardFontRegistry is supplied AND has SD card fonts installed, the
-// font-family entry is replaced in a per-call copy with a registry-aware
-// version. Callers without SD fonts pay only a vector copy.
-inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* registry = nullptr) {
+// #1636) so the per-entry SettingInfo cost is paid once. Read-only consumers
+// can use it directly; mutable device UI lists use getSettingsList(), which
+// returns an owned copy and can add SD-card font options.
+inline const std::vector<SettingInfo>& getBaseSettingsList() {
   static const std::vector<SettingInfo> baseList = [] {
     std::vector<SettingInfo> v;
     v.reserve(67);
@@ -708,10 +707,22 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                               "tiltPageTurnDirection", StrId::STR_CAT_CONTROLS));
       }
     }
+
+    if (!gpio.deviceIsX3()) {
+      auto sleepScreenIt =
+          std::find_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.nameId == StrId::STR_SLEEP_SCREEN; });
+      if (sleepScreenIt != v.end()) {
+        removeEnumRawValue(*sleepScreenIt, static_cast<uint8_t>(CrossPointSettings::MINIMAL_STATS_SLEEP));
+      }
+    }
     return v;
   }();
 
-  std::vector<SettingInfo> v = baseList;
+  return baseList;
+}
+
+inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* registry = nullptr) {
+  std::vector<SettingInfo> v = getBaseSettingsList();
   if (registry && registry->getFamilyCount() > 0) {
     auto it = std::find_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.nameId == StrId::STR_FONT_FAMILY; });
     if (it != v.end()) {
@@ -721,13 +732,6 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         std::find_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.nameId == StrId::STR_FONT_SIZE; });
     if (fontSizeIt != v.end()) {
       *fontSizeIt = buildFontSizeSetting(registry);
-    }
-  }
-  if (!gpio.deviceIsX3()) {
-    auto sleepScreenIt =
-        std::find_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.nameId == StrId::STR_SLEEP_SCREEN; });
-    if (sleepScreenIt != v.end()) {
-      removeEnumRawValue(*sleepScreenIt, static_cast<uint8_t>(CrossPointSettings::MINIMAL_STATS_SLEEP));
     }
   }
   return v;

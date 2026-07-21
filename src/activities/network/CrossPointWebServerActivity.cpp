@@ -65,7 +65,7 @@ int barsForRssi(int rssi, int currentBars) {
 
 void CrossPointWebServerActivity::onEnter() {
   Activity::onEnter();
-  sdFontSystem.releaseLoadedFont(renderer);
+  sdFontSystem.releaseForNetwork(renderer);
 
   LOG_DBG("WEBACT", "Free heap at onEnter: %d bytes", ESP.getFreeHeap());
 
@@ -101,6 +101,16 @@ void CrossPointWebServerActivity::onExit() {
   LOG_DBG("WEBACT", "Free heap at onExit start: %d bytes", ESP.getFreeHeap());
 
   state = WebServerActivityState::SHUTTING_DOWN;
+
+  // Every active WiFi exit already reboots to clear network heap
+  // fragmentation. Restart before graceful socket teardown: a stalled browser
+  // can otherwise keep WebSocketsServer::close() retrying writes for seconds.
+  // silentRestart() returns only when deep sleep is already in progress; that
+  // path still needs the explicit cleanup below.
+  if (WiFi.getMode() != WIFI_MODE_NULL) {
+    silentRestart();
+  }
+
   stopDnsServer();
   MDNS.end();
 
@@ -115,7 +125,8 @@ void CrossPointWebServerActivity::onExit() {
   }
   delay(50);
 
-  // Skip reboot if WiFi was never activated (e.g. user backed out of mode selection).
+  // On the deep-sleep path silentRestart() returns without rebooting, so shut
+  // WiFi down after local services have released their sockets.
   if (WiFi.getMode() != WIFI_MODE_NULL) {
     if (isApMode) {
       WiFi.softAPdisconnect(true);
@@ -123,7 +134,6 @@ void CrossPointWebServerActivity::onExit() {
       WiFi.disconnect(false);
     }
     delay(30);
-    silentRestart();
   }
 
   LOG_DBG("WEBACT", "Free heap at onExit end: %d bytes", ESP.getFreeHeap());
