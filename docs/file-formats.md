@@ -237,14 +237,16 @@ Each file in `sections/*.bin` stores one laid-out spine section. The header is
 also the cache-busting key: if any layout-affecting setting differs from the
 current reader settings, the section is discarded and rebuilt.
 
-Version 50 paginates chapter-heading image runs within the reader viewport so
-they do not overflow into the reserved status-bar area. Version 49 stores
-Bionic Reading split-run offsets in visual order so RTL word prefixes render on
-the right. Version 48 changed Arabic contextual shaping and text measurement,
-so cached word positions from version 47 no longer match what `drawText` renders.
+Version 52 keeps Guide Dots centered when extra word spacing is enabled. Version
+51 preserves continuation state for oversized CJK word fragments. Version 50
+paginates chapter-heading image runs within the reader viewport so they do not
+overflow into the reserved status-bar area. Version 49 stores Bionic Reading
+split-run offsets in visual order so RTL word prefixes render on the right.
+Version 48 changed Arabic contextual shaping and text measurement, so cached
+word positions from version 47 no longer match what `drawText` renders.
 
 Version 48 makes the EPUB word-spacing level widen the natural inter-word gap
-(each level adds ~75% of the gap), which changes laid-out word positions, so
+(each level adds 10 pixels), which changes laid-out word positions, so
 older sections must rebuild. Version 46 added the EPUB word-spacing level to the
 cache-busting header. It retains the flat `TextBlock` arena and chapter-opener
 anchor behavior introduced in version 45. It includes:

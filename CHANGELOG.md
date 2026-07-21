@@ -23,6 +23,7 @@
 
 ### Fixed
 
+- Guide Dots now stay visually centered between words when extra word spacing is enabled.
 - Manual screen refreshes now preserve text anti-aliasing while reading EPUB and TXT books.
 - XTC and XTCH readers now show the configured chapter or book time-left estimate in the reader status bar.
 - Long Russian EPUB paragraphs no longer reapply paragraph indents or split continuation words when memory-safe incremental layout flushes are used.

@@ -361,13 +361,19 @@ int wordSpacingExtraFromGap(const int gap, const uint8_t wordSpacing) {
   return level * WORD_SPACING_LEVEL_PX;
 }
 
+int guideDotWordSpacingExtra(const GfxRenderer& renderer, const int fontId, const std::string& leftWord,
+                             const std::string& rightWord, const EpdFontFamily::Style leftStyle,
+                             const uint8_t wordSpacing) {
+  const int naturalWordGap =
+      renderer.getSpaceAdvance(fontId, lastCodepoint(leftWord), firstCodepoint(rightWord), leftStyle);
+  return wordSpacingExtraFromGap(naturalWordGap, wordSpacing);
+}
+
 int naturalGapBeforeToken(const GfxRenderer& renderer, const int fontId, const std::string& leftWord,
                           const std::string& rightWord, const EpdFontFamily::Style leftStyle, const bool continues,
                           const bool noSpaceBefore, const bool guideDotBefore, const uint8_t wordSpacing) {
   if (guideDotBefore) {
-    const int naturalWordGap =
-        renderer.getSpaceAdvance(fontId, lastCodepoint(leftWord), firstCodepoint(rightWord), leftStyle);
-    const int extraGap = wordSpacingExtraFromGap(naturalWordGap, wordSpacing);
+    const int extraGap = guideDotWordSpacingExtra(renderer, fontId, leftWord, rightWord, leftStyle, wordSpacing);
     return guideDotNaturalGap(renderer, fontId, leftWord, rightWord, leftStyle) + extraGap;
   }
   if (noSpaceBefore) {
@@ -1462,9 +1468,14 @@ bool ParsedText::extractLine(Arena& scratchArena, const size_t breakIndex, const
     if (lineHasGuideDot) {
       outGuideDotXOffset.push_back(0);
       if (i > 0 && lineGuideDotBefore[i]) {
+        const int wordSpacingSecondHalf =
+            guideDotWordSpacingExtra(renderer, fontId, outWords[outWords.size() - 2], outWords.back(),
+                                     outStyles[outStyles.size() - 2], wordSpacing) /
+            2;
         const int secondGap =
             guideDotSecondGap(renderer, fontId, outWords.back()) +
-            (isClosingPunctuationForJustify(firstCodepoint(outWords.back())) ? 0 : activeJustifyExtra);
+            (isClosingPunctuationForJustify(firstCodepoint(outWords.back())) ? 0 : activeJustifyExtra) +
+            wordSpacingSecondHalf;
         const int dotX = static_cast<int>(lineXPos[i]) - secondGap -
                          renderer.getTextAdvanceX(fontId, GUIDE_DOT_UTF8, EpdFontFamily::REGULAR);
         const int dotDelta = dotX - static_cast<int>(outXPos[outXPos.size() - 2]);
