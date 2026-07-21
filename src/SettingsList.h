@@ -318,8 +318,10 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     add(buildBuiltinFontSizeSetting());
     add(SettingInfo::Enum(StrId::STR_SD_FONT_SIZE_RANGE, &CrossPointSettings::sdFontSizeRange,
                           {StrId::STR_FONT_RANGE_TEENSY, StrId::STR_FONT_RANGE_TINY, StrId::STR_FONT_RANGE_XLARGE,
-                           StrId::STR_FONT_RANGE_NO_EMOJI, StrId::STR_FONT_RANGE_ALL},
-                          "sdFontSizeRange", StrId::STR_CAT_READER));
+                           StrId::STR_FONT_RANGE_ALL},
+                          "sdFontSizeRange", StrId::STR_CAT_READER)
+            .withEnumRawValues({CrossPointSettings::SD_FONT_RANGE_TEENSY, CrossPointSettings::SD_FONT_RANGE_TINY,
+                                CrossPointSettings::SD_FONT_RANGE_XLARGE, CrossPointSettings::SD_FONT_RANGE_ALL}));
     add(SettingInfo::Value(StrId::STR_LINE_SPACING, &CrossPointSettings::lineHeightPercent,
                            {CrossPointSettings::MIN_LINE_HEIGHT_PERCENT, CrossPointSettings::MAX_LINE_HEIGHT_PERCENT,
                             CrossPointSettings::LINE_HEIGHT_PERCENT_STEP},
