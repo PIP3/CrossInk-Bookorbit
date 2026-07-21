@@ -677,6 +677,13 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     add(SettingInfo::Enum(StrId::STR_CLOCK_FORMAT, &CrossPointSettings::clockFormat,
                           {StrId::STR_CLOCK_FORMAT_24H, StrId::STR_CLOCK_FORMAT_12H}, "clockFormat",
                           StrId::STR_CAT_SYSTEM));
+    add(SettingInfo::Enum(StrId::STR_DATE_FORMAT, &CrossPointSettings::dateFormat,
+                          {StrId::STR_DATE_FORMAT_MONTH_DAY_YEAR_LONG, StrId::STR_DATE_FORMAT_DAY_MONTH_YEAR_LONG,
+                           StrId::STR_DATE_FORMAT_MONTH_DAY_YEAR_NUMERIC, StrId::STR_DATE_FORMAT_DAY_MONTH_YEAR_NUMERIC,
+                           StrId::STR_DATE_FORMAT_YEAR_MONTH_DAY_ISO, StrId::STR_DATE_FORMAT_YEAR_MONTH_DAY_NUMERIC,
+                           StrId::STR_DATE_FORMAT_MONTH_DAY_NUMERIC, StrId::STR_DATE_FORMAT_DAY_MONTH_NUMERIC,
+                           StrId::STR_DATE_FORMAT_MONTH_DAY_LONG, StrId::STR_DATE_FORMAT_DAY_MONTH_LONG},
+                          "dateFormat", StrId::STR_CAT_SYSTEM));
     // Persistence flag for NTP debounce. Resetting from the web UI forces a re-sync
     // on next WiFi connect, which is useful when crossing time zones.
     add(SettingInfo::Toggle(StrId::STR_CLOCK_SYNCED, &CrossPointSettings::clockHasBeenSynced, "clockHasBeenSynced",
@@ -953,13 +960,14 @@ inline std::vector<SettingInfo> buildSystemSettingsParentList(const std::vector<
 
 inline std::vector<SettingInfo> buildSystemDeviceSettingsList(const std::vector<SettingInfo>& allSettings) {
   std::vector<SettingInfo> settings;
-  settings.reserve(7);
+  settings.reserve(8);
   addSettingByName(settings, allSettings, StrId::STR_DEVICE_NAME);
   addSettingByName(settings, allSettings, StrId::STR_TIME_TO_SLEEP);
   settings.push_back(SettingInfo::Action(StrId::STR_LANGUAGE, SettingAction::Language));
   if (halClock.isAvailable()) {
     addSettingByName(settings, allSettings, StrId::STR_CLOCK_FORMAT);
     addSettingByName(settings, allSettings, StrId::STR_CLOCK_UTC_OFFSET);
+    addSettingByName(settings, allSettings, StrId::STR_DATE_FORMAT);
     settings.push_back(SettingInfo::Action(StrId::STR_CLOCK_SYNC_NOW, SettingAction::ClockSync));
   }
   return settings;

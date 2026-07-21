@@ -2,7 +2,6 @@
 
 #include <GfxRenderer.h>
 #include <HalClock.h>
-#include <HalGPIO.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -16,9 +15,15 @@ constexpr int kHeaderDateRightInset = 12;
 constexpr int kHeaderDateBottomGap = 10;
 
 bool formatHeaderDate(char* buf, const size_t len) {
-  if (!gpio.deviceIsX3()) return false;
+  if (!halClock.isAvailable()) return false;
   if (!SETTINGS.clockDateHasBeenSynced) return false;
+#ifdef SIMULATOR
+  // The simulator has no RTC and keeps the legacy HalClock formatting API.
   return halClock.formatDate(buf, len, SETTINGS.clockUtcOffsetQ);
+#else
+  return halClock.formatDate(buf, len, SETTINGS.clockUtcOffsetQ,
+                             static_cast<HalClock::DateFormat>(SETTINGS.dateFormat));
+#endif
 }
 }  // namespace
 

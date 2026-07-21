@@ -2,6 +2,7 @@
 
 ### Added
 
+- RTC-enabled devices can now choose the date format shown in headers from Settings > System > Device.
 - The web EPUB optimizer now splits oversized chapters into memory-friendlier sections before sending them to the reader.
 - Reader indexing can now use `Incremental` or `Full Section` mode globally or per book; changing modes keeps the current chapter readable and applies when the next chapter needs indexing.
 - Look Up Word can now be assigned to short- and long-press Power button shortcuts.

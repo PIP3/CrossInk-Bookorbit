@@ -319,7 +319,7 @@ class CrossPointSettings {
   uint8_t statusBarTimeLeft = TIME_LEFT_HIDE;
   uint8_t statusBarBattery = 1;
   uint8_t xtcStatusBarMode = XTC_STATUS_BAR_HIDE;
-  // Clock visibility mode (X3 only, requires DS3231 RTC)
+  // Clock visibility mode (only used when an RTC is available)
   uint8_t hideClock = HIDE_CLOCK_ALWAYS;
   // Clock UTC offset in quarter-hour steps, biased by 48 so it fits in uint8_t.
   // Value 48 = UTC+0, 0 = UTC-12:00, 104 = UTC+14:00.
@@ -327,6 +327,8 @@ class CrossPointSettings {
   uint8_t clockUtcOffsetQ = 48;
   // Clock display format: 0 = 24-hour, 1 = 12-hour
   uint8_t clockFormat = 0;
+  // Date display format. Values match HalClock::DateFormat; 0 preserves the existing "Jul 21, 2026" default.
+  uint8_t dateFormat = 0;
   // Set once an NTP sync succeeds. Used to skip re-syncing on every WiFi connect.
   // Resetting to 0 (e.g. via the web UI) forces a re-sync on next WiFi connect.
   uint8_t clockHasBeenSynced = 0;
