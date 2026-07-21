@@ -2,6 +2,7 @@
 
 #include <FontCacheManager.h>
 #include <HalPowerManager.h>
+#include <HalStorage.h>
 #include <Logging.h>
 #include <Memory.h>
 
@@ -25,6 +26,19 @@
 #include "settings/OpdsServerListActivity.h"
 #include "settings/SettingsActivity.h"
 #include "util/FullScreenMessageActivity.h"
+
+namespace {
+constexpr uint32_t FILE_TRANSFER_MODE_MASK = 0xFF;
+constexpr uint32_t FILE_TRANSFER_RETURN_TO_READER = 1U << 8;
+
+uint32_t fileTransferBootPayload(const NetworkMode mode, const bool returnToReader) {
+  return static_cast<uint32_t>(mode) | (returnToReader ? FILE_TRANSFER_RETURN_TO_READER : 0);
+}
+
+void restartToFileTransfer(const NetworkMode mode, const std::string& returnBookPath) {
+  silentRestartToNetwork(NetworkBootTarget::FILE_TRANSFER, fileTransferBootPayload(mode, !returnBookPath.empty()));
+}
+}  // namespace
 
 void ActivityManager::begin(const uint32_t renderTaskStackBytes) {
   xTaskCreatePinnedToCore(&renderTaskTrampoline, "ActivityManagerRender", renderTaskStackBytes,
@@ -193,18 +207,45 @@ void ActivityManager::goToFileTransfer(std::string returnBookPath) {
 }
 
 void ActivityManager::goToCalibreWireless(std::string returnBookPath) {
-  replaceActivity(std::make_unique<CrossPointWebServerActivity>(renderer, mappedInput, NetworkMode::CONNECT_CALIBRE,
-                                                                std::move(returnBookPath)));
+  restartToFileTransfer(NetworkMode::CONNECT_CALIBRE, returnBookPath);
 }
 
 void ActivityManager::goToJoinNetworkFileTransfer(std::string returnBookPath) {
-  replaceActivity(std::make_unique<CrossPointWebServerActivity>(renderer, mappedInput, NetworkMode::JOIN_NETWORK,
-                                                                std::move(returnBookPath)));
+  restartToFileTransfer(NetworkMode::JOIN_NETWORK, returnBookPath);
 }
 
 void ActivityManager::goToHotspotFileTransfer(std::string returnBookPath) {
-  replaceActivity(std::make_unique<CrossPointWebServerActivity>(renderer, mappedInput, NetworkMode::CREATE_HOTSPOT,
-                                                                std::move(returnBookPath)));
+  restartToFileTransfer(NetworkMode::CREATE_HOTSPOT, returnBookPath);
+}
+
+bool ActivityManager::resumeFileTransferFromNetworkBoot(const uint32_t payload) {
+  const uint32_t rawMode = payload & FILE_TRANSFER_MODE_MASK;
+  if (rawMode > static_cast<uint32_t>(NetworkMode::CREATE_HOTSPOT)) {
+    LOG_ERR("ACT", "Invalid file transfer network boot mode: %lu", static_cast<unsigned long>(rawMode));
+    return false;
+  }
+
+  std::string returnBookPath;
+  if ((payload & FILE_TRANSFER_RETURN_TO_READER) != 0) {
+    if (!APP_STATE.openEpubPath.empty() && Storage.exists(APP_STATE.openEpubPath.c_str())) {
+      returnBookPath = APP_STATE.openEpubPath;
+    } else {
+      LOG_ERR("ACT", "File transfer cannot return to missing reader path: %s", APP_STATE.openEpubPath.c_str());
+    }
+  }
+
+  // The activity must outlive this boot function, so allocate its small control object on the heap; web buffers
+  // remain owned and released by the activity lifecycle.
+  auto activity = makeUniqueNoThrow<CrossPointWebServerActivity>(
+      renderer, mappedInput, static_cast<NetworkMode>(rawMode), std::move(returnBookPath), true);
+  if (!activity) {
+    LOG_ERR("ACT", "OOM: file transfer after minimal boot (free=%u maxAlloc=%u)", ESP.getFreeHeap(),
+            ESP.getMaxAllocHeap());
+    return false;
+  }
+
+  replaceActivity(std::move(activity));
+  return true;
 }
 
 void ActivityManager::goToNearbyStatsSync() {
