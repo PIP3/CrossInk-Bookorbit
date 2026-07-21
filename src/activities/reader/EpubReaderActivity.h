@@ -308,6 +308,10 @@ class EpubReaderActivity final : public Activity {
   void onExit() override;
   void loop() override;
   void render(RenderLock&& lock) override;
+  bool prepareManualRefresh() override {
+    pagesUntilFullRefresh = 1;
+    return true;
+  }
   bool preventAutoSleep() override { return automaticPageTurnActive; }
   bool skipLoopDelay() override { return section && section->isBuilding(); }
   bool isReaderActivity() const override { return true; }

@@ -344,6 +344,17 @@ bool ActivityManager::canSnapshotForSleepOverlay() const {
   return currentActivity && currentActivity->canSnapshotForSleepOverlay();
 }
 
+bool ActivityManager::requestManualReaderRefresh() {
+  RenderLock lock;
+  if (!currentActivity || !currentActivity->isReaderActivity() || !currentActivity->prepareManualRefresh()) {
+    return false;
+  }
+
+  lock.unlock();
+  requestUpdate(true);
+  return true;
+}
+
 bool ActivityManager::skipLoopDelay() const { return currentActivity && currentActivity->skipLoopDelay(); }
 
 std::string ActivityManager::getCurrentBookPath() const {

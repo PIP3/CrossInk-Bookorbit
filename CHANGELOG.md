@@ -23,6 +23,7 @@
 
 ### Fixed
 
+- Manual screen refreshes now preserve text anti-aliasing while reading EPUB and TXT books.
 - XTC and XTCH readers now show the configured chapter or book time-left estimate in the reader status bar.
 - Long Russian EPUB paragraphs no longer reapply paragraph indents or split continuation words when memory-safe incremental layout flushes are used.
 - EPUB layouts using SD-card fonts now release unused font-menu metadata before indexing, reducing unnecessary Safe Mode fallbacks.
