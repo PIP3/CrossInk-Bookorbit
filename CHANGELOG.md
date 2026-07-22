@@ -30,6 +30,7 @@
 
 ### Fixed
 
+- Low-memory EPUB layout now fails cleanly when page or image elements cannot be allocated instead of risking a reboot.
 - EPUB background indexing now waits for sufficient contiguous memory instead of starting a layout pass that is likely to fail.
 - KOReader Sync now uses a smaller TLS footprint and can start safely when reader heap is fragmented.
 - Web file transfers now keep the active request task registered with the watchdog, and low-memory EPUB grayscale falls back without leaving a stale display baseline.

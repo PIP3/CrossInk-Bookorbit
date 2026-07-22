@@ -8,7 +8,7 @@
 
 class ImageBlock final : public Block {
  public:
-  ImageBlock(const std::string& imagePath, int16_t width, int16_t height);
+  ImageBlock(std::string imagePath, int16_t width, int16_t height);
   ~ImageBlock() override = default;
 
   const std::string& getImagePath() const { return imagePath; }

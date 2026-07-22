@@ -6,6 +6,7 @@
 #include <Serialization.h>
 
 #include <cstdlib>
+#include <utility>
 
 #include "Epub/converters/DirectPixelWriter.h"
 #include "Epub/converters/ImageDecoderFactory.h"
@@ -15,8 +16,8 @@
 // - uint16_t height
 // - uint8_t pixels[...] - 2 bits per pixel, packed (4 pixels per byte), row-major order
 
-ImageBlock::ImageBlock(const std::string& imagePath, int16_t width, int16_t height)
-    : imagePath(imagePath), width(width), height(height) {}
+ImageBlock::ImageBlock(std::string imagePath, int16_t width, int16_t height)
+    : imagePath(std::move(imagePath)), width(width), height(height) {}
 
 bool ImageBlock::imageExists() const { return Storage.exists(imagePath.c_str()); }
 
@@ -374,7 +375,7 @@ std::unique_ptr<ImageBlock> ImageBlock::deserialize(FsFile& file) {
     return nullptr;
   }
 
-  auto* imageBlock = new (std::nothrow) ImageBlock(path, w, h);
+  auto* imageBlock = new (std::nothrow) ImageBlock(std::move(path), w, h);
   if (!imageBlock) {
     LOG_ERR("IMG", "Deserialization failed: could not allocate ImageBlock");
     return nullptr;
