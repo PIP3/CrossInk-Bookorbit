@@ -1,6 +1,7 @@
 #include "DictionaryDefinitionActivity.h"
 
 #include <DictHtmlRenderer.h>
+#include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
@@ -12,6 +13,7 @@
 #include <cstring>
 #include <memory>
 #include <numeric>
+#include <optional>
 
 #include "../settings/DictionarySelectActivity.h"
 #include "CrossPointSettings.h"
@@ -28,6 +30,8 @@
 static constexpr char kBullet[] = "- ";
 static constexpr const char kEtymologyTreeMarker[] = "Etymology tree";
 static constexpr int kDictionarySwitchTouchHeight = 56;
+
+class DictionaryDefinitionActivity;
 
 static bool dictionaryPageButtonTriggered(MappedInputManager& mappedInput, bool previous) {
   const bool usePress = SETTINGS.sideButtonLongPress == CrossPointSettings::SIDE_LONG_PRESS::SIDE_LONG_OFF;
@@ -49,6 +53,7 @@ static std::string dictionaryNameFromPath(const std::string& path) {
 }
 
 struct DefinitionSpanFeedContext {
+  DictionaryDefinitionActivity* activity = nullptr;
   DictLayout::Wrapper* wrapper = nullptr;
   char lastVisibleChar = '\0';
   bool sawEtymologyTree = false;
@@ -140,14 +145,39 @@ static bool shouldSanitizeDefinitionCodepoint(uint32_t cp) {
   }
 }
 
-static bool definitionTextNeedsSanitizing(const char* text) {
-  if (!text) return false;
-  const auto* p = reinterpret_cast<const unsigned char*>(text);
-  uint32_t cp = 0;
-  while ((cp = utf8NextCodepoint(&p))) {
-    if (shouldSanitizeDefinitionCodepoint(cp)) return true;
+// Every Lexend Deca/Bitter reader font header (all sizes and styles) has the
+// same direct coverage among the codepoints above. Keep that coverage beside
+// the approximation policy instead of probing the font map for every definition.
+// The Greek entries below are the renderer's fixed synthetic fallbacks; U+02BB
+// is its fixed alias for the left single quotation mark.
+static constexpr bool builtinDefinitionFontSupportsCandidate(const uint32_t cp) {
+  switch (cp) {
+    case 0x00A0:
+    case 0x00E6:
+    case 0x00F0:
+    case 0x00F8:
+    case 0x0127:
+    case 0x014B:
+    case 0x0153:
+    case 0x02BB:
+    case 0x0393:
+    case 0x03B5:
+    case 0x03C9:
+    case 0x2013:
+    case 0x2014:
+    case 0x2018:
+    case 0x2019:
+    case 0x201C:
+    case 0x201D:
+    case 0x2026:
+    case 0x2212:
+      return true;
+    default:
+      return (cp >= 0x0300 && cp <= 0x0304) || (cp >= 0x0306 && cp <= 0x030C) || cp == 0x030F ||
+             (cp >= 0x0311 && cp <= 0x0312) || cp == 0x031B || (cp >= 0x0323 && cp <= 0x0324) ||
+             (cp >= 0x0326 && cp <= 0x0328) || cp == 0x032E || cp == 0x0331 || cp == 0x0335 || cp == 0x034F ||
+             cp == 0x03BB;
   }
-  return false;
 }
 
 static void appendDictionaryApproximation(uint32_t cp, std::string& out) {
@@ -288,18 +318,11 @@ static void appendDictionaryApproximation(uint32_t cp, std::string& out) {
 
 static bool startsWithCapitalizedToken(const char* text) { return text && isAsciiUpper(text[0]); }
 
-static std::string sanitizeDefinitionText(const char* text, bool inEtymologyTree) {
-  std::string out;
-  if (!text) return out;
-  out.reserve(std::char_traits<char>::length(text));
-
-  const auto* p = reinterpret_cast<const unsigned char*>(text);
-  uint32_t cp = 0;
-  while ((cp = utf8NextCodepoint(&p))) {
-    appendDictionaryApproximation(cp, out);
-  }
-  fixEtymologySpacingArtifacts(out, inEtymologyTree);
-  return out;
+static EpdFontFamily::Style styleForSpan(const StyledSpan& span) {
+  if (span.bold && span.italic) return EpdFontFamily::BOLD_ITALIC;
+  if (span.bold) return EpdFontFamily::BOLD;
+  if (span.italic) return EpdFontFamily::ITALIC;
+  return EpdFontFamily::REGULAR;
 }
 
 void DictionaryDefinitionActivity::onEnter() {
@@ -321,7 +344,47 @@ void DictionaryDefinitionActivity::onExit() {
   Activity::onExit();
 }
 
-int DictionaryDefinitionActivity::getDefinitionFontId(bool) const { return UI_12_FONT_ID; }
+int DictionaryDefinitionActivity::getDefinitionFontId(bool) const { return SETTINGS.getReaderFontId(); }
+
+bool DictionaryDefinitionActivity::shouldApproximateDefinitionCodepoint(const uint32_t cp) const {
+  if (!shouldSanitizeDefinitionCodepoint(cp)) return false;
+
+  const int fontId = getDefinitionFontId();
+  // SD fonts own their coverage. Do not replace pronunciation, Greek, or combining
+  // characters before the active .cpfont gets a chance to draw them.
+  if (renderer.isSdCardFont(fontId)) return false;
+
+  return !builtinDefinitionFontSupportsCandidate(cp);
+}
+
+bool DictionaryDefinitionActivity::definitionTextNeedsApproximation(const char* text) const {
+  if (!text) return false;
+  const auto* p = reinterpret_cast<const unsigned char*>(text);
+  uint32_t cp = 0;
+  while ((cp = utf8NextCodepoint(&p))) {
+    if (shouldApproximateDefinitionCodepoint(cp)) return true;
+  }
+  return false;
+}
+
+std::string DictionaryDefinitionActivity::approximateDefinitionText(const char* text,
+                                                                    const bool inEtymologyTree) const {
+  std::string out;
+  if (!text) return out;
+  out.reserve(std::char_traits<char>::length(text));
+
+  const auto* p = reinterpret_cast<const unsigned char*>(text);
+  uint32_t cp = 0;
+  while ((cp = utf8NextCodepoint(&p))) {
+    if (shouldApproximateDefinitionCodepoint(cp)) {
+      appendDictionaryApproximation(cp, out);
+    } else {
+      utf8AppendCodepoint(cp, out);
+    }
+  }
+  fixEtymologySpacingArtifacts(out, inEtymologyTree);
+  return out;
+}
 
 int DictionaryDefinitionActivity::getLineHeight() const {
   return static_cast<int>(renderer.getLineHeight(getDefinitionFontId()) * SETTINGS.getReaderLineCompression());
@@ -378,7 +441,7 @@ void DictionaryDefinitionActivity::wrapText() {
     const int innerPadding = metrics.optionPopupInnerPadding;
     leftPadding = modalX_ + innerPadding;
     rightPadding = renderer.getScreenWidth() - (modalX_ + modalWidth_ - innerPadding);
-    bodyStartY = modalY_ + innerPadding + renderer.getLineHeight(UI_12_FONT_ID) + metrics.optionPopupTitleGap;
+    bodyStartY = modalY_ + innerPadding + renderer.getLineHeight(getDefinitionFontId()) + metrics.optionPopupTitleGap;
   } else {
     const int sidePadding = metrics.contentSidePadding + SETTINGS.screenMargin;
     leftPadding = contentX + sidePadding;
@@ -451,7 +514,7 @@ void DictionaryDefinitionActivity::sizeModalForCurrentPage() {
   const int maxHeight =
       renderer.getScreenHeight() - metrics.buttonHintsHeight - metrics.verticalSpacing - dialogMargin * 2;
   const int visibleLines = std::max(1, static_cast<int>(layoutLines.size()));
-  const int titleLineHeight = renderer.getLineHeight(UI_12_FONT_ID);
+  const int titleLineHeight = renderer.getLineHeight(getDefinitionFontId());
   const int footerHeight = dictionaryFooterHeight();
   const int contentHeight = metrics.optionPopupInnerPadding * 2 + titleLineHeight + metrics.optionPopupTitleGap +
                             visibleLines * getLineHeight() + footerHeight;
@@ -528,7 +591,7 @@ void DictionaryDefinitionActivity::wrapHtml() {
   // it each call (XML_ParserReset, not free+create), so no per-turn object/parser
   // churn. Streaming means it never materializes the whole-definition buffers.
   const std::string dictPath = foundLocation.folderPath + ".dict";
-  DefinitionSpanFeedContext feedCtx{&wrapper};
+  DefinitionSpanFeedContext feedCtx{this, &wrapper};
   const DictHtmlRenderer::SpanSink spanSink{&feedCtx, &DictionaryDefinitionActivity::feedSpanToWrapper};
   htmlRenderer_.renderFromFileStreaming(dictPath.c_str(), definitionOffset_, definitionSize_, spanSink);
   wrapper.finish();
@@ -537,11 +600,12 @@ void DictionaryDefinitionActivity::wrapHtml() {
 
 void DictionaryDefinitionActivity::feedSpanToWrapper(void* ctx, const StyledSpan& span) {
   auto* feedCtx = static_cast<DefinitionSpanFeedContext*>(ctx);
+  const EpdFontFamily::Style style = styleForSpan(span);
   const bool hasMarker = span.text && strstr(span.text, kEtymologyTreeMarker) != nullptr;
   const bool needsBoundarySpace = feedCtx->sawEtymologyTree && feedCtx->lastVisibleChar != '\0' &&
                                   (isAsciiWordChar(feedCtx->lastVisibleChar) || feedCtx->lastVisibleChar == '.') &&
                                   startsWithCapitalizedToken(span.text);
-  const bool needsCleanup = needsBoundarySpace || definitionTextNeedsSanitizing(span.text) ||
+  const bool needsCleanup = needsBoundarySpace || feedCtx->activity->definitionTextNeedsApproximation(span.text) ||
                             definitionTextHasEtymologySpacingArtifact(span.text, feedCtx->sawEtymologyTree);
   if (!needsCleanup) {
     feedCtx->wrapper->onSpan(span);
@@ -550,7 +614,7 @@ void DictionaryDefinitionActivity::feedSpanToWrapper(void* ctx, const StyledSpan
     return;
   }
 
-  std::string cleaned = sanitizeDefinitionText(span.text, feedCtx->sawEtymologyTree);
+  std::string cleaned = feedCtx->activity->approximateDefinitionText(span.text, feedCtx->sawEtymologyTree);
   if (needsBoundarySpace && !cleaned.empty() && cleaned[0] != ' ') {
     cleaned.insert(cleaned.begin(), ' ');
   }
@@ -593,9 +657,9 @@ void DictionaryDefinitionActivity::wrapPlain() {
 
   auto tryAppendWord = [&]() {
     if (currentWord.empty()) return;
-    std::string word = (definitionTextNeedsSanitizing(currentWord.c_str()) ||
+    std::string word = (definitionTextNeedsApproximation(currentWord.c_str()) ||
                         definitionTextHasEtymologySpacingArtifact(currentWord.c_str(), false))
-                           ? sanitizeDefinitionText(currentWord.c_str(), false)
+                           ? approximateDefinitionText(currentWord.c_str(), false)
                            : std::move(currentWord);
     currentWord.clear();
     if (word.empty()) return;
@@ -923,6 +987,12 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
   if (isWordSelectMode && nextRenderMode_ == RenderMode::Differential && !controller.isActive()) {
     const int currIdx = navigator.getCurrentFlatIndex();
     if (currIdx >= 0) {
+      if (const auto* word = navigator.getWordAt(currIdx); word && renderer.isSdCardFont(word->fontId)) {
+        if (auto* fcm = renderer.getFontCacheManager()) {
+          const uint8_t styleMask = static_cast<uint8_t>(1u << (static_cast<uint8_t>(word->style) & 0x03));
+          fcm->prewarmCache(word->fontId, navigator.getDisplay(*word), styleMask);
+        }
+      }
       const int lineHeight = getLineHeight();
       auto dirty = navigator.renderHighlightDifferential(renderer, lineHeight, prevHighlightIdx_, currIdx);
       if (dirty.has_value()) {
@@ -954,24 +1024,27 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
 
   const auto metrics = UITheme::getInstance().getMetrics();
   const int bodyFontId = getDefinitionFontId();
+  const int titleFontId = bodyFontId;
+  const int titleLineHeight = renderer.getLineHeight(titleFontId);
   const int indentStep = renderer.getTextWidth(bodyFontId, "   ");
 
-  // Header
+  // Header chrome stays in the built-in UI font; the looked-up word uses the
+  // active reader font and is drawn with the definition body after prewarming.
   Rect headerRect{contentX, hintGutterHeight + metrics.topPadding, renderer.getScreenWidth() - hintGutterWidth,
                   metrics.headerHeight};
   if (hasModalBackground()) {
     drawModalFrame();
     const int innerPadding = metrics.optionPopupInnerPadding;
-    headerRect = Rect{modalX_ + innerPadding, modalY_ + innerPadding, modalWidth_ - innerPadding * 2,
-                      renderer.getLineHeight(UI_12_FONT_ID)};
-    renderer.drawText(UI_12_FONT_ID, headerRect.x, headerRect.y, headword.c_str(), true, EpdFontFamily::BOLD);
+    headerRect = Rect{modalX_ + innerPadding, modalY_ + innerPadding, modalWidth_ - innerPadding * 2, titleLineHeight};
     if (metrics.optionPopupTitleSeparator) {
       const int separatorY = headerRect.y + headerRect.height + metrics.optionPopupTitleGap / 2;
       renderer.drawLine(headerRect.x, separatorY, headerRect.x + headerRect.width, separatorY, true);
     }
   } else {
-    GUI.drawHeader(renderer, headerRect, headword.c_str());
+    GUI.drawHeader(renderer, headerRect, "");
   }
+
+  int titleRight = headerRect.x + headerRect.width;
   if (!isWordSelectMode && totalPages > 1) {
     char pageInfo[16];
     snprintf(pageInfo, sizeof(pageInfo), "%d/%d", currentPage + 1, totalPages);
@@ -983,7 +1056,17 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
     const int pageInfoX = hasModalBackground() ? headerRect.x + headerRect.width - textWidth
                                                : renderer.getScreenWidth() - rightPadding - textWidth;
     renderer.drawText(SMALL_FONT_ID, pageInfoX, pageInfoY, pageInfo);
+    titleRight = pageInfoX - metrics.optionPopupInnerPadding;
   }
+
+  const int titleX = hasModalBackground() ? headerRect.x : headerRect.x + metrics.contentSidePadding;
+  const int titleY = hasModalBackground() ? headerRect.y : headerRect.y + (headerRect.height - titleLineHeight) / 2;
+  const int titleMaxWidth = std::max(0, titleRight - titleX);
+  const std::string visibleHeadword =
+      renderer.truncatedText(titleFontId, headword.c_str(), titleMaxWidth, EpdFontFamily::BOLD);
+  auto renderTitle = [&]() {
+    renderer.drawText(titleFontId, titleX, titleY, visibleHeadword.c_str(), true, EpdFontFamily::BOLD);
+  };
 
   // Body: draw layout lines for the current page (BW pass). layoutLines holds
   // only the current page (Stage 2a streaming), so it is indexed from 0.
@@ -1012,7 +1095,28 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
       }
     }
   };
-  renderBody();
+
+  // SD fonts retain bitmaps for only the most recently prepared page. The
+  // reader background above may have replaced that cache, so scan the visible
+  // title and definition page before drawing them. The .dict reader was closed
+  // by loadPage(), keeping font and dictionary SD access serialized.
+  std::optional<FontCacheManager::PrewarmScope> definitionFontScope;
+  bool definitionTextRendered = false;
+  if (renderer.isSdCardFont(bodyFontId)) {
+    if (auto* fcm = renderer.getFontCacheManager()) {
+      definitionFontScope.emplace(*fcm);
+      renderTitle();
+      renderBody();  // scan pass
+      definitionFontScope->endScanAndPrewarm();
+      renderTitle();
+      renderBody();  // prepared render; scope keeps the glyph cache alive through highlighting
+      definitionTextRendered = true;
+    }
+  }
+  if (!definitionTextRendered) {
+    renderTitle();
+    renderBody();
+  }
 
   if (hasModalBackground() && !dictionaryName_.empty()) {
     const int innerPadding = metrics.optionPopupInnerPadding;

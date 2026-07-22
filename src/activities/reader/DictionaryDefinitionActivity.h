@@ -152,6 +152,9 @@ class DictionaryDefinitionActivity final : public Activity {
   void sizeModalForCurrentPage();
   void drawModalFrame() const;
   int getMixedWidth(std::vector<IpaTextSpan>& ipaRuns, const char* text, EpdFontFamily::Style style);
+  bool definitionTextNeedsApproximation(const char* text) const;
+  std::string approximateDefinitionText(const char* text, bool inEtymologyTree) const;
+  bool shouldApproximateDefinitionCodepoint(uint32_t cp) const;
   // Width measurement adapter injected into DictLayout::wrapSpans. ctx is `this`.
   static int measureWidthAdapter(void* ctx, const char* text, EpdFontFamily::Style style, bool isIpa);
   // Line sink injected into DictLayout::wrapSpans: keeps collectTargetPage_'s

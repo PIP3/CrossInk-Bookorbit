@@ -140,9 +140,9 @@ The history screen shows the 50 most recent entries. The on-disk history is appe
 
 ## IPA Phonetic Characters
 
-Dictionary definitions can render common IPA phonetic characters (pronunciation symbols like /ˈæp.əl/) using the built-in definition font.
+Dictionary definitions use the same font as the active reader. If you use an SD-card font with the needed glyphs, pronunciation symbols and other non-Latin dictionary text are passed through unchanged.
 
-If you see a filled diamond where a pronunciation symbol should appear, that character is outside the supported IPA range.
+Built-in fonts keep the glyphs they contain and approximate only unsupported pronunciation symbols. If you see a filled diamond, choose an SD-card font that includes that character.
 
 ---
 

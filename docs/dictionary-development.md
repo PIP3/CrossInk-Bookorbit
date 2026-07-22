@@ -35,7 +35,7 @@ StarDict files with `idxoffsetbits=64` are parsed, but entries whose definition 
 
 ## Definition Rendering
 
-`DictionaryDefinitionActivity` resolves the selected `.dict` byte range and renders one page at a time. `DictHtmlRenderer` streams HTML input, while `DictLayout::Wrapper` wraps styled spans into page lines. Keeping only the current page bounds peak RAM and avoids materializing a large definition as one in-memory document. Definitions currently use the fixed built-in `UI_12_FONT_ID`; there are no separate definition font settings.
+`DictionaryDefinitionActivity` resolves the selected `.dict` byte range and renders one page at a time. `DictHtmlRenderer` streams HTML input, while `DictLayout::Wrapper` wraps styled spans into page lines. Keeping only the current page bounds peak RAM and avoids materializing a large definition as one in-memory document. Definition body text uses the active reader font; headers and controls keep built-in UI fonts. SD-font text is passed through unchanged. Built-in coverage uses the audited, fixed Lexend Deca/Bitter glyph set (including the renderer's `Γ`, `ε`, and `ω` fallbacks), while unsupported IPA, Greek, combining-mark, and punctuation codepoints use the existing approximations.
 
 Paging re-parses the definition from its start. This trades extra sequential reads for predictable memory usage on the ESP32-C3.
 
