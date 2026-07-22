@@ -26,6 +26,7 @@
 
 ### Fixed
 
+- KOReader authentication and progress sync now reconnect through WiFi selection when the saved WiFi state has no active station address.
 - File Transfer now loads web settings with less memory and exits promptly when browser connections stall.
 - Manual screen refreshes now preserve text anti-aliasing while reading EPUB and TXT books.
 - XTC and XTCH readers now show the configured chapter or book time-left estimate in the reader status bar.

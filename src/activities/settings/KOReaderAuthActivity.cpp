@@ -2,6 +2,7 @@
 
 #include <GfxRenderer.h>
 #include <I18n.h>
+#include <Logging.h>
 #include <WiFi.h>
 
 #include "KOReaderCredentialStore.h"
@@ -12,6 +13,7 @@
 #include "activities/network/WifiSelectionActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "network/WifiUtils.h"
 
 void KOReaderAuthActivity::onWifiSelectionComplete(const bool success) {
   if (!success) {
@@ -31,7 +33,10 @@ void KOReaderAuthActivity::onWifiSelectionComplete(const bool success) {
     state = AUTHENTICATING;
     statusMessage = mode == Mode::SIGN_UP ? tr(STR_CREATING_ACCOUNT) : tr(STR_AUTHENTICATING);
   }
-  requestUpdate();
+  if (requestUpdateAndWait() != RequestUpdateResult::Rendered) {
+    LOG_ERR("KOSync", "Authentication screen could not be rendered before request");
+    requestUpdate(true);
+  }
 
   performAuthentication();
 }
@@ -58,7 +63,7 @@ void KOReaderAuthActivity::onEnter() {
   sdFontSystem.releaseLoadedFont(renderer);
 
   // Check if already connected
-  if (WiFi.status() == WL_CONNECTED) {
+  if (hasActiveStationWifiConnection()) {
     onWifiSelectionComplete(true);
     return;
   }

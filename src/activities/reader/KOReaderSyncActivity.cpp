@@ -25,6 +25,7 @@
 #include "activities/network/WifiSelectionActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "network/WifiUtils.h"
 
 namespace {
 std::string calculateDocumentHashForMethod(const std::string& path, const DocumentMatchMethod method) {
@@ -536,7 +537,7 @@ void KOReaderSyncActivity::onEnter() {
   wifiActivated = true;
 
   // Check if already connected (e.g. from settings page auth)
-  if (WiFi.status() == WL_CONNECTED) {
+  if (hasActiveStationWifiConnection()) {
     LOG_DBG("KOSync", "Already connected to WiFi");
     onWifiSelectionComplete(true);
     return;
