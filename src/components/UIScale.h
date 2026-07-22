@@ -2,11 +2,10 @@
 #include "CrossPointSettings.h"
 #include "fontIds.h"
 
-// Maps the uiScale setting to the FreeInkUI font slots. Row heights, header
-// height, and touch sizes are not chosen here: FreeInkApp derives all metric
-// tokens from the body font's line height (themeTokensForLineHeight), so each
-// scale step grows every element uniformly and layout stays within screen
-// bounds through the components' own virtualization.
+// Maps the uiScale setting to the FreeInkUI font slots. Small and body use the
+// same font so list labels and their values have the same visible size. Row
+// heights, header height, and touch sizes are derived from the body font's line
+// height by FreeInkApp.
 struct UIScaleSpec {
   int smallFontId;
   int bodyFontId;
@@ -17,34 +16,19 @@ inline UIScaleSpec uiScaleSpec() {
   UIScaleSpec spec{};
   switch (SETTINGS.uiScale) {
     case CrossPointSettings::UI_SCALE_SMALL:
-      spec.smallFontId = SMALL_FONT_ID;
       spec.bodyFontId = UI_10_FONT_ID;
       spec.titleFontId = UI_12_FONT_ID;
       break;
     case CrossPointSettings::UI_SCALE_LARGE:
-      spec.smallFontId = UI_10_FONT_ID;
-#ifdef OMIT_MEDIUM_FONT
       spec.bodyFontId = UI_12_FONT_ID;
-#else
-      spec.smallFontId = UI_12_FONT_ID;
-      spec.bodyFontId = LEXENDDECA_14_FONT_ID;
-#endif
-#ifdef OMIT_LARGE_FONT
-      spec.titleFontId = spec.bodyFontId;
-#else
-      spec.titleFontId = LEXENDDECA_16_FONT_ID;
-#endif
+      spec.titleFontId = UI_12_FONT_ID;
       break;
-    case CrossPointSettings::UI_SCALE_MEDIUM:
     default:
       spec.smallFontId = UI_10_FONT_ID;
       spec.bodyFontId = UI_12_FONT_ID;
-#ifdef OMIT_MEDIUM_FONT
       spec.titleFontId = UI_12_FONT_ID;
-#else
-      spec.titleFontId = LEXENDDECA_14_FONT_ID;
-#endif
       break;
   }
+  spec.smallFontId = spec.bodyFontId;
   return spec;
 }

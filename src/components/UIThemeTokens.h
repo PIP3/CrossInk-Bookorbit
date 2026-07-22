@@ -10,15 +10,8 @@ inline int16_t scaledListMetric(const int metric) {
   constexpr int baseFontSize = 10;
   int scaleFontSize = baseFontSize;
   switch (SETTINGS.uiScale) {
-    case CrossPointSettings::UI_SCALE_MEDIUM:
-      scaleFontSize = 12;
-      break;
     case CrossPointSettings::UI_SCALE_LARGE:
-#ifdef OMIT_MEDIUM_FONT
       scaleFontSize = 12;
-#else
-      scaleFontSize = 14;
-#endif
       break;
     case CrossPointSettings::UI_SCALE_SMALL:
     default:

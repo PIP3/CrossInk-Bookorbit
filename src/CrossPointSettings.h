@@ -310,7 +310,7 @@ class CrossPointSettings {
   // UI scale for list-style screens: sizes list fonts and row heights
   // together so touch targets grow uniformly. Board-dependent default (see
   // defaultUiScale in CrossPointSettings.cpp).
-  enum UI_SCALE { UI_SCALE_SMALL = 0, UI_SCALE_MEDIUM = 1, UI_SCALE_LARGE = 2, UI_SCALE_COUNT };
+  enum UI_SCALE { UI_SCALE_SMALL = 0, UI_SCALE_LARGE = 1, UI_SCALE_COUNT };
   static uint8_t defaultUiScale();
 
   // Sleep screen settings
