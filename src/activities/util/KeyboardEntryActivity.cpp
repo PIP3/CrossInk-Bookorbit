@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cstring>
 
+#include "DeviceCapabilities.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -404,7 +405,8 @@ KeyboardEntryActivity::InputFieldTouchTarget KeyboardEntryActivity::inputFieldTo
                           metrics.verticalSpacing * 4 + metrics.keyboardVerticalOffset;
 
   int availableWidth = pageWidth;
-  if (gpio.deviceIsX3()) {
+  // Clear the side-button hint gutters, which only render on edge-button boards without touch.
+  if (deviceHasEdgeSideButtons(gpio) && !gpio.hasTouch()) {
     availableWidth -= 2 * metrics.sideButtonHintsWidth;
   }
   const int effectiveMargin = (pageWidth - availableWidth * metrics.keyboardTextFieldWidthPercent / 100) / 2;
@@ -726,7 +728,8 @@ void KeyboardEntryActivity::render(RenderLock&&) {
 
   const bool isPassword = (inputType == InputType::Password);
   int availableWidth = pageWidth;
-  if (gpio.deviceIsX3()) {
+  // Clear the side-button hint gutters, which only render on edge-button boards without touch.
+  if (deviceHasEdgeSideButtons(gpio) && !gpio.hasTouch()) {
     availableWidth -= 2 * metrics.sideButtonHintsWidth;
   }
   const int effectiveMargin = (pageWidth - availableWidth * metrics.keyboardTextFieldWidthPercent / 100) / 2;

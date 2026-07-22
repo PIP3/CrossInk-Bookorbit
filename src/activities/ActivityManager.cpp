@@ -1,5 +1,6 @@
 #include "ActivityManager.h"
 
+#include <CrossInkHalFrontlight.h>
 #include <FontCacheManager.h>
 #include <HalPowerManager.h>
 #include <HalStorage.h>
@@ -28,6 +29,7 @@
 #include "reader/ReaderActivity.h"
 #include "settings/OpdsServerListActivity.h"
 #include "settings/SettingsActivity.h"
+#include "util/FrontlightPanelActivity.h"
 #include "util/FullScreenMessageActivity.h"
 
 namespace {
@@ -92,6 +94,14 @@ void ActivityManager::renderTaskLoop() {
 void ActivityManager::loop() {
   if (currentActivity) {
     mappedInput.setPowerAsConfirmInReaderMode(currentActivity->allowPowerAsConfirmInReaderMode());
+
+    // Frontlight quick panel: global top-edge down-swipe on boards where the
+    // home key freed that edge (X4 Pro). Pushed, so it returns to whatever
+    // was underneath — including mid-book.
+    if (Frontlight.present() && currentActivity->name != "FrontlightPanel" && mappedInput.wasLightPanelGesture()) {
+      pushActivity(std::make_unique<FrontlightPanelActivity>(renderer, mappedInput));
+      return;
+    }
     // Note: do not hold a lock here, the loop() method must be responsible for acquire one if needed
     if (!handleReaderPowerButtonSettingsOverride() && !handleGlobalHomeGesture()) {
       currentActivity->loop();
@@ -196,6 +206,10 @@ bool ActivityManager::handleGlobalHomeGesture() {
 
   if (!mappedInput.wasHomeGesture()) {
     return false;
+  }
+
+  if (currentActivity->handleHomeGesture()) {
+    return true;
   }
 
   goHome();

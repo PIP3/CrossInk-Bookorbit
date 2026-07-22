@@ -74,8 +74,16 @@ class MappedInputManager {
   SwipeDir wasSwipe() const;
   bool wasSwipeWithPoints(SwipeDir& direction, int& startX, int& startY, int& endX, int& endY) const;
   bool wasLeftEdgeGesture() const;
+  // Exit-to-home intent. Boards with a capacitive home key (X4 Pro) use the
+  // key's press edge; everywhere else it's the bottom-edge up-swipe.
   bool wasHomeGesture() const;
+  // Contextual menu intent (the reader menu). Home-key boards move this to the
+  // bottom-edge up-swipe (freed by the home key); others keep the top-edge
+  // down-swipe.
   bool wasMenuGesture() const;
+  // Frontlight quick panel: top-edge down-swipe, only on home-key boards where
+  // that edge is no longer the menu gesture.
+  bool wasLightPanelGesture() const;
 #else
   constexpr bool hasTouch() const { return false; }
   constexpr bool hasTouchHardware() const { return false; }
@@ -107,6 +115,7 @@ class MappedInputManager {
   constexpr bool wasLeftEdgeGesture() const { return false; }
   constexpr bool wasHomeGesture() const { return false; }
   constexpr bool wasMenuGesture() const { return false; }
+  constexpr bool wasLightPanelGesture() const { return false; }
 #endif
   bool wasAnyPressed() const;
   bool wasAnyReleased() const;
@@ -170,7 +179,11 @@ class MappedInputManager {
   bool shouldMirrorPowerAsConfirmHold() const;
 #if CROSSINK_APP_CAP_TOUCH
   bool touchInputEnabled() const;
+  bool hasHomeKeyHardware() const;
   bool wasBackGesture() const;
+  bool wasTopEdgeDownSwipe() const;
+  bool wasBottomEdgeUpSwipe() const;
+  // Fetch the pending swipe (if any) and map both endpoints to logical screen coords.
   bool decodeSwipe(int& sx, int& sy, int& ex, int& ey) const;
   bool listItemFromPoint(int x, int y, int& index, int itemCount, int selectedIndex, int listTop, int listHeight,
                          bool hasSubtitle) const;

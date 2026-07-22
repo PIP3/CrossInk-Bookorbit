@@ -508,9 +508,16 @@ bool MappedInputManager::wasBackGesture() const {
 
 bool MappedInputManager::wasLeftEdgeGesture() const { return wasBackGesture(); }
 
-bool MappedInputManager::wasMenuGesture() const {
-  if (!touchInputEnabled()) return false;
-  // Downward swipe starting at the top edge (mirror of the bottom-edge home gesture).
+bool MappedInputManager::hasHomeKeyHardware() const {
+#ifdef SIMULATOR
+  return false;
+#else
+  return gpio.hasHomeKey();
+#endif
+}
+
+bool MappedInputManager::wasTopEdgeDownSwipe() const {
+  // Downward swipe starting at the top edge (mirror of the bottom-edge swipe).
   int sx = 0;
   int sy = 0;
   int ex = 0;
@@ -522,7 +529,7 @@ bool MappedInputManager::wasMenuGesture() const {
   return hit;
 }
 
-bool MappedInputManager::wasHomeGesture() const {
+bool MappedInputManager::wasBottomEdgeUpSwipe() const {
   int sx = 0;
   int sy = 0;
   int ex = 0;
@@ -537,6 +544,24 @@ bool MappedInputManager::wasHomeGesture() const {
   }
   return false;
 }
+
+// Home-key boards (X4 Pro) rearrange the edge gestures: the capacitive key
+// takes over "exit to home", the bottom edge (freed by the key) becomes the
+// menu gesture, and the top edge opens the frontlight quick panel.
+bool MappedInputManager::wasMenuGesture() const {
+  return hasHomeKeyHardware() ? wasBottomEdgeUpSwipe() : wasTopEdgeDownSwipe();
+}
+
+bool MappedInputManager::wasHomeGesture() const {
+  if (!hasHomeKeyHardware()) return wasBottomEdgeUpSwipe();
+#ifdef SIMULATOR
+  return false;
+#else
+  return gpio.wasHomeKeyPressed();
+#endif
+}
+
+bool MappedInputManager::wasLightPanelGesture() const { return hasHomeKeyHardware() && wasTopEdgeDownSwipe(); }
 #endif
 
 bool MappedInputManager::wasPressed(const Button button) const {

@@ -54,6 +54,8 @@ class Activity {
   virtual bool isHomeActivity() const { return false; }
   virtual bool allowPowerAsConfirmInReaderMode() const { return false; }
   virtual bool allowGlobalHomeGesture() const { return true; }
+  // Let overlays consume the global Home gesture as a dismiss action.
+  virtual bool handleHomeGesture() { return false; }
   virtual bool canSnapshotForSleepOverlay() const { return false; }
   virtual bool handlesReaderPowerSettingsOverride() const { return false; }
   virtual bool openReaderSettingsMenu() { return false; }
