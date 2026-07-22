@@ -185,6 +185,7 @@ class EpubReaderActivity final : public Activity {
   // hold the loop at full speed while it did. The reader keeps the pages already laid out; a
   // build is only re-attempted from render() if the reader actually pages past the watermark.
   bool partialRebuildAbortedForLowMemory = false;
+  bool backgroundBuildPausedForLowMemory = false;
   std::atomic<bool> sectionBuildCancelRequested{false};
   std::atomic<bool> goHomeAfterBuildCancel{false};
 
@@ -329,7 +330,8 @@ class EpubReaderActivity final : public Activity {
            (!section->activeBuildHasCaughtReadablePages() ||
             static_cast<int>(section->pageCount) < section->currentPage + BUILD_WINDOW_AHEAD);
   }
-  bool skipLoopDelay() override { return sectionBuildWantsTick(); }
+  bool backgroundSectionBuildHasHeap();
+  bool skipLoopDelay() override { return sectionBuildWantsTick() && !backgroundBuildPausedForLowMemory; }
   bool isReaderActivity() const override { return true; }
   bool canSnapshotForSleepOverlay() const override { return true; }
   bool handlesReaderPowerSettingsOverride() const override { return true; }

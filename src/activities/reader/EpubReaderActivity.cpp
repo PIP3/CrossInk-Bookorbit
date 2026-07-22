@@ -2077,6 +2077,22 @@ void EpubReaderActivity::openReaderMenu() {
       });
 }
 
+bool EpubReaderActivity::backgroundSectionBuildHasHeap() {
+  const auto heap = MemoryBudget::snapshot();
+  if (MemoryBudget::hasHeap(heap, MemoryBudget::EPUB_TEXT_LAYOUT_MIN_FREE,
+                            MemoryBudget::EPUB_TEXT_LAYOUT_MIN_MAX_ALLOC)) {
+    backgroundBuildPausedForLowMemory = false;
+    return true;
+  }
+
+  if (!backgroundBuildPausedForLowMemory) {
+    LOG_DBG("ERS", "Pausing background section build: low heap (free=%u, maxAlloc=%u, need %u/%u)", heap.freeHeap,
+            heap.maxAllocHeap, MemoryBudget::EPUB_TEXT_LAYOUT_MIN_FREE, MemoryBudget::EPUB_TEXT_LAYOUT_MIN_MAX_ALLOC);
+  }
+  backgroundBuildPausedForLowMemory = true;
+  return false;
+}
+
 void EpubReaderActivity::loop() {
   if (!epub) {
     // Should never happen
@@ -2106,7 +2122,8 @@ void EpubReaderActivity::loop() {
   // rebuild is all cost (whole-chapter re-layout from page 0) and no benefit this session.
   if (section && !section->isBuilding() && section->isPartial() && !RenderLock::peek() && buildViewportWidth > 0 &&
       !partialRebuildStartFailed && !partialRebuildAbortedForLowMemory &&
-      section->currentPage + PARTIAL_REBUILD_START_MARGIN >= static_cast<int>(section->pageCount)) {
+      section->currentPage + PARTIAL_REBUILD_START_MARGIN >= static_cast<int>(section->pageCount) &&
+      backgroundSectionBuildHasHeap()) {
     RenderLock lock(*this);
     if (section && !section->isBuilding() && section->isPartial()) {
       const int renderFontId = activeSectionFontId != 0 ? activeSectionFontId : SETTINGS.getReaderFontId();
@@ -2139,7 +2156,7 @@ void EpubReaderActivity::loop() {
   // sectionBuildWantsTick() holds the catch-up/window logic and is shared with
   // skipLoopDelay(), so the loop only runs hot while a tick can actually happen.
   if (sectionBuildWantsTick() && !RenderLock::peek() &&
-      (section->isPartial() || section->activeBuildHasCaughtReadablePages())) {
+      (section->isPartial() || section->activeBuildHasCaughtReadablePages()) && backgroundSectionBuildHasHeap()) {
     RenderLock lock(*this);
     // Re-check under the lock: render() may have finalized the build between the outer
     // isBuilding() check and acquiring the lock here.

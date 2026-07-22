@@ -32,8 +32,6 @@ constexpr size_t PARSE_BUFFER_SIZE = 1024;
 // Initial slab for the parse arena. Covers both style stacks (~2 KB) with headroom for growth.
 constexpr size_t PARSE_ARENA_SLAB_SIZE = 4 * 1024;
 constexpr size_t IMAGE_EXTRACT_CHUNK_SIZE = 1024;
-constexpr uint32_t MIN_FREE_HEAP_FOR_TEXT_LAYOUT = 44 * 1024;
-constexpr uint32_t MIN_MAX_ALLOC_FOR_TEXT_LAYOUT = 32 * 1024;
 constexpr uint32_t MIN_FREE_HEAP_FOR_TABLE_BUFFERING = 64 * 1024;
 constexpr uint32_t MIN_MAX_ALLOC_FOR_TABLE_BUFFERING = 40 * 1024;
 constexpr size_t DEFAULT_BUFFERED_WORDS_BEFORE_LAYOUT = 350;
@@ -322,7 +320,8 @@ bool ChapterHtmlSlimParser::shouldAbortForLowMemory(const char* stage) {
   }
 
   auto heap = MemoryBudget::snapshot();
-  if (heap.freeHeap >= MIN_FREE_HEAP_FOR_TEXT_LAYOUT && heap.maxAllocHeap >= MIN_MAX_ALLOC_FOR_TEXT_LAYOUT) {
+  if (MemoryBudget::hasHeap(heap, MemoryBudget::EPUB_TEXT_LAYOUT_MIN_FREE,
+                            MemoryBudget::EPUB_TEXT_LAYOUT_MIN_MAX_ALLOC)) {
     return false;
   }
 
@@ -333,7 +332,8 @@ bool ChapterHtmlSlimParser::shouldAbortForLowMemory(const char* stage) {
       LOG_DBG("EHP", "Released SD font caches before %s: free=%u->%u maxAlloc=%u->%u", stage, heap.freeHeap,
               afterRelease.freeHeap, heap.maxAllocHeap, afterRelease.maxAllocHeap);
       heap = afterRelease;
-      if (heap.freeHeap >= MIN_FREE_HEAP_FOR_TEXT_LAYOUT && heap.maxAllocHeap >= MIN_MAX_ALLOC_FOR_TEXT_LAYOUT) {
+      if (MemoryBudget::hasHeap(heap, MemoryBudget::EPUB_TEXT_LAYOUT_MIN_FREE,
+                                MemoryBudget::EPUB_TEXT_LAYOUT_MIN_MAX_ALLOC)) {
         return false;
       }
     }
@@ -355,7 +355,8 @@ bool ChapterHtmlSlimParser::startNewPage(const char* reason) {
   }
 
   const auto heap = MemoryBudget::snapshot();
-  if (heap.freeHeap >= MIN_FREE_HEAP_FOR_TEXT_LAYOUT && heap.maxAllocHeap >= PAGE_ELEMENT_RESERVE_MIN_MAX_ALLOC) {
+  if (heap.freeHeap >= MemoryBudget::EPUB_TEXT_LAYOUT_MIN_FREE &&
+      heap.maxAllocHeap >= PAGE_ELEMENT_RESERVE_MIN_MAX_ALLOC) {
     currentPage->elements.reserve(INITIAL_PAGE_ELEMENT_RESERVE);
   }
   currentPageNextY = 0;
