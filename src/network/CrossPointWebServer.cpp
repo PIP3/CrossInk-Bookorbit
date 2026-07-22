@@ -1813,7 +1813,7 @@ void CrossPointWebServer::handleFontsPage() const {
 
 void CrossPointWebServer::handleFontList() const {
   // Pick up any uploads/deletes that happened since the last reader load.
-  const_cast<SdCardFontSystem&>(sdFontSystem).refreshIfDirty();
+  sdFontSystem.ensureRegistry();
   const auto& families = sdFontSystem.registry().getFamilies();
 
   JsonDocument doc;

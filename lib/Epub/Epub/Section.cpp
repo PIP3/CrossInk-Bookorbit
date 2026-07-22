@@ -3,11 +3,10 @@
 #include <Arduino.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
-#include <InflateReader.h>
+#include <InflateStream.h>
 #include <Logging.h>
 #include <Memory.h>
 #include <MemoryBudget.h>
-#include <ScratchWorkspace.h>
 #include <Serialization.h>
 
 #include "Epub/css/CssParser.h"
@@ -58,18 +57,10 @@ bool ensurePageLutCapacity(std::unique_ptr<Entry[]>& lut, uint16_t& lutCapacity,
   return true;
 }
 
-ScratchWorkspace::Lease acquireSectionZipInflateScratch(GfxRenderer& renderer, const int fontId, const char* reason) {
-  if (ESP.getMaxAllocHeap() < InflateReader::STREAMING_DICT_SIZE && renderer.isSdCardFont(fontId)) {
+void prepareSectionZipInflate(GfxRenderer& renderer, const int fontId) {
+  if (ESP.getMaxAllocHeap() < InflateStream::requiredStorageSize(true) && renderer.isSdCardFont(fontId)) {
     renderer.releaseSdCardFontForLowMemory(fontId);
   }
-
-  auto scratch = ScratchWorkspace::acquire(InflateReader::STREAMING_DICT_SIZE, reason);
-  if (scratch || !renderer.isSdCardFont(fontId)) {
-    return scratch;
-  }
-
-  renderer.releaseSdCardFontForLowMemory(fontId);
-  return ScratchWorkspace::acquire(InflateReader::STREAMING_DICT_SIZE, reason);
 }
 
 size_t sectionHtmlStreamChunkSize(const bool preview) {
@@ -78,12 +69,53 @@ size_t sectionHtmlStreamChunkSize(const bool preview) {
   }
 
   const uint32_t maxAlloc = ESP.getMaxAllocHeap();
-  const size_t largeStreamBudget = InflateReader::STREAMING_DICT_SIZE + (2U * SECTION_HTML_STREAM_CHUNK_SIZE);
+  const size_t largeStreamBudget = InflateStream::requiredStorageSize(true) + (2U * SECTION_HTML_STREAM_CHUNK_SIZE);
   if (maxAlloc < largeStreamBudget) {
     LOG_DBG("SCT", "Using low-memory HTML stream chunk (maxAlloc=%u)", maxAlloc);
     return LOW_MEMORY_SECTION_HTML_STREAM_CHUNK_SIZE;
   }
   return SECTION_HTML_STREAM_CHUNK_SIZE;
+}
+
+std::string sectionBackupPath(const std::string& filePath) { return filePath + ".bak"; }
+
+void recoverSectionCacheBackup(const std::string& filePath) {
+  const std::string backupPath = sectionBackupPath(filePath);
+  if (!Storage.exists(backupPath.c_str())) return;
+
+  if (Storage.exists(filePath.c_str())) {
+    Storage.remove(backupPath.c_str());
+    return;
+  }
+
+  if (Storage.rename(backupPath.c_str(), filePath.c_str())) {
+    LOG_INF("SCT", "Recovered section cache backup: %s", filePath.c_str());
+  } else {
+    LOG_ERR("SCT", "Failed to recover section cache backup: %s", filePath.c_str());
+  }
+}
+
+bool promoteSectionCache(const std::string& tmpPath, const std::string& filePath) {
+  recoverSectionCacheBackup(filePath);
+  if (!Storage.exists(filePath.c_str())) {
+    return Storage.rename(tmpPath.c_str(), filePath.c_str());
+  }
+
+  const std::string backupPath = sectionBackupPath(filePath);
+  if (!Storage.rename(filePath.c_str(), backupPath.c_str())) {
+    LOG_ERR("SCT", "Failed to preserve old section cache before replacement");
+    return false;
+  }
+  if (Storage.rename(tmpPath.c_str(), filePath.c_str())) {
+    Storage.remove(backupPath.c_str());
+    return true;
+  }
+
+  LOG_ERR("SCT", "Failed to promote section cache; restoring previous cache");
+  if (!Storage.rename(backupPath.c_str(), filePath.c_str())) {
+    LOG_ERR("SCT", "Failed to restore section cache backup");
+  }
+  return false;
 }
 }  // namespace
 
@@ -93,7 +125,9 @@ Section::Section(const std::shared_ptr<Epub>& epub, const int spineIndex, GfxRen
       spineIndex(spineIndex),
       renderer(renderer),
       filePath(epub->getCachePath() + "/sections/" + std::to_string(spineIndex) + (cacheSuffix ? cacheSuffix : "") +
-               ".bin") {}
+               ".bin") {
+  recoverSectionCacheBackup(filePath);
+}
 
 // Suspend any in-progress build so every section.reset() / navigation / sleep path
 // persists the pages already laid out as a partial .bin instead of discarding them
@@ -352,6 +386,10 @@ bool Section::clearCache() const {
   if (Storage.exists(tmpBin.c_str())) {
     Storage.remove(tmpBin.c_str());
   }
+  const std::string backupPath = sectionBackupPath(filePath);
+  if (Storage.exists(backupPath.c_str())) {
+    Storage.remove(backupPath.c_str());
+  }
   if (!Storage.exists(filePath.c_str())) {
     LOG_DBG("SCT", "Cache does not exist, no action needed");
     return true;
@@ -438,10 +476,8 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
         continue;
       }
       const size_t htmlStreamChunkSize = sectionHtmlStreamChunkSize(buildOptions.isPreview());
-      {
-        auto zipInflateScratch = acquireSectionZipInflateScratch(renderer, fontId, "section one-shot HTML inflate");
-        streamed = epub->readItemContentsToStream(localPath, tmpHtml, htmlStreamChunkSize);
-      }
+      prepareSectionZipInflate(renderer, fontId);
+      streamed = epub->readItemContentsToStream(localPath, tmpHtml, htmlStreamChunkSize);
       fileSize = tmpHtml.size();
       // Explicitly close() file before calling Storage.remove()
       tmpHtml.close();
@@ -682,10 +718,7 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
   }
   // Explicit close() required: member variable persists beyond function scope
   file.close();
-  if (Storage.exists(filePath.c_str())) {
-    Storage.remove(filePath.c_str());
-  }
-  if (!Storage.rename(tmpSectionPath.c_str(), filePath.c_str())) {
+  if (!promoteSectionCache(tmpSectionPath, filePath)) {
     LOG_ERR("SCT", "Failed to promote temp section cache into place");
     Storage.remove(tmpSectionPath.c_str());
     if (cssParser) {
@@ -767,10 +800,8 @@ bool Section::startBuild(const int fontId, const float lineCompression, const bo
         continue;
       }
       const size_t htmlStreamChunkSize = sectionHtmlStreamChunkSize(buildOptions.isPreview());
-      {
-        auto zipInflateScratch = acquireSectionZipInflateScratch(renderer, fontId, "section incremental HTML inflate");
-        streamed = epub->readItemContentsToStream(localPath, tmpHtml, htmlStreamChunkSize);
-      }
+      prepareSectionZipInflate(renderer, fontId);
+      streamed = epub->readItemContentsToStream(localPath, tmpHtml, htmlStreamChunkSize);
       fileSize = tmpHtml.size();
       tmpHtml.close();
       if (!streamed && Storage.exists(tmpHtmlPath.c_str())) {
@@ -925,7 +956,9 @@ bool Section::buildSomeMore(const int maxPages) {
     lastLayoutAbortedForLowMemory_ = lastLayoutAbortedForLowMemory_ || build_->parser->wasLowMemoryAbortTriggered();
     if (build_->pageCompletionFailed || status == ChapterHtmlSlimParser::ParseStatus::Error) {
       LOG_ERR("SCT", "Failed during incremental section build");
-      if (lastLayoutAbortedForLowMemory_ && builtPageCount_ > 0) {
+      // A low-memory replay over an existing partial may fail before rebuilding page 0.
+      // Suspend in that case too so suspendBuild() keeps the older readable partial.
+      if (lastLayoutAbortedForLowMemory_ && (builtPageCount_ > 0 || partial_)) {
         suspendBuild();
       } else {
         abandonBuild();
@@ -1091,12 +1124,9 @@ bool Section::commitBuildFile(const uint8_t version, const uint32_t bytesConsume
   // Explicit close() required: member variable persists beyond function scope
   file.close();
 
-  // Swap into place. A crash between remove and rename loses the old file but keeps a
-  // fully-committed tmp; the next build just removes it and rebuilds.
-  if (Storage.exists(filePath.c_str())) {
-    Storage.remove(filePath.c_str());
-  }
-  if (!Storage.rename(build_->tmpSectionPath.c_str(), filePath.c_str())) {
+  // Keep the readable cache as a backup until the completed replacement is in
+  // place. A reboot after the backup rename recovers it in the constructor.
+  if (!promoteSectionCache(build_->tmpSectionPath, filePath)) {
     LOG_ERR("SCT", "Failed to move built section into place");
     Storage.remove(build_->tmpSectionPath.c_str());
     return false;
@@ -1125,10 +1155,9 @@ bool Section::finalizeBuild() {
   }
   build_.reset();
   if (!committed) {
-    // commitBuildFile removed filePath before the failed swap, so nothing valid remains.
-    partial_ = false;
-    partialPageCount_ = 0;
-    pageCount = 0;
+    // The previous cache was retained/restored by promoteSectionCache(). Keep
+    // its in-memory watermark too so this Section remains readable.
+    pageCount = partial_ ? partialPageCount_ : 0;
     builtPageCount_ = 0;
     return false;
   }
@@ -1279,7 +1308,7 @@ std::unique_ptr<Page> Section::loadPage(const int page) {
   return loadPageAt(page);
 }
 
-std::unique_ptr<Page> Section::loadPageFromSectionFile() { return loadPageAt(currentPage); }
+std::unique_ptr<Page> Section::loadPageFromSectionFile() { return loadPage(currentPage); }
 
 std::string Section::getTextFromSectionFile() {
   std::string fullText;
@@ -1377,6 +1406,10 @@ std::optional<uint16_t> Section::getPageForAnchor(const std::string& anchor) con
 }
 
 std::optional<uint16_t> Section::getPageForParagraphIndex(const uint16_t pIndex) const {
+  if (const auto page = findParagraphDuringBuild(pIndex)) {
+    return page;
+  }
+
   FsFile f;
   if (!Storage.openFileForRead("SCT", filePath, f)) {
     return std::nullopt;
@@ -1423,6 +1456,17 @@ std::optional<uint16_t> Section::getPageForParagraphIndex(const uint16_t pIndex)
   }
 
   return resultPage;
+}
+
+std::optional<uint16_t> Section::findParagraphDuringBuild(const uint16_t pIndex) const {
+  if (build_) {
+    for (uint16_t i = 0; i < build_->lutCount; i++) {
+      if (build_->lut[i].paragraphIndex >= pIndex) {
+        return i;
+      }
+    }
+  }
+  return std::nullopt;
 }
 
 std::optional<uint16_t> Section::getParagraphIndexForPage(const uint16_t page) const {

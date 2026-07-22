@@ -1,0 +1,1031 @@
+#include "DictionaryDefinitionActivity.h"
+
+#include <DictHtmlRenderer.h>
+#include <GfxRenderer.h>
+#include <HalStorage.h>
+#include <I18n.h>
+#include <Utf8.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+
+#include <algorithm>
+#include <cstring>
+#include <memory>
+#include <numeric>
+
+#include "../settings/DictionarySelectActivity.h"
+#include "CrossPointSettings.h"
+#include "MappedInputManager.h"
+#include "Memory.h"
+#include "components/UITheme.h"
+#include "fontIds.h"
+#include "util/Dictionary.h"
+#include "util/DictionaryActivityUtils.h"
+#include "util/IpaUtils.h"
+#include "util/LookupHistory.h"
+#include "util/TextPool.h"
+
+static constexpr char kBullet[] = "- ";
+static constexpr const char kEtymologyTreeMarker[] = "Etymology tree";
+
+static bool dictionaryPageButtonTriggered(MappedInputManager& mappedInput, bool previous) {
+  const bool usePress = SETTINGS.sideButtonLongPress == CrossPointSettings::SIDE_LONG_PRESS::SIDE_LONG_OFF;
+  const auto sideLayout = static_cast<CrossPointSettings::SIDE_BUTTON_LAYOUT>(SETTINGS.sideButtonLayout);
+  const MappedInputManager::Button button =
+      sideLayout == CrossPointSettings::NEXT_NEXT
+          ? (previous ? MappedInputManager::Button::Up : MappedInputManager::Button::Down)
+          : (previous ? MappedInputManager::Button::PageBack : MappedInputManager::Button::PageForward);
+  return usePress ? mappedInput.wasPressed(button) : mappedInput.wasReleased(button);
+}
+
+static std::string dictionaryNameFromPath(const std::string& path) {
+  const size_t stemSlash = path.rfind('/');
+  if (stemSlash == std::string::npos) return path;
+
+  const size_t nameSlash = stemSlash == 0 ? std::string::npos : path.rfind('/', stemSlash - 1);
+  const size_t nameStart = nameSlash == std::string::npos ? 0 : nameSlash + 1;
+  return path.substr(nameStart, stemSlash - nameStart);
+}
+
+struct DefinitionSpanFeedContext {
+  DictLayout::Wrapper* wrapper = nullptr;
+  char lastVisibleChar = '\0';
+  bool sawEtymologyTree = false;
+};
+
+static bool isAsciiWordChar(char c) {
+  return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9');
+}
+
+static bool isGreekCodepoint(uint32_t cp) { return (cp >= 0x0370 && cp <= 0x03FF) || (cp >= 0x1F00 && cp <= 0x1FFF); }
+
+static bool startsWithAt(const std::string& text, size_t pos, const char* needle) {
+  const size_t len = std::char_traits<char>::length(needle);
+  return pos + len <= text.size() && text.compare(pos, len, needle) == 0;
+}
+
+static bool startsWithAt(const char* text, const char* needle) {
+  if (!text) return false;
+  const size_t len = std::char_traits<char>::length(needle);
+  return strncmp(text, needle, len) == 0;
+}
+
+static bool isAsciiUpper(char c) { return c >= 'A' && c <= 'Z'; }
+
+static bool startsWithEtymologyTreeMarker(const char* text) { return startsWithAt(text, kEtymologyTreeMarker); }
+
+static bool definitionTextHasEtymologySpacingArtifact(const char* text, bool inEtymologyTree) {
+  if (!text || !text[0]) return false;
+  for (const char* p = text; *p; ++p) {
+    if (startsWithEtymologyTreeMarker(p)) {
+      const char* afterMarker = p + sizeof(kEtymologyTreeMarker) - 1;
+      if (*afterMarker != '\0' && *afterMarker != ' ') return true;
+    }
+    if (inEtymologyTree && *p == '.' && isAsciiUpper(*(p + 1))) return true;
+  }
+  return false;
+}
+
+static void fixEtymologySpacingArtifacts(std::string& text, bool inEtymologyTree) {
+  if (text.size() < 2) return;
+
+  std::string out;
+  out.reserve(text.size() + 8);
+  for (size_t i = 0; i < text.size();) {
+    if (startsWithAt(text, i, kEtymologyTreeMarker)) {
+      const size_t markerLen = sizeof(kEtymologyTreeMarker) - 1;
+      out.append(text, i, markerLen);
+      i += markerLen;
+      if (i < text.size() && text[i] != ' ') out += ' ';
+      inEtymologyTree = true;
+      continue;
+    }
+
+    if (inEtymologyTree && text[i] == '.' && i + 1 < text.size() && isAsciiUpper(text[i + 1])) {
+      out += ". ";
+      ++i;
+      continue;
+    }
+
+    out += text[i++];
+  }
+  text = std::move(out);
+}
+
+static char lastVisibleAsciiChar(const char* text) {
+  if (!text) return '\0';
+  char last = '\0';
+  while (*text) {
+    if (*text != ' ' && *text != '\t' && *text != '\r' && *text != '\n') last = *text;
+    ++text;
+  }
+  return last;
+}
+
+static bool shouldSanitizeDefinitionCodepoint(uint32_t cp) {
+  switch (cp) {
+    case 0x00A0:
+    case 0x2013:
+    case 0x2014:
+    case 0x2212:
+    case 0x2018:
+    case 0x2019:
+    case 0x201C:
+    case 0x201D:
+    case 0x2026:
+      return true;
+    default:
+      return isIpaCodepoint(cp) || isGreekCodepoint(cp) || utf8IsCombiningMark(cp) || cp == REPLACEMENT_GLYPH;
+  }
+}
+
+static bool definitionTextNeedsSanitizing(const char* text) {
+  if (!text) return false;
+  const auto* p = reinterpret_cast<const unsigned char*>(text);
+  uint32_t cp = 0;
+  while ((cp = utf8NextCodepoint(&p))) {
+    if (shouldSanitizeDefinitionCodepoint(cp)) return true;
+  }
+  return false;
+}
+
+static void appendDictionaryApproximation(uint32_t cp, std::string& out) {
+  switch (cp) {
+    case 0x00A0:
+      out += ' ';
+      break;  // nbsp
+    case 0x00E6:
+      out += "ae";
+      break;  // ae
+    case 0x00F0:
+      out += "th";
+      break;  // eth
+    case 0x00F8:
+      out += 'o';
+      break;  // o slash
+    case 0x0127:
+      out += 'h';
+      break;  // h stroke
+    case 0x014B:
+      out += "ng";
+      break;  // eng
+    case 0x0153:
+      out += "oe";
+      break;      // oe
+    case 0x0251:  // script a
+    case 0x0252:
+      out += 'a';
+      break;  // turned alpha
+    case 0x0254:
+      out += 'o';
+      break;  // open o
+    case 0x0259:
+      out += 'e';
+      break;      // schwa
+    case 0x025A:  // rhotacized schwa
+    case 0x025D:
+      out += "er";
+      break;  // reversed epsilon hook
+    case 0x025B:
+      out += 'e';
+      break;  // open e
+    case 0x0261:
+      out += 'g';
+      break;  // script g
+    case 0x026A:
+      out += 'i';
+      break;  // small capital i
+    case 0x026B:
+      out += 'l';
+      break;  // velarized l
+    case 0x0272:
+      out += "ny";
+      break;  // n hook
+    case 0x0273:
+      out += 'n';
+      break;      // retroflex n
+    case 0x0279:  // turned r
+    case 0x027B:  // turned r hook
+    case 0x027D:  // r tail
+    case 0x027E:
+      out += 'r';
+      break;  // tap r
+    case 0x0280:
+      out += 'R';
+      break;  // small capital r
+    case 0x0283:
+      out += "sh";
+      break;  // esh
+    case 0x028A:
+      out += 'u';
+      break;  // upsilon
+    case 0x028C:
+      out += 'u';
+      break;  // turned v
+    case 0x0292:
+      out += "zh";
+      break;  // ezh
+    case 0x0294:
+      out += '\'';
+      break;  // glottal stop
+    case 0x02A4:
+      out += 'j';
+      break;  // dezh digraph
+    case 0x02A7:
+      out += "ch";
+      break;  // tesh digraph
+    case 0x02B0:
+      out += 'h';
+      break;  // modifier h
+    case 0x02B2:
+      out += 'y';
+      break;  // modifier j
+    case 0x02B7:
+      out += 'w';
+      break;  // modifier w
+    case 0x02BC:
+      out += '\'';
+      break;      // modifier apostrophe
+    case 0x02C8:  // primary stress
+    case 0x02CC:
+      break;  // secondary stress
+    case 0x02D0:
+      out += ':';
+      break;  // length mark
+    case 0x03B2:
+      out += 'b';
+      break;  // beta
+    case 0x03B8:
+      out += "th";
+      break;  // theta
+    case 0x03C7:
+      out += "kh";
+      break;      // chi
+    case 0x2013:  // en dash
+    case 0x2014:  // em dash
+    case 0x2212:
+      out += '-';
+      break;      // minus
+    case 0x2018:  // left single quote
+    case 0x2019:
+      out += '\'';
+      break;      // right single quote
+    case 0x201C:  // left double quote
+    case 0x201D:
+      out += '"';
+      break;  // right double quote
+    case 0x2026:
+      out += "...";
+      break;  // ellipsis
+    default:
+      if (!isIpaCodepoint(cp) && !isGreekCodepoint(cp) && !utf8IsCombiningMark(cp) && cp != REPLACEMENT_GLYPH) {
+        utf8AppendCodepoint(cp, out);
+      }
+      break;
+  }
+}
+
+static bool startsWithCapitalizedToken(const char* text) { return text && isAsciiUpper(text[0]); }
+
+static std::string sanitizeDefinitionText(const char* text, bool inEtymologyTree) {
+  std::string out;
+  if (!text) return out;
+  out.reserve(std::char_traits<char>::length(text));
+
+  const auto* p = reinterpret_cast<const unsigned char*>(text);
+  uint32_t cp = 0;
+  while ((cp = utf8NextCodepoint(&p))) {
+    appendDictionaryApproximation(cp, out);
+  }
+  fixEtymologySpacingArtifacts(out, inEtymologyTree);
+  return out;
+}
+
+void DictionaryDefinitionActivity::onEnter() {
+  Activity::onEnter();
+  wrapText();
+  requestUpdate();
+  // SD write overlaps the e-ink refresh kicked by requestUpdate() on the render task.
+  LookupHistory::addWordIf(cachePath, historyWord, historyStatus, recordHistory);
+
+  // Seed the back-nav chain. The initial word is the newest history entry iff it
+  // was just logged (same condition addWordIf applies internally).
+  chain_.reset(LookupHistory::MAX_VISIBLE_ENTRIES);
+  const bool initialLogged = recordHistory && !historyWord.empty() && !cachePath.empty();
+  chain_.setCurrentHistIndex(initialLogged ? 0 : -1);
+}
+
+void DictionaryDefinitionActivity::onExit() {
+  controller.onExit();
+  Activity::onExit();
+}
+
+int DictionaryDefinitionActivity::getDefinitionFontId(bool) const { return UI_12_FONT_ID; }
+
+int DictionaryDefinitionActivity::getLineHeight() const {
+  return static_cast<int>(renderer.getLineHeight(getDefinitionFontId()) * SETTINGS.getReaderLineCompression());
+}
+
+// ---------------------------------------------------------------------------
+// Layout helpers — shared setup
+// ---------------------------------------------------------------------------
+
+void DictionaryDefinitionActivity::wrapText() {
+  isWordSelectMode = false;
+  navigator.reset();
+  currentPage = 0;  // new definition always starts at page 0
+
+  // Match the folder-name label shown by DictionarySelectActivity.
+  dictionaryName_ = dictionaryNameFromPath(foundLocation.folderPath);
+
+  const auto orient = renderer.getOrientation();
+  const auto metrics = UITheme::getInstance().getMetrics();
+  const bool isLandscapeCw = orient == GfxRenderer::Orientation::LandscapeClockwise;
+  const bool isLandscapeCcw = orient == GfxRenderer::Orientation::LandscapeCounterClockwise;
+  const bool isInverted = orient == GfxRenderer::Orientation::PortraitInverted;
+  hintGutterWidth = (isLandscapeCw || isLandscapeCcw) ? metrics.buttonHintsHeight : 0;
+  hintGutterHeight = isInverted ? (metrics.buttonHintsHeight + metrics.verticalSpacing) : 0;
+  contentX = isLandscapeCw ? hintGutterWidth : 0;
+  const int bottomArea = metrics.buttonHintsHeight + metrics.verticalSpacing;
+
+  if (hasModalBackground()) {
+    const int dialogMargin = metrics.optionPopupDialogSideMargin;
+    // Reserve the orientation hint gutter on both sides. The controls only
+    // occupy one side, but symmetrical gutters keep the modal centered.
+    modalX_ = hintGutterWidth + dialogMargin;
+    modalWidth_ = renderer.getScreenWidth() - modalX_ * 2;
+    modalHeight_ = renderer.getScreenHeight() - bottomArea - dialogMargin * 2;
+    modalY_ = (renderer.getScreenHeight() - modalHeight_) / 2;
+
+    const int innerPadding = metrics.optionPopupInnerPadding;
+    leftPadding = modalX_ + innerPadding;
+    rightPadding = renderer.getScreenWidth() - (modalX_ + modalWidth_ - innerPadding);
+    bodyStartY = modalY_ + innerPadding + renderer.getLineHeight(UI_12_FONT_ID) + metrics.optionPopupTitleGap;
+  } else {
+    const int sidePadding = metrics.contentSidePadding + SETTINGS.screenMargin;
+    leftPadding = contentX + sidePadding;
+    rightPadding = (isLandscapeCcw ? hintGutterWidth : 0) + sidePadding;
+    bodyStartY = hintGutterHeight + metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+  }
+
+  const int footerHeight =
+      hasModalBackground() ? renderer.getLineHeight(UI_10_FONT_ID) + metrics.optionPopupTitleGap : 0;
+  const int bodyBottom = hasModalBackground() ? modalY_ + modalHeight_ - metrics.optionPopupInnerPadding - footerHeight
+                                              : renderer.getScreenHeight() - bottomArea;
+  linesPerPage = (bodyBottom - bodyStartY) / getLineHeight();
+  if (linesPerPage < 1) linesPerPage = 1;
+
+  loadPage(currentPage);
+  // Pick the modal height once per definition. Page turns re-fill the content
+  // without moving the frame, so the last (usually shorter) page feels like
+  // part of the same lookup rather than a different modal.
+  if (hasModalBackground()) sizeModalForCurrentPage();
+}
+
+void DictionaryDefinitionActivity::drawModalFrame() const {
+  const auto metrics = UITheme::getInstance().getMetrics();
+  const int frameThickness = metrics.popupFrameThickness;
+  const int frameRadius = metrics.popupCornerRadius;
+
+  if (frameRadius > 0) {
+    renderer.fillRoundedRect(modalX_ - frameThickness, modalY_ - frameThickness, modalWidth_ + frameThickness * 2,
+                             modalHeight_ + frameThickness * 2, frameRadius + frameThickness, Color::White);
+    renderer.fillRoundedRect(modalX_, modalY_, modalWidth_, modalHeight_, frameRadius, Color::Black);
+    renderer.fillRoundedRect(modalX_ + frameThickness, modalY_ + frameThickness, modalWidth_ - frameThickness * 2,
+                             modalHeight_ - frameThickness * 2, std::max(0, frameRadius - frameThickness),
+                             Color::White);
+  } else {
+    renderer.fillRect(modalX_ - frameThickness, modalY_ - frameThickness, modalWidth_ + frameThickness * 2,
+                      modalHeight_ + frameThickness * 2, true);
+    renderer.fillRect(modalX_, modalY_, modalWidth_, modalHeight_, false);
+  }
+}
+
+// Re-parse the definition and lay out ONLY `page` into layoutLines. The wrap
+// produces every line, but collectLineSink keeps only this page's lines (the
+// rest are produced then dropped, so peak RAM is one page, not the whole
+// definition) and counts all lines to recompute totalPages. Called on entry and
+// on every page turn (Stage 2a: re-parse every turn, both directions).
+void DictionaryDefinitionActivity::loadPage(int page) {
+  layoutLines.clear();
+  layoutLines.reserve(static_cast<size_t>(linesPerPage) + 1);
+  pagePool_.clear();
+  collectTargetPage_ = page;
+  collectLineCount_ = 0;
+
+  // Choose rendering path based on dictionary content type
+  const DictInfo info = Dictionary::readInfo(foundLocation.folderPath.c_str());
+  const DictDefinitionSlice slice = Dictionary::resolveDefinitionSlice(foundLocation, info);
+  definitionOffset_ = slice.offset;
+  definitionSize_ = slice.size;
+  definitionIsHtml_ = slice.isHtml;
+  if (definitionIsHtml_) {
+    wrapHtml();
+  } else {
+    wrapPlain();
+  }
+
+  totalPages = DictLayout::paginate(collectLineCount_, linesPerPage);
+}
+
+void DictionaryDefinitionActivity::sizeModalForCurrentPage() {
+  const auto metrics = UITheme::getInstance().getMetrics();
+  const int dialogMargin = metrics.optionPopupDialogSideMargin;
+  const int maxHeight =
+      renderer.getScreenHeight() - metrics.buttonHintsHeight - metrics.verticalSpacing - dialogMargin * 2;
+  const int visibleLines = std::max(1, static_cast<int>(layoutLines.size()));
+  const int titleLineHeight = renderer.getLineHeight(UI_12_FONT_ID);
+  const int footerHeight = renderer.getLineHeight(UI_10_FONT_ID) + metrics.optionPopupTitleGap;
+  const int contentHeight = metrics.optionPopupInnerPadding * 2 + titleLineHeight + metrics.optionPopupTitleGap +
+                            visibleLines * getLineHeight() + footerHeight;
+
+  modalHeight_ = std::min(maxHeight, contentHeight);
+  modalY_ = (renderer.getScreenHeight() - modalHeight_) / 2;
+  bodyStartY = modalY_ + metrics.optionPopupInnerPadding + titleLineHeight + metrics.optionPopupTitleGap;
+}
+
+void DictionaryDefinitionActivity::collectLineSink(void* ctx, DictLayout::LayoutLine&& line) {
+  auto* self = static_cast<DictionaryDefinitionActivity*>(ctx);
+  const int idx = self->collectLineCount_++;
+  const int start = self->collectTargetPage_ * self->linesPerPage;
+  if (idx < start || idx >= start + self->linesPerPage) return;  // not on this page — discard
+
+  // Pool the kept line's text: each (already same-style-merged) segment becomes
+  // one null-terminated pool entry referenced by {offset, len}.
+  PooledLine pooled;
+  pooled.indentLevel = line.indentLevel;
+  pooled.isListItem = line.isListItem;
+  pooled.segments.reserve(line.segments.size());
+  for (const auto& seg : line.segments) {
+    PooledSegment ps;
+    ps.offset = TextPool::append(self->pagePool_, seg.text.c_str(), seg.text.size());
+    ps.len = static_cast<uint16_t>(seg.text.size());
+    ps.style = seg.style;
+    ps.isIpa = seg.isIpa;
+    pooled.segments.push_back(ps);
+  }
+  self->layoutLines.push_back(std::move(pooled));
+}
+
+// ---------------------------------------------------------------------------
+// Shared helper: measure text width accounting for mixed IPA/non-IPA runs
+// ---------------------------------------------------------------------------
+
+int DictionaryDefinitionActivity::getMixedWidth(std::vector<IpaTextSpan>& ipaRuns, const char* text,
+                                                EpdFontFamily::Style style) {
+  ipaRuns.clear();
+  splitIpaRuns(text, ipaRuns);
+  return std::accumulate(ipaRuns.begin(), ipaRuns.end(), 0, [&](int sum, const IpaTextSpan& run) {
+    return sum + renderer.getTextWidth(getDefinitionFontId(run.isIpa), run.text.c_str(), style);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// HTML path: run DictHtmlRenderer, lay out spans into LayoutLines
+// ---------------------------------------------------------------------------
+
+int DictionaryDefinitionActivity::measureWidthAdapter(void* ctx, const char* text, EpdFontFamily::Style style,
+                                                      bool isIpa) {
+  auto* self = static_cast<DictionaryDefinitionActivity*>(ctx);
+  const int fontId = self->getDefinitionFontId(isIpa);
+  if (!isIpa && text[0] == ' ' && text[1] == '\0') return self->renderer.getSpaceWidth(fontId, style);
+  return self->renderer.getTextWidth(fontId, text, style);
+}
+
+void DictionaryDefinitionActivity::wrapHtml() {
+  const int maxWidth = renderer.getScreenWidth() - leftPadding - rightPadding;
+  // Indent step: 3 spaces worth of pixels at regular weight.
+  const int bodyFontId = getDefinitionFontId();
+  const int indentStep = renderer.getTextWidth(bodyFontId, "   ");
+  const int bulletWidth = renderer.getTextWidth(bodyFontId, kBullet);
+
+  // Fully streamed: the renderer delivers spans one at a time to the Wrapper, the
+  // Wrapper emits completed lines to the page collector, and the collector keeps
+  // only the current page. Neither the whole-definition span/textBuf (renderer)
+  // nor all pages of lines (here) is ever materialized.
+  DictLayout::Measurer measure{this, &DictionaryDefinitionActivity::measureWidthAdapter};
+  DictLayout::LineSink lineSink{this, &DictionaryDefinitionActivity::collectLineSink};
+  DictLayout::Wrapper wrapper(DictLayout::WrapMetrics{maxWidth, indentStep, bulletWidth}, measure, lineSink);
+
+  // Renderer is a reused activity member (3.1-A): renderFromFileStreaming resets
+  // it each call (XML_ParserReset, not free+create), so no per-turn object/parser
+  // churn. Streaming means it never materializes the whole-definition buffers.
+  const std::string dictPath = foundLocation.folderPath + ".dict";
+  DefinitionSpanFeedContext feedCtx{&wrapper};
+  const DictHtmlRenderer::SpanSink spanSink{&feedCtx, &DictionaryDefinitionActivity::feedSpanToWrapper};
+  htmlRenderer_.renderFromFileStreaming(dictPath.c_str(), definitionOffset_, definitionSize_, spanSink);
+  wrapper.finish();
+  // Only the kept page's span text was ever copied into layoutLines.
+}
+
+void DictionaryDefinitionActivity::feedSpanToWrapper(void* ctx, const StyledSpan& span) {
+  auto* feedCtx = static_cast<DefinitionSpanFeedContext*>(ctx);
+  const bool hasMarker = span.text && strstr(span.text, kEtymologyTreeMarker) != nullptr;
+  const bool needsBoundarySpace = feedCtx->sawEtymologyTree && feedCtx->lastVisibleChar != '\0' &&
+                                  (isAsciiWordChar(feedCtx->lastVisibleChar) || feedCtx->lastVisibleChar == '.') &&
+                                  startsWithCapitalizedToken(span.text);
+  const bool needsCleanup = needsBoundarySpace || definitionTextNeedsSanitizing(span.text) ||
+                            definitionTextHasEtymologySpacingArtifact(span.text, feedCtx->sawEtymologyTree);
+  if (!needsCleanup) {
+    feedCtx->wrapper->onSpan(span);
+    feedCtx->lastVisibleChar = lastVisibleAsciiChar(span.text);
+    feedCtx->sawEtymologyTree = feedCtx->sawEtymologyTree || hasMarker;
+    return;
+  }
+
+  std::string cleaned = sanitizeDefinitionText(span.text, feedCtx->sawEtymologyTree);
+  if (needsBoundarySpace && !cleaned.empty() && cleaned[0] != ' ') {
+    cleaned.insert(cleaned.begin(), ' ');
+  }
+  if (cleaned.empty()) return;
+
+  StyledSpan cleanedSpan = span;
+  cleanedSpan.text = cleaned.c_str();
+  feedCtx->wrapper->onSpan(cleanedSpan);
+  feedCtx->lastVisibleChar = lastVisibleAsciiChar(cleaned.c_str());
+  feedCtx->sawEtymologyTree = feedCtx->sawEtymologyTree || hasMarker;
+}
+
+// ---------------------------------------------------------------------------
+// Plain text path: word-wrap into single-segment REGULAR lines
+// ---------------------------------------------------------------------------
+
+void DictionaryDefinitionActivity::wrapPlain() {
+  std::vector<IpaTextSpan> ipaRuns;
+  const int screenWidth = renderer.getScreenWidth();
+  const int maxWidth = screenWidth - leftPadding - rightPadding;
+  const int spaceWidth = renderer.getSpaceWidth(getDefinitionFontId(), EpdFontFamily::REGULAR);
+
+  std::string currentWord;
+  std::string currentLineText;
+  int currentLineWidth = 0;
+
+  DictLayout::LineSink sink{this, &DictionaryDefinitionActivity::collectLineSink};
+  auto flushLine = [&]() {
+    if (currentLineText.empty()) return;
+    DictLayout::LayoutLine line;
+    ipaRuns.clear();
+    splitIpaRuns(currentLineText.c_str(), ipaRuns);
+    for (const auto& run : ipaRuns) {
+      line.segments.push_back({run.text, EpdFontFamily::REGULAR, run.isIpa});
+    }
+    sink(std::move(line));
+    currentLineText.clear();
+    currentLineWidth = 0;
+  };
+
+  auto tryAppendWord = [&]() {
+    if (currentWord.empty()) return;
+    std::string word = (definitionTextNeedsSanitizing(currentWord.c_str()) ||
+                        definitionTextHasEtymologySpacingArtifact(currentWord.c_str(), false))
+                           ? sanitizeDefinitionText(currentWord.c_str(), false)
+                           : std::move(currentWord);
+    currentWord.clear();
+    if (word.empty()) return;
+
+    const int wordWidth = getMixedWidth(ipaRuns, word.c_str(), EpdFontFamily::REGULAR);
+    if (currentLineText.empty()) {
+      currentLineText = word;
+      currentLineWidth = wordWidth;
+    } else {
+      const int testWidth = currentLineWidth + spaceWidth + wordWidth;
+      if (testWidth <= maxWidth) {
+        currentLineText += ' ';
+        currentLineText += word;
+        currentLineWidth = testWidth;
+      } else {
+        flushLine();
+        currentLineText = word;
+        currentLineWidth = wordWidth;
+      }
+    }
+  };
+
+  // Stream from .dict file — the full definition is never held in RAM.
+  const std::string dictPath = foundLocation.folderPath + ".dict";
+  HalFile dictFile;
+  if (!Storage.openFileForRead("DICT", dictPath.c_str(), dictFile)) return;
+  dictFile.seekSet(definitionOffset_);
+
+  uint32_t remaining = definitionSize_;
+  char chunk[512];
+
+  while (remaining > 0) {
+    uint32_t toRead = remaining < sizeof(chunk) ? remaining : static_cast<uint32_t>(sizeof(chunk));
+    int n = dictFile.read(reinterpret_cast<uint8_t*>(chunk), static_cast<int>(toRead));
+    if (n <= 0) break;
+    remaining -= static_cast<uint32_t>(n);
+
+    for (int ci = 0; ci < n; ci++) {
+      char c = chunk[ci];
+      if (c == '\0') {
+        tryAppendWord();
+      } else if (c == '\n') {
+        tryAppendWord();
+        flushLine();
+      } else if (c == ' ') {
+        tryAppendWord();
+      } else {
+        currentWord += c;
+      }
+    }
+  }
+
+  tryAppendWord();
+  flushLine();
+  dictFile.close();
+}
+
+// ---------------------------------------------------------------------------
+// Word-select: extract words from the currently visible page
+// ---------------------------------------------------------------------------
+
+void DictionaryDefinitionActivity::extractWordsFromLayout() {
+  const int bodyFontId = getDefinitionFontId();
+  const int indentStep = renderer.getTextWidth(bodyFontId, "   ");
+
+  std::vector<WordSelectNavigator::WordInfo> words;
+  words.reserve(64);
+  std::vector<WordSelectNavigator::Row> rows;
+  rows.reserve(16);
+  std::string textPool;
+  textPool.reserve(512);
+
+  const int lineHeight = getLineHeight();  // cached for loop
+  for (int i = 0; i < linesPerPage && i < static_cast<int>(layoutLines.size()); i++) {
+    const PooledLine& line = layoutLines[i];
+    const int16_t lineY = static_cast<int16_t>(bodyStartY + i * lineHeight);
+    int x = leftPadding + line.indentLevel * indentStep;
+
+    if (line.isListItem) {
+      x += renderer.getTextWidth(bodyFontId, kBullet);
+    }
+
+    for (const auto& seg : line.segments) {
+      const int segFontId = getDefinitionFontId(seg.isIpa);
+      const int spaceWidth = renderer.getSpaceWidth(segFontId, seg.style);
+      const char* p = pagePool_.data() + seg.offset;
+      while (*p) {
+        while (*p == ' ') {
+          x += spaceWidth;
+          ++p;
+        }
+        if (!*p) break;
+
+        const char* tokStart = p;
+        while (*p && *p != ' ') ++p;
+        const size_t tokLen = static_cast<size_t>(p - tokStart);
+        std::string tok(tokStart, tokLen);
+
+        const int tokAdvanceX = renderer.getTextAdvanceX(segFontId, tok.c_str(), seg.style);
+        std::string cleaned = Dictionary::cleanWord(tok);
+        if (!cleaned.empty()) {
+          uint16_t tokOff = WordSelectNavigator::poolAppend(textPool, tok.c_str(), tok.size());
+          uint16_t cleanedOff = WordSelectNavigator::poolAppend(textPool, cleaned.c_str(), cleaned.size());
+          WordSelectNavigator::WordInfo wi;
+          wi.textOffset = tokOff;
+          wi.textLen = static_cast<uint16_t>(tok.size());
+          wi.lookupOffset = cleanedOff;
+          wi.lookupLen = static_cast<uint16_t>(cleaned.size());
+          wi.screenX = static_cast<int16_t>(x);
+          wi.screenY = lineY;
+          wi.width = static_cast<int16_t>(tokAdvanceX);
+          wi.style = seg.style;
+          wi.isIpa = seg.isIpa;
+          wi.fontId = segFontId;
+          words.push_back(wi);
+        }
+        x += tokAdvanceX;
+      }
+    }
+  }
+
+  WordSelectNavigator::organizeIntoRows(words, rows);
+  navigator.load(std::move(words), std::move(rows), std::move(textPool));
+}
+
+void DictionaryDefinitionActivity::openDictionarySwitch() {
+  auto picker = makeUniqueNoThrow<DictionarySelectActivity>(renderer, mappedInput, cachePath, true);
+  if (!picker) {
+    LOG_ERR("DICT", "OOM: DictionarySelectActivity");
+    return;
+  }
+
+  startActivityForResult(std::move(picker), [this](const ActivityResult& result) {
+    if (result.isCancelled) {
+      requestUpdate();
+      return;
+    }
+    dictionarySwitchLookupInProgress = true;
+    controller.startLookup(headword, false);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Input loop
+// ---------------------------------------------------------------------------
+
+bool DictionaryDefinitionActivity::handleLongPressExitAll(bool enabled) {
+  if (exitAllOnBackRelease_) {
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
+        !mappedInput.isPressed(MappedInputManager::Button::Back)) {
+      setResult(ActivityResult{});
+      finish();
+    }
+    return true;
+  }
+
+  if (enabled && mappedInput.isPressed(MappedInputManager::Button::Back) &&
+      mappedInput.getHeldTime() >= Dictionary::LONG_PRESS_MS) {
+    exitAllOnBackRelease_ = true;
+    return true;
+  }
+  return false;
+}
+
+void DictionaryDefinitionActivity::loop() {
+  // Own the complete long-press gesture. Returning to the reader while Back is
+  // still held would let the reader fire its configured long-press shortcut.
+  if (handleLongPressExitAll(showLookupButton)) return;
+
+  // --- Controller active (LookingUp / AltFormPrompt / NotFound) ---
+  if (controller.isActive()) {
+    switch (controller.handleInput()) {
+      case DictionaryLookupController::LookupEvent::FoundDefinition: {
+        const bool wasBackNav = chainBackNavInProgress;
+        const bool wasDictionarySwitch = dictionarySwitchLookupInProgress;
+        const bool willLog = !wasBackNav && controller.getRecordHistory();
+        if (!wasBackNav && !wasDictionarySwitch) {
+          // Forward: push a back-entry for the word being left (current headword,
+          // on currentPage), referencing its history position.
+          chain_.onForward(static_cast<uint16_t>(currentPage), willLog);
+        }
+        chainBackNavInProgress = false;
+        dictionarySwitchLookupInProgress = false;
+        headword = controller.getFoundWord();
+        foundLocation = controller.getFoundLocation();
+        wrapText();  // resets currentPage to 0 and loads page 0
+        if (wasBackNav) {
+          // Re-derive the now-current word's history position and restore its page.
+          chain_.setCurrentHistIndex(pendingBack_.histIndex);
+          currentPage = (pendingBack_.page < totalPages) ? pendingBack_.page : (totalPages - 1);
+          if (currentPage < 0) currentPage = 0;
+          if (currentPage > 0) loadPage(currentPage);
+        }
+        isWordSelectMode = false;
+        requestUpdate();
+        // Chain-forward records; chain-back-nav does not.
+        LookupHistory::addWordIf(cachePath, controller.getLookupWord(),
+                                 DictionaryLookupController::toHistStatus(controller.getFoundStatus()), willLog);
+        break;
+      }
+      case DictionaryLookupController::LookupEvent::NotFoundDismissedBack:
+        dictionarySwitchLookupInProgress = false;
+        requestUpdate();
+        break;
+      case DictionaryLookupController::LookupEvent::NotFoundDismissedDone:
+        dictionarySwitchLookupInProgress = false;
+        setResult(ActivityResult{});
+        finish();
+        break;
+      case DictionaryLookupController::LookupEvent::Cancelled:
+        dictionarySwitchLookupInProgress = false;
+        isWordSelectMode = false;
+        navigator.reset();
+        requestUpdate();
+        break;
+      default:
+        break;
+    }
+    return;
+  }
+
+  // --- Word-select mode ---
+  if (isWordSelectMode) {
+    if (navigator.handleNavigation(mappedInput, renderer)) {
+      requestUpdate();
+    }
+
+    if (controller.handleMultiSelect(navigator)) return;
+
+    if (!navigator.isMultiSelecting()) {
+      if (controller.handleConfirmLookup(navigator)) return;
+
+      // Short press Back: exit word-select mode.
+      if (mappedInput.wasReleased(MappedInputManager::Button::Back) &&
+          mappedInput.getHeldTime() < Dictionary::LONG_PRESS_MS) {
+        isWordSelectMode = false;
+        navigator.reset();
+        requestUpdate();
+      }
+    }
+    return;
+  }
+
+  // --- View mode ---
+  if (showLookupButton && mappedInput.wasReleased(MappedInputManager::Button::Left)) {
+    openDictionarySwitch();
+    return;
+  }
+
+  const bool prevPage = dictionaryPageButtonTriggered(mappedInput, true);
+  const bool nextPage = dictionaryPageButtonTriggered(mappedInput, false);
+
+  if (prevPage && currentPage > 0) {
+    currentPage--;
+    loadPage(currentPage);
+    requestUpdate();
+  }
+
+  if (nextPage && currentPage < totalPages - 1) {
+    currentPage++;
+    loadPage(currentPage);
+    requestUpdate();
+  }
+
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    if (showLookupButton) {
+      extractWordsFromLayout();
+      if (!navigator.isEmpty()) {
+        isWordSelectMode = true;
+        requestUpdate();
+      }
+    } else {
+      DictUtils::cancelAndFinish(*this);
+    }
+    return;
+  }
+
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back) &&
+      (!showLookupButton || mappedInput.getHeldTime() < Dictionary::LONG_PRESS_MS)) {
+    if (!cachePath.empty() && !chain_.empty()) {
+      pendingBack_ = chain_.pop();
+      // Resolve the prior headword from the persisted history by distance-from-newest.
+      const auto hist = LookupHistory::load(cachePath);  // newest-first
+      if (pendingBack_.histIndex < hist.size()) {
+        chainBackNavInProgress = true;
+        controller.startLookup(hist[pendingBack_.histIndex].word, false);
+        return;
+      }
+      // Unresolvable (should not happen under the depth cap) — fall through to exit.
+    }
+    DictUtils::cancelAndFinish(*this);
+    return;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Render
+// ---------------------------------------------------------------------------
+
+void DictionaryDefinitionActivity::render(RenderLock&&) {
+  // Differential fast path: only when we're already in word-select mode AND
+  // we set it up on the previous frame AND the controller has nothing pending.
+  if (isWordSelectMode && nextRenderMode_ == RenderMode::Differential && !controller.isActive()) {
+    const int currIdx = navigator.getCurrentFlatIndex();
+    if (currIdx >= 0) {
+      const int lineHeight = getLineHeight();
+      auto dirty = navigator.renderHighlightDifferential(renderer, lineHeight, prevHighlightIdx_, currIdx);
+      if (dirty.has_value()) {
+        // Full panel push — matches DictionaryWordSelectActivity. Windowed refresh is not
+        // wired up because the SDK's experimental path produces alternating black→white
+        // failures on consecutive partial refreshes. Savings come from skipping page->render.
+        renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+        prevHighlightIdx_ = currIdx;
+        return;
+      }
+      // fall through to full repaint path
+    }
+  }
+
+  // Full repaint path. Reader lookups redraw the owned book page beneath a
+  // large modal. Other entry points (such as lookup history) retain the
+  // existing full-screen definition view.
+  if (hasModalBackground()) {
+    backgroundRender_(backgroundContext_);
+  } else {
+    renderer.clearScreen();
+  }
+  if (controller.render()) {
+    // Controller drew an overlay; framebuffer state is unknown.
+    nextRenderMode_ = RenderMode::FullPage;
+    prevHighlightIdx_ = -1;
+    return;
+  }
+
+  const auto metrics = UITheme::getInstance().getMetrics();
+  const int bodyFontId = getDefinitionFontId();
+  const int indentStep = renderer.getTextWidth(bodyFontId, "   ");
+
+  // Header
+  Rect headerRect{contentX, hintGutterHeight + metrics.topPadding, renderer.getScreenWidth() - hintGutterWidth,
+                  metrics.headerHeight};
+  if (hasModalBackground()) {
+    drawModalFrame();
+    const int innerPadding = metrics.optionPopupInnerPadding;
+    headerRect = Rect{modalX_ + innerPadding, modalY_ + innerPadding, modalWidth_ - innerPadding * 2,
+                      renderer.getLineHeight(UI_12_FONT_ID)};
+    renderer.drawText(UI_12_FONT_ID, headerRect.x, headerRect.y, headword.c_str(), true, EpdFontFamily::BOLD);
+    if (metrics.optionPopupTitleSeparator) {
+      const int separatorY = headerRect.y + headerRect.height + metrics.optionPopupTitleGap / 2;
+      renderer.drawLine(headerRect.x, separatorY, headerRect.x + headerRect.width, separatorY, true);
+    }
+  } else {
+    GUI.drawHeader(renderer, headerRect, headword.c_str());
+  }
+  if (!isWordSelectMode && totalPages > 1) {
+    char pageInfo[16];
+    snprintf(pageInfo, sizeof(pageInfo), "%d/%d", currentPage + 1, totalPages);
+    const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, pageInfo);
+    const int pageInfoY =
+        hasModalBackground()
+            ? headerRect.y + (headerRect.height - renderer.getLineHeight(SMALL_FONT_ID)) / 2
+            : headerRect.y + headerRect.height - renderer.getLineHeight(SMALL_FONT_ID) - metrics.verticalSpacing / 2;
+    const int pageInfoX = hasModalBackground() ? headerRect.x + headerRect.width - textWidth
+                                               : renderer.getScreenWidth() - rightPadding - textWidth;
+    renderer.drawText(SMALL_FONT_ID, pageInfoX, pageInfoY, pageInfo);
+  }
+
+  // Body: draw layout lines for the current page (BW pass). layoutLines holds
+  // only the current page (Stage 2a streaming), so it is indexed from 0.
+  const int lineHeight = getLineHeight();  // cached for loop + renderHighlight
+  auto renderBody = [&]() {
+    for (int i = 0; i < linesPerPage && i < static_cast<int>(layoutLines.size()); i++) {
+      const PooledLine& line = layoutLines[i];
+      const int y = bodyStartY + i * lineHeight;
+      int x = leftPadding + line.indentLevel * indentStep;
+
+      if (line.isListItem) {
+        renderer.drawText(bodyFontId, x, y, kBullet);
+        x += renderer.getTextWidth(bodyFontId, kBullet);
+      }
+
+      for (const auto& seg : line.segments) {
+        const int segFontId = getDefinitionFontId(seg.isIpa);
+        const char* segText = pagePool_.data() + seg.offset;
+        renderer.drawText(segFontId, x, y, segText, true, seg.style);
+        if ((seg.style & EpdFontFamily::UNDERLINE) != 0) {
+          const int segWidth = renderer.getTextWidth(segFontId, segText, seg.style);
+          const int underlineY = y + renderer.getFontAscenderSize(segFontId) + 2;
+          renderer.drawLine(x, underlineY, x + segWidth, underlineY, true);
+        }
+        x += renderer.getTextAdvanceX(segFontId, segText, seg.style);
+      }
+    }
+  };
+  renderBody();
+
+  if (hasModalBackground() && !dictionaryName_.empty()) {
+    const int innerPadding = metrics.optionPopupInnerPadding;
+    const int footerLineHeight = renderer.getLineHeight(UI_10_FONT_ID);
+    const int footerY = modalY_ + modalHeight_ - innerPadding - footerLineHeight;
+    const int separatorY = footerY - metrics.optionPopupTitleGap / 2;
+    renderer.drawLine(modalX_, separatorY, modalX_ + modalWidth_, separatorY, true);
+    const auto visibleName =
+        renderer.truncatedText(UI_10_FONT_ID, dictionaryName_.c_str(), modalWidth_ - innerPadding * 2);
+    renderer.drawText(UI_10_FONT_ID, modalX_ + innerPadding, footerY, visibleName.c_str());
+  }
+
+  // Word-select mode: overlay highlighted word(s) and prime snapshot for next frame.
+  // The -1 prevWordIdx literal is load-bearing: renderHighlightDifferential uses
+  // prevWordIdx < 0 as the signal "framebuffer was just redrawn from scratch,
+  // discard any stale snapshot rather than restoring it on top of fresh pixels."
+  // This is the only path that disturbs the framebuffer outside the differential
+  // cycle, so it's also the only call site that must pass -1.
+  if (isWordSelectMode) {
+    const int currIdx = navigator.getCurrentFlatIndex();
+    bool snapshotPrimed = false;
+    if (currIdx >= 0) {
+      auto setup = navigator.renderHighlightDifferential(renderer, lineHeight, /*prevWordIdx=*/-1, currIdx);
+      snapshotPrimed = setup.has_value();
+    }
+    if (!snapshotPrimed) {
+      navigator.renderHighlight(renderer, lineHeight);
+    }
+
+    DictUtils::drawWordSelectButtonHints(renderer, mappedInput, navigator);
+    renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+
+    prevHighlightIdx_ = currIdx;
+    nextRenderMode_ = snapshotPrimed ? RenderMode::Differential : RenderMode::FullPage;
+    return;
+  }
+
+  // View mode: differential state is irrelevant — reset so that the next entry
+  // into word-select starts cleanly with a full repaint.
+  nextRenderMode_ = RenderMode::FullPage;
+  prevHighlightIdx_ = -1;
+
+  // Button hints
+  const char* btn2 = showLookupButton ? tr(STR_LOOKUP_SHORT) : "";
+  const char* btn3 = showLookupButton ? tr(STR_DICT_SWITCH) : "";
+  const char* btn4 = "";
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), btn2, btn3, btn4);
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+
+  renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+
+  // Skip the full-screen grayscale anti-aliasing overlay here. This modal is
+  // short-lived, and the 48KB BW backup it needs can fragment the heap enough
+  // that the reader's largest free block does not recover after returning.
+}

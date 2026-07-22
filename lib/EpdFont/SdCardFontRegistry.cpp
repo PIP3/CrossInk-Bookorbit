@@ -199,7 +199,9 @@ void SdCardFontRegistry::scanRoot(const char* rootPath, std::vector<SdCardFontFa
 
 bool SdCardFontRegistry::discover() {
   families_.clear();
-  families_.reserve(MAX_SD_FAMILIES);
+  // Most cards have fewer than 16 families. Grow only for unusually large
+  // catalogs instead of permanently reserving 128 entries at boot.
+  families_.reserve(16);
 
   // Hidden root is scanned first so it wins on name collisions, matching the
   // sleep-folder pattern (/.sleep preferred over /sleep).

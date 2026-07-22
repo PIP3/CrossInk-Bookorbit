@@ -16,6 +16,8 @@
 #include "CrossPointSettings.h"
 #include "KOReaderCredentialStore.h"
 #include "activities/settings/SettingsActivity.h"
+#include "util/Dictionary.h"
+#include "util/DictionaryRegistry.h"
 
 inline std::string fontSizePointLabel(const uint8_t pointSize) { return std::to_string(pointSize) + " pt"; }
 
@@ -234,6 +236,50 @@ inline SettingInfo buildFontFamilySetting(const SdCardFontRegistry* registry) {
   return s;
 }
 
+inline SettingInfo buildDictionarySetting(const DictionaryRegistry* dictRegistry) {
+  SettingInfo s;
+  s.nameId = StrId::STR_DICTIONARY;
+  s.type = SettingType::ENUM;
+  s.key = "dictionary";
+  s.category = StrId::STR_CAT_READER;
+  s.enumStringValues.push_back(I18N.get(StrId::STR_DICT_NONE));
+
+  std::vector<DictionaryEntry> entries;
+  if (dictRegistry) {
+    entries = dictRegistry->getEntries();
+    s.enumStringValues.reserve(entries.size() + 1);
+    for (const auto& entry : entries) {
+      s.enumStringValues.push_back(entry.name);
+    }
+  }
+
+  s.valueGetter = [entries]() -> uint8_t {
+    const std::string activePath = Dictionary::readDictPath();
+    if (activePath.empty()) {
+      return 0;
+    }
+    for (size_t i = 0; i < entries.size(); i++) {
+      if (entries[i].basePath == activePath) {
+        return static_cast<uint8_t>(i + 1);
+      }
+    }
+    return 0;
+  };
+
+  s.valueSetter = [entries](uint8_t v) {
+    if (v == 0) {
+      Dictionary::saveGlobalDictPath("");
+      return;
+    }
+    const size_t entryIndex = static_cast<size_t>(v - 1);
+    if (entryIndex < entries.size()) {
+      Dictionary::saveGlobalDictPath(entries[entryIndex].basePath.c_str());
+    }
+  };
+
+  return s;
+}
+
 inline SettingInfo buildSleepScreenSetting() {
   SettingInfo s = SettingInfo::Enum(
       StrId::STR_SLEEP_SCREEN, &CrossPointSettings::sleepScreen,
@@ -265,7 +311,7 @@ inline SettingInfo buildSleepScreenSetting() {
 // The static list is constructed exactly once (master's optimization, #1086 +
 // #1636) so the per-entry SettingInfo cost is paid once. Read-only consumers
 // can use it directly; mutable device UI lists use getSettingsList(), which
-// returns an owned copy and can add SD-card font options.
+// returns an owned copy and can add SD-card font and dictionary options.
 inline const std::vector<SettingInfo>& getBaseSettingsList() {
   static const std::vector<SettingInfo> baseList = [] {
     std::vector<SettingInfo> v;
@@ -362,6 +408,9 @@ inline const std::vector<SettingInfo>& getBaseSettingsList() {
                             "bionicReadingEnabled", StrId::STR_CAT_READER));
     add(SettingInfo::Toggle(StrId::STR_GUIDE_READING, &CrossPointSettings::guideReadingEnabled, "guideReadingEnabled",
                             StrId::STR_CAT_READER));
+    add(SettingInfo::Enum(StrId::STR_INDEXING_METHOD, &CrossPointSettings::indexingMethod,
+                          {StrId::STR_INDEXING_INCREMENTAL, StrId::STR_INDEXING_FULL_SECTION}, "indexingMethod",
+                          StrId::STR_CAT_READER));
 
     // --- Controls ---
     add(SettingInfo::Enum(StrId::STR_SIDE_BTN_LAYOUT, &CrossPointSettings::sideButtonLayout,
@@ -408,7 +457,8 @@ inline const std::vector<SettingInfo>& getBaseSettingsList() {
                            StrId::STR_READER_DARK_MODE,
                            StrId::STR_FOOTNOTES,
                            StrId::STR_BROWSE_FILES,
-                           StrId::STR_SAVE_CLIPPING},
+                           StrId::STR_SAVE_CLIPPING,
+                           StrId::STR_LOOKUP},
                           "shortPwrBtn", StrId::STR_CAT_CONTROLS)
             .withEnumRawValues({CrossPointSettings::IGNORE,
                                 CrossPointSettings::SLEEP,
@@ -430,7 +480,8 @@ inline const std::vector<SettingInfo>& getBaseSettingsList() {
                                 CrossPointSettings::TOGGLE_DARK_MODE,
                                 CrossPointSettings::FOOTNOTES,
                                 CrossPointSettings::FILE_BROWSER,
-                                CrossPointSettings::CREATE_CLIPPING}));
+                                CrossPointSettings::CREATE_CLIPPING,
+                                CrossPointSettings::LOOKUP_WORD}));
     add(SettingInfo::Enum(StrId::STR_LONG_PRESS_ACTION, &CrossPointSettings::longPwrBtn,
                           {StrId::STR_IGNORE,
                            StrId::STR_SLEEP,
@@ -452,7 +503,8 @@ inline const std::vector<SettingInfo>& getBaseSettingsList() {
                            StrId::STR_READER_DARK_MODE,
                            StrId::STR_FOOTNOTES,
                            StrId::STR_BROWSE_FILES,
-                           StrId::STR_SAVE_CLIPPING},
+                           StrId::STR_SAVE_CLIPPING,
+                           StrId::STR_LOOKUP},
                           "longPwrBtn", StrId::STR_CAT_CONTROLS)
             .withEnumRawValues({CrossPointSettings::IGNORE,
                                 CrossPointSettings::SLEEP,
@@ -474,7 +526,8 @@ inline const std::vector<SettingInfo>& getBaseSettingsList() {
                                 CrossPointSettings::TOGGLE_DARK_MODE,
                                 CrossPointSettings::FOOTNOTES,
                                 CrossPointSettings::FILE_BROWSER,
-                                CrossPointSettings::CREATE_CLIPPING}));
+                                CrossPointSettings::CREATE_CLIPPING,
+                                CrossPointSettings::LOOKUP_WORD}));
     add(SettingInfo::Enum(StrId::STR_LONG_PRESS_MENU_ACTION, &CrossPointSettings::longPressMenuAction,
                           {StrId::STR_IGNORE,
                            StrId::STR_SLEEP,
@@ -495,7 +548,8 @@ inline const std::vector<SettingInfo>& getBaseSettingsList() {
                            StrId::STR_READER_DARK_MODE,
                            StrId::STR_FOOTNOTES,
                            StrId::STR_BROWSE_FILES,
-                           StrId::STR_SAVE_CLIPPING},
+                           StrId::STR_SAVE_CLIPPING,
+                           StrId::STR_LOOKUP},
                           "longPressMenuAction", StrId::STR_CAT_CONTROLS)
             .withEnumRawValues({CrossPointSettings::LONG_MENU_OFF,
                                 CrossPointSettings::LONG_MENU_SLEEP,
@@ -516,7 +570,8 @@ inline const std::vector<SettingInfo>& getBaseSettingsList() {
                                 CrossPointSettings::LONG_MENU_TOGGLE_DARK_MODE,
                                 CrossPointSettings::LONG_MENU_FOOTNOTES,
                                 CrossPointSettings::LONG_MENU_FILE_BROWSER,
-                                CrossPointSettings::LONG_MENU_CREATE_CLIPPING}));
+                                CrossPointSettings::LONG_MENU_CREATE_CLIPPING,
+                                CrossPointSettings::LONG_MENU_LOOKUP_WORD}));
     add(SettingInfo::Enum(StrId::STR_LONG_PRESS_BACK_ACTION, &CrossPointSettings::longPressBackAction,
                           {StrId::STR_IGNORE,
                            StrId::STR_SLEEP,
@@ -537,7 +592,8 @@ inline const std::vector<SettingInfo>& getBaseSettingsList() {
                            StrId::STR_READER_DARK_MODE,
                            StrId::STR_FOOTNOTES,
                            StrId::STR_BROWSE_FILES,
-                           StrId::STR_SAVE_CLIPPING},
+                           StrId::STR_SAVE_CLIPPING,
+                           StrId::STR_LOOKUP},
                           "longPressBackAction", StrId::STR_CAT_CONTROLS)
             .withEnumRawValues({CrossPointSettings::LONG_MENU_OFF,
                                 CrossPointSettings::LONG_MENU_SLEEP,
@@ -558,7 +614,8 @@ inline const std::vector<SettingInfo>& getBaseSettingsList() {
                                 CrossPointSettings::LONG_MENU_TOGGLE_DARK_MODE,
                                 CrossPointSettings::LONG_MENU_FOOTNOTES,
                                 CrossPointSettings::LONG_MENU_FILE_BROWSER,
-                                CrossPointSettings::LONG_MENU_CREATE_CLIPPING}));
+                                CrossPointSettings::LONG_MENU_CREATE_CLIPPING,
+                                CrossPointSettings::LONG_MENU_LOOKUP_WORD}));
     add(SettingInfo::Toggle(StrId::STR_PWR_BTN_FOOTNOTE_BACK, &CrossPointSettings::pwrBtnFootnoteBack,
                             "pwrBtnFootnoteBack", StrId::STR_CAT_CONTROLS));
 
@@ -730,7 +787,8 @@ inline const std::vector<SettingInfo>& getBaseSettingsList() {
   return baseList;
 }
 
-inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* registry = nullptr) {
+inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* registry = nullptr,
+                                                const DictionaryRegistry* dictRegistry = nullptr) {
   std::vector<SettingInfo> v = getBaseSettingsList();
   if (registry && registry->getFamilyCount() > 0) {
     auto it = std::find_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.nameId == StrId::STR_FONT_FAMILY; });
@@ -742,6 +800,12 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     if (fontSizeIt != v.end()) {
       *fontSizeIt = buildFontSizeSetting(registry);
     }
+  }
+  if (dictRegistry) {
+    auto guideIt =
+        std::find_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.nameId == StrId::STR_GUIDE_READING; });
+    const auto insertPos = guideIt == v.end() ? v.end() : guideIt + 1;
+    v.insert(insertPos, buildDictionarySetting(dictRegistry));
   }
   return v;
 }
@@ -801,7 +865,7 @@ inline void addSettingByName(std::vector<SettingInfo>& target, const std::vector
 
 inline std::vector<SettingInfo> buildReaderSettingsParentList(const std::vector<SettingInfo>& allSettings) {
   std::vector<SettingInfo> readerSettings;
-  readerSettings.reserve(8);
+  readerSettings.reserve(12);
   readerSettings.push_back(SettingInfo::Submenu(StrId::STR_READER_FONT_OPTIONS, SettingAction::ReaderFontOptions));
   readerSettings.push_back(SettingInfo::Submenu(StrId::STR_READER_PAGE_LAYOUT, SettingAction::ReaderPageLayout));
   readerSettings.push_back(SettingInfo::Action(StrId::STR_CUSTOMISE_STATUS_BAR, SettingAction::CustomiseStatusBar));
@@ -811,6 +875,8 @@ inline std::vector<SettingInfo> buildReaderSettingsParentList(const std::vector<
   addSettingByName(readerSettings, allSettings, StrId::STR_IMAGES);
   addSettingByName(readerSettings, allSettings, StrId::STR_BIONIC_READING);
   addSettingByName(readerSettings, allSettings, StrId::STR_GUIDE_READING);
+  addSettingByName(readerSettings, allSettings, StrId::STR_DICTIONARY);
+  addSettingByName(readerSettings, allSettings, StrId::STR_INDEXING_METHOD);
   return readerSettings;
 }
 

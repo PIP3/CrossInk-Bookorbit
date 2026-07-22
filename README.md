@@ -120,6 +120,7 @@ See [Installation](./docs/installation.md) for step-by-step flashing and revert 
 - [Installation](./docs/installation.md)
 - [SD Card Fonts](./docs/sd-card-fonts.md)
 - [Reader Features](./docs/reader-features.md)
+- [Dictionary](./docs/dictionary.md)
 - [Controls](./docs/controls.md)
 - [Simulator](./docs/simulator.md)
 - [Data Cache](./docs/data-cache.md)

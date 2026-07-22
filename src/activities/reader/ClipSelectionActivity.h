@@ -66,7 +66,7 @@ class ClipSelectionActivity final : public Activity {
 
   void buildReadingOrder();
   void resetSavedBufferChunks();
-  bool allocateSavedBuffer();
+  void allocateSavedBuffer();
   void storeCurrentBuffer();
   void restoreSavedBuffer() const;
   bool switchToPage(int pageIdx);

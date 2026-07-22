@@ -6,8 +6,6 @@
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
-#include <InflateReader.h>
-#include <ScratchWorkspace.h>
 #include <Serialization.h>
 #include <Utf8.h>
 #include <Xtc.h>
@@ -638,11 +636,6 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
   }
 
   recentsLoading = true;
-  // EPUB cover extraction needs the ZIP inflater's 32KB history buffer. Drop
-  // the saved cover tile while generating thumbnails so Home has a larger
-  // contiguous heap block available.
-  freeCoverBuffer();
-  auto zipInflateScratch = ScratchWorkspace::acquire(InflateReader::STREAMING_DICT_SIZE, "Home EPUB thumbnails");
   bool showingLoading = false;
   Rect popupRect;
 
@@ -1014,6 +1007,11 @@ bool HomeActivity::storeCoverBuffer() {
   freeCoverBuffer();
   const size_t needed = renderer.getRegionByteSize(coverRectX, coverRectY, coverRectW, coverRectH);
   if (needed == 0) return false;
+  if (ESP.getFreeHeap() < needed || ESP.getMaxAllocHeap() < needed) {
+    LOG_DBG("HOME", "Skipping cover buffer cache (%zu bytes, free=%u, maxAlloc=%u)", needed, ESP.getFreeHeap(),
+            ESP.getMaxAllocHeap());
+    return false;
+  }
   coverBuffer = static_cast<uint8_t*>(malloc(needed));
   if (!coverBuffer) {
     LOG_ERR("HOME", "OOM: cover buffer (%u bytes)", (unsigned)needed);

@@ -83,6 +83,10 @@ struct FilePathResult {
   std::string path;
 };
 
+struct WordResult {
+  std::string word;
+};
+
 struct ReadingStatsResult {
   bool changed = false;
 };
@@ -118,7 +122,7 @@ struct ClippingJumpResult {
 using ResultVariant = std::variant<std::monostate, WifiResult, KeyboardResult, MenuResult, ChapterResult, PercentResult,
                                    IntervalResult, OptionSelectionResult, PageResult, ProgressChangeResult, SyncResult,
                                    NetworkModeResult, FootnoteResult, BookmarkResult, FileBrowserActionResult,
-                                   FilePathResult, ReadingStatsResult, ClippingResult, ClippingJumpResult>;
+                                   FilePathResult, WordResult, ReadingStatsResult, ClippingResult, ClippingJumpResult>;
 
 struct ActivityResult {
   bool isCancelled = false;

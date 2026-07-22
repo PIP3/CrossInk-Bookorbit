@@ -160,7 +160,11 @@ class Section {
   std::optional<uint16_t> getCachedPageCount() const;
 
   // Look up the page number for a synthetic paragraph index from XPath p[N].
+  // Checks the active incremental build before falling back to the committed cache.
   std::optional<uint16_t> getPageForParagraphIndex(uint16_t pIndex) const;
+
+  // Look up a synthetic paragraph among pages produced by the active build only.
+  std::optional<uint16_t> findParagraphDuringBuild(uint16_t pIndex) const;
 
   // Look up the page number for a running list-item index from the li LUT.
   std::optional<uint16_t> getPageForListItemIndex(uint16_t liIndex) const;

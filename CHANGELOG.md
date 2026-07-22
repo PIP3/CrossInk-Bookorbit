@@ -2,6 +2,7 @@
 
 ### Added
 
+- Dictionary lookup and lookup history
 - RTC-enabled devices can now choose the date format shown in headers from Settings > System > Device.
 - The web EPUB optimizer now splits oversized chapters into memory-friendlier sections before sending them to the reader.
 - Reader indexing can now use `Incremental` or `Full Section` mode globally or per book; changing modes keeps the current chapter readable and applies when the next chapter needs indexing.
@@ -40,6 +41,7 @@
 - X4 sleep entry no longer flashes through multiple full-screen transitions before showing the sleep screen.
 - Bionic Reading now keeps Hebrew and other right-to-left EPUB text in the correct reading order.
 - EPUB clipping selection no longer replaces selected text with corrupted glyphs as the selection grows.
+- EPUB clipping selection now preserves SD-card fonts and Bionic Reading layout on memory-tight pages.
 - Popup option menus now show a scrollbar when more choices are available than can fit on screen.
 - Backing out of Manage Fonts without changing fonts now returns to Font Options instead of Home.
 - The “Entering sleep” message now follows the reader's current orientation, including book-specific orientation overrides.

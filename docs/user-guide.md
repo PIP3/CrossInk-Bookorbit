@@ -568,6 +568,8 @@ Available options include:
 - **Sync Progress** – Push or pull reading progress with a KOReader sync server (see [KOReader Sync Quick Setup](#367-koreader-sync-quick-setup)).
 - **Reading Stats** – Open the current book's reading stats.
 - **Mark Finished / Mark Unfinished** – Toggle whether the current book is marked as finished.
+- **Look Up Word / Lookup History** – Select words on the page and revisit recent per-book lookups when a dictionary is active.
+- **Book Dictionary** – Choose a per-book dictionary override from the reader menu's settings tab.
 
 Press **Back** at any time to close the menu and return to your current page.
 
@@ -591,6 +593,10 @@ To open bookmarks, press **Confirm** while inside a book. Then navigate to the *
 
 Bookmarks are stored as per-book `.bin` files in the `.crosspoint/bookmarks` folder.
 
+### 5.3 Dictionary
+
+Dictionary lookup supports word selection, recent per-book history, chained lookups from definitions, and per-book dictionary overrides. See the [Dictionary guide](./docs/dictionary.md) for installation and preparation instructions.
+
 ## 6. Current Limitations & Roadmap
 
 Please note that this firmware is currently in active development. The following features are **not yet supported** but are planned for future updates:
@@ -600,7 +606,6 @@ Please note that this firmware is currently in active development. The following
   built-in [EPUB optimization](./webserver.md#epub-optimization) before upload
   if a book is slow or memory-sensitive.
 - **Unsupported Image Formats:** Most JPG and PNG images in EPUBs render correctly. GIFs and progressive JPEGs are not supported and will fall back to an `[Image]` placeholder.
-- **Dictionary Lookup:** Inline word lookup is not yet implemented.
 
 ---
 

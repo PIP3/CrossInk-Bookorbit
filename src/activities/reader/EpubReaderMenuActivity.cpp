@@ -47,6 +47,8 @@ struct ReaderLayoutSettingsSnapshot {
   uint8_t bionicReadingEnabled;
   uint8_t guideReadingEnabled;
   uint8_t epubRenderMode;
+  // Indexing method is a build policy, not a layout input. A mode-only change
+  // keeps the live section/parser and takes effect when the next chapter opens.
   char sdFontFamilyName[sizeof(SETTINGS.sdFontFamilyName)] = {};
 
   bool operator==(const ReaderLayoutSettingsSnapshot& other) const {
@@ -135,16 +137,16 @@ void drawReaderMenuBitmapIcon(const GfxRenderer& renderer, const uint8_t bitmap[
 EpubReaderMenuActivity::EpubReaderMenuActivity(
     GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title, const int currentPage,
     const int totalPages, const int bookProgressPercent, const uint8_t currentOrientation, const bool hasFootnotes,
-    const bool hasBookmarks, const bool hasClippings, const bool isCurrentPageBookmarked, const bool isBookCompleted,
-    const bool autoPageTurnActive, const uint16_t autoPageTurnIntervalSeconds, const bool showReadingPaceReset,
-    ReaderOptionsActivity::SaveSettingsCallback saveReaderSettingsCallback, void* saveReaderSettingsContext,
-    ReaderOptionsActivity::SaveGlobalSettingsCallback saveGlobalSettingsCallback, void* saveGlobalSettingsContext,
-    ReaderOptionsActivity::GlobalSettingsEditCallback beginGlobalSettingsEditCallback,
+    const bool hasDictionary, const bool hasBookmarks, const bool hasClippings, const bool isCurrentPageBookmarked,
+    const bool isBookCompleted, const bool autoPageTurnActive, const uint16_t autoPageTurnIntervalSeconds,
+    const bool showReadingPaceReset, ReaderOptionsActivity::SaveSettingsCallback saveReaderSettingsCallback,
+    void* saveReaderSettingsContext, ReaderOptionsActivity::SaveGlobalSettingsCallback saveGlobalSettingsCallback,
+    void* saveGlobalSettingsContext, ReaderOptionsActivity::GlobalSettingsEditCallback beginGlobalSettingsEditCallback,
     void* beginGlobalSettingsEditContext, const bool stablePageNumbersAvailable,
     ReaderOptionsActivity::GlobalSettingsEditCallback endGlobalSettingsEditCallback, void* endGlobalSettingsEditContext)
     : Activity("EpubReaderMenu", renderer, mappedInput),
       menuItems(buildMenuItems(hasFootnotes, hasBookmarks, hasClippings, isCurrentPageBookmarked, isBookCompleted,
-                               showReadingPaceReset)),
+                               showReadingPaceReset, hasDictionary)),
       title(title),
       pendingOrientation(currentOrientation),
       currentPage(currentPage),
@@ -162,22 +164,24 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(
       endGlobalSettingsEditCallback(endGlobalSettingsEditCallback),
       endGlobalSettingsEditContext(endGlobalSettingsEditContext) {}
 
-EpubReaderMenuActivity::TabMenuItems EpubReaderMenuActivity::buildMenuItems(bool hasFootnotes, bool hasBookmarks,
-                                                                            bool hasClippings,
-                                                                            bool isCurrentPageBookmarked,
-                                                                            bool isBookCompleted,
-                                                                            bool showReadingPaceReset) {
+EpubReaderMenuActivity::TabMenuItems EpubReaderMenuActivity::buildMenuItems(
+    bool hasFootnotes, bool hasBookmarks, bool hasClippings, bool isCurrentPageBookmarked, bool isBookCompleted,
+    bool showReadingPaceReset, bool hasDictionary) {
   TabMenuItems items;
   auto& mainItems = items[MAIN_TAB_INDEX];
   auto& bookmarkItems = items[BOOKMARKS_TAB_INDEX];
   auto& settingsItems = items[SETTINGS_TAB_INDEX];
 
-  mainItems.reserve(8 + (hasFootnotes ? 1u : 0u));
+  mainItems.reserve(10 + (hasFootnotes ? 1u : 0u) + (hasDictionary ? 2u : 0u));
   bookmarkItems.reserve(8 + (hasBookmarks ? 2u : 0u) + (hasClippings ? 1u : 0u));
   settingsItems.reserve(2 + (showReadingPaceReset ? 1u : 0u));
 
   if (hasFootnotes) {
     mainItems.push_back({MenuAction::FOOTNOTES, StrId::STR_FOOTNOTES});
+  }
+  if (hasDictionary) {
+    mainItems.push_back({MenuAction::LOOKUP, StrId::STR_LOOKUP});
+    mainItems.push_back({MenuAction::LOOKUP_HISTORY, StrId::STR_LOOKUP_HISTORY});
   }
   mainItems.push_back({MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER});
   mainItems.push_back({MenuAction::READER_OPTIONS, StrId::STR_READER_OPTIONS});
@@ -205,6 +209,7 @@ EpubReaderMenuActivity::TabMenuItems EpubReaderMenuActivity::buildMenuItems(bool
 
   settingsItems.push_back({MenuAction::DELETE_STATS, StrId::STR_DELETE_BOOK_STATS});
   settingsItems.push_back({MenuAction::DELETE_CACHE, StrId::STR_DELETE_CACHE});
+  settingsItems.push_back({MenuAction::SET_BOOK_DICTIONARY, StrId::STR_BOOK_DICTIONARY});
   if (showReadingPaceReset) {
     settingsItems.push_back({MenuAction::RESET_READING_PACE, StrId::STR_RESET_READING_PACE});
   }

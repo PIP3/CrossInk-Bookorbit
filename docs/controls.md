@@ -75,7 +75,8 @@ Available actions include:
 - Footnotes
 - Dark Mode
 - Browse Files
-- Save Clipping
+- Create Clipping
+- Look Up Word
 
 ## Footnote Shortcut
 

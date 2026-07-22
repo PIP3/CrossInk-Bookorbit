@@ -21,12 +21,14 @@
 #include <memory>
 #include <new>
 
+#include "../settings/DictionarySelectActivity.h"
 #include "../settings/KOReaderSettingsActivity.h"
 #include "BookStatsActivity.h"
 #include "ClipSelectionActivity.h"
 #include "ClippingStore.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "DictionaryWordSelectActivity.h"
 #include "EpubReaderBookmarkListActivity.h"
 #include "EpubReaderChapterSelectionActivity.h"
 #include "EpubReaderClippingListActivity.h"
@@ -36,6 +38,7 @@
 #include "GlobalActions.h"
 #include "KOReaderCredentialStore.h"
 #include "KOReaderSyncActivity.h"
+#include "LookedUpWordsActivity.h"
 #include "MappedInputManager.h"
 #include "NearbyBookPositionSyncActivity.h"
 #include "ProgressMapper.h"
@@ -51,6 +54,7 @@
 #include "fontIds.h"
 #include "util/BookCacheUtils.h"
 #include "util/BookMoveUtils.h"
+#include "util/Dictionary.h"
 #include "util/ScreenshotUtil.h"
 
 namespace {
@@ -62,7 +66,8 @@ constexpr uint16_t MAX_AUTO_PAGE_TURN_INTERVAL_S = 120;
 constexpr int MAX_PAGE_LOAD_RETRIES = 3;
 constexpr uint8_t LEGACY_READER_SETTINGS_FILE_VERSION = 1;
 constexpr uint8_t PRE_WORD_SPACING_READER_SETTINGS_FILE_VERSION = 2;
-constexpr uint8_t READER_SETTINGS_FILE_VERSION = 3;
+constexpr uint8_t PRE_INDEXING_METHOD_READER_SETTINGS_FILE_VERSION = 3;
+constexpr uint8_t READER_SETTINGS_FILE_VERSION = 4;
 constexpr uint8_t READER_SETTINGS_FLAG_CUSTOM = 1 << 0;
 constexpr uint8_t READER_SETTINGS_FLAG_AUTO_PAGE_TURN = 1 << 1;
 constexpr uint8_t READER_SETTINGS_FLAG_RENDER_MODE = 1 << 2;
@@ -905,6 +910,7 @@ void captureReaderSettings(EpubReaderActivity::ReaderSettingsSnapshot& out) {
   out.bionicReadingEnabled = SETTINGS.bionicReadingEnabled;
   out.guideReadingEnabled = SETTINGS.guideReadingEnabled;
   out.epubRenderMode = normalizeRenderModeRaw(SETTINGS.epubRenderMode);
+  out.indexingMethod = SETTINGS.indexingMethod;
   std::strncpy(out.sdFontFamilyName, SETTINGS.sdFontFamilyName, sizeof(out.sdFontFamilyName) - 1);
   out.sdFontFamilyName[sizeof(out.sdFontFamilyName) - 1] = '\0';
 }
@@ -941,6 +947,9 @@ void applyReaderSettings(const EpubReaderActivity::ReaderSettingsSnapshot& in) {
   SETTINGS.bionicReadingEnabled = in.bionicReadingEnabled ? 1 : 0;
   SETTINGS.guideReadingEnabled = in.guideReadingEnabled ? 1 : 0;
   SETTINGS.epubRenderMode = normalizeRenderModeRaw(in.epubRenderMode);
+  SETTINGS.indexingMethod = in.indexingMethod < CrossPointSettings::INDEXING_METHOD_COUNT
+                                ? in.indexingMethod
+                                : CrossPointSettings::INDEXING_FULL_SECTION;
 }
 
 struct BookReaderSettingsData {
@@ -953,7 +962,7 @@ struct BookReaderSettingsData {
 };
 
 bool readReaderSettingsSnapshot(FsFile& file, EpubReaderActivity::ReaderSettingsSnapshot& out,
-                                const bool includesWordSpacing) {
+                                const bool includesWordSpacing, const bool includesIndexingMethod) {
   if (!(readU8(file, out.fontFamily) && readU8(file, out.fontSize) && readU8(file, out.lineHeightPercent) &&
         (!includesWordSpacing || readU8(file, out.wordSpacing)) && readU8(file, out.orientation) &&
         readU8(file, out.screenMargin) && readU8(file, out.publisherPageNumbers) &&
@@ -968,6 +977,9 @@ bool readReaderSettingsSnapshot(FsFile& file, EpubReaderActivity::ReaderSettings
     return false;
   }
   out.epubRenderMode = normalizeRenderModeRaw(out.epubRenderMode);
+  if (includesIndexingMethod && !readU8(file, out.indexingMethod)) {
+    return false;
+  }
   return readExact(file, out.sdFontFamilyName, sizeof(out.sdFontFamilyName));
 }
 
@@ -981,6 +993,9 @@ bool writeReaderSettingsSnapshot(FsFile& file, const EpubReaderActivity::ReaderS
          writeU8(file, in.extraParagraphSpacing) && writeU8(file, in.forceParagraphIndents) &&
          writeU8(file, in.bionicReadingEnabled) && writeU8(file, in.guideReadingEnabled) &&
          writeU8(file, normalizeRenderModeRaw(in.epubRenderMode)) &&
+         writeU8(file, in.indexingMethod < CrossPointSettings::INDEXING_METHOD_COUNT
+                           ? in.indexingMethod
+                           : CrossPointSettings::INDEXING_FULL_SECTION) &&
          writeExact(file, in.sdFontFamilyName, sizeof(in.sdFontFamilyName));
 }
 
@@ -1010,7 +1025,8 @@ BookReaderSettingsData loadBookReaderSettingsFile(const std::string& cachePath) 
     return data;
   }
 
-  if (version != PRE_WORD_SPACING_READER_SETTINGS_FILE_VERSION && version != READER_SETTINGS_FILE_VERSION) {
+  if (version != PRE_WORD_SPACING_READER_SETTINGS_FILE_VERSION &&
+      version != PRE_INDEXING_METHOD_READER_SETTINGS_FILE_VERSION && version != READER_SETTINGS_FILE_VERSION) {
     file.close();
     LOG_DBG("ERS", "Reader settings version mismatch, using defaults");
     return data;
@@ -1020,12 +1036,16 @@ BookReaderSettingsData loadBookReaderSettingsFile(const std::string& cachePath) 
   uint16_t seconds = 0;
   uint8_t renderMode = static_cast<uint8_t>(EpubRenderMode::CrossInkDefault);
   EpubReaderActivity::ReaderSettingsSnapshot snapshot;
+  // Version 2/3 books inherit the current global indexing method instead of
+  // silently changing modes when their older custom settings are loaded.
+  snapshot.indexingMethod = data.readerSettings.indexingMethod;
   bool ok = readU8(file, flags) && readU16(file, seconds);
   if (ok) {
     ok = readU8(file, renderMode);
   }
   if (ok) {
-    ok = readReaderSettingsSnapshot(file, snapshot, version >= READER_SETTINGS_FILE_VERSION);
+    ok = readReaderSettingsSnapshot(file, snapshot, version >= PRE_INDEXING_METHOD_READER_SETTINGS_FILE_VERSION,
+                                    version >= READER_SETTINGS_FILE_VERSION);
   }
   file.close();
   if (!ok) {
@@ -1674,6 +1694,13 @@ void EpubReaderActivity::saveCurrentBookReaderSettings() {
     return;
   }
 
+  if (section && section->isBuilding()) {
+    // The incremental parser and section writer keep SD handles open. Release
+    // them before reader_settings.bin is read/written; the build reopens both
+    // lazily on its next chunk.
+    section->releaseBuildFile();
+  }
+
   ReaderSettingsSnapshot snapshot;
   captureReaderSettings(snapshot);
   bookHasCustomReaderSettings = true;
@@ -1929,7 +1956,9 @@ void EpubReaderActivity::openReaderMenu() {
   startActivityForResult(
       std::make_unique<EpubReaderMenuActivity>(
           renderer, mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent, SETTINGS.orientation,
-          !previewActive && !currentPageFootnotes.empty(), !BOOKMARKS.getBookmarks().empty(), CLIPPINGS.hasClippings(),
+          !previewActive && !currentPageFootnotes.empty(),
+          !previewActive && epub && Dictionary::exists(epub->getCachePath().c_str()), !BOOKMARKS.getBookmarks().empty(),
+          CLIPPINGS.hasClippings(),
           !previewActive && BOOKMARKS.hasBookmarkForPage(bmSpine, bmProgress, bookmarkPageCount), isBookCompleted,
           automaticPageTurnActive, getAutoPageTurnIntervalSeconds(),
           SETTINGS.statusBarTimeLeft != CrossPointSettings::STATUS_BAR_TIME_LEFT::TIME_LEFT_HIDE,
@@ -2027,10 +2056,14 @@ void EpubReaderActivity::loop() {
   // Skip while the render mutex is busy so we never delay a pending render; re-check
   // isBuilding() under the lock since render() may have just finished it.
   // While extending a partial, pageCount is pinned at the partial watermark until the rebuild
-  // catches up, so keep ticking it even before activeBuildHasCaughtReadablePages() turns true.
-  if (section && section->isBuilding() && !RenderLock::peek() &&
-      (section->isPartial() || section->activeBuildHasCaughtReadablePages()) &&
-      (section->isPartial() || static_cast<int>(section->pageCount) < section->currentPage + BUILD_WINDOW_AHEAD)) {
+  // catches up, so keep ticking it even before activeBuildHasCaughtReadablePages() turns true;
+  // the window check below would compare against the pinned watermark and stall the catch-up.
+  // Once the extension has caught up, the window applies again: without that, a resumed partial
+  // rebuilt its whole chapter in one hot-loop burst instead of following the reader.
+  // sectionBuildWantsTick() holds the catch-up/window logic and is shared with
+  // skipLoopDelay(), so the loop only runs hot while a tick can actually happen.
+  if (sectionBuildWantsTick() && !RenderLock::peek() &&
+      (section->isPartial() || section->activeBuildHasCaughtReadablePages())) {
     RenderLock lock(*this);
     // Re-check under the lock: render() may have finalized the build between the outer
     // isBuilding() check and acquiring the lock here.
@@ -2562,6 +2595,67 @@ void EpubReaderActivity::handleClippingJump(const ClippingJumpResult& clipping) 
   pauseReadingPaceTimer("clipping_jump");
 }
 
+void EpubReaderActivity::openWordSelect(bool framebufferContainsPage) {
+  std::unique_ptr<Page> pageForLookup;
+  ReaderViewportLayout layout{};
+  std::string bookCachePath;
+  std::string nextPageFirstWord;
+
+  {
+    RenderLock lock(*this);
+    if (!section || !epub) {
+      requestUpdate();
+      return;
+    }
+
+    pageForLookup = section->loadPageFromSectionFile();
+    if (!pageForLookup) {
+      requestUpdate();
+      return;
+    }
+
+    layout = computeReaderViewportLayout(renderer, automaticPageTurnActive);
+    bookCachePath = epub->getCachePath();
+
+    if (section->currentPage < section->pageCount - 1) {
+      const int savedPage = section->currentPage;
+      section->currentPage = savedPage + 1;
+      auto nextPage = section->loadPageFromSectionFile();
+      section->currentPage = savedPage;
+      if (nextPage) {
+        const auto it = std::find_if(nextPage->elements.begin(), nextPage->elements.end(),
+                                     [](const auto& element) { return element->getTag() == TAG_PageLine; });
+        if (it != nextPage->elements.end()) {
+          const auto* firstLine = static_cast<const PageLine*>(it->get());
+          if (firstLine->getBlock() && !firstLine->getBlock()->isEmpty()) {
+            nextPageFirstWord = firstLine->getBlock()->wordText(0);
+          }
+        }
+      }
+    }
+  }
+
+  pauseReadingPaceTimer("dictionary_lookup");
+  // The activity outlives this call, so it must be heap-owned; make the fixed-size
+  // object allocation fallible instead of aborting the firmware when memory is tight.
+  auto wordSelect = makeUniqueNoThrow<DictionaryWordSelectActivity>(
+      renderer, mappedInput, std::move(pageForLookup), layout.marginLeft, layout.marginTop, bookCachePath,
+      nextPageFirstWord, framebufferContainsPage, layout.marginBottom);
+  if (!wordSelect) {
+    LOG_ERR("DICT", "OOM allocating DictionaryWordSelectActivity (%u bytes)",
+            static_cast<unsigned>(sizeof(DictionaryWordSelectActivity)));
+    resumeReadingPaceTimer("dictionary_lookup_alloc_failed");
+    drawToast(renderer, tr(STR_MEMORY_ERROR));
+    delay(1000);
+    requestUpdate();
+    return;
+  }
+  startActivityForResult(std::move(wordSelect), [this](const ActivityResult&) {
+    resumeReadingPaceTimer("dictionary_lookup_return");
+    requestUpdate();
+  });
+}
+
 void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action) {
   switch (action) {
     case EpubReaderMenuActivity::MenuAction::SELECT_CHAPTER: {
@@ -2659,6 +2753,28 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
     }
     case EpubReaderMenuActivity::MenuAction::SAVE_CLIPPING: {
       startClipSelection();
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::LOOKUP: {
+      openWordSelect(/*framebufferContainsPage=*/false);
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::LOOKUP_HISTORY: {
+      pauseReadingPaceTimer("lookup_history");
+      startActivityForResult(std::make_unique<LookedUpWordsActivity>(renderer, mappedInput, epub->getCachePath()),
+                             [this](const ActivityResult&) {
+                               resumeReadingPaceTimer("lookup_history_return");
+                               requestUpdate();
+                             });
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::SET_BOOK_DICTIONARY: {
+      pauseReadingPaceTimer("dictionary_select");
+      startActivityForResult(std::make_unique<DictionarySelectActivity>(renderer, mappedInput, epub->getCachePath()),
+                             [this](const ActivityResult&) {
+                               resumeReadingPaceTimer("dictionary_select_return");
+                               requestUpdate();
+                             });
       break;
     }
     case EpubReaderMenuActivity::MenuAction::GO_HOME: {
@@ -3331,6 +3447,15 @@ void EpubReaderActivity::executeReaderQuickAction(CrossPointSettings::LONG_PRESS
     case CrossPointSettings::LONG_MENU_CREATE_CLIPPING:
       startClipSelection();
       break;
+    case CrossPointSettings::LONG_MENU_LOOKUP_WORD:
+      if (epub && Dictionary::exists(epub->getCachePath().c_str())) {
+        openWordSelect(/*framebufferContainsPage=*/true);
+      } else {
+        drawToast(renderer, tr(STR_DICT_NO_DICT_SET));
+        delay(1000);
+        requestUpdate();
+      }
+      break;
     case CrossPointSettings::LONG_MENU_OFF:
     default:
       break;
@@ -3342,6 +3467,7 @@ bool EpubReaderActivity::quickActionUsesConfirmRelease(const CrossPointSettings:
     case CrossPointSettings::LONG_MENU_READING_STATS:
     case CrossPointSettings::LONG_MENU_CYCLE_PAGE_TURN:
     case CrossPointSettings::LONG_MENU_CREATE_CLIPPING:
+    case CrossPointSettings::LONG_MENU_LOOKUP_WORD:
       return true;
     case CrossPointSettings::LONG_MENU_FOOTNOTES:
       return currentPageFootnotes.size() > 1;
@@ -3460,6 +3586,10 @@ bool EpubReaderActivity::executeShortPowerButtonAction() {
       mappedInput.suppressNextPowerConfirmRelease();
       executeReaderQuickAction(CrossPointSettings::LONG_MENU_CREATE_CLIPPING);
       return true;
+    case CrossPointSettings::SHORT_PWRBTN::LOOKUP_WORD:
+      mappedInput.suppressNextPowerConfirmRelease();
+      executeReaderQuickAction(CrossPointSettings::LONG_MENU_LOOKUP_WORD);
+      return true;
     default:
       return false;
   }
@@ -3552,6 +3682,10 @@ bool EpubReaderActivity::executeLongPowerButtonAction() {
     case CrossPointSettings::SHORT_PWRBTN::CREATE_CLIPPING:
       mappedInput.suppressNextPowerConfirmRelease();
       executeReaderQuickAction(CrossPointSettings::LONG_MENU_CREATE_CLIPPING);
+      return true;
+    case CrossPointSettings::SHORT_PWRBTN::LOOKUP_WORD:
+      mappedInput.suppressNextPowerConfirmRelease();
+      executeReaderQuickAction(CrossPointSettings::LONG_MENU_LOOKUP_WORD);
       return true;
     default:
       return false;
@@ -3835,11 +3969,15 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     GUI.drawPopup(renderer, tr(STR_SAVE_PROGRESS_FAILED));
   };
 
-  const auto showLowMemoryLayoutError = [this]() {
+  const auto queueLowMemoryLayoutAlert = [this](const bool goHomeOnBack) {
     snprintf(APP_STATE.pendingAlertTitle, sizeof(APP_STATE.pendingAlertTitle), "%s", tr(STR_EPUB_LAYOUT_MEMORY_TITLE));
     snprintf(APP_STATE.pendingAlertBody, sizeof(APP_STATE.pendingAlertBody), "%s", tr(STR_EPUB_LAYOUT_MEMORY_BODY));
-    APP_STATE.pendingAlertGoHomeOnBack.store(true, std::memory_order_relaxed);
+    APP_STATE.pendingAlertGoHomeOnBack.store(goHomeOnBack, std::memory_order_relaxed);
     APP_STATE.hasPendingAlert.store(true, std::memory_order_release);
+  };
+
+  const auto showLowMemoryLayoutError = [this, &queueLowMemoryLayoutAlert]() {
+    queueLowMemoryLayoutAlert(true);
     GUI.drawPopup(renderer, tr(STR_EPUB_LAYOUT_MEMORY_TITLE));
   };
 
@@ -3906,6 +4044,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
             ESP.getFreeHeap(), ESP.getMaxAllocHeap());
     const int readerFontId = SETTINGS.getReaderFontId();
     const EpubRenderMode selectedRenderMode = normalizeRenderMode(SETTINGS.epubRenderMode);
+    const bool fullSectionIndexing = SETTINGS.indexingMethod == CrossPointSettings::INDEXING_FULL_SECTION;
     EpubRenderMode usedRenderMode = selectedRenderMode;
     const bool buildingFootnotePreview = !pendingFootnotePreviewAnchor.empty();
     bool loadedSection = false;
@@ -3956,12 +4095,24 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       bool imagesWereSuppressed = false;
       bool layoutAbortedForLowMemory = false;
       bool fallbackBuildSucceeded = false;
+      bool usedReadablePartialFallback = false;
+      EpubRenderMode lastAttemptedRenderMode = selectedRenderMode;
+      bool lastAttemptUsedSafeMode = false;
+      std::unique_ptr<Section> readablePartialFallback;
+      if (fullSectionIndexing && partialCacheLoaded) {
+        // Keep the known-readable partial alive until its full replacement has
+        // been built and atomically promoted. A failed full build must not turn
+        // a mode change or reopen into an invalid-book dead end.
+        readablePartialFallback = std::move(section);
+      }
       auto buildSectionWithProfile = [&](const int fontId, const SectionBuildProfile& profile) {
+        lastAttemptedRenderMode = profile.renderMode;
+        lastAttemptUsedSafeMode = profile.safeMode;
         const std::string cacheSuffix =
             buildingFootnotePreview ? footnotePreviewCacheSuffix(profile.renderMode, pendingFootnotePreviewAnchor)
                                     : std::string(sectionCacheSuffixForRenderMode(profile.renderMode));
-        const bool reuseLoadedPartial =
-            section && section->isPartial() && fontId == activeSectionFontId && profile.renderMode == usedRenderMode;
+        const bool reuseLoadedPartial = !fullSectionIndexing && section && section->isPartial() &&
+                                        fontId == activeSectionFontId && profile.renderMode == usedRenderMode;
         if (!reuseLoadedPartial) {
           section.reset();
           section = makeUniqueNoThrow<Section>(epub, currentSpineIndex, renderer, cacheSuffix.c_str());
@@ -3978,9 +4129,8 @@ void EpubReaderActivity::render(RenderLock&& lock) {
         const SectionBuildOptions buildOptions{
             buildingFootnotePreview ? pendingFootnotePreviewAnchor.c_str() : nullptr,
             static_cast<uint16_t>(buildingFootnotePreview ? FOOTNOTE_PREVIEW_MAX_PAGES : 0)};
-        const bool needsFullBuild = buildingFootnotePreview || pendingPercentJump ||
-                                    pendingClippingIndex != UINT16_MAX || pendingParagraphIndex != UINT16_MAX ||
-                                    pendingRelayoutReposition;
+        const bool needsFullBuild = fullSectionIndexing || buildingFootnotePreview || pendingPercentJump ||
+                                    pendingClippingIndex != UINT16_MAX || pendingParagraphIndex != UINT16_MAX;
         bool buildSucceeded = false;
         if (needsFullBuild) {
           showIndexingPopup();
@@ -4033,7 +4183,9 @@ void EpubReaderActivity::render(RenderLock&& lock) {
                                     SETTINGS.wordSpacing, profile.renderMode, buildOptions)) {
               bool buildFailed = false;
               while (!section->isBuildComplete() &&
-                     (anchorJump ? !anchorPageReady() : static_cast<int>(section->pageCount) <= target)) {
+                     (anchorJump                  ? !anchorPageReady()
+                      : pendingRelayoutReposition ? !isRelayoutCatchUpComplete()
+                                                  : static_cast<int>(section->pageCount) <= target)) {
                 if (cancelBuildForBack()) {
                   break;
                 }
@@ -4043,11 +4195,17 @@ void EpubReaderActivity::render(RenderLock&& lock) {
                   break;
                 }
               }
+              if (!buildFailed && pendingRelayoutReposition && section->isBuilding() && isRelayoutCatchUpComplete()) {
+                LOG_DBG("ERS", "Incremental relayout reached prior watermark: pages=%u target=%d", section->pageCount,
+                        cachedChapterPageWatermark);
+              }
               attemptImagesWereSuppressed = attemptImagesWereSuppressed || section->lastBuildImagesWereSuppressed();
               attemptLayoutAbortedForLowMemory =
                   attemptLayoutAbortedForLowMemory || section->lastBuildLayoutAbortedForLowMemory();
-              const bool requestedPageAvailable =
-                  anchorJump ? anchorPageReady() : target >= 0 && target < static_cast<int>(section->pageCount);
+              const bool requestedPageAvailable = anchorJump ? anchorPageReady()
+                                                  : pendingRelayoutReposition
+                                                      ? isRelayoutCatchUpComplete()
+                                                      : target >= 0 && target < static_cast<int>(section->pageCount);
               if (buildCancelledForBack) {
                 buildFailed = false;
               }
@@ -4113,6 +4271,39 @@ void EpubReaderActivity::render(RenderLock&& lock) {
         return;
       }
 
+      if (!fallbackBuildSucceeded && readablePartialFallback && !buildingFootnotePreview && !pendingPercentJump &&
+          pendingClippingIndex == UINT16_MAX && pendingParagraphIndex == UINT16_MAX && !pendingRelayoutReposition) {
+        const int target = pendingPageJump.has_value() ? *pendingPageJump : std::max(0, nextPageNumber);
+        bool targetAvailable = target < static_cast<int>(readablePartialFallback->pageCount);
+        if (!pendingAnchor.empty()) {
+          const auto anchorPage = readablePartialFallback->findAnchor(pendingAnchor);
+          targetAvailable = anchorPage.has_value() && *anchorPage < readablePartialFallback->pageCount;
+        }
+        if (targetAvailable) {
+          LOG_ERR("ERS", "Full-section build failed; retaining readable partial cache (%u pages)",
+                  readablePartialFallback->pageCount);
+          section.reset();
+          section = std::move(readablePartialFallback);
+          fallbackBuildSucceeded = true;
+          usedReadablePartialFallback = true;
+          layoutAbortedForLowMemory = false;
+        }
+      }
+
+      if (!fallbackBuildSucceeded && layoutAbortedForLowMemory && section && section->isPartial() &&
+          section->pageCount > 0 && !buildingFootnotePreview && !pendingPercentJump && pendingAnchor.empty() &&
+          pendingClippingIndex == UINT16_MAX && pendingParagraphIndex == UINT16_MAX && !pendingRelayoutReposition) {
+        LOG_ERR("ERS", "Incremental build stopped for low heap; retaining readable partial cache (%u pages)",
+                section->pageCount);
+        fallbackBuildSucceeded = true;
+        usedReadablePartialFallback = true;
+        partialRebuildAbortedForLowMemory = true;
+        activeSectionFontId = readerFontId;
+        usedRenderMode = lastAttemptedRenderMode;
+        safeModeBuildSucceeded = lastAttemptUsedSafeMode;
+        queueLowMemoryLayoutAlert(false);
+      }
+
       if (!fallbackBuildSucceeded) {
         if (layoutAbortedForLowMemory) {
           LOG_ERR("ERS", "EPUB section layout aborted for low heap; chapter exceeds safe layout memory");
@@ -4149,8 +4340,13 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       if (!section->isBuilding()) {
         releaseReaderSdFontCachesForLowMemory(renderer, "ERS", "section cache build");
       }
-      LOG_DBG("ERS", "Cache build complete: pages=%u font=%d mode=%u free=%u maxAlloc=%u", section->pageCount,
-              activeSectionFontId, static_cast<unsigned>(usedRenderMode), ESP.getFreeHeap(), ESP.getMaxAllocHeap());
+      if (usedReadablePartialFallback) {
+        LOG_DBG("ERS", "Continuing from readable partial cache after failed build: pages=%u free=%u maxAlloc=%u",
+                section->pageCount, ESP.getFreeHeap(), ESP.getMaxAllocHeap());
+      } else {
+        LOG_DBG("ERS", "Cache build complete: pages=%u font=%d mode=%u free=%u maxAlloc=%u", section->pageCount,
+                activeSectionFontId, static_cast<unsigned>(usedRenderMode), ESP.getFreeHeap(), ESP.getMaxAllocHeap());
+      }
 
       if (!buildingFootnotePreview && safeModeBuildSucceeded) {
         applySafeModeReaderSettings();
@@ -4272,49 +4468,82 @@ void EpubReaderActivity::render(RenderLock&& lock) {
 
   // Extend the build to the requested page if needed. This covers a partial cache that is
   // already loaded but not actively building; pages already available do no work here.
+  if (!activeFootnotePreview && partialRebuildAbortedForLowMemory && section->pageCount > 0 &&
+      section->currentPage >= static_cast<int>(section->pageCount)) {
+    LOG_ERR("ERS", "Requested page %d exceeds low-memory partial watermark %u; showing last readable page",
+            section->currentPage, section->pageCount);
+    section->currentPage = section->pageCount - 1;
+  }
   if (!activeFootnotePreview && section->isPartial() && section->currentPage >= static_cast<int>(section->pageCount)) {
     showIndexingPopup();
   }
-  while (!activeFootnotePreview && section->isPartial() &&
-         section->currentPage >= static_cast<int>(section->pageCount)) {
-    if (!section->isBuilding()) {
-      const int renderFontId = activeSectionFontId != 0 ? activeSectionFontId : SETTINGS.getReaderFontId();
-      const SectionBuildProfile profile = buildProfileForRenderMode(normalizeRenderMode(SETTINGS.epubRenderMode));
-      if (!section->startBuild(renderFontId, SETTINGS.getReaderLineCompression(), SETTINGS.extraParagraphSpacing,
-                               SETTINGS.forceParagraphIndents, SETTINGS.paragraphAlignment, viewportWidth,
-                               viewportHeight, SETTINGS.hyphenationEnabled, profile.embeddedStyle,
-                               SETTINGS.imageRendering, profile.bionicReadingEnabled, profile.guideReadingEnabled,
-                               SETTINGS.wordSpacing, profile.renderMode)) {
-        LOG_ERR("ERS", "Failed to start partial extension build");
-        section.reset();
-        showBuildError();
-        return;
+  const bool needsBlockingCatchUp = section->currentPage >= static_cast<int>(section->pageCount) &&
+                                    ((!activeFootnotePreview && section->isPartial()) || section->isBuilding());
+  bool catchUpCancelled = false;
+  bool catchUpFailed = false;
+  const auto runBlockingCatchUp = [&]() {
+    while (!activeFootnotePreview && section->isPartial() &&
+           section->currentPage >= static_cast<int>(section->pageCount)) {
+      if (!section->isBuilding()) {
+        const int renderFontId = activeSectionFontId != 0 ? activeSectionFontId : SETTINGS.getReaderFontId();
+        const SectionBuildProfile profile = buildProfileForRenderMode(normalizeRenderMode(SETTINGS.epubRenderMode));
+        if (!section->startBuild(renderFontId, SETTINGS.getReaderLineCompression(), SETTINGS.extraParagraphSpacing,
+                                 SETTINGS.forceParagraphIndents, SETTINGS.paragraphAlignment, viewportWidth,
+                                 viewportHeight, SETTINGS.hyphenationEnabled, profile.embeddedStyle,
+                                 SETTINGS.imageRendering, profile.bionicReadingEnabled, profile.guideReadingEnabled,
+                                 SETTINGS.wordSpacing, profile.renderMode)) {
+          LOG_ERR("ERS", "Failed to start partial extension build");
+          catchUpFailed = true;
+          return;
+        }
+      }
+      while (!section->isBuildComplete() && section->currentPage >= static_cast<int>(section->pageCount)) {
+        if (cancelBuildForBack()) {
+          catchUpCancelled = true;
+          return;
+        }
+        if (!section->buildSomeMore(BUILD_PAGES_PER_CHUNK)) {
+          LOG_ERR("ERS", "Failed during incremental section build");
+          catchUpFailed = true;
+          return;
+        }
       }
     }
-    while (!section->isBuildComplete() && section->currentPage >= static_cast<int>(section->pageCount)) {
-      if (cancelBuildForBack()) {
-        return;
-      }
-      if (!section->buildSomeMore(BUILD_PAGES_PER_CHUNK)) {
-        LOG_ERR("ERS", "Failed during incremental section build");
-        section.reset();
-        showBuildError();
-        return;
-      }
-    }
-  }
 
-  if (section->isBuilding()) {
-    while (!section->isBuildComplete() && section->currentPage >= static_cast<int>(section->pageCount)) {
-      if (cancelBuildForBack()) {
-        return;
+    if (section->isBuilding()) {
+      while (!section->isBuildComplete() && section->currentPage >= static_cast<int>(section->pageCount)) {
+        if (cancelBuildForBack()) {
+          catchUpCancelled = true;
+          return;
+        }
+        if (!section->buildSomeMore(BUILD_PAGES_PER_CHUNK)) {
+          LOG_ERR("ERS", "Failed during incremental section build");
+          catchUpFailed = true;
+          return;
+        }
       }
-      if (!section->buildSomeMore(BUILD_PAGES_PER_CHUNK)) {
-        LOG_ERR("ERS", "Failed during incremental section build");
-        section.reset();
-        showBuildError();
-        return;
-      }
+    }
+  };
+
+  if (needsBlockingCatchUp) {
+    // The panel keeps its current image, and the page below is redrawn from
+    // scratch. Let miniz use the framebuffer while this catch-up blocks.
+    GfxRenderer::FrameBufferLoan loan(renderer);
+    runBlockingCatchUp();
+  }
+  if (catchUpCancelled) {
+    return;
+  }
+  if (catchUpFailed) {
+    if (section->lastBuildLayoutAbortedForLowMemory() && section->pageCount > 0) {
+      partialRebuildAbortedForLowMemory = true;
+      section->currentPage = std::min(section->currentPage, static_cast<int>(section->pageCount) - 1);
+      LOG_ERR("ERS", "Blocking build stopped for low heap; retaining %u readable partial pages", section->pageCount);
+      queueLowMemoryLayoutAlert(false);
+    } else {
+      section.reset();
+      showBuildError();
+      return;
     }
   }
 
@@ -4400,6 +4629,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     LOG_DBG("ERS", "Rendered page in %dms", millis() - start);
   }
   if (!activeFootnotePreview) {
+    silentIndexNextChapterIfNeeded(viewportWidth, viewportHeight);
     const int totalPages = section->estimatedTotalPages();
     // render() also runs on menu/bookmark/screenshot re-renders. Avoid repeating
     // the same progress.bin write unless the rendered position or estimated total changed.
@@ -4420,8 +4650,158 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   }
 }
 
+void EpubReaderActivity::silentIndexNextChapterIfNeeded(const uint16_t viewportWidth, const uint16_t viewportHeight) {
+  if (SETTINGS.indexingMethod != CrossPointSettings::INDEXING_FULL_SECTION || activeFootnotePreview || !epub ||
+      !section || section->isBuilding() || section->isPartial() || section->pageCount < 2) {
+    return;
+  }
+
+  // Match the old full-section behavior: build the next chapter while the
+  // penultimate page is on screen, giving the reader one page of reading time.
+  if (section->currentPage != section->pageCount - 2) {
+    return;
+  }
+
+  const int nextSpineIndex = currentSpineIndex + 1;
+  if (nextSpineIndex < 0 || nextSpineIndex >= epub->getSpineItemsCount()) {
+    return;
+  }
+
+  const int readerFontId = SETTINGS.getReaderFontId();
+  const EpubRenderMode selectedRenderMode = normalizeRenderMode(SETTINGS.epubRenderMode);
+  auto nextSection =
+      makeUniqueNoThrow<Section>(epub, nextSpineIndex, renderer, sectionCacheSuffixForRenderMode(selectedRenderMode));
+  if (!nextSection) {
+    LOG_ERR("ERS", "Failed to allocate next-chapter cache reader for spine %d", nextSpineIndex);
+    return;
+  }
+
+  if (nextSection->loadSectionFile(readerFontId, SETTINGS.getReaderLineCompression(), SETTINGS.extraParagraphSpacing,
+                                   SETTINGS.forceParagraphIndents, SETTINGS.paragraphAlignment, viewportWidth,
+                                   viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
+                                   SETTINGS.imageRendering, SETTINGS.bionicReadingEnabled, SETTINGS.guideReadingEnabled,
+                                   SETTINGS.wordSpacing, selectedRenderMode) &&
+      !nextSection->isPartial()) {
+    LOG_DBG("ERS", "Skipping silent next-chapter indexing: cache already exists (chapter=%d pages=%u)", nextSpineIndex,
+            nextSection->pageCount);
+    return;
+  }
+  // Close any loaded partial before rebuilding the same cache path. Real SdFat
+  // hardware permits only one reader for a file path at a time.
+  nextSection.reset();
+
+  const bool releasedSdFontCaches =
+      releaseReaderSdFontCachesForLowMemory(renderer, "ERS", "preparing silent next-chapter indexing");
+  const uint32_t minFreeForPrefetch = releasedSdFontCaches
+                                          ? MemoryBudget::OPTIONAL_EPUB_PREFETCH_AFTER_SD_FONT_RELEASE_MIN_FREE
+                                          : MemoryBudget::OPTIONAL_EPUB_REBUILD_MIN_FREE;
+  if (!MemoryBudget::hasHeapForOptionalEpubRebuild("ERS", "silent next-chapter indexing", nextSpineIndex,
+                                                   minFreeForPrefetch,
+                                                   MemoryBudget::OPTIONAL_EPUB_REBUILD_MIN_MAX_ALLOC)) {
+    return;
+  }
+
+  LOG_DBG("ERS", "Silently indexing next chapter: %d (free=%u, maxAlloc=%u)", nextSpineIndex, ESP.getFreeHeap(),
+          ESP.getMaxAllocHeap());
+  bool layoutAbortedForLowMemory = false;
+  bool buildSucceeded = false;
+  bool safeModeBuildSucceeded = false;
+  EpubRenderMode usedRenderMode = selectedRenderMode;
+
+  const auto buildNextSection = [&](const SectionBuildProfile& profile) {
+    auto attemptSection =
+        makeUniqueNoThrow<Section>(epub, nextSpineIndex, renderer, sectionCacheSuffixForRenderMode(profile.renderMode));
+    if (!attemptSection) {
+      LOG_ERR("ERS", "Failed to allocate next-chapter section builder for spine %d", nextSpineIndex);
+      layoutAbortedForLowMemory = true;
+      return false;
+    }
+
+    bool attemptAbortedForLowMemory = false;
+    const bool succeeded = attemptSection->createSectionFile(
+        readerFontId, SETTINGS.getReaderLineCompression(), SETTINGS.extraParagraphSpacing,
+        SETTINGS.forceParagraphIndents, SETTINGS.paragraphAlignment, viewportWidth, viewportHeight,
+        SETTINGS.hyphenationEnabled, profile.embeddedStyle, SETTINGS.imageRendering, profile.bionicReadingEnabled,
+        profile.guideReadingEnabled, SETTINGS.wordSpacing, nullptr, nullptr, &attemptAbortedForLowMemory,
+        profile.renderMode);
+    layoutAbortedForLowMemory = attemptAbortedForLowMemory;
+    if (succeeded) {
+      usedRenderMode = profile.renderMode;
+      LOG_DBG("ERS", "Silent indexing complete: chapter=%d pages=%u mode=%u free=%u maxAlloc=%u", nextSpineIndex,
+              attemptSection->pageCount, static_cast<unsigned>(usedRenderMode), ESP.getFreeHeap(),
+              ESP.getMaxAllocHeap());
+    }
+    return succeeded;
+  };
+
+  uint8_t fallbackCount = 0;
+  const auto fallbackModes = fallbackModesForSelection(selectedRenderMode, fallbackCount);
+  for (uint8_t i = 0; i < fallbackCount && !buildSucceeded; ++i) {
+    if (i > 0) {
+      if (!layoutAbortedForLowMemory) {
+        break;
+      }
+      releaseReaderSdFontCachesForLowMemory(renderer, "ERS", "silent next-chapter fallback indexing");
+    }
+    layoutAbortedForLowMemory = false;
+    buildSucceeded = buildNextSection(buildProfileForRenderMode(fallbackModes[i]));
+  }
+
+  if (!buildSucceeded && layoutAbortedForLowMemory && shouldAttemptSafeModeFallback()) {
+    releaseReaderSdFontCachesForLowMemory(renderer, "ERS", "silent next-chapter safe mode indexing");
+    layoutAbortedForLowMemory = false;
+    buildSucceeded = buildNextSection(safeModeBuildProfile());
+    safeModeBuildSucceeded = buildSucceeded;
+  }
+
+  releaseReaderSdFontCachesForLowMemory(renderer, "ERS", "silent next-chapter indexing");
+
+  if (!buildSucceeded) {
+    LOG_ERR("ERS", "Failed silent indexing for chapter: %d", nextSpineIndex);
+    return;
+  }
+
+  // A grouped sibling just changed from missing/partial to exact. Re-scan on the
+  // next reader render so the tilde can disappear without doing file I/O in the
+  // status-bar drawing function itself.
+  chapterGroupEstimate.valid = false;
+
+  if (safeModeBuildSucceeded) {
+    applySafeModeReaderSettings();
+    bookHasCustomReaderSettings = true;
+    bookHasRenderModeOverride = true;
+    if (!saveRuntimeReaderSettingsForCache(epub->getCachePath())) {
+      LOG_ERR("ERS", "Failed to save Safe Mode reader settings after silent indexing");
+    }
+  } else if (usedRenderMode != selectedRenderMode) {
+    SETTINGS.epubRenderMode = static_cast<uint8_t>(usedRenderMode);
+    bookHasRenderModeOverride = true;
+    if (!saveBookRenderModeForCache(epub->getCachePath(), SETTINGS.epubRenderMode)) {
+      LOG_ERR("ERS", "Failed to save render mode after silent indexing");
+    }
+  }
+}
+
+bool EpubReaderActivity::isRelayoutCatchUpComplete() const {
+  if (!pendingRelayoutReposition || !section) {
+    return !pendingRelayoutReposition;
+  }
+
+  const bool watermarkReached = static_cast<int>(section->pageCount) >= std::max(1, cachedChapterPageWatermark);
+  bool positionResolved = static_cast<int>(section->pageCount) > cachedChapterPageNumber;
+  if (cachedPageParagraphIndex != UINT16_MAX) {
+    positionResolved = section->isBuilding() ? section->findParagraphDuringBuild(cachedPageParagraphIndex).has_value()
+                                             : section->getPageForParagraphIndex(cachedPageParagraphIndex).has_value();
+  }
+  return watermarkReached && positionResolved;
+}
+
 bool EpubReaderActivity::applyDeferredReposition() {
-  if (cachedChapterTotalPageCount == 0 || !section || section->isBuilding()) {
+  if (cachedChapterTotalPageCount == 0 || !section) {
+    return false;
+  }
+
+  if (section->isBuilding() && !isRelayoutCatchUpComplete()) {
     return false;
   }
 
@@ -4461,7 +4841,7 @@ bool EpubReaderActivity::applyDeferredReposition() {
       }
     }
 
-    if (!restoredFromParagraph && section->pageCount != cachedChapterTotalPageCount) {
+    if (!restoredFromParagraph && !section->isBuilding() && section->pageCount != cachedChapterTotalPageCount) {
       const float progress =
           static_cast<float>(cachedChapterPageNumber) / static_cast<float>(cachedChapterTotalPageCount);
       int newPage = static_cast<int>(progress * static_cast<float>(section->pageCount));
@@ -4478,6 +4858,7 @@ bool EpubReaderActivity::applyDeferredReposition() {
 
   cachedChapterPageNumber = 0;
   cachedChapterTotalPageCount = 0;
+  cachedChapterPageWatermark = 0;
   pendingRelayoutReposition = false;
   cachedPageParagraphIndex = UINT16_MAX;
   cachedPageParagraphOffset = 0;
@@ -4510,6 +4891,7 @@ void EpubReaderActivity::cacheCurrentSectionPosition() {
   cachedSpineIndex = currentSpineIndex;
   cachedChapterPageNumber = section->currentPage;
   cachedChapterTotalPageCount = section->estimatedTotalPages();
+  cachedChapterPageWatermark = section->pageCount;
   pendingRelayoutReposition = true;
   cachedPageParagraphIndex = UINT16_MAX;
   cachedPageParagraphOffset = 0;

@@ -60,13 +60,6 @@ void ClipSelectionActivity::onEnter() {
   cursorIdx = 0;
 
   savedSectionPage = section.currentPage;
-  if (!allocateSavedBuffer()) {
-    ActivityResult result;
-    result.isCancelled = true;
-    setResult(std::move(result));
-    finish();
-    return;
-  }
 
   if (!switchToPage(0)) {
     ActivityResult result;
@@ -90,7 +83,7 @@ void ClipSelectionActivity::onExit() {
   Activity::onExit();
 }
 
-bool ClipSelectionActivity::allocateSavedBuffer() {
+void ClipSelectionActivity::allocateSavedBuffer() {
   savedBufferSize = renderer.getBufferSize();
   const size_t chunkCount = (savedBufferSize + BUFFER_CHUNK_SIZE - 1) / BUFFER_CHUNK_SIZE;
   savedBufferChunkCount = 0;
@@ -98,7 +91,7 @@ bool ClipSelectionActivity::allocateSavedBuffer() {
   if (chunkCount > savedBufferChunks.size()) {
     LOG_ERR("CLIP", "Framebuffer snapshot needs %u chunks; using rerender fallback", static_cast<unsigned>(chunkCount));
     savedBufferSize = 0;
-    return true;
+    return;
   }
 
   for (size_t i = 0; i < chunkCount; i++) {
@@ -110,12 +103,11 @@ bool ClipSelectionActivity::allocateSavedBuffer() {
               static_cast<unsigned>(i), static_cast<unsigned>(chunkSize));
       resetSavedBufferChunks();
       savedBufferSize = 0;
-      return true;
+      return;
     }
     savedBufferChunks[i] = std::move(chunk);
   }
   savedBufferChunkCount = chunkCount;
-  return true;
 }
 
 void ClipSelectionActivity::resetSavedBufferChunks() {
@@ -278,6 +270,11 @@ bool ClipSelectionActivity::switchToPage(const int pageIdx) {
     return false;
   }
 
+  // The snapshot is almost a full framebuffer. Release it before SD-font
+  // prewarming so its chunks do not crowd out the contiguous glyph bitmap.
+  resetSavedBufferChunks();
+  hasSavedBuffer = false;
+
   if (auto* fcm = renderer.getFontCacheManager()) {
     bool renderWithFallback = false;
     {
@@ -303,6 +300,10 @@ bool ClipSelectionActivity::switchToPage(const int pageIdx) {
     page->render(renderer, renderFontId, marginLeft, marginTop, ReaderUtils::readerForegroundBlack());
   }
 
+  // The rendered page is now in the framebuffer, so its deserialized objects
+  // no longer need to overlap with the snapshot allocation.
+  page.reset();
+  allocateSavedBuffer();
   storeCurrentBuffer();
   currentDisplayPage = pageIdx;
   return true;

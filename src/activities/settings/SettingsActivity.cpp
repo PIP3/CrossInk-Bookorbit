@@ -35,6 +35,7 @@
 #include "components/CompactHeader.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/DictionaryRegistry.h"
 
 const StrId SettingsActivity::categoryNames[categoryCount] = {StrId::STR_CAT_DISPLAY, StrId::STR_CAT_READER,
                                                               StrId::STR_CAT_CONTROLS, StrId::STR_CAT_SYSTEM};
@@ -215,7 +216,8 @@ void SettingsActivity::rebuildSettingsLists() {
   // reader activity ran — otherwise the font-family picker shows stale list.
   sdFontSystem.refreshIfDirty();
 
-  const auto allSettings = getSettingsList(&sdFontSystem.registry());
+  dictionaryRegistry.refreshIfDirty();
+  const auto allSettings = getSettingsList(&sdFontSystem.registry(), &dictionaryRegistry);
   displaySettings = buildGroupedDisplaySettingsList(allSettings);
   displaySleepSettings = buildDisplaySleepSettingsList(allSettings);
   readerSettings = buildReaderSettingsParentList(allSettings);
@@ -518,6 +520,10 @@ void SettingsActivity::openStringEditor(const SettingInfo& setting) {
 void SettingsActivity::onEnter() {
   Activity::onEnter();
 
+  // Dictionary names and paths are needed only while settings are open. Keep
+  // the catalog out of the reader's steady-state heap.
+  dictionaryRegistry.discover();
+
   // Reset selection to first category
   selectedCategoryIndex = 0;
   selectedSettingIndex = 0;
@@ -535,6 +541,8 @@ void SettingsActivity::onEnter() {
 }
 
 void SettingsActivity::onExit() {
+  dictionaryRegistry.clear();
+  sdFontSystem.releaseRegistry();
   Activity::onExit();
 
   UITheme::getInstance().reload();  // Re-apply theme in case it was changed

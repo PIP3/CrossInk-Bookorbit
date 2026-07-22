@@ -14,7 +14,6 @@
 #include <Logging.h>
 #include <Memory.h>
 #include <SPI.h>
-#include <ScratchWorkspace.h>
 #include <builtinFonts/all.h>
 
 #ifdef SIMULATOR
@@ -90,6 +89,8 @@ inline esp_sleep_wakeup_cause_t esp_sleep_get_wakeup_cause() { return ESP_SLEEP_
 #endif
 #include "images/LoadingIcon.h"
 #include "util/ButtonNavigator.h"
+#include "util/Dictionary.h"
+#include "util/DictionaryRegistry.h"
 #include "util/ScreenshotUtil.h"
 
 MappedInputManager mappedInputManager(gpio);
@@ -97,8 +98,13 @@ GfxRenderer renderer(display);
 ActivityManager activityManager(renderer, mappedInputManager);
 FontDecompressor fontDecompressor;
 SdCardFontSystem sdFontSystem;
+DictionaryRegistry dictionaryRegistry;
 FontCacheManager fontCacheManager(renderer.getFontMap(), renderer.getSdCardFonts());
 static unsigned long allowSleepAt = 0;
+
+static void logBootHeap(const char* stage) {
+  LOG_DBG("BOOTMEM", "%s: free=%u maxAlloc=%u", stage, ESP.getFreeHeap(), ESP.getMaxAllocHeap());
+}
 
 // Fonts
 #ifndef OMIT_MEDIUM_FONT
@@ -748,6 +754,7 @@ void setup() {
     activityManager.goToFullScreenMessage("SD card error", EpdFontFamily::BOLD);
     return;
   }
+  logBootHeap("storage ready");
 
   HalSystem::checkPanic();
 
@@ -757,8 +764,10 @@ void setup() {
   I18N.setLanguage(static_cast<Language>(SETTINGS.language));
   if (!isNetworkResume) {
     RECENT_BOOKS.loadFromFile();
+    logBootHeap("settings and recent books loaded");
     KOREADER_STORE.loadFromFile();
-    OPDS_STORE.loadFromFile();
+    logBootHeap("sync credentials loaded");
+    Dictionary::isValidDictionary();
   } else if (snapshotTarget == static_cast<uint32_t>(NetworkBootTarget::KOREADER_SYNC) ||
              snapshotTarget == static_cast<uint32_t>(NetworkBootTarget::KOREADER_AUTH) ||
              snapshotTarget == static_cast<uint32_t>(NetworkBootTarget::FILE_TRANSFER)) {
@@ -766,6 +775,7 @@ void setup() {
   }
   UITheme::getInstance().reload();
   ButtonNavigator::setMappedInputManager(mappedInputManager);
+  logBootHeap("boot state ready");
 
   // Check wake duration before the remaining file loads so the user does not
   // have to hold the power button across all of the SD reads below.
@@ -827,6 +837,7 @@ void setup() {
                                                         : BootResume::Splash;
 
   setupDisplayAndFonts(resume != BootResume::Splash, resume != BootResume::Network);
+  logBootHeap("display and selected fonts ready");
 
   switch (resume) {
     case BootResume::Silent:

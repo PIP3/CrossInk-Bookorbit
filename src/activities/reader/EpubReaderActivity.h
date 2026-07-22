@@ -45,6 +45,7 @@ class EpubReaderActivity final : public Activity {
     uint8_t bionicReadingEnabled = 0;
     uint8_t guideReadingEnabled = 0;
     uint8_t epubRenderMode = 0;
+    uint8_t indexingMethod = CrossPointSettings::INDEXING_FULL_SECTION;
     char sdFontFamilyName[64] = "";
   };
 
@@ -64,6 +65,7 @@ class EpubReaderActivity final : public Activity {
   int cachedSpineIndex = 0;
   int cachedChapterPageNumber = 0;
   int cachedChapterTotalPageCount = 0;
+  int cachedChapterPageWatermark = 0;
   struct ChapterGroupEstimateCache {
     int currentSpineIndex = -1;
     int firstSpineIndex = -1;
@@ -201,6 +203,7 @@ class EpubReaderActivity final : public Activity {
   bool shouldUseFootnotePreview(int targetSpineIndex, const std::string& anchor) const;
   std::string footnotePreviewCacheSuffix(EpubRenderMode renderMode, const std::string& anchor) const;
   void clearFootnotePreviewState();
+  void silentIndexNextChapterIfNeeded(uint16_t viewportWidth, uint16_t viewportHeight);
   // Pages laid out per incremental-build pump: on the render path (catching up to the page
   // being shown) and per loop() tick (background build of a large chapter). Kept small so a
   // background build chunk never noticeably delays input or a pending render.
@@ -225,9 +228,9 @@ class EpubReaderActivity final : public Activity {
   // whole HTML must be inflated before page 1 can lay out (the giant single-spine case), which is
   // a multi-second wait. Normal chapters are well under this and stay popup-free.
   static constexpr size_t BUILD_POPUP_BYTE_THRESHOLD = 96 * 1024;
-  // Remap the cached relative reading position once the section's real page count is known
+  // Remap the cached reading position once the saved paragraph and prior readable watermark are rebuilt
   // (used after a settings change re-paginates a chapter). Returns true if currentPage moved.
-  // No-op while the section is still building or when the pagination is unchanged (plain resume).
+  bool isRelayoutCatchUpComplete() const;
   bool applyDeferredReposition();
   bool saveProgress(int spineIndex, int currentPage, int pageCount);
   void cacheCurrentSectionPosition();
@@ -278,6 +281,7 @@ class EpubReaderActivity final : public Activity {
   bool executeShortPowerButtonAction();
   bool executeLongPowerButtonAction();
   void handleClippingJump(const ClippingJumpResult& clipping);
+  void openWordSelect(bool framebufferContainsPage);
   void onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action);
   // Opens the reader menu for the current position (short-press Confirm)
   void openReaderMenu();
@@ -313,7 +317,16 @@ class EpubReaderActivity final : public Activity {
     return true;
   }
   bool preventAutoSleep() override { return automaticPageTurnActive; }
-  bool skipLoopDelay() override { return section && section->isBuilding(); }
+  // Hold the loop hot only while the build has work this loop would do: a kept-alive
+  // build sitting outside the lookahead window is dormant, and reporting it here would
+  // pin the CPU at full clock (no power saving, yield-only loop) for the whole read.
+  // Mirrors the tick condition in loop(): catch-up phase, or watermark inside the window.
+  bool sectionBuildWantsTick() const {
+    return section && section->isBuilding() &&
+           (!section->activeBuildHasCaughtReadablePages() ||
+            static_cast<int>(section->pageCount) < section->currentPage + BUILD_WINDOW_AHEAD);
+  }
+  bool skipLoopDelay() override { return sectionBuildWantsTick(); }
   bool isReaderActivity() const override { return true; }
   bool canSnapshotForSleepOverlay() const override { return true; }
   std::string getCurrentBookPath() const override { return epub ? epub->getPath() : std::string{}; }

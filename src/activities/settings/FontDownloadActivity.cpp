@@ -138,6 +138,7 @@ void FontDownloadActivity::onExit() {
   }
 
   sdFontSystem.ensureLoaded(renderer);
+  sdFontSystem.releaseRegistry();
 }
 
 void FontDownloadActivity::onWifiSelectionComplete(const bool success) {

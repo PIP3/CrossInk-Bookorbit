@@ -94,7 +94,14 @@ void ReaderOptionsActivity::rebuildSettingsList() {
   sdFontSystem.refreshIfDirty();
   const auto allSettings = getSettingsList(&sdFontSystem.registry());
   settings = buildReaderSettingsParentList(allSettings);
-  settings.push_back(buildReaderRenderModeSetting());
+  const auto indexingMethod = std::find_if(settings.begin(), settings.end(), [](const SettingInfo& setting) {
+    return setting.nameId == StrId::STR_INDEXING_METHOD;
+  });
+  if (indexingMethod == settings.end()) {
+    settings.push_back(buildReaderRenderModeSetting());
+  } else {
+    settings.insert(indexingMethod, buildReaderRenderModeSetting());
+  }
   fontSettings = buildReaderFontSettingsList(allSettings);
   pageLayoutSettings = buildReaderPageLayoutSettingsList(allSettings);
   fontSettings.erase(std::remove_if(fontSettings.begin(), fontSettings.end(),
@@ -174,7 +181,10 @@ void ReaderOptionsActivity::closeSubmenu() {
   selectedIndex = 0;
 }
 
-void ReaderOptionsActivity::onExit() { Activity::onExit(); }
+void ReaderOptionsActivity::onExit() {
+  sdFontSystem.releaseRegistry();
+  Activity::onExit();
+}
 
 void ReaderOptionsActivity::moveSelection(bool forward) {
   if (settingsCount <= 0) return;

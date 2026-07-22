@@ -21,6 +21,7 @@ void SdCardFontSystem::begin(GfxRenderer& renderer) {
     const auto* family = registry_.findFamily(SETTINGS.sdFontFamilyName);
     if (family) {
       if (manager_.loadFamily(*family, renderer, SETTINGS.getSdFontTargetPointSize(), SETTINGS.fontSize)) {
+        loadedFontSizeStep_ = SETTINGS.fontSize;
         LOG_DBG("SDFS", "Loaded SD card font family: %s", SETTINGS.sdFontFamilyName);
       } else {
         LOG_ERR("SDFS", "Failed to load SD font family: %s (clearing)", SETTINGS.sdFontFamilyName);
@@ -35,6 +36,7 @@ void SdCardFontSystem::begin(GfxRenderer& renderer) {
   }
 
   LOG_DBG("SDFS", "SD font system ready (%d families discovered)", registry_.getFamilyCount());
+  releaseRegistry();
 }
 
 void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
@@ -52,7 +54,12 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
   if (wantedFamily[0] == '\0') {
     if (!currentFamily.empty()) {
       manager_.unloadAll(renderer);
+      loadedFontSizeStep_ = UINT8_MAX;
     }
+    return;
+  }
+
+  if (!registryWasDirty && currentFamily == wantedFamily && loadedFontSizeStep_ == SETTINGS.fontSize) {
     return;
   }
 
@@ -85,6 +92,7 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
   const auto* family = registry_.findFamily(wantedFamily);
   if (family) {
     if (manager_.loadFamily(*family, renderer, targetPointSize, sizeStep)) {
+      loadedFontSizeStep_ = SETTINGS.fontSize;
       LOG_DBG("SDFS", "Loaded SD font family: %s", wantedFamily);
     } else {
       LOG_ERR("SDFS", "Failed to load SD font family: %s (clearing)", wantedFamily);
@@ -104,6 +112,7 @@ void SdCardFontSystem::releaseLoadedFont(GfxRenderer& renderer) {
   const std::string familyName = manager_.currentFamilyName();
   (void)familyName;
   manager_.unloadAll(renderer);
+  loadedFontSizeStep_ = UINT8_MAX;
   LOG_DBG("SDFS", "Released SD card font before low-memory operation: %s", familyName.c_str());
 }
 

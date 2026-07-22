@@ -15,6 +15,7 @@ Welcome to CrossInk, a personal fork of CrossPoint Reader.
 - [Installation](./installation.md)
 - [SD Card Fonts](./sd-card-fonts.md)
 - [Reader Features](./reader-features.md)
+- [Dictionary](./dictionary.md)
 - [Controls](./controls.md)
 - [Bionic Reading](./bionic-reading.md)
 - [Reading Stats Sync](./reading-stats-sync.md)
@@ -25,3 +26,7 @@ Welcome to CrossInk, a personal fork of CrossPoint Reader.
 - [File Formats](./file-formats.md)
 - [Web Server Guide](./webserver.md)
 - [Troubleshooting](./troubleshooting.md)
+
+## Developer Docs
+
+- [Dictionary Development](./dictionary-development.md)

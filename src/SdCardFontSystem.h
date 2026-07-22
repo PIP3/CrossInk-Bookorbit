@@ -29,6 +29,10 @@ class SdCardFontSystem {
   /// Release all SD-font RAM that network/TLS work does not need.
   void releaseForNetwork(GfxRenderer& renderer);
 
+  /// Ensure the font catalog is available for settings/web enumeration, including
+  /// newly uploaded or deleted fonts visible in the web UI.
+  void ensureRegistry();
+
   /// Release catalog names and paths without unloading the active reader font.
   void releaseRegistry();
 
@@ -55,12 +59,11 @@ class SdCardFontSystem {
   void refreshIfDirty() { ensureRegistry(); }
 
  private:
-  void ensureRegistry();
-
   SdCardFontRegistry registry_;
   SdCardFontManager manager_;
   std::atomic<bool> registryDirty_{false};
   bool registryLoaded_ = false;
+  uint8_t loadedFontSizeStep_ = UINT8_MAX;
 };
 
 // Global SD card font system instance (defined in main.cpp).

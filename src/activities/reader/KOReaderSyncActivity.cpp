@@ -525,6 +525,14 @@ void KOReaderSyncActivity::onEnter() {
   ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
   lockInitialConfirmRelease = mappedInput.isPressed(MappedInputManager::Button::Confirm);
 
+  if (!localProgressDeferred && !localProgress.valid) {
+    LOG_ERR("KOSync", "Source position map unavailable; re-optimize the EPUB before filename-based sync");
+    state = SYNC_FAILED;
+    statusMessage = tr(STR_SYNC_REOPTIMIZE_REQUIRED);
+    requestUpdate();
+    return;
+  }
+
   // Check for credentials first
   if (!KOREADER_STORE.hasCredentials()) {
     state = NO_CREDENTIALS;

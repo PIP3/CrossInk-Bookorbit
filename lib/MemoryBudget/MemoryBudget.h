@@ -24,6 +24,7 @@ constexpr uint32_t EPUB_INLINE_IMAGE_SD_FONT_RELEASE_MIN_FREE = 120U * 1024U;
 constexpr uint32_t EPUB_INLINE_IMAGE_SD_FONT_RELEASE_MIN_MAX_ALLOC = 80U * 1024U;
 constexpr uint32_t OPTIONAL_EPUB_REBUILD_MIN_FREE = 96U * 1024U;
 constexpr uint32_t OPTIONAL_EPUB_REBUILD_MIN_MAX_ALLOC = 48U * 1024U;
+constexpr uint32_t OPTIONAL_EPUB_PREFETCH_AFTER_SD_FONT_RELEASE_MIN_FREE = 88U * 1024U;
 constexpr uint32_t IMAGE_DECODER_HEADROOM = 16U * 1024U;
 constexpr uint32_t JPEG_DECODER_APPROX_BYTES = 20U * 1024U;
 constexpr uint32_t EPUB_INLINE_JPEG_MIN_FREE = JPEG_DECODER_APPROX_BYTES + IMAGE_DECODER_HEADROOM;
@@ -77,15 +78,16 @@ inline bool hasHeapForEpubInlineImage(const char* tag, const char* source) {
   return false;
 }
 
-inline bool hasHeapForOptionalEpubRebuild(const char* tag, const char* action, const int spineIndex) {
+inline bool hasHeapForOptionalEpubRebuild(const char* tag, const char* action, const int spineIndex,
+                                          const uint32_t minFree = OPTIONAL_EPUB_REBUILD_MIN_FREE,
+                                          const uint32_t minMaxAlloc = OPTIONAL_EPUB_REBUILD_MIN_MAX_ALLOC) {
   const auto heap = snapshot();
-  if (hasHeap(heap, OPTIONAL_EPUB_REBUILD_MIN_FREE, OPTIONAL_EPUB_REBUILD_MIN_MAX_ALLOC)) {
+  if (hasHeap(heap, minFree, minMaxAlloc)) {
     return true;
   }
 
   LOG_DBG(tag, "Skipping %s for spine %d: low heap (free=%u, maxAlloc=%u, need free>=%u maxAlloc>=%u)", action,
-          spineIndex, heap.freeHeap, heap.maxAllocHeap, OPTIONAL_EPUB_REBUILD_MIN_FREE,
-          OPTIONAL_EPUB_REBUILD_MIN_MAX_ALLOC);
+          spineIndex, heap.freeHeap, heap.maxAllocHeap, minFree, minMaxAlloc);
   return false;
 }
 

@@ -20,7 +20,6 @@ Project: Open-source e-reader firmware for Xteink X4 (ESP32-C3).
 
 - Read `.claude/CONTEXT.md` at session start for durable repo-specific gotchas.
 - Keep `.claude/CONTEXT.md` short. Add only reusable findings, not turn-by-turn history.
-- If asked to summarize a session, create `.claude/CONTEXT-YYYY-MM-DD.md` with the relevant findings for that session.
 
 ## Repo Skills
 
@@ -153,6 +152,7 @@ When new features are added or issues are fixed, make sure to add an entry to `C
 - The release date of each version is displayed.
 
 ### Types of Changelog Changes
+
 - Added - for new features.
 - Changed - for changes in existing functionality.
 - Deprecated - for soon-to-be removed features.

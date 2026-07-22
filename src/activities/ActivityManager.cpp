@@ -302,6 +302,9 @@ bool ActivityManager::goToOpdsServer(const uint32_t serverIndex, const bool netw
 }
 
 void ActivityManager::goToReader(std::string path, const bool suppressBackRelease) {
+  // OPDS credentials are unrelated to local reading and may contain several
+  // heap-backed strings. Home reloads them lazily when it becomes active.
+  OPDS_STORE.release();
   replaceActivity(std::make_unique<ReaderActivity>(renderer, mappedInput, std::move(path), suppressBackRelease));
 }
 

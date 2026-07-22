@@ -2,11 +2,15 @@
 
 Keep this file focused on repo-specific gotchas that are worth reusing in future sessions.
 
+## FreeInk SDK
+
+Refer to https://freeink.org/llms.txt for guidance.
+
 ## Simulator
 
-- Simulator patches belong in the adjacent `crosspoint-simulator` repo.
+- Simulator patches belong in the adjacent `crossink-simulator` repo.
 - The valid local simulator env in this repo is `simulator`, and `pio run -e simulator` currently builds cleanly.
-- The simulator `PNGdec` stub in `crosspoint-simulator/src/PNGdec.h` needs to mirror the real API shape used by app code, including `hasAlpha()` and `getTransparentColor()`, even though decode still fails intentionally.
+- The simulator `PNGdec` stub in `crossink-simulator/src/PNGdec.h` needs to mirror the real API shape used by app code, including `hasAlpha()` and `getTransparentColor()`, even though decode still fails intentionally.
 - Known simulator limits:
   - No image rendering: `platformio.ini` ignores `hal`, `PNGdec`, and `JPEGDEC`, so image decoders are intentionally absent.
   - JPEGDEC stub always fails; `JPEGDEC fallback: open failed (err=-1)` is expected in simulator.

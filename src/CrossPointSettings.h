@@ -223,6 +223,7 @@ class CrossPointSettings {
     JOIN_NETWORK = 19,
     CREATE_HOTSPOT = 20,
     CREATE_CLIPPING = 21,
+    LOOKUP_WORD = 22,
     SHORT_PWRBTN_COUNT
   };
 
@@ -253,6 +254,8 @@ class CrossPointSettings {
 
   // Image rendering in EPUB reader
   enum IMAGE_RENDERING { IMAGES_DISPLAY = 0, IMAGES_PLACEHOLDER = 1, IMAGES_SUPPRESS = 2, IMAGE_RENDERING_COUNT };
+
+  enum INDEXING_METHOD { INDEXING_INCREMENTAL = 0, INDEXING_FULL_SECTION = 1, INDEXING_METHOD_COUNT };
 
   enum TILT_PAGE_TURN { TILT_OFF = 0, TILT_ON = 1, TILT_PAGE_TURN_COUNT };
   enum TILT_PAGE_TURN_DIRECTION {
@@ -286,6 +289,7 @@ class CrossPointSettings {
     LONG_MENU_JOIN_NETWORK = 18,
     LONG_MENU_CREATE_HOTSPOT = 19,
     LONG_MENU_CREATE_CLIPPING = 20,
+    LONG_MENU_LOOKUP_WORD = 21,
     LONG_PRESS_MENU_ACTION_COUNT
   };
 
@@ -413,6 +417,8 @@ class CrossPointSettings {
   uint8_t pwrBtnFootnoteBack = 1;
   // Use book's embedded CSS styles for EPUB rendering (1 = enabled, 0 = disabled)
   uint8_t embeddedStyle = 1;
+  // EPUB section indexing policy. The current chapter keeps its active build.
+  uint8_t indexingMethod = INDEXING_FULL_SECTION;
   // Focus Reading - emphasizes the first part of words with bold
   uint8_t bionicReadingEnabled = 0;
   // Guide Dots - places a middle dot between words to guide the eye

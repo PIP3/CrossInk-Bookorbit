@@ -5,8 +5,6 @@
 #include <I18n.h>
 #include <Memory.h>
 
-#include <optional>
-
 #include "CrossPointSettings.h"
 #include "Epub.h"
 #include "EpubReaderActivity.h"
@@ -59,15 +57,12 @@ std::unique_ptr<Epub> ReaderActivity::loadEpub(const std::string& path) {
   if (uncached) {
     GUI.drawPopup(renderer, tr(STR_INDEXING));
   }
-  bool loaded;
-  {
-    // Lend the framebuffer's 48 KB to the container parse (expat + spine/TOC
-    // build). The popup just displayed stays on the panel; whichever reader
-    // activity follows redraws the full screen anyway.
-    std::optional<GfxRenderer::FrameBufferLoan> loan;
-    if (uncached) loan.emplace(renderer);
-    loaded = epub->load(true, SETTINGS.embeddedStyle == 0);
-  }
+  // Lend the framebuffer's 48 KB for every EPUB load: even a cached book may
+  // rebuild stale/missing CSS and need miniz's ~43 KB streaming workspace. The
+  // panel keeps showing its last image, and the next activity redraws fully.
+  GfxRenderer::FrameBufferLoan loan(renderer);
+  const bool loaded = epub->load(true, SETTINGS.embeddedStyle == 0);
+  loan.end();
   if (loaded) {
     return epub;
   }
