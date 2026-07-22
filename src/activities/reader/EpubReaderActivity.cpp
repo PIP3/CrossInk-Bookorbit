@@ -647,12 +647,16 @@ bool runTiledGrayscalePass(GfxRenderer& renderer, const Page& page, const int fo
   };
 
   // Whole-plane buffers are about 48 KB each, so they are unsuitable for the
-  // task stack or permanent activity storage. Allocate them only while a real
-  // deferred refresh can hide their render cost. One plane overlaps the LSB
-  // pass; a second plane also overlaps MSB when at least 60 KB remains free.
-  auto lsbPlaneBuf = asyncRefreshPending ? makeUniqueNoThrow<uint8_t[]>(planeBytes) : nullptr;
-  auto msbPlaneBuf =
-      (lsbPlaneBuf && ESP.getFreeHeap() >= planeBytes + 60000U) ? makeUniqueNoThrow<uint8_t[]>(planeBytes) : nullptr;
+  // task stack or permanent activity storage. Each transient allocation must
+  // leave enough total and contiguous heap for the next render allocations.
+  constexpr size_t PLANE_BUFFER_FREE_HEAP_RESERVE = 60000;
+  constexpr size_t PLANE_BUFFER_MAX_ALLOC_RESERVE = 16 * 1024;
+  const auto planeBufferFits = [planeBytes] {
+    return ESP.getFreeHeap() >= planeBytes + PLANE_BUFFER_FREE_HEAP_RESERVE &&
+           ESP.getMaxAllocHeap() >= planeBytes + PLANE_BUFFER_MAX_ALLOC_RESERVE;
+  };
+  auto lsbPlaneBuf = (asyncRefreshPending && planeBufferFits()) ? makeUniqueNoThrow<uint8_t[]>(planeBytes) : nullptr;
+  auto msbPlaneBuf = (lsbPlaneBuf && planeBufferFits()) ? makeUniqueNoThrow<uint8_t[]>(planeBytes) : nullptr;
 
   if (lsbPlaneBuf) {
     timings.overlappedRefresh = true;
@@ -695,6 +699,11 @@ bool runTiledGrayscalePass(GfxRenderer& renderer, const Page& page, const int fo
   if (!scratch) {
     LOG_ERR("ERS", "OOM: grayscale strip scratch (%d bytes); falling back to BW snapshot",
             displayWidthBytes * STRIP_ROWS);
+    if (asyncRefreshPending) {
+      // The shadow-free async update does not rebuild the controller's
+      // differential baseline. Re-sync it even when grayscale is skipped.
+      renderer.cleanupGrayscaleWithFrameBuffer();
+    }
     return false;
   }
 
