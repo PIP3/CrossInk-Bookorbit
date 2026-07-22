@@ -27,6 +27,7 @@
 
 ### Fixed
 
+- KOReader Sync now uses a smaller TLS footprint and can start safely when reader heap is fragmented.
 - Web file transfers now keep the active request task registered with the watchdog, and low-memory EPUB grayscale falls back without leaving a stale display baseline.
 - KOReader authentication and progress sync now reconnect through WiFi selection when the saved WiFi state has no active station address.
 - File Transfer now loads web settings with less memory and exits promptly when browser connections stall.
