@@ -289,11 +289,7 @@ void CrossPointSettings::validateReaderFrontButtonMapping(CrossPointSettings& se
   }
 }
 
-uint8_t CrossPointSettings::defaultUiScale() {
-  // Touch boards get larger touch targets out of the box; button-only boards
-  // keep the compact density.
-  return BoardConfig::hasTouch() ? UI_SCALE_LARGE : UI_SCALE_SMALL;
-}
+uint8_t CrossPointSettings::defaultUiScale() { return UI_SCALE_SMALL; }
 
 uint8_t CrossPointSettings::sleepTimeoutEnumToMinutes(const uint8_t legacyValue) {
   switch (legacyValue) {

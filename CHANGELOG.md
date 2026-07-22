@@ -24,6 +24,7 @@
 - The web file manager can now delete non-empty folders recursively and, when hidden files are shown, remove hidden or system-managed SD card items after confirmation.
 - SD-font, OPDS catalogs, and other unneeded settings now stay out of memory while reading unless their settings are open.
 - EPUB books can now keep more saved clippings without loading every clipping's text into memory while reading.
+- Touch devices now default to the Small UI scale instead of Large.
 
 ### Removed
 
