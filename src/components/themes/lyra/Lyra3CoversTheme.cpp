@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "RecentBooksStore.h"
+#include "components/TouchRegistry.h"
 #include "components/UITheme.h"
 #include "components/icons/cover.h"
 #include "fontIds.h"
@@ -88,6 +89,9 @@ void Lyra3CoversTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
       bool bookSelected = (selectorIndex == i);
 
       int tileX = Lyra3CoversMetrics::values.contentSidePadding + tileWidth * i;
+      const int targetHeight =
+          Lyra3CoversMetrics::values.homeCoverHeight + hPaddingInSelection + renderer.getLineHeight(SMALL_FONT_ID) * 3;
+      TouchRegistry::getInstance().add(Rect{tileX, tileY, tileWidth, targetHeight}, i, TouchRegistry::Cover);
 
       const int maxLineWidth = tileWidth - 2 * hPaddingInSelection;
 

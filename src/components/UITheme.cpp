@@ -2,6 +2,7 @@
 
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include <HalGPIO.h>
 #include <HalStorage.h>
 #include <Logging.h>
 
@@ -91,6 +92,22 @@ void UITheme::setTheme(CrossPointSettings::UI_THEME type) {
       currentMetrics = &BaseMetrics::values;
       break;
   }
+  metricsValid = false;
+}
+
+const ThemeMetrics& UITheme::getMetrics() const {
+  // hasTouch() can flip once touch init completes after static construction, so the
+  // cached copy is refreshed when the flag differs instead of copying the struct per call.
+  const bool touch = gpio.hasTouch();
+  if (!metricsValid || touch != metricsForTouch) {
+    adjustedMetrics = *currentMetrics;
+    if (touch) {
+      adjustedMetrics.buttonHintsHeight = 0;
+    }
+    metricsForTouch = touch;
+    metricsValid = true;
+  }
+  return adjustedMetrics;
 }
 
 int UITheme::getNumberOfItemsPerPage(const GfxRenderer& renderer, bool hasHeader, bool hasTabBar, bool hasButtonHints,
@@ -109,8 +126,7 @@ int UITheme::getNumberOfItemsPerPage(const GfxRenderer& renderer, bool hasHeader
     reservedHeight += metrics.verticalSpacing + metrics.buttonHintsHeight;
   }
   const int availableHeight = renderer.getScreenHeight() - reservedHeight - extraReservedHeight;
-  int rowHeight = hasSubtitle ? metrics.listWithSubtitleRowHeight : metrics.listRowHeight;
-  return availableHeight / rowHeight;
+  return UITheme::getInstance().getTheme().getListPageItems(availableHeight, hasSubtitle);
 }
 
 // Screen area excluding the button hints

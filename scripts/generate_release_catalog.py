@@ -14,7 +14,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
-VARIANT_ORDER = ('tiny', 'xlarge')
+VARIANT_ORDER = ('tiny', 'xlarge', 'sticky')
+DEFAULT_SUPPORTED_DEVICES = {
+    'tiny': ['x4', 'x3'],
+    'xlarge': ['x4', 'x3'],
+    'sticky': ['sticky'],
+}
 FIRMWARE_NAME_PATTERN = re.compile(r'^firmware-(?P<variant>.+?)-v[^/]+\.bin$')
 
 
@@ -82,7 +87,6 @@ def sort_key_for_variant(variant):
 def main():
     args = parse_args()
     version = normalize_version(args.version)
-    supported_devices = args.supported_devices or ['x4', 'x3']
     notes = args.notes or f'CrossInk {version} {args.channel} firmware'
     firmware_base_url = args.firmware_base_url or f'https://github.com/{args.repo}/releases/download/v{version}/'
     firmware_base_url = firmware_base_url.rstrip('/') + '/'
@@ -97,6 +101,7 @@ def main():
 
         filename = firmware_path.name
         variant = parse_variant(firmware_path)
+        supported_devices = args.supported_devices or DEFAULT_SUPPORTED_DEVICES.get(variant, [])
         firmware_url = f'{firmware_base_url}{filename}'
         firmware_sha256 = sha256_file(firmware_path)
         firmware_size = firmware_path.stat().st_size

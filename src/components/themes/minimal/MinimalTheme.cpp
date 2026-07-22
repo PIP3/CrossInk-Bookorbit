@@ -21,6 +21,7 @@
 #include "activities/reader/BookReadingStats.h"
 #include "activities/reader/GlobalReadingStats.h"
 #include "activities/reader/ReadingStatsUtils.h"
+#include "components/TouchRegistry.h"
 #include "components/UITheme.h"
 #include "components/icons/afternoon.h"
 #include "components/icons/book24.h"
@@ -36,6 +37,16 @@ struct MinimalQuote {
   const char* text;
   const char* author;
 };
+
+bool tabSlotIndexFromPoint(const Rect rect, const int tabCount, const int x, const int y, int& index) {
+  if (tabCount <= 0 || rect.width <= 0 || y < rect.y || y >= rect.y + rect.height || x < rect.x ||
+      x >= rect.x + rect.width) {
+    return false;
+  }
+
+  index = std::min(tabCount - 1, ((x - rect.x) * tabCount) / rect.width);
+  return true;
+}
 
 constexpr MinimalQuote kQuotes[] = {
     {"\"A book is a dream you hold in your hands.\"", "Neil Gaiman"},
@@ -436,12 +447,19 @@ void MinimalTheme::drawTabBar(const GfxRenderer& renderer, Rect rect, const std:
     const int nextSlotX = rect.x + ((i + 1) * rect.width) / tabCount;
     const int slotWidth = nextSlotX - slotX;
     const auto& tab = tabs[i];
+    TouchRegistry::getInstance().add(Rect{slotX, rect.y, slotWidth, rect.height}, i, TouchRegistry::Tab);
     const auto fontStyle = tab.selected ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR;
     const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, tab.label, fontStyle);
     const int textX = slotX + (slotWidth - textWidth) / 2;
     const int textY = rect.y + (rect.height - renderer.getLineHeight(UI_10_FONT_ID)) / 2;
     renderer.drawText(UI_10_FONT_ID, textX, textY, tab.label, true, fontStyle);
   }
+}
+
+bool MinimalTheme::tabIndexFromPoint(const GfxRenderer& renderer, const Rect rect, const std::vector<TabInfo>& tabs,
+                                     const int x, const int y, int& index) const {
+  (void)renderer;
+  return tabSlotIndexFromPoint(rect, static_cast<int>(tabs.size()), x, y, index);
 }
 
 int MinimalTheme::compactFileBrowserRowHeightFor(const GfxRenderer& renderer) {
@@ -459,16 +477,17 @@ void MinimalTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCoun
                             const std::function<UIIcon(int index)>& rowIcon,
                             const std::function<std::string(int index)>& rowValue, bool highlightValue,
                             const std::function<bool(int index)>& rowDimmed,
-                            const std::function<bool(int index)>& isHeader) const {
+                            const std::function<bool(int index)>& isHeader, const int rowHeightScale,
+                            const bool showSelection) const {
   const bool compactFileRows = rowSubtitle != nullptr && rowIcon != nullptr && rowValue != nullptr;
   if (!compactFileRows) {
     LyraTheme::drawList(renderer, rect, itemCount, selectedIndex, rowTitle, rowSubtitle, rowIcon, rowValue,
-                        highlightValue, rowDimmed, isHeader);
+                        highlightValue, rowDimmed, isHeader, rowHeightScale, showSelection);
     return;
   }
 
   drawCompactFileBrowserList(renderer, rect, itemCount, selectedIndex, rowTitle, rowSubtitle, rowIcon, rowValue,
-                             rowDimmed);
+                             rowDimmed, showSelection);
 }
 
 void MinimalTheme::drawCompactFileBrowserList(const GfxRenderer& renderer, Rect rect, int itemCount, int selectedIndex,
@@ -476,14 +495,17 @@ void MinimalTheme::drawCompactFileBrowserList(const GfxRenderer& renderer, Rect 
                                               const std::function<std::string(int index)>& rowSubtitle,
                                               const std::function<UIIcon(int index)>& rowIcon,
                                               const std::function<std::string(int index)>& rowValue,
-                                              const std::function<bool(int index)>& rowDimmed) {
+                                              const std::function<bool(int index)>& rowDimmed, const bool showSelection,
+                                              const bool uniformRowHeight, const bool allowTwoLineTitles) {
   if (itemCount <= 0) return;
 
   const int fileRowHeight = compactFileBrowserRowHeightFor(renderer);
   const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
   const int folderRowHeight = MinimalMetrics::values.listRowHeight;
   const auto isFolderRow = [&](int index) { return rowSubtitle(index) == "folder"; };
-  const auto rowHeightFor = [&](int index) { return isFolderRow(index) ? folderRowHeight : fileRowHeight; };
+  const auto rowHeightFor = [&](int index) {
+    return !uniformRowHeight && isFolderRow(index) ? folderRowHeight : fileRowHeight;
+  };
   const auto pageEndFor = [&](int startIndex) {
     int usedHeight = 0;
     int endIndex = startIndex;
@@ -527,7 +549,7 @@ void MinimalTheme::drawCompactFileBrowserList(const GfxRenderer& renderer, Rect 
                       MinimalMetrics::values.scrollBarWidth, scrollBarHeight, true);
   }
 
-  if (selectedIndex >= 0) {
+  if (showSelection && selectedIndex >= 0) {
     int selectedY = rect.y;
     for (int i = pageStartIndex; i < selectedIndex; i++) {
       selectedY += rowHeightFor(i);
@@ -545,7 +567,8 @@ void MinimalTheme::drawCompactFileBrowserList(const GfxRenderer& renderer, Rect 
   for (int i = pageStartIndex; i < itemCount && i < pageEndIndex; i++) {
     const int rowHeight = rowHeightFor(i);
     const bool folderRow = isFolderRow(i);
-    const bool selectedRow = i == selectedIndex;
+    const bool selectedRow = showSelection && i == selectedIndex;
+    TouchRegistry::getInstance().add(Rect{rect.x, itemY, contentWidth, rowHeight}, i, TouchRegistry::Item);
 
     std::string valueText = rowValue(i);
     if (!valueText.empty()) {
@@ -562,7 +585,7 @@ void MinimalTheme::drawCompactFileBrowserList(const GfxRenderer& renderer, Rect 
       renderer.drawIcon(iconBitmap, iconX, iconY, kFileBrowserIconSize, kFileBrowserIconSize);
     }
 
-    const int maxTitleLines = folderRow ? 1 : 2;
+    const int maxTitleLines = folderRow || !allowTwoLineTitles ? 1 : 2;
     auto lines = renderer.wrappedText(UI_10_FONT_ID, rowTitle(i).c_str(), textWidth, maxTitleLines);
     const int textBlockHeight = static_cast<int>(lines.size()) * lineHeight;
     int textY = centeredRowY(itemY, rowHeight, textBlockHeight);
@@ -591,8 +614,24 @@ void MinimalTheme::drawCompactFileBrowserList(const GfxRenderer& renderer, Rect 
 
 void MinimalTheme::setHomeButtonHintSelection(const int selectedIndex) { homeButtonHintSelection = selectedIndex; }
 
+Rect MinimalTheme::buttonMenuPanelRect(const GfxRenderer& renderer, const int buttonCount) {
+  if (buttonCount <= 0) {
+    return Rect{0, 0, 0, 0};
+  }
+
+  const int panelW = std::min(kMenuPanelWidth, renderer.getScreenWidth() - 80);
+  const int panelH = buttonCount * kMenuRowHeight + 2;
+  const int panelX = (renderer.getScreenWidth() - panelW) / 2;
+  return Rect{panelX, kMenuPanelTop, panelW, panelH};
+}
+
 void MinimalTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                                    const char* btn4, const bool allowInvertedText) const {
+  if (gpio.hasTouch()) {
+    homeButtonHintSelection = -1;
+    return;
+  }
+
   const GfxRenderer::Orientation origOrientation = renderer.getOrientation();
   const bool invertText = allowInvertedText && origOrientation == GfxRenderer::Orientation::PortraitInverted;
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
@@ -615,6 +654,8 @@ void MinimalTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, cons
     const int x = buttonPositions[i];
     const bool hasLabel = labels[i] != nullptr && labels[i][0] != '\0';
     if (hasLabel) {
+      TouchRegistry::getInstance().add(Rect{x, pageHeight - buttonY, buttonWidth, buttonHeight}, i,
+                                       TouchRegistry::Button);
       const Color background = i == selectedIndex ? Color::LightGray : Color::White;
       renderer.fillRoundedRect(x, pageHeight - buttonY, buttonWidth, buttonHeight, kButtonCornerRadius, background);
       renderer.drawRoundedRect(x, pageHeight - buttonY, buttonWidth, buttonHeight, 1, kButtonCornerRadius, true, true,
@@ -680,6 +721,7 @@ void MinimalTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const s
     coverBufferStored = storeCoverBuffer();
     coverRendered = coverBufferStored;
   }
+  TouchRegistry::getInstance().add(coverRect, 0, TouchRegistry::Cover);
 
   drawProgressBlock(renderer, coverRect, stats, progressPercent, false);
 }
@@ -717,14 +759,16 @@ void MinimalTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCo
     return;
   }
 
-  const int panelW = std::min(kMenuPanelWidth, renderer.getScreenWidth() - 80);
-  const int panelH = buttonCount * kMenuRowHeight + 2;
-  const int panelX = (renderer.getScreenWidth() - panelW) / 2;
-  const int panelY = kMenuPanelTop;
+  const Rect panel = buttonMenuPanelRect(renderer, buttonCount);
+  const int panelX = panel.x;
+  const int panelY = panel.y;
+  const int panelW = panel.width;
+  const int panelH = panel.height;
   renderer.drawRoundedRect(panelX, panelY, panelW, panelH, 1, kMenuPanelRadius, true);
 
   for (int i = 0; i < buttonCount; ++i) {
     const int rowY = panelY + 1 + i * kMenuRowHeight;
+    TouchRegistry::getInstance().add(Rect{panelX, rowY, panelW, kMenuRowHeight}, i, TouchRegistry::Item);
     if (i == selectedIndex) {
       const int triangleX = panelX + kMenuSelectionTriangleInset;
       const int triangleCenterY = rowY + kMenuRowHeight / 2;

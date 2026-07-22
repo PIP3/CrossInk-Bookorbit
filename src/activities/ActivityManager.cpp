@@ -8,12 +8,14 @@
 
 #include <algorithm>
 
+#include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "OpdsServerStore.h"
 #include "SilentRestart.h"
 #include "boot_sleep/BootActivity.h"
 #include "boot_sleep/SleepActivity.h"
 #include "browser/OpdsBookBrowserActivity.h"
+#include "components/TouchRegistry.h"
 #include "home/AlertActivity.h"
 #include "home/CrashActivity.h"
 #include "home/FileBrowserActivity.h"
@@ -41,11 +43,16 @@ void restartToFileTransfer(const NetworkMode mode, const std::string& returnBook
 }  // namespace
 
 void ActivityManager::begin(const uint32_t renderTaskStackBytes) {
+#if defined(configNUM_CORES) && configNUM_CORES > 1
+  constexpr BaseType_t renderTaskCore = 1;
+#else
+  constexpr BaseType_t renderTaskCore = 0;
+#endif
   xTaskCreatePinnedToCore(&renderTaskTrampoline, "ActivityManagerRender", renderTaskStackBytes,
                           this,               // Parameters
                           1,                  // Priority
                           &renderTaskHandle,  // Task handle
-                          0                   // Pin to core 0 (PRO_CPU)
+                          renderTaskCore  // Keep long renders/cover decodes off CPU 0's idle watchdog when available
   );
   assert(renderTaskHandle != nullptr && "Failed to create render task");
   LOG_DBG("ACT", "Render task started with %lu-byte stack", static_cast<unsigned long>(renderTaskStackBytes));
@@ -62,10 +69,13 @@ void ActivityManager::renderTaskLoop() {
     // Acquire the lock before reading currentActivity to avoid a TOCTOU race
     // where the main task deletes the activity between the null-check and render().
     RenderLock lock;
+    TouchRegistry::getInstance().setEnabled(mappedInput.hasTouch());
+    TouchRegistry::getInstance().beginFrame();
     if (currentActivity) {
       HalPowerManager::Lock powerLock;  // Ensure we don't go into low-power mode while rendering
       currentActivity->render(std::move(lock));
     }
+    TouchRegistry::getInstance().publish();
     // Notify any task blocked in requestUpdateAndWait() that the render is done.
     TaskHandle_t waiter = nullptr;
     taskENTER_CRITICAL(&renderStateMux);
@@ -82,7 +92,9 @@ void ActivityManager::loop() {
   if (currentActivity) {
     mappedInput.setPowerAsConfirmInReaderMode(currentActivity->allowPowerAsConfirmInReaderMode());
     // Note: do not hold a lock here, the loop() method must be responsible for acquire one if needed
-    currentActivity->loop();
+    if (!handleReaderPowerButtonSettingsOverride() && !handleGlobalHomeGesture()) {
+      currentActivity->loop();
+    }
   } else {
     mappedInput.setPowerAsConfirmInReaderMode(false);
   }
@@ -180,9 +192,41 @@ void ActivityManager::loop() {
   }
 }
 
+bool ActivityManager::handleGlobalHomeGesture() {
+  if (!currentActivity || pendingAction != PendingAction::None || currentActivity->isHomeActivity() ||
+      !currentActivity->allowGlobalHomeGesture() || !mappedInput.hasTouch()) {
+    return false;
+  }
+
+  if (!mappedInput.wasHomeGesture()) {
+    return false;
+  }
+
+  goHome();
+  return true;
+}
+
+bool ActivityManager::handleReaderPowerButtonSettingsOverride() {
+  if (!readerPowerButtonOpensSettings()) {
+    return false;
+  }
+
+  if (mappedInput.wasReleased(MappedInputManager::Button::Power)) {
+    if (!currentActivity->openReaderSettingsMenu()) {
+      goToSettings();
+    }
+    return true;
+  }
+
+  // Do not let reader activities run configured short/long Power actions while
+  // the button is held. Its release is reserved for restoring Settings access.
+  return mappedInput.isPressed(MappedInputManager::Button::Power);
+}
+
 void ActivityManager::exitActivity(const RenderLock& lock) {
   // Note: lock must be held by the caller
   if (currentActivity) {
+    TouchRegistry::getInstance().clear();
     currentActivity->onExit();
     currentActivity.reset();
   }
@@ -191,12 +235,14 @@ void ActivityManager::exitActivity(const RenderLock& lock) {
 void ActivityManager::replaceActivity(std::unique_ptr<Activity>&& newActivity) {
   // Note: no lock here, this is usually called by loop() and we may run into deadlock
   if (currentActivity) {
+    TouchRegistry::getInstance().clear();
     // Defer launch if we're currently in an activity, to avoid deleting the current activity
     // leading to the "delete this" problem
     pendingActivity = std::move(newActivity);
     pendingAction = PendingAction::Replace;
   } else {
     // No current activity, safe to launch immediately
+    TouchRegistry::getInstance().clear();
     currentActivity = std::move(newActivity);
     currentActivity->onEnter();
   }
@@ -349,6 +395,7 @@ void ActivityManager::pushActivity(std::unique_ptr<Activity>&& activity) {
     LOG_ERR("ACT", "pendingActivity while pushActivity is not expected");
     pendingActivity.reset();
   }
+  TouchRegistry::getInstance().clear();
   pendingActivity = std::move(activity);
   pendingAction = PendingAction::Push;
 }
@@ -359,6 +406,7 @@ void ActivityManager::popActivity() {
     LOG_ERR("ACT", "pendingActivity while popActivity is not expected");
     pendingActivity.reset();
   }
+  TouchRegistry::getInstance().clear();
   pendingAction = PendingAction::Pop;
 }
 
@@ -373,6 +421,11 @@ bool ActivityManager::isReaderActivity() const {
 
   return std::any_of(stackActivities.begin(), stackActivities.end(),
                      [](const auto& activity) { return activity && activity->isReaderActivity(); });
+}
+
+bool ActivityManager::readerPowerButtonOpensSettings() const {
+  return mappedInput.hasTouchHardware() && SETTINGS.disableReaderTouchscreen && currentActivity &&
+         currentActivity->handlesReaderPowerSettingsOverride();
 }
 
 bool ActivityManager::hasActivityNamed(const char* activityName) const {

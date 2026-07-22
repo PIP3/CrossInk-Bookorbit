@@ -27,6 +27,7 @@ class ControlsOptionsActivity final : public Activity {
   void closeSubmenu();
   void moveSelection(bool forward);
   bool currentSettingUsesOptionMenu(const SettingInfo& setting) const;
+  bool handleTouchInput();
   void openEnumOptionPicker(const SettingInfo& setting);
   void toggleCurrentSetting();
 
@@ -38,4 +39,5 @@ class ControlsOptionsActivity final : public Activity {
   void loop() override;
   void render(RenderLock&&) override;
   bool allowPowerAsConfirmInReaderMode() const override { return true; }
+  bool allowGlobalHomeGesture() const override { return false; }
 };

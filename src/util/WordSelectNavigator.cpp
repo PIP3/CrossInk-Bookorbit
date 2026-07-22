@@ -309,6 +309,53 @@ bool WordSelectNavigator::handleNavigation(const MappedInputManager& input, cons
   return changed;
 }
 
+bool WordSelectNavigator::selectWordAtPoint(const int x, const int y, const int lineHeight, bool* hit) {
+  if (hit) *hit = false;
+  if (rows.empty() || words.empty() || lineHeight <= 0) return false;
+
+  const int horizontalPad = 6;
+  const int verticalPad = std::max(4, lineHeight / 4);
+  int bestIdx = -1;
+  int bestScore = INT_MAX;
+
+  for (int idx = 0; idx < static_cast<int>(words.size()); idx++) {
+    const auto& word = words[idx];
+    const int left = static_cast<int>(word.screenX) - horizontalPad;
+    const int right = static_cast<int>(word.screenX) + static_cast<int>(word.width) + horizontalPad;
+    const int top = static_cast<int>(word.screenY) - verticalPad;
+    const int bottom = static_cast<int>(word.screenY) + lineHeight + verticalPad;
+    if (x < left || x > right || y < top || y > bottom) continue;
+
+    const int centerX = static_cast<int>(word.screenX) + static_cast<int>(word.width) / 2;
+    const int centerY = static_cast<int>(word.screenY) + lineHeight / 2;
+    const int score = std::abs(x - centerX) + std::abs(y - centerY);
+    if (score < bestScore) {
+      bestScore = score;
+      bestIdx = idx;
+    }
+  }
+
+  if (bestIdx < 0) return false;
+  if (hit) *hit = true;
+  const int targetRow = words[bestIdx].row;
+  if (targetRow < 0 || targetRow >= static_cast<int>(rows.size())) return false;
+
+  int targetWordInRow = -1;
+  for (int i = 0; i < static_cast<int>(rows[targetRow].wordIndices.size()); i++) {
+    if (rows[targetRow].wordIndices[i] == bestIdx) {
+      targetWordInRow = i;
+      break;
+    }
+  }
+  if (targetWordInRow < 0) return false;
+
+  const bool changed = currentRow != targetRow || currentWordInRow != targetWordInRow;
+  currentRow = targetRow;
+  currentWordInRow = targetWordInRow;
+  pendingSnapIdx = -1;
+  return changed;
+}
+
 WordSelectNavigator::MultiSelectAction WordSelectNavigator::handleMultiSelectInput(const MappedInputManager& input,
                                                                                    std::string& outPhrase,
                                                                                    unsigned long longPressMs) {
@@ -360,6 +407,21 @@ WordSelectNavigator::MultiSelectAction WordSelectNavigator::handleMultiSelectInp
   return MultiSelectAction::None;
 }
 
+bool WordSelectNavigator::beginTouchMultiSelect() {
+  const int flatIdx = getCurrentFlatIndex();
+  if (flatIdx < 0) return false;
+  inMultiSelectMode = true;
+  anchorFlatIndex = flatIdx;
+  return true;
+}
+
+std::string WordSelectNavigator::finishTouchMultiSelect() {
+  if (!inMultiSelectMode) return {};
+  const std::string phrase = buildPhrase(anchorFlatIndex, getCurrentFlatIndex());
+  inMultiSelectMode = false;
+  return phrase;
+}
+
 bool WordSelectNavigator::HighlightSnapshot::capture(uint16_t x, uint16_t y, uint16_t w, uint16_t h,
                                                      const GfxRenderer& renderer) {
   bytes_ = 0;
@@ -387,11 +449,13 @@ void WordSelectNavigator::renderHighlight(const GfxRenderer& renderer, int lineH
       drawSingleHighlight(renderer, lineHeight, i);
       drawContinuationsIfOutside(renderer, lineHeight, getWordAt(i), lo, hi);
     }
+    drawTouchDragCursor(renderer, lineHeight, cursorIdx);
   } else {
     const int selIdx = getCurrentFlatIndex();
     if (selIdx < 0) return;
     drawSingleHighlight(renderer, lineHeight, selIdx);
     drawContinuationsIfOutside(renderer, lineHeight, getWordAt(selIdx), selIdx, selIdx);
+    drawTouchDragCursor(renderer, lineHeight, selIdx);
   }
 }
 
@@ -399,26 +463,38 @@ void WordSelectNavigator::drawSingleHighlight(const GfxRenderer& renderer, int l
   const auto* w = getWordAt(wordIndex);
   if (!w) return;
   renderer.fillRect(w->screenX - 2, w->screenY - 2, w->width + 4, lineHeight + 4, true);
-  const char* displayText = getDisplay(*w);
+  const char* display = getDisplay(*w);
   const auto baseDir = w->isRtl ? BidiUtils::BidiBaseDir::RTL : BidiUtils::BidiBaseDir::LTR;
   if (w->bionicBoundary > 0 && w->bionicSuffixX > 0) {
     const auto boldStyle = static_cast<EpdFontFamily::Style>(w->style | EpdFontFamily::BOLD);
     char boldBuf[40];
     const size_t boldLen =
-        std::min<size_t>({static_cast<size_t>(w->bionicBoundary), strlen(displayText), sizeof(boldBuf) - 1});
-    memcpy(boldBuf, displayText, boldLen);
+        std::min<size_t>({static_cast<size_t>(w->bionicBoundary), strlen(display), sizeof(boldBuf) - 1});
+    memcpy(boldBuf, display, boldLen);
     boldBuf[boldLen] = '\0';
     if (w->isRtl) {
-      renderer.drawText(w->fontId, w->screenX, w->screenY, displayText + boldLen, false, w->style, baseDir);
+      renderer.drawText(w->fontId, w->screenX, w->screenY, display + boldLen, false, w->style, baseDir);
       renderer.drawText(w->fontId, w->screenX + w->bionicSuffixX, w->screenY, boldBuf, false, boldStyle, baseDir);
     } else {
       renderer.drawText(w->fontId, w->screenX, w->screenY, boldBuf, false, boldStyle, baseDir);
-      renderer.drawText(w->fontId, w->screenX + w->bionicSuffixX, w->screenY, displayText + boldLen, false, w->style,
+      renderer.drawText(w->fontId, w->screenX + w->bionicSuffixX, w->screenY, display + boldLen, false, w->style,
                         baseDir);
     }
     return;
   }
-  renderer.drawText(w->fontId, w->screenX, w->screenY, displayText, false, w->style, baseDir);
+  renderer.drawText(w->fontId, w->screenX, w->screenY, display, false, w->style, baseDir);
+}
+
+void WordSelectNavigator::drawTouchDragCursor(const GfxRenderer& renderer, int lineHeight, int wordIndex) const {
+  if (!touchDragCursorVisible) return;
+  const auto* w = getWordAt(wordIndex);
+  if (!w) return;
+  const int x = w->screenX + w->width + 4;
+  const int top = w->screenY - 2;
+  const int bottom = w->screenY + lineHeight + 1;
+  renderer.drawLine(x, top, x, bottom, 2, true);
+  renderer.drawLine(x - 2, top, x + 3, top, 2, true);
+  renderer.drawLine(x - 2, bottom, x + 3, bottom, 2, true);
 }
 
 void WordSelectNavigator::drawContinuationsIfOutside(const GfxRenderer& renderer, int lineHeight, const WordInfo* w,
@@ -435,8 +511,9 @@ void WordSelectNavigator::drawContinuationsIfOutside(const GfxRenderer& renderer
 WordSelectNavigator::Rect WordSelectNavigator::boundsForWord(int wordIndex, int lineHeight) const {
   const auto* w = getWordAt(wordIndex);
   if (!w) return Rect{};
-  return Rect{static_cast<int>(w->screenX) - 2, static_cast<int>(w->screenY) - 2, static_cast<int>(w->width) + 4,
-              lineHeight + 4};
+  const int cursorWidth = touchDragCursorVisible ? 10 : 0;
+  return Rect{static_cast<int>(w->screenX) - 2, static_cast<int>(w->screenY) - 2,
+              static_cast<int>(w->width) + 4 + cursorWidth, lineHeight + 4};
 }
 
 WordSelectNavigator::Rect WordSelectNavigator::computeDirtyRect(int prevWordIdx, int currWordIdx,
@@ -492,6 +569,7 @@ std::optional<WordSelectNavigator::Rect> WordSelectNavigator::renderHighlightDif
 
   // Step 3: draw the new highlight on top of the captured pixels.
   drawSingleHighlight(renderer, lineHeight, currWordIdx);
+  drawTouchDragCursor(renderer, lineHeight, currWordIdx);
 
   // Step 4: caller pushes the union region.
   return computeDirtyRect(prevWordIdx, currWordIdx, lineHeight);

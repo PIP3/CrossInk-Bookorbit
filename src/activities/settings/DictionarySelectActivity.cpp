@@ -13,8 +13,22 @@
 #include "I18nKeys.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
-#include "fontIds.h"
+#include "components/UIThemeTokens.h"
+#include "components/UiAppHelpers.h"
 #include "util/DictionaryRegistry.h"
+
+namespace fui = freeink::ui;
+namespace {
+constexpr fui::ActionId ACTION_ROW = 1;
+}  // namespace
+
+DictionarySelectActivity::DictionarySelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
+                                                   std::string bookCachePath, const bool disableCurrentSelection)
+    : Activity("DictionarySelect", renderer, mappedInput),
+      bookCachePath(std::move(bookCachePath)),
+      disableCurrentSelection(disableCurrentSelection),
+      uiTarget(makeUiTarget(renderer)),
+      app(uiTarget, uiTarget.deviceContext()) {}
 
 // ---------------------------------------------------------------------------
 // Lifecycle
@@ -98,6 +112,12 @@ void DictionarySelectActivity::onEnter() {
   if (disableCurrentSelection) {
     selectedIndex = firstSelectableIndexFrom(selectedIndex);
   }
+  topIndex = 0;
+  visibleRows = 1;
+  uiReady = false;
+  app.setTheme(uiThemeTokens(uiTarget));
+  app.on(ACTION_ROW, &DictionarySelectActivity::onRowEvent, this);
+  app.setScreen(&DictionarySelectActivity::listScreen, this);
   requestUpdate();
 }
 
@@ -189,6 +209,23 @@ bool DictionarySelectActivity::applySelection() {
 // Input
 // ---------------------------------------------------------------------------
 
+void DictionarySelectActivity::finishSelection() {
+  if (!applySelection()) {
+    ActivityResult result;
+    result.isCancelled = true;
+    setResult(std::move(result));
+  }
+  finish();
+}
+
+void DictionarySelectActivity::onRowEvent(const fui::ActionEvent& event, void* user) {
+  auto* self = static_cast<DictionarySelectActivity*>(user);
+  if (event.value < 0 || event.value >= self->totalItems || self->rowIsDisabled(event.value)) return;
+  self->selectedIndex = event.value;
+  self->app.clearTapFlash();
+  self->finishSelection();
+}
+
 void DictionarySelectActivity::loop() {
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     finish();
@@ -201,47 +238,53 @@ void DictionarySelectActivity::loop() {
       return;
     }
 
-    if (!applySelection()) {
-      ActivityResult result;
-      result.isCancelled = true;
-      setResult(std::move(result));
-    }
-    finish();
+    finishSelection();
     return;
   }
 
-  const int pageItems = UITheme::getNumberOfItemsPerPage(renderer, true, false, true, false);
+  if (uiReady) {
+    const fui::InputSnapshot snap = touchSnapshotFrom(mappedInput);
+    if (snap.touchPressed || snap.touchReleased) {
+      const auto event = app.route(snap);
+      if (app.invalidated()) requestUpdate();
+      if (event) return;
+    }
+  }
 
-  buttonNavigator.onNextRelease([this] {
-    selectedIndex = ButtonNavigator::nextIndex(selectedIndex, totalItems);
-    selectedIndex = firstSelectableIndexFrom(selectedIndex);
+  const auto swipe = mappedInput.wasSwipe();
+  if (swipe == MappedInputManager::SwipeDir::Up || swipe == MappedInputManager::SwipeDir::Down) {
+    const int next = scrollListBy(topIndex, swipe == MappedInputManager::SwipeDir::Up ? visibleRows : -visibleRows,
+                                  visibleRows, totalItems);
+    if (next != topIndex) {
+      topIndex = next;
+      requestUpdate();
+    }
+    return;
+  }
+
+  const auto moveForward = [this](const int next) {
+    selectedIndex = firstSelectableIndexFrom(next);
+    topIndex = followListSelection(selectedIndex, topIndex, visibleRows, totalItems);
     requestUpdate();
-  });
-
-  buttonNavigator.onPreviousRelease([this] {
-    selectedIndex = ButtonNavigator::previousIndex(selectedIndex, totalItems);
+  };
+  const auto moveBackward = [this](int next) {
     if (totalItems > 0) {
-      for (int offset = 0; offset < totalItems && rowIsDisabled(selectedIndex); offset++) {
-        selectedIndex = ButtonNavigator::previousIndex(selectedIndex, totalItems);
+      for (int offset = 0; offset < totalItems && rowIsDisabled(next); offset++) {
+        next = ButtonNavigator::previousIndex(next, totalItems);
       }
     }
+    selectedIndex = next;
+    topIndex = followListSelection(selectedIndex, topIndex, visibleRows, totalItems);
     requestUpdate();
-  });
-
-  buttonNavigator.onNextContinuous([this, pageItems] {
-    selectedIndex = ButtonNavigator::nextPageIndex(selectedIndex, totalItems, pageItems);
-    selectedIndex = firstSelectableIndexFrom(selectedIndex);
-    requestUpdate();
-  });
-
-  buttonNavigator.onPreviousContinuous([this, pageItems] {
-    selectedIndex = ButtonNavigator::previousPageIndex(selectedIndex, totalItems, pageItems);
-    if (totalItems > 0) {
-      for (int offset = 0; offset < totalItems && rowIsDisabled(selectedIndex); offset++) {
-        selectedIndex = ButtonNavigator::previousIndex(selectedIndex, totalItems);
-      }
-    }
-    requestUpdate();
+  };
+  buttonNavigator.onNextRelease(
+      [this, &moveForward] { moveForward(ButtonNavigator::nextIndex(selectedIndex, totalItems)); });
+  buttonNavigator.onPreviousRelease(
+      [this, &moveBackward] { moveBackward(ButtonNavigator::previousIndex(selectedIndex, totalItems)); });
+  buttonNavigator.onNextContinuous(
+      [this, &moveForward] { moveForward(ButtonNavigator::nextPageIndex(selectedIndex, totalItems, visibleRows)); });
+  buttonNavigator.onPreviousContinuous([this, &moveBackward] {
+    moveBackward(ButtonNavigator::previousPageIndex(selectedIndex, totalItems, visibleRows));
   });
 }
 
@@ -249,40 +292,53 @@ void DictionarySelectActivity::loop() {
 // Rendering
 // ---------------------------------------------------------------------------
 
+void DictionarySelectActivity::listScreen(UiApp::ScreenType& screen, void* user) {
+  static_cast<DictionarySelectActivity*>(user)->buildListScreen(screen);
+}
+
+void DictionarySelectActivity::buildListScreen(UiApp::ScreenType& screen) {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  screen.setContentMargin(fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight), 0,
+                                      static_cast<int16_t>(metrics.buttonHintsHeight), 0});
+  screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
+  const std::string activePath = disableCurrentSelection
+                                     ? currentEffectiveDictPath
+                                     : (bookCachePath.empty() ? Dictionary::readDictPath() : currentBookDictPath);
+  std::vector<fui::ListItem> items;
+  items.reserve(totalItems);
+  for (int i = 0; i < totalItems; ++i) {
+    const std::string folder = folderForIndex(i);
+    fui::ListItem item;
+    item.label = nameForIndex(i);
+    if ((folder.empty() && activePath.empty()) || (!folder.empty() && folder == activePath))
+      item.value = tr(STR_SELECTED);
+    if (rowIsDisabled(i)) item.state = fui::StateDisabled;
+    item.actionValue = static_cast<int16_t>(i);
+    items.push_back(item);
+  }
+  fui::ListProps props;
+  props.items = items.data();
+  props.count = static_cast<uint16_t>(items.size());
+  props.selectedIndex = static_cast<int16_t>(selectedIndex);
+  props.action = ACTION_ROW;
+  props.inputMask = fui::InputTouch;
+  props.valueInset = 8;
+  props.labelText = screen.theme().bodyText;
+  const auto rows = configureUiList(props, screen.theme(), screen.body());
+  visibleRows = rows > 0 ? rows : 1;
+  topIndex = scrollListBy(topIndex, 0, visibleRows, totalItems);
+  props.topIndex = static_cast<uint16_t>(topIndex);
+  screen.list(props);
+}
+
 void DictionarySelectActivity::render(RenderLock&&) {
   renderer.clearScreen();
-
-  const int pageWidth = renderer.getScreenWidth();
-  const int pageHeight = renderer.getScreenHeight();
   const auto& metrics = UITheme::getInstance().getMetrics();
-
-  // --- Picker screen ---
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_DICTIONARY));
-
-  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
-
-  // Show "None found" note when no dictionaries are available
-  if (dictFolders.empty()) {
-    const int textY = contentTop + contentHeight / 3;
-    renderer.drawCenteredText(UI_10_FONT_ID, textY, tr(STR_DICT_NONE_FOUND));
-  }
-
-  GUI.drawList(
-      renderer, Rect{0, contentTop, pageWidth, contentHeight}, totalItems, selectedIndex,
-      [this](int index) { return std::string(nameForIndex(index)); }, nullptr, nullptr,
-      [this](int index) -> std::string {
-        // Show "Selected" marker for the currently active dictionary.
-        // In per-book mode compare against currentBookDictPath; in settings mode against global.
-        std::string folder = folderForIndex(index);
-        const std::string activePath = disableCurrentSelection
-                                           ? currentEffectiveDictPath
-                                           : (bookCachePath.empty() ? Dictionary::readDictPath() : currentBookDictPath);
-        if (folder.empty() && activePath.empty()) return tr(STR_SELECTED);
-        if (!folder.empty() && folder == activePath) return tr(STR_SELECTED);
-        return "";
-      },
-      true, [this](int index) { return rowIsDisabled(index); });
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, renderer.getScreenWidth(), metrics.headerHeight},
+                 tr(STR_DICTIONARY));
+  uiReady = false;
+  app.render();
+  uiReady = true;
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);

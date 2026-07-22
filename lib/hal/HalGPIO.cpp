@@ -1,120 +1,134 @@
+#include <BatteryMonitor.h>
+#include <BoardConfig.h>
 #include <HalGPIO.h>
 #include <Logging.h>
+#include <PowerManager.h>
 #include <Preferences.h>
 #include <SPI.h>
-#include <Wire.h>
+#include <XteinkDetect.h>
 #include <esp_sleep.h>
+
+#ifdef STICKY_SIDE_BUTTON_DIAGNOSTICS
+#include <driver/gpio.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#endif
 
 // Global HalGPIO instance
 HalGPIO gpio;
 
-namespace X3GPIO {
+namespace {
+#ifdef STICKY_SIDE_BUTTON_DIAGNOSTICS
+constexpr uint8_t SIDE_BUTTON_DIAGNOSTIC_QUEUE_SIZE = 32;
 
-struct X3ProbeResult {
-  bool bq27220 = false;
-  bool ds3231 = false;
-  bool qmi8658 = false;
-
-  uint8_t score() const {
-    return static_cast<uint8_t>(bq27220) + static_cast<uint8_t>(ds3231) + static_cast<uint8_t>(qmi8658);
-  }
+struct SideButtonDiagnosticEdge {
+  TickType_t tick;
+  int8_t pin;
+  uint8_t level;
 };
 
-bool readI2CReg8(uint8_t addr, uint8_t reg, uint8_t* outValue) {
-  Wire.beginTransmission(addr);
-  Wire.write(reg);
-  if (Wire.endTransmission(false) != 0) {
-    return false;
+DRAM_ATTR SideButtonDiagnosticEdge sideButtonDiagnosticEdges[SIDE_BUTTON_DIAGNOSTIC_QUEUE_SIZE] = {};
+DRAM_ATTR volatile uint8_t sideButtonDiagnosticReadIndex = 0;
+DRAM_ATTR volatile uint8_t sideButtonDiagnosticWriteIndex = 0;
+DRAM_ATTR volatile uint32_t sideButtonDiagnosticDroppedEdges = 0;
+DRAM_ATTR portMUX_TYPE sideButtonDiagnosticMux = portMUX_INITIALIZER_UNLOCKED;
+TickType_t sideButtonDiagnosticLastUpdateTick = 0;
+
+void IRAM_ATTR recordSideButtonDiagnosticEdge(void* context) {
+  const int8_t pin = static_cast<int8_t>(reinterpret_cast<intptr_t>(context));
+  const SideButtonDiagnosticEdge edge = {xTaskGetTickCountFromISR(), pin,
+                                         static_cast<uint8_t>(gpio_get_level(static_cast<gpio_num_t>(pin)))};
+
+  portENTER_CRITICAL_ISR(&sideButtonDiagnosticMux);
+  const uint8_t nextWriteIndex =
+      static_cast<uint8_t>((sideButtonDiagnosticWriteIndex + 1) % SIDE_BUTTON_DIAGNOSTIC_QUEUE_SIZE);
+  if (nextWriteIndex == sideButtonDiagnosticReadIndex) {
+    sideButtonDiagnosticDroppedEdges = sideButtonDiagnosticDroppedEdges + 1;
+  } else {
+    sideButtonDiagnosticEdges[sideButtonDiagnosticWriteIndex] = edge;
+    sideButtonDiagnosticWriteIndex = nextWriteIndex;
   }
-  if (Wire.requestFrom(addr, static_cast<uint8_t>(1), static_cast<uint8_t>(true)) < 1) {
-    return false;
-  }
-  *outValue = Wire.read();
-  return true;
+  portEXIT_CRITICAL_ISR(&sideButtonDiagnosticMux);
 }
 
-bool readI2CReg16LE(uint8_t addr, uint8_t reg, uint16_t* outValue) {
-  Wire.beginTransmission(addr);
-  Wire.write(reg);
-  if (Wire.endTransmission(false) != 0) {
-    return false;
+bool popSideButtonDiagnosticEdge(SideButtonDiagnosticEdge& edge) {
+  bool hasEdge = false;
+  portENTER_CRITICAL(&sideButtonDiagnosticMux);
+  if (sideButtonDiagnosticReadIndex != sideButtonDiagnosticWriteIndex) {
+    edge = sideButtonDiagnosticEdges[sideButtonDiagnosticReadIndex];
+    sideButtonDiagnosticReadIndex =
+        static_cast<uint8_t>((sideButtonDiagnosticReadIndex + 1) % SIDE_BUTTON_DIAGNOSTIC_QUEUE_SIZE);
+    hasEdge = true;
   }
-  if (Wire.requestFrom(addr, static_cast<uint8_t>(2), static_cast<uint8_t>(true)) < 2) {
-    while (Wire.available()) {
-      Wire.read();
+  portEXIT_CRITICAL(&sideButtonDiagnosticMux);
+  return hasEdge;
+}
+
+uint32_t takeDroppedSideButtonDiagnosticEdges() {
+  portENTER_CRITICAL(&sideButtonDiagnosticMux);
+  const uint32_t dropped = sideButtonDiagnosticDroppedEdges;
+  sideButtonDiagnosticDroppedEdges = 0;
+  portEXIT_CRITICAL(&sideButtonDiagnosticMux);
+  return dropped;
+}
+
+const char* sideButtonDiagnosticName(const int8_t pin) { return pin == BoardConfig::ACTIVE.input.up ? "up" : "down"; }
+
+void beginStickySideButtonDiagnostics() {
+  if (!BoardConfig::isSticky()) return;
+
+  const int8_t pins[] = {BoardConfig::ACTIVE.input.up, BoardConfig::ACTIVE.input.down};
+  for (const int8_t pin : pins) {
+    if (pin >= 0) {
+      attachInterruptArg(pin, recordSideButtonDiagnosticEdge, reinterpret_cast<void*>(static_cast<intptr_t>(pin)),
+                         CHANGE);
     }
-    return false;
   }
-  const uint8_t lo = Wire.read();
-  const uint8_t hi = Wire.read();
-  *outValue = (static_cast<uint16_t>(hi) << 8) | lo;
-  return true;
+  sideButtonDiagnosticLastUpdateTick = xTaskGetTickCount();
+  LOG_INF("BTNDIAG", "Sticky raw side-button diagnostics enabled (up=%d down=%d)", BoardConfig::ACTIVE.input.up,
+          BoardConfig::ACTIVE.input.down);
 }
 
-bool readBQ27220CurrentMA(int16_t* outCurrent) {
-  uint16_t raw = 0;
-  if (!readI2CReg16LE(I2C_ADDR_BQ27220, BQ27220_CUR_REG, &raw)) {
-    return false;
+void logStickySideButtonDiagnostics(const InputManager& inputManager) {
+  if (!BoardConfig::isSticky()) return;
+
+  const TickType_t updateTick = xTaskGetTickCount();
+  const unsigned long pollGapMs =
+      static_cast<unsigned long>(updateTick - sideButtonDiagnosticLastUpdateTick) * portTICK_PERIOD_MS;
+  sideButtonDiagnosticLastUpdateTick = updateTick;
+
+  SideButtonDiagnosticEdge edge{};
+  while (popSideButtonDiagnosticEdge(edge)) {
+    const unsigned long edgeMs = static_cast<unsigned long>(edge.tick) * portTICK_PERIOD_MS;
+    const unsigned long observedAfterMs = static_cast<unsigned long>(updateTick - edge.tick) * portTICK_PERIOD_MS;
+    LOG_INF("BTNDIAG", "raw %s %s edge_ms=%lu observed_after_ms=%lu poll_gap_ms=%lu",
+            sideButtonDiagnosticName(edge.pin), edge.level == LOW ? "pressed" : "released", edgeMs, observedAfterMs,
+            pollGapMs);
   }
-  *outCurrent = static_cast<int16_t>(raw);
-  return true;
+
+  const uint32_t droppedEdges = takeDroppedSideButtonDiagnosticEdges();
+  if (droppedEdges > 0) {
+    LOG_ERR("BTNDIAG", "raw edge buffer overflow: dropped=%lu", static_cast<unsigned long>(droppedEdges));
+  }
+
+  const uint8_t buttons[] = {InputManager::BTN_UP, InputManager::BTN_DOWN};
+  const char* const names[] = {"up", "down"};
+  for (size_t i = 0; i < 2; ++i) {
+    if (inputManager.wasPressed(buttons[i])) {
+      LOG_INF("BTNDIAG", "manager %s pressed poll_gap_ms=%lu held_ms=%lu", names[i], pollGapMs,
+              inputManager.getHeldTime());
+    }
+    if (inputManager.wasReleased(buttons[i])) {
+      LOG_INF("BTNDIAG", "manager %s released poll_gap_ms=%lu held_ms=%lu", names[i], pollGapMs,
+              inputManager.getHeldTime());
+    }
+  }
 }
+#endif
 
-bool probeBQ27220Signature() {
-  uint16_t soc = 0;
-  uint16_t voltageMv = 0;
-  if (!readI2CReg16LE(I2C_ADDR_BQ27220, BQ27220_SOC_REG, &soc)) {
-    return false;
-  }
-  if (soc > 100) {
-    return false;
-  }
-  if (!readI2CReg16LE(I2C_ADDR_BQ27220, BQ27220_VOLT_REG, &voltageMv)) {
-    return false;
-  }
-  return voltageMv >= 2500 && voltageMv <= 5000;
-}
-
-bool probeDS3231Signature() {
-  uint8_t sec = 0;
-  if (!readI2CReg8(I2C_ADDR_DS3231, DS3231_SEC_REG, &sec)) {
-    return false;
-  }
-  const uint8_t tensDigit = (sec >> 4) & 0x07;
-  const uint8_t onesDigit = sec & 0x0F;
-
-  return tensDigit <= 5 && onesDigit <= 9;
-}
-
-bool probeQMI8658Signature() {
-  uint8_t whoami = 0;
-  if (readI2CReg8(I2C_ADDR_QMI8658, QMI8658_WHO_AM_I_REG, &whoami) && whoami == QMI8658_WHO_AM_I_VALUE) {
-    return true;
-  }
-  if (readI2CReg8(I2C_ADDR_QMI8658_ALT, QMI8658_WHO_AM_I_REG, &whoami) && whoami == QMI8658_WHO_AM_I_VALUE) {
-    return true;
-  }
-  return false;
-}
-
-X3ProbeResult runX3ProbePass() {
-  X3ProbeResult result;
-  Wire.begin(X3_I2C_SDA, X3_I2C_SCL, X3_I2C_FREQ);
-  Wire.setTimeOut(6);
-
-  result.bq27220 = probeBQ27220Signature();
-  result.ds3231 = probeDS3231Signature();
-  result.qmi8658 = probeQMI8658Signature();
-
-  Wire.end();
-  pinMode(20, INPUT);
-  pinMode(0, INPUT);
-  return result;
-}
-
-}  // namespace X3GPIO
-
-namespace {
+// The X3-vs-X4 fingerprint (freeink::detectXteinkVerdict) only makes sense on
+// Xteink hardware; other boards keep their compile-time BoardConfig profile.
+#if FREEINK_DEVICE_X4 || FREEINK_DEVICE_X3
 constexpr char HW_NAMESPACE[] = "cphw";
 constexpr char NVS_KEY_DEV_OVERRIDE[] = "dev_ovr";  // 0=auto, 1=x4, 2=x3
 constexpr char NVS_KEY_DEV_CACHED[] = "dev_det";    // 0=unknown, 1=x4, 2=x3
@@ -162,36 +176,34 @@ HalGPIO::DeviceType detectDeviceTypeWithFingerprint() {
     return nvsToDeviceType(cachedValue);
   }
 
-  // No cache yet: run active X3 fingerprint probe and persist result.
-  const X3GPIO::X3ProbeResult pass1 = X3GPIO::runX3ProbePass();
-  delay(2);
-  const X3GPIO::X3ProbeResult pass2 = X3GPIO::runX3ProbePass();
+  // No cache yet: run the SDK's X3 fingerprint probe and persist the result.
+  uint8_t score1 = 0;
+  uint8_t score2 = 0;
+  const freeink::XteinkVerdict verdict = freeink::detectXteinkVerdict(&score1, &score2);
+  LOG_INF("HW", "X3 probe scores: pass1=%u pass2=%u", score1, score2);
 
-  const uint8_t score1 = pass1.score();
-  const uint8_t score2 = pass2.score();
-  LOG_INF("HW", "X3 probe scores: pass1=%u(bq=%d rtc=%d imu=%d) pass2=%u(bq=%d rtc=%d imu=%d)", score1, pass1.bq27220,
-          pass1.ds3231, pass1.qmi8658, score2, pass2.bq27220, pass2.ds3231, pass2.qmi8658);
-  const bool x3Confirmed = (score1 >= 2) && (score2 >= 2);
-  const bool x4Confirmed = (score1 == 0) && (score2 == 0);
-
-  if (x3Confirmed) {
-    writeNvsDeviceValue(NVS_KEY_DEV_CACHED, NvsDeviceValue::X3);
-    return HalGPIO::DeviceType::X3;
+  switch (verdict) {
+    case freeink::XteinkVerdict::X3Confirmed:
+      writeNvsDeviceValue(NVS_KEY_DEV_CACHED, NvsDeviceValue::X3);
+      return HalGPIO::DeviceType::X3;
+    case freeink::XteinkVerdict::X4Confirmed:
+      writeNvsDeviceValue(NVS_KEY_DEV_CACHED, NvsDeviceValue::X4);
+      return HalGPIO::DeviceType::X4;
+    case freeink::XteinkVerdict::Inconclusive:
+      break;
   }
 
-  if (x4Confirmed) {
-    writeNvsDeviceValue(NVS_KEY_DEV_CACHED, NvsDeviceValue::X4);
-    return HalGPIO::DeviceType::X4;
-  }
-
-  // Conservative fallback for first boot with inconclusive probes.
+  // Conservative fallback for first boot with inconclusive probes; not cached,
+  // so the next boot re-probes.
   return HalGPIO::DeviceType::X4;
 }
+
+#endif  // FREEINK_DEVICE_X4 || FREEINK_DEVICE_X3
 
 }  // namespace
 
 void HalGPIO::begin() {
-  inputMgr.begin();
+#if FREEINK_DEVICE_X4 || FREEINK_DEVICE_X3
   SPI.begin(EPD_SCLK, SPI_MISO, EPD_MOSI, EPD_CS);
 
 #ifdef FORCE_DEVICE_X3
@@ -200,15 +212,24 @@ void HalGPIO::begin() {
 #else
   _deviceType = detectDeviceTypeWithFingerprint();
 #endif
+  BoardConfig::selectDevice(deviceIsX3() ? BoardConfig::Board::XteinkX3 : BoardConfig::Board::XteinkX4);
 
   if (deviceIsX4()) {
     pinMode(BAT_GPIO0, INPUT);
     pinMode(UART0_RXD, INPUT);
   }
+#endif
+  inputMgr.begin();
+#ifdef STICKY_SIDE_BUTTON_DIAGNOSTICS
+  beginStickySideButtonDiagnostics();
+#endif
 }
 
 void HalGPIO::update() {
   inputMgr.update();
+#ifdef STICKY_SIDE_BUTTON_DIAGNOSTICS
+  logStickySideButtonDiagnostics(inputMgr);
+#endif
   const bool connected = isUsbConnected();
   usbStateChanged = (connected != lastUsbConnected);
   lastUsbConnected = connected;
@@ -230,7 +251,48 @@ unsigned long HalGPIO::getHeldTime() const { return inputMgr.getHeldTime(); }
 
 unsigned long HalGPIO::getPowerButtonHeldTime() const { return inputMgr.getPowerButtonHeldTime(); }
 
+#if CROSSINK_APP_CAP_TOUCH
+bool HalGPIO::hasTouch() const { return inputMgr.hasTouch(); }
+
+bool HalGPIO::wasTouchTap(float& nx, float& ny) const { return inputMgr.wasTouchTap(nx, ny); }
+
+bool HalGPIO::wasTouchDown(float& nx, float& ny) const { return inputMgr.wasTouchPressedAt(nx, ny); }
+
+bool HalGPIO::wasTouchReleased() const { return inputMgr.wasTouchReleased(); }
+
+bool HalGPIO::isTouchTapCandidate(float& nx, float& ny, unsigned long& heldMs) const {
+  return inputMgr.isTouchTapCandidate(nx, ny, heldMs);
+}
+
+bool HalGPIO::isTouchHeldAt(float& nx, float& ny) const { return inputMgr.isTouchHeldAt(nx, ny); }
+
+unsigned long HalGPIO::lastTouchHeldMs() const { return inputMgr.lastTouchHeldMs(); }
+
+bool HalGPIO::wasSwipe(float& nxStart, float& nyStart, float& nxEnd, float& nyEnd) const {
+  return inputMgr.wasSwipe(nxStart, nyStart, nxEnd, nyEnd);
+}
+
+bool HalGPIO::wasTouchActivity() const { return inputMgr.wasTouchActivity(); }
+#endif
+
+void HalGPIO::setSharedConfirmPowerShortPressEmitsPower(const bool enabled) {
+  InputManager::setSharedConfirmPowerShortPressEmitsPower(enabled);
+}
+
+bool HalGPIO::isXteinkDevice() const {
+  return BoardConfig::ACTIVE.board == BoardConfig::Board::XteinkX3 ||
+         BoardConfig::ACTIVE.board == BoardConfig::Board::XteinkX4;
+}
+
 bool HalGPIO::verifyPowerButtonWakeup(uint16_t requiredDurationMs, bool shortPressAllowed) {
+  // Boards without a power button (or M5Paper's latch circuit) cannot verify a
+  // hold; treat the wake as valid.
+  if (BoardConfig::ACTIVE.input.power < 0) {
+    return true;
+  }
+#if defined(FREEINK_DEVICE_M5PAPER) && FREEINK_DEVICE_M5PAPER
+  return true;
+#endif
   if (shortPressAllowed) {
     // Fast path - no duration check needed
     return true;
@@ -264,20 +326,18 @@ bool HalGPIO::verifyPowerButtonWakeup(uint16_t requiredDurationMs, bool shortPre
 }
 
 bool HalGPIO::isUsbConnected() const {
+#if FREEINK_DEVICE_X3
   if (deviceIsX3()) {
-    // X3: infer USB/charging via BQ27220 Current() register (0x0C, signed mA).
-    // Positive current means charging.
-    for (uint8_t attempt = 0; attempt < 2; ++attempt) {
-      int16_t currentMa = 0;
-      if (X3GPIO::readBQ27220CurrentMA(&currentMa)) {
-        return currentMa > 0;
-      }
-      delay(2);
-    }
+    // X3 has no USB-detect pin; infer external power from the gauge's charge
+    // current via the SDK's BatteryMonitor (BQ27220 Current() > 0 = charging).
+    static const BatteryMonitor battery;
+    return battery.isCharging();
+  }
+#endif
+  if (BoardConfig::ACTIVE.usbDetect < 0) {
     return false;
   }
-  // U0RXD/GPIO20 reads HIGH when USB is connected
-  return digitalRead(UART0_RXD) == HIGH;
+  return digitalRead(BoardConfig::ACTIVE.usbDetect) == HIGH;
 }
 
 HalGPIO::WakeupReason HalGPIO::getWakeupReason() const {

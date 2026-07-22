@@ -17,9 +17,15 @@
 #include "WifiCredentialStore.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
+#include "components/UIThemeTokens.h"
+#include "components/UiAppHelpers.h"
 #include "fontIds.h"
 
+namespace fui = freeink::ui;
+
 namespace {
+
+constexpr fui::ActionId ACTION_ROW = 1;
 
 #ifndef SIMULATOR
 uint8_t sLastStaDisconnectReason = 0;
@@ -166,6 +172,24 @@ const char* wifiAuthName(const int authMode) {
 
 }  // namespace
 
+WifiSelectionActivity::WifiSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
+                                             const bool autoConnect)
+    : Activity("WifiSelection", renderer, mappedInput),
+      allowAutoConnect(autoConnect),
+      uiTarget(makeUiTarget(renderer)),
+      app(uiTarget, uiTarget.deviceContext()) {}
+
+void WifiSelectionActivity::onRowEvent(const fui::ActionEvent& event, void* user) {
+  auto* self = static_cast<WifiSelectionActivity*>(user);
+  if (self->state != WifiSelectionState::NETWORK_LIST) return;
+  if (event.value < 0 || event.value >= static_cast<int16_t>(self->networks.size())) return;
+  self->selectedNetworkIndex = static_cast<size_t>(event.value);
+  // Selection leaves this screen (password entry / connecting); a lingering
+  // flash would gray an unrelated row.
+  self->app.clearTapFlash();
+  self->selectNetwork(static_cast<int>(self->selectedNetworkIndex));
+}
+
 void WifiSelectionActivity::onEnter() {
   Activity::onEnter();
   sdFontSystem.releaseLoadedFont(renderer);
@@ -200,6 +224,13 @@ void WifiSelectionActivity::onEnter() {
 
   // Cache MAC address for display
   cachedMacAddress = getDisplayMacAddress();
+
+  uiReady = false;
+  visibleRows = 1;
+  topIndex = 0;
+  app.setTheme(uiThemeTokens(uiTarget));
+  app.on(ACTION_ROW, &WifiSelectionActivity::onRowEvent, this);
+  app.setScreen(&WifiSelectionActivity::listScreen, this);
 
   // Trigger first update to show scanning message
   requestUpdate();
@@ -253,6 +284,7 @@ void WifiSelectionActivity::onExit() {
 void WifiSelectionActivity::startWifiScan(const bool autoScan) {
   autoConnecting = autoScan;
   manualNetworkListRequested = false;
+  topIndex = 0;
   state = WifiSelectionState::SCANNING;
   networks.clear();
   requestUpdate();
@@ -612,8 +644,7 @@ void WifiSelectionActivity::checkConnectionStatus() {
             WiFi.RSSI());
 #endif
 
-    // Sync RTC from NTP on the first successful WiFi connection only. The DS3231
-    // drifts ~2 ppm so one sync is enough; users can force a re-sync from
+    // Sync RTC from NTP on the first successful WiFi connection only. Users can force a re-sync from
     // Settings > System > Device > Sync Date/Time Now.
     if (halClock.isAvailable() && (!SETTINGS.clockHasBeenSynced || !SETTINGS.clockDateHasBeenSynced)) {
       if (halClock.syncFromNTP()) {
@@ -763,6 +794,34 @@ void WifiSelectionActivity::loop() {
 
   // Handle save prompt state
   if (state == WifiSelectionState::SAVE_PROMPT) {
+    {
+      const Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+      const auto height = renderer.getLineHeight(UI_10_FONT_ID);
+      const int buttonY = screen.y + (screen.height - height * 3) / 2 + 80;
+      constexpr int buttonWidth = 60;
+      constexpr int buttonSpacing = 30;
+      const int startX = screen.x + (screen.width - (buttonWidth * 2 + buttonSpacing)) / 2;
+      int touchedOption = -1;
+      const auto touch = mappedInput.colTouch(touchedOption, startX - 8, buttonWidth + buttonSpacing, 2, buttonY - 8,
+                                              buttonY + height + 8, buttonWidth + 16);
+      if (touch == MappedInputManager::RowTouch::Down) {
+        if (savePromptSelection != touchedOption) {
+          savePromptSelection = touchedOption;
+          requestUpdate();
+        }
+        return;
+      }
+      if (touch == MappedInputManager::RowTouch::Tap) {
+        savePromptSelection = touchedOption;
+        if (savePromptSelection == 0) {
+          RenderLock lock(*this);
+          WIFI_STORE.addCredential(selectedSSID, enteredPassword);
+        }
+        onComplete(true);
+        return;
+      }
+    }
+
     if (mappedInput.wasPressed(MappedInputManager::Button::Up) ||
         mappedInput.wasPressed(MappedInputManager::Button::Left)) {
       if (savePromptSelection > 0) {
@@ -793,6 +852,39 @@ void WifiSelectionActivity::loop() {
 
   // Handle forget prompt state (connection failed with saved credentials)
   if (state == WifiSelectionState::FORGET_PROMPT) {
+    {
+      const Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+      const auto height = renderer.getLineHeight(UI_10_FONT_ID);
+      const int buttonY = screen.y + (screen.height - height * 3) / 2 + 80;
+      constexpr int buttonWidth = 120;
+      constexpr int buttonSpacing = 30;
+      const int startX = screen.x + (screen.width - (buttonWidth * 2 + buttonSpacing)) / 2;
+      int touchedOption = -1;
+      const auto touch = mappedInput.colTouch(touchedOption, startX - 8, buttonWidth + buttonSpacing, 2, buttonY - 8,
+                                              buttonY + height + 8, buttonWidth + 16);
+      if (touch == MappedInputManager::RowTouch::Down) {
+        if (forgetPromptSelection != touchedOption) {
+          forgetPromptSelection = touchedOption;
+          requestUpdate();
+        }
+        return;
+      }
+      if (touch == MappedInputManager::RowTouch::Tap) {
+        forgetPromptSelection = touchedOption;
+        if (forgetPromptSelection == 1) {
+          RenderLock lock(*this);
+          WIFI_STORE.removeCredential(selectedSSID);
+          const auto network = find_if(networks.begin(), networks.end(),
+                                       [this](const WifiNetworkInfo& net) { return net.ssid == selectedSSID; });
+          if (network != networks.end()) {
+            network->hasSavedPassword = false;
+          }
+        }
+        startWifiScan();
+        return;
+      }
+    }
+
     if (mappedInput.wasPressed(MappedInputManager::Button::Up) ||
         mappedInput.wasPressed(MappedInputManager::Button::Left)) {
       if (forgetPromptSelection > 0) {
@@ -894,15 +986,42 @@ void WifiSelectionActivity::loop() {
       }
     }
 
-    // Handle navigation
-    buttonNavigator.onNext([this] {
-      selectedNetworkIndex = ButtonNavigator::nextIndex(selectedNetworkIndex, networks.size());
-      requestUpdate();
-    });
+    // Touch goes through the FreeInkApp: render() registered the row hit
+    // rects; route the snapshot and let onRowEvent dispatch.
+    if (uiReady) {
+      const fui::InputSnapshot snap = touchSnapshotFrom(mappedInput);
+      if (snap.touchPressed || snap.touchReleased) {
+        const auto event = app.route(snap);
+        if (app.invalidated()) requestUpdate();
+        if (event) return;  // dispatched to onRowEvent
+      }
+    }
 
-    buttonNavigator.onPrevious([this] {
-      selectedNetworkIndex = ButtonNavigator::previousIndex(selectedNetworkIndex, networks.size());
+    if (!networks.empty()) {
+      // Swipes scroll the viewport; the selection stays put and button
+      // navigation pulls the view back to it.
+      const auto swipe = mappedInput.wasSwipe();
+      if (swipe == MappedInputManager::SwipeDir::Up || swipe == MappedInputManager::SwipeDir::Down) {
+        const int delta = swipe == MappedInputManager::SwipeDir::Up ? visibleRows : -visibleRows;
+        const int next = scrollListBy(topIndex, delta, visibleRows, static_cast<int>(networks.size()));
+        if (next != topIndex) {
+          topIndex = next;
+          requestUpdate();
+        }
+        return;
+      }
+    }
+
+    const auto moveSelection = [this](const int index) {
+      selectedNetworkIndex = static_cast<size_t>(index);
+      topIndex = followListSelection(static_cast<int>(selectedNetworkIndex), topIndex, visibleRows,
+                                     static_cast<int>(networks.size()));
       requestUpdate();
+    };
+    buttonNavigator.onNext(
+        [this, &moveSelection] { moveSelection(ButtonNavigator::nextIndex(selectedNetworkIndex, networks.size())); });
+    buttonNavigator.onPrevious([this, &moveSelection] {
+      moveSelection(ButtonNavigator::previousIndex(selectedNetworkIndex, networks.size()));
     });
   }
 }
@@ -979,33 +1098,67 @@ void WifiSelectionActivity::render(RenderLock&&) {
   renderer.displayBuffer();
 }
 
-void WifiSelectionActivity::renderNetworkList(const Rect* screen, const ThemeMetrics* metrics) const {
+void WifiSelectionActivity::listScreen(UiApp::ScreenType& screen, void* user) {
+  static_cast<WifiSelectionActivity*>(user)->buildListScreen(screen);
+}
+
+void WifiSelectionActivity::buildListScreen(UiApp::ScreenType& screen) {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+  // Content below the header + MAC sub-band, above the legend line.
+  screen.setContentMargin(fui::Insets{
+      static_cast<int16_t>(safe.y + metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight +
+                           metrics.verticalSpacing),
+      static_cast<int16_t>(renderer.getScreenWidth() - (safe.x + safe.width)),
+      static_cast<int16_t>(renderer.getScreenHeight() - (safe.y + safe.height) + metrics.verticalSpacing * 2),
+      static_cast<int16_t>(safe.x)});
+
   if (networks.empty()) {
-    // No networks found or scan failed
+    screen.centeredText(tr(STR_NO_NETWORKS), screen.theme().bodyText);
+    return;
+  }
+
+  // Per-render owned status strings ("+ * ||||"); items point into them for
+  // the draw only.
+  std::vector<std::string> statuses(networks.size());
+  std::vector<fui::ListItem> items;
+  items.reserve(networks.size());
+  for (size_t i = 0; i < networks.size(); i++) {
+    const auto& network = networks[i];
+    if (!network.isHiddenPlaceholder) {
+      statuses[i] = std::string(network.hasSavedPassword ? "+ " : "") + (network.isEncrypted ? "* " : "") +
+                    getSignalStrengthIndicator(network.rssi);
+    }
+    fui::ListItem item;
+    item.label = network.isHiddenPlaceholder ? tr(STR_ADD_HIDDEN_NETWORK) : network.ssid.c_str();
+    if (!statuses[i].empty()) item.value = statuses[i].c_str();
+    item.actionValue = static_cast<int16_t>(i);
+    items.push_back(item);
+  }
+
+  fui::ListProps props;
+  props.items = items.data();
+  props.count = static_cast<uint16_t>(items.size());
+  props.selectedIndex = static_cast<int16_t>(selectedNetworkIndex);
+  props.action = ACTION_ROW;
+  props.inputMask = fui::InputTouch;  // physical buttons stay in loop()
+  props.valueInset = 8;               // air between the signal bars and the row edge
+  const auto rows = configureUiList(props, screen.theme(), screen.body());
+  visibleRows = rows > 0 ? rows : 1;
+  topIndex = scrollListBy(topIndex, 0, visibleRows, static_cast<int>(networks.size()));  // clamp to range
+  props.topIndex = static_cast<uint16_t>(topIndex);
+  screen.list(props);
+}
+
+void WifiSelectionActivity::renderNetworkList(const Rect* screen, const ThemeMetrics* metrics) {
+  uiReady = false;
+  app.render();
+  uiReady = true;
+  if (networks.empty()) {
+    // Below the centered "no networks" line the app drew.
     const auto height = renderer.getLineHeight(UI_10_FONT_ID);
     const auto top = screen->y + (screen->height - height) / 2;
-    UITheme::drawCenteredText(renderer, *screen, UI_10_FONT_ID, top, tr(STR_NO_NETWORKS));
     UITheme::drawCenteredText(renderer, *screen, SMALL_FONT_ID, top + height + 10, tr(STR_PRESS_OK_SCAN));
-  } else {
-    int contentTop =
-        screen->y + metrics->topPadding + metrics->headerHeight + metrics->tabBarHeight + metrics->verticalSpacing;
-    int contentHeight = screen->height - contentTop - metrics->verticalSpacing * 2;
-    GUI.drawList(
-        renderer, Rect{screen->x, contentTop, screen->width, contentHeight}, static_cast<int>(networks.size()),
-        selectedNetworkIndex,
-        [this](int index) {
-          const auto& network = networks[index];
-          return network.isHiddenPlaceholder ? std::string(tr(STR_ADD_HIDDEN_NETWORK)) : network.ssid;
-        },
-        nullptr, nullptr,
-        [this](int index) {
-          const auto& network = networks[index];
-          if (network.isHiddenPlaceholder) {
-            return std::string();
-          }
-          return std::string(network.hasSavedPassword ? "+ " : "") + (network.isEncrypted ? "* " : "") +
-                 getSignalStrengthIndicator(network.rssi);
-        });
   }
 
   GUI.drawHelpText(renderer,

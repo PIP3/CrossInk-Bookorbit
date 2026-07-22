@@ -61,6 +61,7 @@ class XtcReaderActivity final : public Activity {
   void openReadingStats();
   void deleteBookStats();
   void deleteBookCache();
+  void openReaderMenu();
   void onReaderMenuConfirm(int action);
   bool executeLongPressBackAction();
 
@@ -73,6 +74,14 @@ class XtcReaderActivity final : public Activity {
   void render(RenderLock&&) override;
   bool isReaderActivity() const override { return true; }
   bool canSnapshotForSleepOverlay() const override { return true; }
+  bool handlesReaderPowerSettingsOverride() const override { return true; }
+  bool openReaderSettingsMenu() override {
+    if (!xtc) {
+      return false;
+    }
+    openReaderMenu();
+    return true;
+  }
   std::string getCurrentBookPath() const override { return xtc ? xtc->getPath() : std::string{}; }
 
   // Renders the last saved page to the frame buffer without flushing to display.

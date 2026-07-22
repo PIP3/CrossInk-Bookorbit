@@ -22,6 +22,7 @@ class DictionaryDefinitionActivity final : public Activity {
   // showLookupButton=true:
   //   Confirm = enter word-select mode on the definition text (Look Up Word).
   //   Back (short press) = return to caller (isCancelled=true).
+  //   Touch Back gesture = exit the lookup flow and return to the reader.
   //   Back (long press, >= LONG_PRESS_MS) = Done — exit to reader (isCancelled=false).
   // showLookupButton=false:
   //   Back/Confirm both return to caller (isCancelled=true). Unchanged from old behaviour.
@@ -144,6 +145,9 @@ class DictionaryDefinitionActivity final : public Activity {
   void wrapPlain();
   void extractWordsFromLayout();
   void openDictionarySwitch();
+  bool showTouchDictionarySwitch() const;
+  int dictionaryFooterHeight() const;
+  bool dictionarySwitchButtonContains(int x, int y) const;
   bool hasModalBackground() const { return backgroundContext_ && backgroundRender_; }
   void sizeModalForCurrentPage();
   void drawModalFrame() const;

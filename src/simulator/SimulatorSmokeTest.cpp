@@ -53,13 +53,15 @@ class SimulatorSmokeTest {
   }
 
  private:
-  enum class ScriptActionType : uint8_t { Press, Release, Render };
+  enum class ScriptActionType : uint8_t { Press, Release, TouchDown, TouchMove, TouchRelease, AssertActivity, Render };
 
   struct ScriptAction {
     ScriptActionType type;
     MappedInputManager::Button button;
     const char* label;
     int settleFrames;
+    int x;
+    int y;
   };
 
   SmokeStep step = SmokeStep::Start;
@@ -207,15 +209,32 @@ class SimulatorSmokeTest {
     }
   }
 
-  static ScriptAction press(MappedInputManager::Button button) { return {ScriptActionType::Press, button, nullptr, 0}; }
+  static ScriptAction press(MappedInputManager::Button button) {
+    return {ScriptActionType::Press, button, nullptr, 0, 0, 0};
+  }
 
   static ScriptAction release(MappedInputManager::Button button) {
-    return {ScriptActionType::Release, button, nullptr, 0};
+    return {ScriptActionType::Release, button, nullptr, 0, 0, 0};
   }
 
   static ScriptAction render(const char* label, int framesToSettle = 3) {
-    return {ScriptActionType::Render, MappedInputManager::Button::Back, label, framesToSettle};
+    return {ScriptActionType::Render, MappedInputManager::Button::Back, label, framesToSettle, 0, 0};
   }
+
+#if CROSSINK_APP_CAP_TOUCH
+  static ScriptAction touchDown(const int x, const int y) {
+    return {ScriptActionType::TouchDown, MappedInputManager::Button::Back, nullptr, 0, x, y};
+  }
+  static ScriptAction touchMove(const int x, const int y) {
+    return {ScriptActionType::TouchMove, MappedInputManager::Button::Back, nullptr, 0, x, y};
+  }
+  static ScriptAction touchRelease(const int x, const int y) {
+    return {ScriptActionType::TouchRelease, MappedInputManager::Button::Back, nullptr, 0, x, y};
+  }
+  static ScriptAction assertActivity(const char* name) {
+    return {ScriptActionType::AssertActivity, MappedInputManager::Button::Back, name, 0, 0, 0};
+  }
+#endif
 
   void addTap(MappedInputManager::Button button) {
     inputScript.push_back(press(button));
@@ -227,6 +246,58 @@ class SimulatorSmokeTest {
     scriptIndex = 0;
 
     const int turns = pageTurnCount();
+#if CROSSINK_APP_CAP_TOUCH
+    if (mappedInputManager.hasTouch()) {
+      const int width = renderer.getScreenWidth();
+      const int height = renderer.getScreenHeight();
+      if (width <= 0 || height <= 0) fail("Touch smoke test has invalid screen dimensions");
+      LOG_INF("SMOKE", "Running touch reader input script with %d page turn(s)", turns);
+      for (int i = 0; i < turns; ++i) {
+        inputScript.push_back(touchDown(width * 5 / 6, height / 2));
+        inputScript.push_back(touchRelease(width * 5 / 6, height / 2));
+        inputScript.push_back(render("Reader after touch page forward", 4));
+      }
+      inputScript.push_back(touchDown(width / 2, 8));
+      inputScript.push_back(touchMove(width / 2, height / 4));
+      inputScript.push_back(touchRelease(width / 2, height / 4));
+      inputScript.push_back(render("Reader Menu opened from touch gesture", 4));
+      inputScript.push_back(assertActivity("EpubReaderMenu"));
+
+      // The menu itself registers its tab and list hit areas through the active
+      // theme. Exercise both before activating Reader Options from list row 1.
+      const auto& metrics = UITheme::getInstance().getMetrics();
+      const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+      const int tabTop = safe.y + metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight;
+      const int tabHeight = metrics.tabBarHeight * 2;
+      const int listTop = tabTop + tabHeight + metrics.verticalSpacing;
+      const int rowHeight = UITheme::getInstance().getTheme().getListRowStep(false, 2);
+      if (rowHeight <= 0) fail("Touch smoke test has invalid list row height");
+
+      inputScript.push_back(touchDown(safe.x + safe.width / 2, tabTop + tabHeight / 2));
+      inputScript.push_back(touchRelease(safe.x + safe.width / 2, tabTop + tabHeight / 2));
+      inputScript.push_back(render("Reader Menu tab touch navigation", 3));
+      inputScript.push_back(assertActivity("EpubReaderMenu"));
+      inputScript.push_back(touchDown(safe.x + safe.width / 6, tabTop + tabHeight / 2));
+      inputScript.push_back(touchRelease(safe.x + safe.width / 6, tabTop + tabHeight / 2));
+      inputScript.push_back(render("Reader Menu main tab restored", 3));
+      inputScript.push_back(assertActivity("EpubReaderMenu"));
+
+      const int readerOptionsY = listTop + rowHeight + rowHeight / 2;
+      inputScript.push_back(touchDown(safe.x + safe.width / 2, readerOptionsY));
+      inputScript.push_back(touchRelease(safe.x + safe.width / 2, readerOptionsY));
+      inputScript.push_back(render("Reader Options opened by touch list activation", 4));
+      inputScript.push_back(assertActivity("ReaderOptions"));
+
+      const int optionsListTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+      const int optionsStartY = optionsListTop + rowHeight * 4 + rowHeight / 2;
+      inputScript.push_back(touchDown(width / 2, optionsStartY));
+      inputScript.push_back(touchMove(width / 2, optionsListTop + rowHeight / 2));
+      inputScript.push_back(touchRelease(width / 2, optionsListTop + rowHeight / 2));
+      inputScript.push_back(render("Reader Options touch swipe navigation", 3));
+      inputScript.push_back(assertActivity("ReaderOptions"));
+      return;
+    }
+#endif
     for (int i = 0; i < turns; i++) {
       addTap(MappedInputManager::Button::PageForward);
       inputScript.push_back(render("Reader after page forward", 4));
@@ -269,6 +340,24 @@ class SimulatorSmokeTest {
         break;
       case ScriptActionType::Release:
         mappedInputManager.simulatorInjectRelease(action.button);
+        break;
+      case ScriptActionType::TouchDown:
+#if CROSSINK_APP_CAP_TOUCH
+        mappedInputManager.simulatorInjectTouchDown(action.x, action.y);
+#endif
+        break;
+      case ScriptActionType::TouchMove:
+#if CROSSINK_APP_CAP_TOUCH
+        mappedInputManager.simulatorInjectTouchMove(action.x, action.y);
+#endif
+        break;
+      case ScriptActionType::TouchRelease:
+#if CROSSINK_APP_CAP_TOUCH
+        mappedInputManager.simulatorInjectTouchRelease(action.x, action.y);
+#endif
+        break;
+      case ScriptActionType::AssertActivity:
+        if (!activityManager.hasActivityNamed(action.label)) fail("Expected activity: %s", action.label);
         break;
       case ScriptActionType::Render:
         queueStep(action.label, SmokeStep::ReaderInput, action.settleFrames);

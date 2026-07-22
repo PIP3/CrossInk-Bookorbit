@@ -22,12 +22,46 @@
 #include "SdCardFontSystem.h"
 #include "SilentRestart.h"
 #include "activities/ActivityManager.h"
+#include "activities/home/RecentBookProgress.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "network/WifiUtils.h"
 
 namespace {
+constexpr int RESULT_LOCAL_PAGE_Y_OFFSET = 200;
+constexpr int RESULT_ACTION_MARGIN_TOP = 20;
+constexpr int RESULT_ACTION_HEIGHT = 48;
+constexpr int RESULT_ACTION_GAP = 10;
+constexpr int RESULT_NON_TOUCH_ACTION_MARGIN_TOP = 8;
+constexpr int RESULT_NON_TOUCH_ACTION_HEIGHT = 40;
+constexpr int RESULT_NON_TOUCH_ACTION_GAP = 8;
+
+struct ResultActionLayout {
+  Rect buttons[2];
+  int rowStep;
+  int rowHeight;
+};
+
+ResultActionLayout resultActionLayout(const Rect& screen, const ThemeMetrics& metrics, const int contentTop,
+                                      const int lineHeight, const bool hasTouch) {
+  const int buttonX = screen.x + metrics.contentSidePadding;
+  const int buttonWidth = std::max(1, screen.width - metrics.contentSidePadding * 2);
+  const int buttonHeight = hasTouch ? RESULT_ACTION_HEIGHT : RESULT_NON_TOUCH_ACTION_HEIGHT;
+  const int buttonGap = hasTouch ? RESULT_ACTION_GAP : RESULT_NON_TOUCH_ACTION_GAP;
+  const int marginTop = hasTouch ? RESULT_ACTION_MARGIN_TOP : RESULT_NON_TOUCH_ACTION_MARGIN_TOP;
+  const int desiredButtonY = contentTop + RESULT_LOCAL_PAGE_Y_OFFSET + lineHeight + marginTop;
+  const int reservedBottom = hasTouch ? metrics.verticalSpacing : metrics.buttonHintsHeight + metrics.verticalSpacing;
+  const int latestButtonY = screen.y + screen.height - reservedBottom - buttonHeight * 2 - buttonGap;
+  const int firstButtonY = std::min(desiredButtonY, latestButtonY);
+  return {
+      {Rect{buttonX, firstButtonY, buttonWidth, buttonHeight},
+       Rect{buttonX, firstButtonY + buttonHeight + buttonGap, buttonWidth, buttonHeight}},
+      buttonHeight + buttonGap,
+      buttonHeight,
+  };
+}
+
 std::string calculateDocumentHashForMethod(const std::string& path, const DocumentMatchMethod method) {
   return method == DocumentMatchMethod::FILENAME ? KOReaderDocumentId::calculateFromFilename(path)
                                                  : KOReaderDocumentId::calculate(path);
@@ -136,6 +170,7 @@ void KOReaderSyncActivity::saveProgressAndReturn(const CrossPointPosition& posit
     requestUpdate(true);
     return;
   }
+  RecentBookProgress::saveCachedEpubPercent(*epub, position.spineIndex, position.pageNumber, pageCount);
   returnToReader();
 }
 
@@ -633,24 +668,23 @@ void KOReaderSyncActivity::render(RenderLock&&) {
     char localPageStr[64];
     snprintf(localPageStr, sizeof(localPageStr), tr(STR_PAGE_TOTAL_OVERALL_FORMAT), currentPage + 1, totalPagesInSpine,
              localProgress.percentage * 100);
-    renderer.drawText(UI_10_FONT_ID, screen.x + metrics.contentSidePadding, top + 200, localPageStr);
+    renderer.drawText(UI_10_FONT_ID, screen.x + metrics.contentSidePadding, top + RESULT_LOCAL_PAGE_Y_OFFSET,
+                      localPageStr);
 
-    const int optionY = top + 230;
-    const int optionHeight = 30;
-
-    // Apply option
-    if (selectedOption == 0) {
-      renderer.fillRect(screen.x, optionY - 2, screen.width - 1, optionHeight);
+    const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
+    const auto actions = resultActionLayout(screen, metrics, top, lineHeight, mappedInput.hasTouch());
+    const char* actionLabels[] = {tr(STR_APPLY_REMOTE), tr(STR_UPLOAD_LOCAL)};
+    for (int option = 0; option < 2; ++option) {
+      const Rect& button = actions.buttons[option];
+      const bool selected = selectedOption == option;
+      if (selected) {
+        renderer.fillRect(button.x, button.y, button.width, button.height);
+      }
+      renderer.drawRect(button.x, button.y, button.width, button.height, true);
+      const int textX = button.x + (button.width - renderer.getTextWidth(UI_10_FONT_ID, actionLabels[option])) / 2;
+      const int textY = button.y + (button.height - lineHeight) / 2;
+      renderer.drawText(UI_10_FONT_ID, textX, textY, actionLabels[option], !selected);
     }
-    renderer.drawText(UI_10_FONT_ID, screen.x + metrics.contentSidePadding, optionY, tr(STR_APPLY_REMOTE),
-                      selectedOption != 0);
-
-    // Upload option
-    if (selectedOption == 1) {
-      renderer.fillRect(screen.x, optionY + optionHeight - 2, screen.width - 1, optionHeight);
-    }
-    renderer.drawText(UI_10_FONT_ID, screen.x + metrics.contentSidePadding, optionY + optionHeight,
-                      tr(STR_UPLOAD_LOCAL), selectedOption != 1);
 
     // Bottom button hints
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
@@ -716,6 +750,38 @@ void KOReaderSyncActivity::loop() {
   }
 
   if (state == SHOWING_RESULT) {
+    auto chooseSelected = [this] {
+      if (selectedOption == 0) {
+        saveProgressAndReturn(remotePosition);
+      } else if (selectedOption == 1) {
+        performUpload();
+      }
+    };
+
+    {
+      const auto& metrics = UITheme::getInstance().getMetrics();
+      const Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+      const int top = screen.y + metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+      const auto actions =
+          resultActionLayout(screen, metrics, top, renderer.getLineHeight(UI_10_FONT_ID), mappedInput.hasTouch());
+      int touchedOption = -1;
+      const auto touch =
+          mappedInput.rowTouch(touchedOption, actions.buttons[0].y, actions.rowStep, 2, actions.buttons[0].x,
+                               actions.buttons[0].x + actions.buttons[0].width, actions.rowHeight);
+      if (touch == MappedInputManager::RowTouch::Down) {
+        if (selectedOption != touchedOption) {
+          selectedOption = touchedOption;
+          requestUpdate();
+        }
+        return;
+      }
+      if (touch == MappedInputManager::RowTouch::Tap) {
+        selectedOption = touchedOption;
+        chooseSelected();
+        return;
+      }
+    }
+
     // Navigate options
     if (mappedInput.wasReleased(MappedInputManager::Button::Up) ||
         mappedInput.wasReleased(MappedInputManager::Button::Left)) {

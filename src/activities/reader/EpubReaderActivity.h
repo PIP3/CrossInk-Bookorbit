@@ -120,6 +120,7 @@ class EpubReaderActivity final : public Activity {
   bool longPowerButtonHandled = false;
   bool sideButtonLongPressHandled = false;
   bool frontButtonLongPressHandled = false;
+  bool touchDictionaryLookupHandled = false;
   int pageLoadRetryCount = 0;
   enum class BookmarkFeedbackType : uint8_t {
     Added,
@@ -281,7 +282,9 @@ class EpubReaderActivity final : public Activity {
   bool executeShortPowerButtonAction();
   bool executeLongPowerButtonAction();
   void handleClippingJump(const ClippingJumpResult& clipping);
-  void openWordSelect(bool framebufferContainsPage);
+  bool handleTouchDictionaryLookup();
+  void openWordSelect(bool framebufferContainsPage, int initialTouchX = -1, int initialTouchY = -1,
+                      bool autoLookupInitialWord = false);
   void onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action);
   // Opens the reader menu for the current position (short-press Confirm)
   void openReaderMenu();
@@ -329,6 +332,14 @@ class EpubReaderActivity final : public Activity {
   bool skipLoopDelay() override { return sectionBuildWantsTick(); }
   bool isReaderActivity() const override { return true; }
   bool canSnapshotForSleepOverlay() const override { return true; }
+  bool handlesReaderPowerSettingsOverride() const override { return true; }
+  bool openReaderSettingsMenu() override {
+    if (!epub) {
+      return false;
+    }
+    openReaderMenu();
+    return true;
+  }
   std::string getCurrentBookPath() const override { return epub ? epub->getPath() : std::string{}; }
   void setAutoPageTurnIntervalSeconds(uint16_t seconds);
   uint16_t getAutoPageTurnIntervalSeconds() const;

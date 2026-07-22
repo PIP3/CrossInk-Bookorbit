@@ -66,6 +66,9 @@ const StrId timeLeftNames[TIME_LEFT_ITEMS] = {StrId::STR_HIDE, StrId::STR_CHAPTE
 
 constexpr int XTC_STATUS_BAR_ITEMS = 3;
 const StrId xtcStatusBarNames[XTC_STATUS_BAR_ITEMS] = {StrId::STR_HIDE, StrId::STR_BOTTOM, StrId::STR_TOP};
+constexpr int touchStatusBarSettingsRowHeightScale = 2;
+
+int statusBarSettingsRowHeightScale(const bool hasTouch) { return hasTouch ? touchStatusBarSettingsRowHeightScale : 1; }
 
 int optionCountForItem(const int item) {
   switch (item) {
@@ -220,6 +223,14 @@ void StatusBarSettingsActivity::onExit() { Activity::onExit(); }
 void StatusBarSettingsActivity::loop() {
   if (optionPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
 
+  int touched = -1;
+  if (mappedInput.wasItemTapped(touched) && touched >= 0 && touched < visibleItemCount) {
+    selectedIndex = touched;
+    handleSelection();
+    requestUpdate();
+    return;
+  }
+
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     finishAfterBackPress();
     return;
@@ -317,6 +328,7 @@ void StatusBarSettingsActivity::render(RenderLock&&) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
+  const int rowHeightScale = statusBarSettingsRowHeightScale(mappedInput.hasTouch());
 
   const auto orientation = renderer.getOrientation();
   const bool isInverted = orientation == GfxRenderer::Orientation::PortraitInverted;
@@ -346,7 +358,8 @@ void StatusBarSettingsActivity::render(RenderLock&&) {
       renderer, Rect{contentX, contentTop, contentWidth, contentHeight}, visibleItemCount,
       static_cast<int>(selectedIndex),
       [this](int index) { return std::string(I18N.get(menuNames[itemForVisibleIndex(index)])); }, nullptr, nullptr,
-      [this](int index) -> std::string { return valueTextForItem(itemForVisibleIndex(index)); }, true);
+      [this](int index) -> std::string { return valueTextForItem(itemForVisibleIndex(index)); }, true, nullptr, nullptr,
+      rowHeightScale);
   // Draw button hints
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4, true);
 

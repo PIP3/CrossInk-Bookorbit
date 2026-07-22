@@ -21,7 +21,9 @@ class DictionaryWordSelectActivity final : public Activity {
   explicit DictionaryWordSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                         std::unique_ptr<Page> page, int marginLeft, int marginTop,
                                         const std::string& cachePath, const std::string& nextPageFirstWord = "",
-                                        bool framebufferContainsPage = false, int reservedBottomHeight = 0)
+                                        bool framebufferContainsPage = false, int reservedBottomHeight = 0,
+                                        int initialTouchX = -1, int initialTouchY = -1,
+                                        bool autoLookupInitialWord = false)
       : Activity("DictionaryWordSelect", renderer, mappedInput),
         page(std::move(page)),
         marginLeft(marginLeft),
@@ -30,7 +32,10 @@ class DictionaryWordSelectActivity final : public Activity {
         nextPageFirstWord(nextPageFirstWord),
         controller(renderer, mappedInput, *this, cachePath),
         framebufferContainsPage_(framebufferContainsPage),
-        reservedBottomHeight_(reservedBottomHeight) {}
+        reservedBottomHeight_(reservedBottomHeight),
+        initialTouchX_(initialTouchX),
+        initialTouchY_(initialTouchY),
+        autoLookupInitialWord_(autoLookupInitialWord) {}
 
   void onEnter() override;
   void onExit() override;
@@ -70,6 +75,10 @@ class DictionaryWordSelectActivity final : public Activity {
   // fast path so the entry frame matches the menu→lookup visual state.
   int reservedBottomHeight_ = 0;
   bool ignoreInitialBackRelease_ = false;
+  int initialTouchX_ = -1;
+  int initialTouchY_ = -1;
+  bool autoLookupInitialWord_ = false;
+  bool touchDragLookup_ = false;
 
   bool skipLoopDelay() override { return controller.skipLoopDelay(); }
 

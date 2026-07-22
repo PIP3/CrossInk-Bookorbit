@@ -27,6 +27,7 @@
 
 static constexpr char kBullet[] = "- ";
 static constexpr const char kEtymologyTreeMarker[] = "Etymology tree";
+static constexpr int kDictionarySwitchTouchHeight = 56;
 
 static bool dictionaryPageButtonTriggered(MappedInputManager& mappedInput, bool previous) {
   const bool usePress = SETTINGS.sideButtonLongPress == CrossPointSettings::SIDE_LONG_PRESS::SIDE_LONG_OFF;
@@ -326,6 +327,23 @@ int DictionaryDefinitionActivity::getLineHeight() const {
   return static_cast<int>(renderer.getLineHeight(getDefinitionFontId()) * SETTINGS.getReaderLineCompression());
 }
 
+bool DictionaryDefinitionActivity::showTouchDictionarySwitch() const {
+  return hasModalBackground() && showLookupButton && mappedInput.hasTouch();
+}
+
+int DictionaryDefinitionActivity::dictionaryFooterHeight() const {
+  if (!hasModalBackground()) return 0;
+
+  const auto metrics = UITheme::getInstance().getMetrics();
+  const int dictionaryNameHeight = renderer.getLineHeight(UI_10_FONT_ID) + metrics.optionPopupTitleGap;
+  return dictionaryNameHeight + (showTouchDictionarySwitch() ? kDictionarySwitchTouchHeight : 0);
+}
+
+bool DictionaryDefinitionActivity::dictionarySwitchButtonContains(const int x, const int y) const {
+  const int buttonY = modalY_ + modalHeight_ - kDictionarySwitchTouchHeight;
+  return x >= modalX_ && x < modalX_ + modalWidth_ && y >= buttonY && y < buttonY + kDictionarySwitchTouchHeight;
+}
+
 // ---------------------------------------------------------------------------
 // Layout helpers — shared setup
 // ---------------------------------------------------------------------------
@@ -368,8 +386,7 @@ void DictionaryDefinitionActivity::wrapText() {
     bodyStartY = hintGutterHeight + metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   }
 
-  const int footerHeight =
-      hasModalBackground() ? renderer.getLineHeight(UI_10_FONT_ID) + metrics.optionPopupTitleGap : 0;
+  const int footerHeight = dictionaryFooterHeight();
   const int bodyBottom = hasModalBackground() ? modalY_ + modalHeight_ - metrics.optionPopupInnerPadding - footerHeight
                                               : renderer.getScreenHeight() - bottomArea;
   linesPerPage = (bodyBottom - bodyStartY) / getLineHeight();
@@ -435,7 +452,7 @@ void DictionaryDefinitionActivity::sizeModalForCurrentPage() {
       renderer.getScreenHeight() - metrics.buttonHintsHeight - metrics.verticalSpacing - dialogMargin * 2;
   const int visibleLines = std::max(1, static_cast<int>(layoutLines.size()));
   const int titleLineHeight = renderer.getLineHeight(UI_12_FONT_ID);
-  const int footerHeight = renderer.getLineHeight(UI_10_FONT_ID) + metrics.optionPopupTitleGap;
+  const int footerHeight = dictionaryFooterHeight();
   const int contentHeight = metrics.optionPopupInnerPadding * 2 + titleLineHeight + metrics.optionPopupTitleGap +
                             visibleLines * getLineHeight() + footerHeight;
 
@@ -806,6 +823,13 @@ void DictionaryDefinitionActivity::loop() {
       requestUpdate();
     }
 
+    int touchX = 0;
+    int touchY = 0;
+    if (mappedInput.wasScreenTapped(touchX, touchY) && navigator.selectWordAtPoint(touchX, touchY, getLineHeight())) {
+      requestUpdate();
+      return;
+    }
+
     if (controller.handleMultiSelect(navigator)) return;
 
     if (!navigator.isMultiSelecting()) {
@@ -823,13 +847,28 @@ void DictionaryDefinitionActivity::loop() {
   }
 
   // --- View mode ---
+  int touchX = 0;
+  int touchY = 0;
+  if (showTouchDictionarySwitch() && mappedInput.wasScreenTapped(touchX, touchY) &&
+      dictionarySwitchButtonContains(touchX, touchY)) {
+    openDictionarySwitch();
+    return;
+  }
+
   if (showLookupButton && mappedInput.wasReleased(MappedInputManager::Button::Left)) {
     openDictionarySwitch();
     return;
   }
 
-  const bool prevPage = dictionaryPageButtonTriggered(mappedInput, true);
-  const bool nextPage = dictionaryPageButtonTriggered(mappedInput, false);
+  if (showLookupButton && mappedInput.hasTouch() && mappedInput.wasLeftEdgeGesture()) {
+    setResult(ActivityResult{});
+    finish();
+    return;
+  }
+
+  const auto swipe = mappedInput.wasSwipe();
+  const bool prevPage = dictionaryPageButtonTriggered(mappedInput, true) || swipe == MappedInputManager::SwipeDir::Down;
+  const bool nextPage = dictionaryPageButtonTriggered(mappedInput, false) || swipe == MappedInputManager::SwipeDir::Up;
 
   if (prevPage && currentPage > 0) {
     currentPage--;
@@ -978,12 +1017,26 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
   if (hasModalBackground() && !dictionaryName_.empty()) {
     const int innerPadding = metrics.optionPopupInnerPadding;
     const int footerLineHeight = renderer.getLineHeight(UI_10_FONT_ID);
-    const int footerY = modalY_ + modalHeight_ - innerPadding - footerLineHeight;
+    const int switchButtonHeight = showTouchDictionarySwitch() ? kDictionarySwitchTouchHeight : 0;
+    const int footerY = modalY_ + modalHeight_ - switchButtonHeight - innerPadding - footerLineHeight;
     const int separatorY = footerY - metrics.optionPopupTitleGap / 2;
+    const int footerBottom = modalY_ + modalHeight_ - switchButtonHeight;
+    const int dictionaryNameY = separatorY + (footerBottom - separatorY - footerLineHeight) / 2;
     renderer.drawLine(modalX_, separatorY, modalX_ + modalWidth_, separatorY, true);
     const auto visibleName =
         renderer.truncatedText(UI_10_FONT_ID, dictionaryName_.c_str(), modalWidth_ - innerPadding * 2);
-    renderer.drawText(UI_10_FONT_ID, modalX_ + innerPadding, footerY, visibleName.c_str());
+    renderer.drawText(UI_10_FONT_ID, modalX_ + innerPadding, dictionaryNameY, visibleName.c_str());
+  }
+
+  if (!isWordSelectMode && showTouchDictionarySwitch()) {
+    const Rect buttonRect{modalX_, modalY_ + modalHeight_ - kDictionarySwitchTouchHeight, modalWidth_,
+                          kDictionarySwitchTouchHeight};
+    renderer.drawLine(buttonRect.x, buttonRect.y, buttonRect.x + buttonRect.width, buttonRect.y, true);
+    const char* label = tr(STR_SWITCH_DICTIONARY);
+    const int labelX =
+        buttonRect.x + (buttonRect.width - renderer.getTextWidth(UI_12_FONT_ID, label, EpdFontFamily::BOLD)) / 2;
+    const int labelY = buttonRect.y + (buttonRect.height - renderer.getLineHeight(UI_12_FONT_ID)) / 2;
+    renderer.drawText(UI_12_FONT_ID, labelX, labelY, label, true, EpdFontFamily::BOLD);
   }
 
   // Word-select mode: overlay highlighted word(s) and prime snapshot for next frame.

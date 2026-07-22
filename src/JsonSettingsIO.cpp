@@ -213,7 +213,6 @@ bool JsonSettingsIO::saveSettings(const CrossPointSettings& s, const char* path)
   // Separate from the legacy clock sync flag because older builds synced time
   // only, leaving the RTC date registers at their placeholder/default value.
   doc["clockDateHasBeenSynced"] = s.clockDateHasBeenSynced;
-
   String json;
   serializeJson(doc, json);
   return Storage.writeFile(path, json);

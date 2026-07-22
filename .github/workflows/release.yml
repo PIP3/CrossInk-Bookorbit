@@ -62,7 +62,7 @@ jobs:
       - name: Build CrossInk
         env:
           CROSSPOINT_RELEASE_VERSION: ${{ env.RELEASE_VERSION }}
-        run: pio run -e tiny -e xlarge
+        run: pio run -e tiny -e xlarge -e sticky
 
       - name: Generate release catalog
         run: |
@@ -71,6 +71,7 @@ jobs:
             --repo "${{ github.repository }}" \
             --firmware ".pio/build/tiny/firmware-tiny-v${{ env.RELEASE_VERSION }}.bin" \
             --firmware ".pio/build/xlarge/firmware-xlarge-v${{ env.RELEASE_VERSION }}.bin" \
+            --firmware ".pio/build/sticky/firmware-sticky-v${{ env.RELEASE_VERSION }}.bin" \
             --output ".pio/build/catalog"
 
       - name: Publish catalog to GitHub Pages source
@@ -115,3 +116,4 @@ jobs:
           files: |
             .pio/build/tiny/firmware-tiny-v${{ env.RELEASE_VERSION }}.bin
             .pio/build/xlarge/firmware-xlarge-v${{ env.RELEASE_VERSION }}.bin
+            .pio/build/sticky/firmware-sticky-v${{ env.RELEASE_VERSION }}.bin

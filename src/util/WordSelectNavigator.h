@@ -95,6 +95,10 @@ class WordSelectNavigator {
   // Does NOT consume Confirm or Back.
   bool handleNavigation(const MappedInputManager& input, const GfxRenderer& renderer);
 
+  // Move the cursor to the word under a screen tap. Returns true only when the
+  // highlighted word changed.
+  bool selectWordAtPoint(int x, int y, int lineHeight, bool* hit = nullptr);
+
   // Currently highlighted word. nullptr if the word list is empty.
   const WordInfo* getSelected() const;
 
@@ -120,6 +124,14 @@ class WordSelectNavigator {
   enum class MultiSelectAction { None, Consumed, PhraseReady, ExitedMultiSelect, EnteredMultiSelect };
 
   bool isMultiSelecting() const { return inMultiSelectMode; }
+
+  // Touch lookup starts with the held word as the anchor, then moves the
+  // cursor with the live contact position until release.
+  bool beginTouchMultiSelect();
+  std::string finishTouchMultiSelect();
+
+  // Draw a small caret beside the active end of the selection as a drag cue.
+  void setTouchDragCursorVisible(bool visible) { touchDragCursorVisible = visible; }
 
   // Process Confirm/Back for multi-select state machine.
   // Returns PhraseReady when a phrase range is confirmed (raw phrase in outPhrase).
@@ -229,6 +241,7 @@ class WordSelectNavigator {
   bool inMultiSelectMode = false;
   bool confirmReleaseConsumed = false;
   int anchorFlatIndex = -1;
+  bool touchDragCursorVisible = false;
 
   int findClosestWord(int targetRow) const;
   int findClosestWordFromX(int targetRow, int refCenterX) const;
@@ -246,6 +259,7 @@ class WordSelectNavigator {
   // Single-word highlight draw. Used by both renderHighlight (for each word it
   // chooses to highlight) and renderHighlightDifferential.
   void drawSingleHighlight(const GfxRenderer& renderer, int lineHeight, int wordIndex) const;
+  void drawTouchDragCursor(const GfxRenderer& renderer, int lineHeight, int wordIndex) const;
 
   // Draw the hyphenated continuation partner(s) of w when they fall outside [lo, hi].
   // No-op when w is nullptr or w has no continuation links.

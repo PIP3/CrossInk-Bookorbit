@@ -1,5 +1,53 @@
 #include "NearbyBookPositionSyncActivity.h"
 
+#include <GfxRenderer.h>
+#include <I18n.h>
+
+#include <algorithm>
+
+#include "components/UITheme.h"
+#include "fontIds.h"
+
+namespace {
+
+constexpr int TOUCH_ACTION_HEIGHT = 48;
+constexpr int TOUCH_ACTION_GAP = 10;
+
+struct TouchActionLayout {
+  Rect buttons[2];
+  int rowStep;
+  int rowHeight;
+};
+
+TouchActionLayout touchActionLayout(const Rect& screen, const ThemeMetrics& metrics) {
+  const int buttonX = screen.x + metrics.contentSidePadding;
+  const int buttonWidth = std::max(1, screen.width - metrics.contentSidePadding * 2);
+  const int firstButtonY =
+      screen.y + screen.height - metrics.verticalSpacing - TOUCH_ACTION_HEIGHT * 2 - TOUCH_ACTION_GAP;
+  return {
+      {Rect{buttonX, firstButtonY, buttonWidth, TOUCH_ACTION_HEIGHT},
+       Rect{buttonX, firstButtonY + TOUCH_ACTION_HEIGHT + TOUCH_ACTION_GAP, buttonWidth, TOUCH_ACTION_HEIGHT}},
+      TOUCH_ACTION_HEIGHT + TOUCH_ACTION_GAP,
+      TOUCH_ACTION_HEIGHT,
+  };
+}
+
+void drawTouchActionButtons(GfxRenderer& renderer, const Rect& screen, const ThemeMetrics& metrics,
+                            const char* confirmLabel) {
+  const auto actions = touchActionLayout(screen, metrics);
+  const char* labels[] = {tr(STR_CANCEL), confirmLabel};
+  const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
+  for (int action = 0; action < 2; ++action) {
+    const Rect& button = actions.buttons[action];
+    renderer.drawRect(button.x, button.y, button.width, button.height, true);
+    const int textX = button.x + (button.width - renderer.getTextWidth(UI_10_FONT_ID, labels[action])) / 2;
+    const int textY = button.y + (button.height - lineHeight) / 2;
+    renderer.drawText(UI_10_FONT_ID, textX, textY, labels[action]);
+  }
+}
+
+}  // namespace
+
 #ifdef SIMULATOR
 
 #include <Arduino.h>
@@ -66,6 +114,29 @@ void NearbyBookPositionSyncActivity::onEnter() {
 void NearbyBookPositionSyncActivity::onExit() { Activity::onExit(); }
 
 void NearbyBookPositionSyncActivity::loop() {
+  const bool canShare = state_ == State::READY || state_ == State::SYNCED || state_ == State::ERROR;
+  const bool canApplyReceivedPosition = state_ == State::SHOWING_RESULT && !sourceMode_;
+  if (mappedInput.hasTouch() && (canShare || canApplyReceivedPosition)) {
+    const auto& metrics = UITheme::getInstance().getMetrics();
+    const Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+    const auto actions = touchActionLayout(screen, metrics);
+    int touchedAction = -1;
+    const auto touch =
+        mappedInput.rowTouch(touchedAction, actions.buttons[0].y, actions.rowStep, 2, actions.buttons[0].x,
+                             actions.buttons[0].x + actions.buttons[0].width, actions.rowHeight);
+    if (touch == MappedInputManager::RowTouch::Down) return;
+    if (touch == MappedInputManager::RowTouch::Tap) {
+      if (touchedAction == 0) {
+        returnToReader(true);
+      } else if (canShare) {
+        startSync();
+      } else {
+        applyPeerPosition();
+      }
+      return;
+    }
+  }
+
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     returnToReader(true);
     return;
@@ -135,8 +206,12 @@ void NearbyBookPositionSyncActivity::render(RenderLock&&) {
 
   if (state_ == State::READY || state_ == State::SYNCED || state_ == State::ERROR) {
     renderReady(primary, detail, detailSecondary);
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_NEARBY_POSITION_SHARE_BUTTON), "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4, true);
+    if (mappedInput.hasTouch()) {
+      drawTouchActionButtons(renderer, screen, metrics, tr(STR_NEARBY_POSITION_SHARE_BUTTON));
+    } else {
+      const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_NEARBY_POSITION_SHARE_BUTTON), "", "");
+      GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4, true);
+    }
     renderer.displayBuffer();
     return;
   }
@@ -327,8 +402,12 @@ void NearbyBookPositionSyncActivity::renderComparison() const {
   renderer.drawText(UI_10_FONT_ID, screen.x + metrics.contentSidePadding, optionY, tr(STR_APPLY_NEARBY_POSITION),
                     false);
 
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), "", "");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4, true);
+  if (mappedInput.hasTouch() && !sourceMode_) {
+    drawTouchActionButtons(renderer, screen, metrics, tr(STR_CONFIRM));
+  } else {
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), "", "");
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4, true);
+  }
 }
 
 #else
@@ -358,6 +437,7 @@ void NearbyBookPositionSyncActivity::renderComparison() const {
 #include "SdCardFontSystem.h"
 #include "SilentRestart.h"
 #include "activities/ActivityManager.h"
+#include "activities/home/RecentBookProgress.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -656,6 +736,30 @@ void NearbyBookPositionSyncActivity::onExit() {
 
 void NearbyBookPositionSyncActivity::loop() {
   processEvents();
+
+  const bool canShare = state_ == State::READY || state_ == State::SYNCED || state_ == State::ERROR;
+  const bool canApplyReceivedPosition = state_ == State::SHOWING_RESULT && !sourceMode_;
+  if (mappedInput.hasTouch() && (canShare || canApplyReceivedPosition)) {
+    const auto& metrics = UITheme::getInstance().getMetrics();
+    const Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+    const auto actions = touchActionLayout(screen, metrics);
+    int touchedAction = -1;
+    const auto touch =
+        mappedInput.rowTouch(touchedAction, actions.buttons[0].y, actions.rowStep, 2, actions.buttons[0].x,
+                             actions.buttons[0].x + actions.buttons[0].width, actions.rowHeight);
+    if (touch == MappedInputManager::RowTouch::Down) return;
+    if (touch == MappedInputManager::RowTouch::Tap) {
+      if (touchedAction == 0) {
+        returnToReader(true);
+      } else if (canShare) {
+        startSync();
+      } else if (applyPeerPosition()) {
+        sendAck(peerSourceMac_.data());
+        returnToReader();
+      }
+      return;
+    }
+  }
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     returnToReader(true);
@@ -1050,6 +1154,7 @@ bool NearbyBookPositionSyncActivity::applyPeerPosition() {
     setError(tr(STR_SAVE_PROGRESS_FAILED));
     return false;
   }
+  RecentBookProgress::saveCachedEpubPercent(*epub_, peerCrossPoint_.spineIndex, peerCrossPoint_.pageNumber, pageCount);
   setState(State::SYNCED);
   return true;
 }
@@ -1148,8 +1253,12 @@ void NearbyBookPositionSyncActivity::render(RenderLock&&) {
 
   if (state_ == State::READY || state_ == State::SYNCED || state_ == State::ERROR) {
     renderReady(primary, detail, detailSecondary);
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_NEARBY_POSITION_SHARE_BUTTON), "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4, true);
+    if (mappedInput.hasTouch()) {
+      drawTouchActionButtons(renderer, screen, metrics, tr(STR_NEARBY_POSITION_SHARE_BUTTON));
+    } else {
+      const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_NEARBY_POSITION_SHARE_BUTTON), "", "");
+      GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4, true);
+    }
     renderer.displayBuffer();
     return;
   }
@@ -1231,8 +1340,12 @@ void NearbyBookPositionSyncActivity::renderComparison() const {
   renderer.drawText(UI_10_FONT_ID, screen.x + metrics.contentSidePadding, optionY, tr(STR_APPLY_NEARBY_POSITION),
                     false);
 
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), "", "");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4, true);
+  if (mappedInput.hasTouch() && !sourceMode_) {
+    drawTouchActionButtons(renderer, screen, metrics, tr(STR_CONFIRM));
+  } else {
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), "", "");
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4, true);
+  }
 }
 
 #endif

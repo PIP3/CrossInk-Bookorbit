@@ -106,11 +106,28 @@ void XtcReaderActivity::onExit() {
   xtc.reset();
 }
 
+void XtcReaderActivity::openReaderMenu() {
+  const bool hasChapters = xtc->hasChapters() && !xtc->getChapters().empty();
+  pauseReadingStatsTimer("reader_menu");
+  startActivityForResult(
+      std::make_unique<XtcReaderMenuActivity>(renderer, mappedInput, xtc->getTitle(), hasChapters, stats.isCompleted),
+      [this](const ActivityResult& result) {
+        const auto* menu = std::get_if<MenuResult>(&result.data);
+        if (result.isCancelled || menu == nullptr) {
+          resumeReadingStatsTimer("reader_menu_return");
+          requestUpdate();
+          return;
+        }
+        onReaderMenuConfirm(menu->action);
+      });
+}
+
 void XtcReaderActivity::loop() {
   if (!xtc) {
     return;
   }
 
+  const auto touch = ReaderUtils::detectTouchPageTurn(renderer, mappedInput);
   const bool atEndOfBook = currentPage >= xtc->getPageCount();
 
   // While the end screen suggestion menu is showing it owns Confirm/Back/navigation
@@ -138,20 +155,8 @@ void XtcReaderActivity::loop() {
     }
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    const bool hasChapters = xtc->hasChapters() && !xtc->getChapters().empty();
-    pauseReadingStatsTimer("reader_menu");
-    startActivityForResult(
-        std::make_unique<XtcReaderMenuActivity>(renderer, mappedInput, xtc->getTitle(), hasChapters, stats.isCompleted),
-        [this](const ActivityResult& result) {
-          const auto* menu = std::get_if<MenuResult>(&result.data);
-          if (result.isCancelled || menu == nullptr) {
-            resumeReadingStatsTimer("reader_menu_return");
-            requestUpdate();
-            return;
-          }
-          onReaderMenuConfirm(menu->action);
-        });
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) || ReaderUtils::isTouchMenuGesture(mappedInput)) {
+    openReaderMenu();
     return;
   }
 
@@ -172,7 +177,7 @@ void XtcReaderActivity::loop() {
   }
 
   // Short press BACK goes directly to home
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back) &&
+  if (!touch.prev && !touch.next && mappedInput.wasReleased(MappedInputManager::Button::Back) &&
       mappedInput.getHeldTime() < ReaderUtils::GO_HOME_MS) {
     onGoHome();
     return;
@@ -293,8 +298,10 @@ void XtcReaderActivity::loop() {
 
   const bool fromSideBtn = (sidePrev || sideNext) && !(frontPrev || frontNext);
   const bool fromTilt = tiltPrev || tiltNext;
-  const bool prevTriggered = tiltPrev || sidePrev || frontPrev;
-  const bool nextTriggered = tiltNext || sideNext || frontNext;
+  bool prevTriggered = tiltPrev || sidePrev || frontPrev;
+  bool nextTriggered = tiltNext || sideNext || frontNext;
+  prevTriggered = prevTriggered || touch.prev;
+  nextTriggered = nextTriggered || touch.next;
 
   if (!prevTriggered && !nextTriggered) {
     return;
@@ -612,7 +619,7 @@ void XtcReaderActivity::deleteBookStats() {
 void XtcReaderActivity::deleteBookCache() {
   startActivityForResult(
       std::make_unique<ConfirmationActivity>(renderer, mappedInput, confirmationHeading(StrId::STR_DELETE_CACHE),
-                                             xtc ? xtc->getTitle() : std::string{}),
+                                             xtc ? xtc->getTitle() : std::string{}, false, true),
       [this](const ActivityResult& result) {
         if (!result.isCancelled && xtc) {
           bool cacheDeleted = false;
@@ -653,6 +660,8 @@ void XtcReaderActivity::onReaderMenuConfirm(const int action) {
       break;
     case XtcReaderMenuActivity::MenuAction::DELETE_CACHE:
       deleteBookCache();
+      break;
+    case XtcReaderMenuActivity::MenuAction::DISABLE_TOUCHSCREEN:
       break;
   }
 }

@@ -7,6 +7,8 @@
 
 #include "DictionaryDefinitionActivity.h"
 #include "MappedInputManager.h"
+#include "Memory.h"
+#include "activities/util/ConfirmationActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/Dictionary.h"
@@ -39,6 +41,28 @@ void LookedUpWordsActivity::onEnter() {
 void LookedUpWordsActivity::onExit() {
   controller.onExit();
   Activity::onExit();
+}
+
+void LookedUpWordsActivity::showDeleteConfirmation(const bool ignoreInitialConfirmRelease) {
+  if (entries.empty() || selectedIndex < 0 || selectedIndex >= static_cast<int>(entries.size())) return;
+
+  const std::string word = entries[selectedIndex].word;
+  auto confirmation = makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, std::string(tr(STR_DELETE)) + "?",
+                                                              word, ignoreInitialConfirmRelease, true);
+  if (!confirmation) {
+    LOG_ERR("LOOKUP", "OOM: ConfirmationActivity");
+    return;
+  }
+  startActivityForResult(std::move(confirmation), [this](const ActivityResult& result) {
+    if (!result.isCancelled) {
+      LookupHistory::removeRecentAt(cachePath, selectedIndex);
+      entries = LookupHistory::load(cachePath);
+      if (selectedIndex >= static_cast<int>(entries.size())) {
+        selectedIndex = std::max(0, static_cast<int>(entries.size()) - 1);
+      }
+    }
+    requestUpdate();
+  });
 }
 
 void LookedUpWordsActivity::loop() {
@@ -84,36 +108,23 @@ void LookedUpWordsActivity::loop() {
     return;
   }
 
-  // Long press Confirm: enter delete-confirm mode (fire at threshold).
-  if (!deleteConfirmMode && mappedInput.isPressed(MappedInputManager::Button::Confirm) &&
+  // Long press Confirm: open the delete confirmation at the hold threshold.
+  if (mappedInput.isPressed(MappedInputManager::Button::Confirm) &&
       mappedInput.getHeldTime() >= Dictionary::LONG_PRESS_MS) {
-    deleteConfirmMode = true;
-    confirmReleaseConsumed = true;
-    requestUpdate();
+    showDeleteConfirmation(true);
     return;
   }
 
-  if (deleteConfirmMode) {
-    // Consume the Confirm release that follows the threshold-fire.
-    if (confirmReleaseConsumed && mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      confirmReleaseConsumed = false;
-      return;
-    }
-    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      LookupHistory::removeRecentAt(cachePath, selectedIndex);
-      entries = LookupHistory::load(cachePath);
-      deleteConfirmMode = false;
-      if (selectedIndex >= static_cast<int>(entries.size())) {
-        selectedIndex = std::max(0, static_cast<int>(entries.size()) - 1);
-      }
-      requestUpdate();
-      return;
-    }
-    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-      deleteConfirmMode = false;
-      requestUpdate();
-      return;
-    }
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+  const int contentHeight =
+      renderer.getScreenHeight() - metrics.buttonHintsHeight - contentTop - metrics.verticalSpacing;
+  int heldIndex = -1;
+  if (mappedInput.isListItemTouchLongPressed(heldIndex, static_cast<int>(entries.size()), selectedIndex, contentTop,
+                                             contentHeight, false, Dictionary::LONG_PRESS_MS)) {
+    selectedIndex = heldIndex;
+    mappedInput.suppressNextTouchTap();
+    showDeleteConfirmation(false);
     return;
   }
 
@@ -176,16 +187,8 @@ void LookedUpWordsActivity::render(RenderLock&&) {
       [this](int i) { return std::string(glyphFor(entries[i].status)) + " " + entries[i].word; }, nullptr, nullptr,
       nullptr, false);
 
-  if (deleteConfirmMode) {
-    char buf[128];
-    snprintf(buf, sizeof(buf), "%s: %s?", tr(STR_DELETE), entries[selectedIndex].word.c_str());
-    GUI.drawPopup(renderer, buf);
-    const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), tr(STR_DELETE), "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-  } else {
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-  }
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);
 }

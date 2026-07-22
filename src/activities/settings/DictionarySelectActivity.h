@@ -1,6 +1,9 @@
 #pragma once
+#include <FreeInkApp.h>
+#include <FreeInkUIGfxRenderer.h>
 #include <I18n.h>
 
+#include <atomic>
 #include <string>
 #include <vector>
 
@@ -10,11 +13,8 @@
 
 class DictionarySelectActivity final : public Activity {
  public:
-  explicit DictionarySelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                    std::string bookCachePath = "", bool disableCurrentSelection = false)
-      : Activity("DictionarySelect", renderer, mappedInput),
-        bookCachePath(std::move(bookCachePath)),
-        disableCurrentSelection(disableCurrentSelection) {}
+  DictionarySelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string bookCachePath = "",
+                           bool disableCurrentSelection = false);
 
   void onEnter() override;
   void onExit() override;
@@ -51,6 +51,17 @@ class DictionarySelectActivity final : public Activity {
   bool disableCurrentSelection = false;
 
   ButtonNavigator buttonNavigator;
+  using UiApp = freeink::ui::FreeInkApp<20, 4>;
+  freeink::ui::GfxRendererTarget uiTarget;
+  UiApp app;
+  std::atomic<bool> uiReady{false};
+  int visibleRows = 1;
+  int topIndex = 0;
+
+  static void listScreen(UiApp::ScreenType& screen, void* user);
+  static void onRowEvent(const freeink::ui::ActionEvent& event, void* user);
+  void buildListScreen(UiApp::ScreenType& screen);
+  void finishSelection();
 
   // Scans the first available dictionary root directory on the SD card and populates dictFolders.
   void scanDictionaries();

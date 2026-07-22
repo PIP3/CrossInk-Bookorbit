@@ -1130,6 +1130,17 @@ bool Epub::readItemContentsToStream(const std::string& itemHref, Print& out, con
   return ZipFile(filepath).readFileToStream(path.c_str(), out, chunkSize);
 }
 
+std::unique_ptr<ZipFileStreamReader> Epub::openItemContentsStream(const std::string& itemHref,
+                                                                  const size_t chunkSize) const {
+  if (itemHref.empty()) {
+    LOG_DBG("EBP", "Failed to open item stream, empty href");
+    return nullptr;
+  }
+
+  const std::string path = FsHelpers::normalisePath(itemHref);
+  return ZipFile(filepath).openFileStream(path.c_str(), chunkSize);
+}
+
 bool Epub::getItemSize(const std::string& itemHref, size_t* size) const {
   const std::string path = FsHelpers::normalisePath(itemHref);
   return ZipFile(filepath).getInflatedFileSize(path.c_str(), size);

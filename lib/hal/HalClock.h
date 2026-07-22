@@ -1,15 +1,14 @@
 #pragma once
 
 #include <Arduino.h>
-#include <Wire.h>
-
-#include "HalGPIO.h"
+#include <Rtc.h>
 
 class HalClock;
 extern HalClock halClock;  // Singleton
 
 class HalClock {
   bool _available = false;
+  mutable Rtc _sdkRtc;
   mutable uint8_t _cachedHour = 0;
   mutable uint8_t _cachedMinute = 0;
   mutable uint16_t _cachedYear = 2000;
@@ -36,10 +35,10 @@ class HalClock {
     DATE_FORMAT_COUNT
   };
 
-  // Call after gpio.begin() and powerManager.begin() (I2C already initialised for X3)
+  // Call after BoardConfig has selected the active device.
   void begin();
 
-  // True if the DS3231 RTC is present on this device
+  // True if an RTC is present on this device
   bool isAvailable() const { return _available; }
 
   // Get current hour (0-23) and minute (0-59).
@@ -54,7 +53,7 @@ class HalClock {
   bool formatTime(char* buf, size_t bufSize, uint8_t utcOffsetQuarterHoursBiased = 48, bool use12Hour = false) const;
 
   // Returns the raw RTC date/time before any user-configured timezone offset is applied.
-  // The DS3231 is synced in UTC, so callers that need wall-clock local time should apply SETTINGS.clockUtcOffsetQ.
+  // The RTC is synced in UTC, so callers that need wall-clock local time should apply SETTINGS.clockUtcOffsetQ.
   bool getDateTime(uint16_t& year, uint8_t& month, uint8_t& day, uint8_t& hour, uint8_t& minute) const {
     return getDate(year, month, day, hour, minute);
   }
@@ -65,7 +64,7 @@ class HalClock {
   bool formatDate(char* buf, size_t bufSize, uint8_t utcOffsetQuarterHoursBiased = 48,
                   DateFormat dateFormat = MONTH_DAY_YEAR_LONG) const;
 
-  // Sync the DS3231 RTC from an NTP server. Requires WiFi to be connected.
+  // Sync the RTC from an NTP server. Requires WiFi to be connected.
   // Blocks for up to ~5s while waiting for SNTP response.
   // Returns true if the RTC was successfully updated.
   //

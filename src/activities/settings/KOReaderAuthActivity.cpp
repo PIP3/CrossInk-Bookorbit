@@ -129,7 +129,9 @@ void KOReaderAuthActivity::loop() {
       return;
     }
 
-    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    int x = 0;
+    int y = 0;
+    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) || mappedInput.wasScreenTapped(x, y)) {
       finish();
     }
   }

@@ -240,6 +240,52 @@ void BookStatsActivity::exitStatsActivity(const bool viaBack) {
   finish();
 }
 
+bool BookStatsActivity::showNextStatsPage() {
+  if (page == Page::PerBook) {
+    page = Page::ThisDevice;
+    requestUpdate();
+    return true;
+  }
+
+  if (page == Page::ThisDevice && showAllDevicesStats) {
+    page = Page::AllDevices;
+    requestUpdate();
+    return true;
+  }
+
+  return false;
+}
+
+bool BookStatsActivity::showPreviousStatsPage() {
+  if (page == Page::AllDevices) {
+    page = Page::ThisDevice;
+    requestUpdate();
+    return true;
+  }
+
+  if (page == Page::ThisDevice) {
+    page = Page::PerBook;
+    requestUpdate();
+    return true;
+  }
+
+  return false;
+}
+
+bool BookStatsActivity::selectEditFieldFromTouchTarget(const int touchTarget) {
+  if (touchTarget < BookStatsTouchTarget::DateFieldBase ||
+      touchTarget >= BookStatsTouchTarget::DateFieldBase + BookStatsTouchTarget::DateFieldCount) {
+    return false;
+  }
+
+  const int newEditField = touchTarget - BookStatsTouchTarget::DateFieldBase;
+  if (selectedEditField != newEditField) {
+    selectedEditField = newEditField;
+    requestUpdate();
+  }
+  return true;
+}
+
 void BookStatsActivity::loop() {
   if (usesNoRtcSingleScreenLayout()) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
@@ -253,12 +299,30 @@ void BookStatsActivity::loop() {
     return;
   }
 
-  const bool editShortcutPressed = mappedInput.wasPressed(MappedInputManager::Button::Up) ||
-                                   mappedInput.wasPressed(MappedInputManager::Button::Left);
-  const bool moreShortcutPressed = mappedInput.wasPressed(MappedInputManager::Button::Down) ||
-                                   mappedInput.wasPressed(MappedInputManager::Button::Right);
+  const bool upOrLeftPressed = mappedInput.wasPressed(MappedInputManager::Button::Up) ||
+                               mappedInput.wasPressed(MappedInputManager::Button::Left);
+  const bool downOrRightPressed = mappedInput.wasPressed(MappedInputManager::Button::Down) ||
+                                  mappedInput.wasPressed(MappedInputManager::Button::Right);
 
   if (page == Page::EditDates) {
+    int touchedTarget = -1;
+    if (mappedInput.wasItemTouchedDown(touchedTarget) && selectEditFieldFromTouchTarget(touchedTarget)) {
+      return;
+    }
+    int tappedTarget = -1;
+    if (mappedInput.wasItemTapped(tappedTarget)) {
+      if (selectEditFieldFromTouchTarget(tappedTarget)) {
+        return;
+      }
+      if (tappedTarget == BookStatsTouchTarget::DateAdjustUp) {
+        adjustSelectedDateField(1);
+        return;
+      }
+      if (tappedTarget == BookStatsTouchTarget::DateAdjustDown) {
+        adjustSelectedDateField(-1);
+        return;
+      }
+    }
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       saveStats();
       page = Page::PerBook;
@@ -301,23 +365,39 @@ void BookStatsActivity::loop() {
     return;
   }
 
+  const auto swipe = mappedInput.wasSwipe();
+  if ((swipe == MappedInputManager::SwipeDir::Left || swipe == MappedInputManager::SwipeDir::Right) &&
+      showNextStatsPage()) {
+    return;
+  }
+
   if (page == Page::PerBook) {
-    if (hasEditableBook() && editShortcutPressed) {
+    int touchedTarget = -1;
+    if (hasEditableBook() && mappedInput.wasItemTapped(touchedTarget) &&
+        touchedTarget == BookStatsTouchTarget::StartedDaysStat) {
       page = Page::EditDates;
       requestUpdate();
       return;
     }
-    if (moreShortcutPressed) {
-      page = Page::ThisDevice;
+    if (hasEditableBook() && upOrLeftPressed) {
+      page = Page::EditDates;
       requestUpdate();
+      return;
+    }
+    if (downOrRightPressed) {
+      showNextStatsPage();
       return;
     }
     return;
   }
 
-  if (page == Page::ThisDevice && showAllDevicesStats && moreShortcutPressed) {
-    page = Page::AllDevices;
-    requestUpdate();
+  if (upOrLeftPressed) {
+    showPreviousStatsPage();
+    return;
+  }
+
+  if (page == Page::ThisDevice && showAllDevicesStats && downOrRightPressed) {
+    showNextStatsPage();
   }
 }
 

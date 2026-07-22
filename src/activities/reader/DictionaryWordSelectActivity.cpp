@@ -77,10 +77,13 @@ constexpr uint8_t styleToBitMask(EpdFontFamily::Style style) {
   return static_cast<uint8_t>(1u << (static_cast<uint8_t>(style) & 0x03));
 }
 
+constexpr unsigned long TOUCH_LOOKUP_HOLD_MS = 1000;
+
 }  // namespace
 
 void DictionaryWordSelectActivity::onEnter() {
   Activity::onEnter();
+  mappedInput.setReaderTouchscreenOverride(true);
   ignoreInitialBackRelease_ = mappedInput.isPressed(MappedInputManager::Button::Back);
   std::vector<WordSelectNavigator::WordInfo> words;
   std::vector<WordSelectNavigator::Row> rows;
@@ -94,11 +97,29 @@ void DictionaryWordSelectActivity::onEnter() {
   // first deliberate tap and force them to press twice.
   const bool consumeInitialConfirm = mappedInput.isPressed(MappedInputManager::Button::Confirm);
   navigator.load(std::move(words), std::move(rows), std::move(textPool), consumeInitialConfirm);
+  navigator.setTouchDragCursorVisible(mappedInput.hasTouch());
+  bool initialTouchHit = false;
+  if (initialTouchX_ >= 0 && initialTouchY_ >= 0) {
+    navigator.selectWordAtPoint(initialTouchX_, initialTouchY_, renderer.getLineHeight(SETTINGS.getReaderFontId()),
+                                &initialTouchHit);
+  }
+  if (autoLookupInitialWord_) {
+    const auto* selected = initialTouchHit ? navigator.getSelected() : nullptr;
+    if (!selected) {
+      ActivityResult result;
+      result.isCancelled = true;
+      setResult(std::move(result));
+      finish();
+      return;
+    }
+    touchDragLookup_ = navigator.beginTouchMultiSelect();
+  }
   requestUpdate();
 }
 
 void DictionaryWordSelectActivity::onExit() {
   controller.onExit();
+  mappedInput.setReaderTouchscreenOverride(false);
   const auto& sdFonts = renderer.getSdCardFonts();
   auto it = sdFonts.find(SETTINGS.getReaderFontId());
   if (it != sdFonts.end()) it->second->clearPersistentCache();
@@ -427,6 +448,46 @@ void DictionaryWordSelectActivity::loop() {
 
   if (navigator.handleNavigation(mappedInput, renderer)) {
     requestUpdate();
+  }
+
+  if (touchDragLookup_) {
+    int dragX = 0;
+    int dragY = 0;
+    if (mappedInput.isScreenTouchHeld(dragX, dragY)) {
+      if (navigator.selectWordAtPoint(dragX, dragY, renderer.getLineHeight(SETTINGS.getReaderFontId()))) {
+        requestUpdate();
+      }
+      return;
+    }
+
+    touchDragLookup_ = false;
+    controller.lookupOrPopup(navigator.finishTouchMultiSelect());
+    return;
+  }
+
+  int heldTouchX = 0;
+  int heldTouchY = 0;
+  if (mappedInput.isScreenTouchLongPress(heldTouchX, heldTouchY, TOUCH_LOOKUP_HOLD_MS)) {
+    bool touchedWord = false;
+    navigator.selectWordAtPoint(heldTouchX, heldTouchY, renderer.getLineHeight(SETTINGS.getReaderFontId()),
+                                &touchedWord);
+    if (touchedWord && navigator.beginTouchMultiSelect()) {
+      touchDragLookup_ = true;
+      requestUpdate();
+    }
+    return;
+  }
+
+  int touchX = 0;
+  int touchY = 0;
+  bool touchedWord = false;
+  if (mappedInput.wasScreenTapped(touchX, touchY)) {
+    navigator.selectWordAtPoint(touchX, touchY, renderer.getLineHeight(SETTINGS.getReaderFontId()), &touchedWord);
+  }
+  if (touchedWord) {
+    const auto* selected = navigator.getSelected();
+    if (selected) controller.lookupOrPopup(navigator.getLookup(*selected));
+    return;
   }
 
   // Check Back early when not in multi-select mode. This allows exit even when

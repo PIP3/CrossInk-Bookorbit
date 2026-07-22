@@ -23,13 +23,12 @@ class LookedUpWordsActivity final : public Activity {
   std::string cachePath;
   std::vector<LookupHistory::Entry> entries;
   int selectedIndex = 0;
-  bool deleteConfirmMode = false;
-  bool confirmReleaseConsumed = false;
 
   DictionaryLookupController controller;
   ButtonNavigator buttonNavigator;
 
   bool skipLoopDelay() override { return controller.skipLoopDelay(); }
 
+  void showDeleteConfirmation(bool ignoreInitialConfirmRelease);
   static const char* glyphFor(LookupHistory::Status s);
 };

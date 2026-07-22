@@ -80,6 +80,58 @@ struct PageTurnResult {
   bool fromTilt;
 };
 
+struct TouchPageTurn {
+  bool prev;
+  bool next;
+  unsigned long heldMs;
+};
+
+inline TouchPageTurn detectTouchPageTurn(GfxRenderer& renderer, const MappedInputManager& input) {
+  TouchPageTurn result{false, false, 0};
+  if (!SETTINGS.touchReaderControls || !input.hasTouch()) {
+    return result;
+  }
+
+  const int width = renderer.getScreenWidth();
+  if (width <= 0) {
+    return result;
+  }
+
+  MappedInputManager::SwipeDir swipe = MappedInputManager::SwipeDir::None;
+  int swipeStartX = 0;
+  int swipeStartY = 0;
+  int swipeEndX = 0;
+  int swipeEndY = 0;
+  if (input.wasSwipeWithPoints(swipe, swipeStartX, swipeStartY, swipeEndX, swipeEndY)) {
+    const int sideZoneWidth = width / 3;
+    result.prev = swipe == MappedInputManager::SwipeDir::Right && swipeStartX < sideZoneWidth;
+    result.next = swipe == MappedInputManager::SwipeDir::Left && swipeStartX >= width - sideZoneWidth;
+    return result;
+  }
+
+  int x = 0;
+  int y = 0;
+  if (!input.wasScreenTapped(x, y)) {
+    return result;
+  }
+  // Reserve the top/bottom gesture bands for vertical edge swipes. If the touch
+  // controller loses part of a short edge swipe, do not reinterpret it as a page tap.
+  if (input.isInVerticalEdgeGestureZone(y)) {
+    return result;
+  }
+
+  const int previousZoneWidth = width / 3;
+  result.prev = x < previousZoneWidth;
+  result.next = x >= previousZoneWidth;
+  result.heldMs = input.getHeldTime();
+  return result;
+}
+
+// Reader menu opens on a downward swipe from the top edge (replaces the old center tap-and-hold).
+inline bool isTouchMenuGesture(const MappedInputManager& input) {
+  return SETTINGS.touchReaderControls && input.hasTouch() && input.wasMenuGesture();
+}
+
 inline PageTurnResult detectPageTurn(const MappedInputManager& input) {
   // Side buttons fire on press only when long-press action is OFF (nothing to detect).
   const bool sideUsePress = SETTINGS.sideButtonLongPress == CrossPointSettings::SIDE_LONG_PRESS::SIDE_LONG_OFF;
@@ -105,12 +157,21 @@ inline PageTurnResult detectPageTurn(const MappedInputManager& input) {
   return {tiltPrev || sidePrev || frontPrev, tiltNext || sideNext || frontNext, fromSide, tiltPrev || tiltNext};
 }
 
-inline void displayWithRefreshCycle(const GfxRenderer& renderer, int& pagesUntilFullRefresh) {
+// One helper, blocking or deferred: the async form starts the refresh and
+// returns so the caller can overlap CPU work with the panel's refresh time.
+// Async callers must not touch the framebuffer until
+// renderer.waitRefreshComplete() and must rebuild the differential baseline
+// before the next page turn (the tiled grayscale cleanup does).
+inline void displayWithRefreshCycle(const GfxRenderer& renderer, int& pagesUntilFullRefresh, bool async = false) {
+  const auto mode = (pagesUntilFullRefresh <= 1) ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH;
+  if (async) {
+    renderer.displayBufferAsync(mode);
+  } else {
+    renderer.displayBuffer(mode);
+  }
   if (pagesUntilFullRefresh <= 1) {
-    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
     pagesUntilFullRefresh = SETTINGS.getRefreshFrequency();
   } else {
-    renderer.displayBuffer();
     pagesUntilFullRefresh--;
   }
 }

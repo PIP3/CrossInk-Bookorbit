@@ -1,11 +1,56 @@
 #pragma once
 #include <HalStorage.h>
+#include <InflateStream.h>
 
+#include <memory>
 #include <string>
 #include <string_view>
 #include <unordered_map>
 
+enum class ZipStreamStatus {
+  More,
+  Done,
+  Error,
+};
+
+struct ZipStreamInflateCtx {
+  InflateStream reader;
+  HalFile* file = nullptr;
+  size_t fileRemaining = 0;
+  uint8_t* readBuf = nullptr;
+  size_t readBufSize = 0;
+};
+
+class ZipFileStreamReader {
+ public:
+  ZipFileStreamReader() = default;
+  ~ZipFileStreamReader();
+  ZipFileStreamReader(const ZipFileStreamReader&) = delete;
+  ZipFileStreamReader& operator=(const ZipFileStreamReader&) = delete;
+
+  bool begin(const std::string& zipPath, const char* filename, size_t chunkSize);
+  ZipStreamStatus pump(Print& out, size_t maxOutputBytes = 0);
+  void abort();
+  size_t produced() const { return totalProduced; }
+
+ private:
+  std::string zipPath;
+  uint16_t method = 0;
+  uint32_t dataOffset = 0;
+  uint32_t compressedSize = 0;
+  uint32_t uncompressedSize = 0;
+  size_t chunkSize = 0;
+  size_t totalProduced = 0;
+  size_t compressedConsumed = 0;
+  uint8_t* readBuffer = nullptr;
+  uint8_t* outputBuffer = nullptr;
+  ZipStreamInflateCtx inflateCtx;
+  bool active = false;
+};
+
 class ZipFile {
+  friend class ZipFileStreamReader;
+
  public:
   struct FileStatSlim {
     uint16_t method;             // Compression method
@@ -69,6 +114,7 @@ class ZipFile {
   // These functions will open and close the zip as needed
   uint8_t* readFileToMemory(const char* filename, size_t* size = nullptr, bool trailingNullByte = false);
   bool readFileToStream(const char* filename, Print& out, size_t chunkSize);
+  std::unique_ptr<ZipFileStreamReader> openFileStream(const char* filename, size_t chunkSize);
 
   template <typename F>
   bool enumerateFilePaths(F&& callback) {

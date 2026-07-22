@@ -75,6 +75,9 @@ class ActivityManager {
   // This variable must only be set by the main loop, to avoid race conditions
   std::atomic<bool> requestedUpdate{false};
 
+  bool handleGlobalHomeGesture();
+  bool handleReaderPowerButtonSettingsOverride();
+
  public:
   explicit ActivityManager(GfxRenderer& renderer, MappedInputManager& mappedInput)
       : renderer(renderer), mappedInput(mappedInput), renderingMutex(xSemaphoreCreateMutex()) {
@@ -118,6 +121,7 @@ class ActivityManager {
   bool preventAutoSleep() const;
   bool isHomeActivity() const;
   bool isReaderActivity() const;
+  bool readerPowerButtonOpensSettings() const;
   bool hasActivityNamed(const char* activityName) const;
   bool canSnapshotForSleepOverlay() const;
   bool requestManualReaderRefresh();

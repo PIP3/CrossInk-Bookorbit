@@ -17,13 +17,23 @@
 #include "activities/util/OptionSelectionActivity.h"
 #include "components/CompactHeader.h"
 #include "components/UITheme.h"
+#include "components/UIThemeTokens.h"
+#include "components/UiAppHelpers.h"
 #include "fontIds.h"
+
+namespace fui = freeink::ui;
 
 namespace {
 constexpr size_t MAX_LIST_RECENT_BOOKS = 10;
 // Hold threshold for the long-press action menu (firmware convention).
 constexpr unsigned long LONG_PRESS_MS = 1000;
+constexpr fui::ActionId ACTION_ROW = 1;
 }  // namespace
+
+RecentBooksActivity::RecentBooksActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
+    : Activity("RecentBooks", renderer, mappedInput),
+      uiTarget(makeUiTarget(renderer)),
+      app(uiTarget, uiTarget.deviceContext()) {}
 
 void RecentBooksActivity::loadRecentBooks() {
   recentBooks.clear();
@@ -41,6 +51,17 @@ void RecentBooksActivity::loadRecentBooks() {
   }
 }
 
+void RecentBooksActivity::onRowEvent(const fui::ActionEvent& event, void* user) {
+  auto* self = static_cast<RecentBooksActivity*>(user);
+  if (event.value < 0 || event.value >= static_cast<int16_t>(self->recentBooks.size())) return;
+  self->selectorIndex = static_cast<size_t>(event.value);
+  // Opening the book leaves this screen; a lingering flash would gray an
+  // unrelated row when the list next appears.
+  self->app.clearTapFlash();
+  LOG_DBG("RBA", "Tapped recent book: %s", self->recentBooks[self->selectorIndex].path.c_str());
+  self->onSelectBook(self->recentBooks[self->selectorIndex].path);
+}
+
 void RecentBooksActivity::onEnter() {
   Activity::onEnter();
 
@@ -54,6 +75,12 @@ void RecentBooksActivity::onEnter() {
   loadRecentBooks();
 
   selectorIndex = 0;
+  uiReady = false;
+  visibleRows = 1;
+  topIndex = 0;
+  app.setTheme(uiThemeTokens(uiTarget));
+  app.on(ACTION_ROW, &RecentBooksActivity::onRowEvent, this);
+  app.setScreen(&RecentBooksActivity::listScreen, this);
   requestUpdate();
 }
 
@@ -63,12 +90,7 @@ void RecentBooksActivity::onExit() {
 }
 
 void RecentBooksActivity::loop() {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const int contentTop = CompactHeader::contentTop(metrics);
-  const int contentHeight =
-      renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
-  const int pageItems = std::max(1, contentHeight / metrics.listWithSubtitleRowHeight);
-
+  const int listSize = static_cast<int>(recentBooks.size());
   // After a long-press has fired, swallow input until Confirm is physically released
   // (so the release doesn't also open the book; re-arm only once the button is up).
   if (longPressFired) {
@@ -88,8 +110,39 @@ void RecentBooksActivity::loop() {
     return;
   }
 
+  int touchX = 0;
+  int touchY = 0;
+  if (mappedInput.isScreenTouchLongPress(touchX, touchY, LONG_PRESS_MS) && listRowStep > 0 && touchY >= listTop &&
+      touchY < listBottom) {
+    const int rowOffset = touchY - listTop;
+    const int row = rowOffset / listRowStep;
+    const int heldIndex = topIndex + row;
+    if (rowOffset % listRowStep >= listRowHeight || row >= visibleRows || heldIndex < 0 || heldIndex >= listSize) {
+      return;
+    }
+    selectorIndex = static_cast<size_t>(heldIndex);
+    mappedInput.suppressNextTouchTap();
+    longPressFired = true;
+    showBookActionMenu(selectorIndex);
+    return;
+  }
+
+  // Touch goes through the FreeInkApp: render() registered the row hit rects;
+  // route the snapshot and let onRowEvent dispatch.
+  if (uiReady) {
+    const fui::InputSnapshot snap = touchSnapshotFrom(mappedInput);
+    if (snap.touchPressed || snap.touchReleased) {
+      const auto event = app.route(snap);
+      // No pressed-state repaint: the render it triggers would drop a slow
+      // tap's release inside the uiReady window (tap-to-activate needed two
+      // taps), and it costs a second e-ink refresh per tap.
+      if (app.invalidated()) requestUpdate();
+      if (event) return;  // dispatched to onRowEvent
+    }
+  }
+
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    if (!recentBooks.empty() && selectorIndex < static_cast<int>(recentBooks.size())) {
+    if (!recentBooks.empty() && selectorIndex < recentBooks.size()) {
       LOG_DBG("RBA", "Selected recent book: %s", recentBooks[selectorIndex].path.c_str());
       onSelectBook(recentBooks[selectorIndex].path);
       return;
@@ -98,28 +151,38 @@ void RecentBooksActivity::loop() {
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     onGoHome();
+    return;
   }
 
-  int listSize = static_cast<int>(recentBooks.size());
+  // Swipes scroll the viewport; the selection stays put and button navigation
+  // pulls the view back to it.
+  const auto swipe = mappedInput.wasSwipe();
+  if (swipe == MappedInputManager::SwipeDir::Up || swipe == MappedInputManager::SwipeDir::Down) {
+    const int delta = swipe == MappedInputManager::SwipeDir::Up ? visibleRows : -visibleRows;
+    const int next = scrollListBy(topIndex, delta, visibleRows, listSize);
+    if (next != topIndex) {
+      topIndex = next;
+      requestUpdate();
+    }
+    return;
+  }
 
-  buttonNavigator.onNextRelease([this, listSize] {
-    selectorIndex = ButtonNavigator::nextIndex(static_cast<int>(selectorIndex), listSize);
+  const auto moveSelection = [this, listSize](const int index) {
+    selectorIndex = static_cast<size_t>(index);
+    topIndex = followListSelection(static_cast<int>(selectorIndex), topIndex, visibleRows, listSize);
     requestUpdate();
+  };
+  buttonNavigator.onNextRelease([this, listSize, &moveSelection] {
+    moveSelection(ButtonNavigator::nextIndex(static_cast<int>(selectorIndex), listSize));
   });
-
-  buttonNavigator.onPreviousRelease([this, listSize] {
-    selectorIndex = ButtonNavigator::previousIndex(static_cast<int>(selectorIndex), listSize);
-    requestUpdate();
+  buttonNavigator.onPreviousRelease([this, listSize, &moveSelection] {
+    moveSelection(ButtonNavigator::previousIndex(static_cast<int>(selectorIndex), listSize));
   });
-
-  buttonNavigator.onNextContinuous([this, listSize, pageItems] {
-    selectorIndex = ButtonNavigator::nextPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
-    requestUpdate();
+  buttonNavigator.onNextContinuous([this, listSize, &moveSelection] {
+    moveSelection(ButtonNavigator::nextPageIndex(static_cast<int>(selectorIndex), listSize, visibleRows));
   });
-
-  buttonNavigator.onPreviousContinuous([this, listSize, pageItems] {
-    selectorIndex = ButtonNavigator::previousPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
-    requestUpdate();
+  buttonNavigator.onPreviousContinuous([this, listSize, &moveSelection] {
+    moveSelection(ButtonNavigator::previousPageIndex(static_cast<int>(selectorIndex), listSize, visibleRows));
   });
 }
 
@@ -130,6 +193,8 @@ void RecentBooksActivity::reloadAfterBookAction() {
   } else if (selectorIndex >= recentBooks.size()) {
     selectorIndex = recentBooks.size() - 1;
   }
+  topIndex =
+      followListSelection(static_cast<int>(selectorIndex), topIndex, visibleRows, static_cast<int>(recentBooks.size()));
   requestUpdate(true);
 }
 
@@ -294,29 +359,66 @@ void RecentBooksActivity::showBookActionMenu(const size_t bookIndex, const bool 
       });
 }
 
+void RecentBooksActivity::listScreen(UiApp::ScreenType& screen, void* user) {
+  static_cast<RecentBooksActivity*>(user)->buildListScreen(screen);
+}
+
+void RecentBooksActivity::buildListScreen(UiApp::ScreenType& screen) {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  // Content below the GUI.drawHeader band, above the button hints.
+  screen.setContentMargin(fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight), 0,
+                                      static_cast<int16_t>(metrics.buttonHintsHeight), 0});
+  screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
+
+  if (recentBooks.empty()) {
+    screen.centeredText(tr(STR_NO_RECENT_BOOKS), screen.theme().bodyText);
+    return;
+  }
+
+  // Transient per-render: points into the recentBooks strings.
+  std::vector<fui::ListItem> items;
+  items.reserve(recentBooks.size());
+  for (const auto& book : recentBooks) {
+    fui::ListItem item;
+    item.label = book.title.c_str();
+    if (!book.author.empty()) item.subtitle = book.author.c_str();
+    item.icon = listIconFor(UITheme::getFileIcon(book.path), 32);  // subtitle rows carry the larger icon
+    item.actionValue = static_cast<int16_t>(items.size());
+    items.push_back(item);
+  }
+
+  fui::ListProps props;
+  props.items = items.data();
+  props.count = static_cast<uint16_t>(items.size());
+  props.selectedIndex = static_cast<int16_t>(selectorIndex);
+  props.action = ACTION_ROW;
+  props.inputMask = fui::InputTouch;  // physical buttons stay in loop()
+  const fui::Rect listBounds = screen.body();
+  listTop = listBounds.y;
+  listBottom = listBounds.bottom();
+  const auto rows = configureUiList(props, screen.theme(), listBounds, UiListRowType::WithSubtitle);
+  listRowHeight = props.rowHeight;
+  listRowStep = listRowHeight + props.rowGap;
+  visibleRows = rows > 0 ? rows : 1;
+  topIndex = scrollListBy(topIndex, 0, visibleRows, static_cast<int>(recentBooks.size()));  // clamp to range
+  props.topIndex = static_cast<uint16_t>(topIndex);
+  screen.list(props);
+}
+
 void RecentBooksActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();
-  const auto pageHeight = renderer.getScreenHeight();
   const auto& metrics = UITheme::getInstance().getMetrics();
 
-  CompactHeader::drawTitle(renderer, tr(STR_MENU_RECENT_BOOKS));
+  // Header via GUI.drawHeader (already FreeInkUI-themed) for the battery
+  // indicator; the rest of the screen renders through the app.
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_MENU_RECENT_BOOKS));
 
-  const int contentTop = CompactHeader::contentTop(metrics);
-  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
+  uiReady = false;
+  app.render();
+  uiReady = true;
 
-  // Recent tab
-  if (recentBooks.empty()) {
-    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, contentTop + 20, tr(STR_NO_RECENT_BOOKS));
-  } else {
-    GUI.drawList(
-        renderer, Rect{0, contentTop, pageWidth, contentHeight}, recentBooks.size(), selectorIndex,
-        [this](int index) { return recentBooks[index].title; }, [this](int index) { return recentBooks[index].author; },
-        [this](int index) { return UITheme::getFileIcon(recentBooks[index].path); });
-  }
-
-  // Help text
   const auto labels = mappedInput.mapLabels(tr(STR_HOME), tr(STR_OPEN), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 

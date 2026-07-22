@@ -31,6 +31,11 @@
 namespace {
 constexpr int kCoverCornerRadius = 2;
 constexpr int kGridColumns = 3;
+constexpr int kTitleStripHeight = 32;
+constexpr int kTitleGridGap = 8;
+constexpr int kSelectionPadding = 4;
+constexpr int kSelectionOutlineGap = 2;
+constexpr int kSelectionOuterInset = kSelectionPadding + kSelectionOutlineGap;
 constexpr unsigned long kLongPressMs = 1000;
 constexpr float kCircleRadians = 6.2831853f;
 constexpr float kCircleRadiansPerPercent = kCircleRadians / 100.0f;
@@ -314,6 +319,39 @@ void RecentBooksGridActivity::onExit() {
   recentBooks.clear();
 }
 
+int RecentBooksGridActivity::bookIndexFromPoint(const int x, const int y) {
+  if (recentBooks.empty()) return -1;
+
+  const auto pageWidth = renderer.getScreenWidth();
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const int contentTop = CompactHeader::contentTop(metrics);
+  const int gridSpacing = metrics.verticalSpacing;
+  const int rowSpacing = gridSpacing + 4;
+  const int totalGridWidth = kGridColumns * COVER_WIDTH + (kGridColumns - 1) * gridSpacing;
+  const int startXOffset = (pageWidth - totalGridWidth) / 2;
+  const int totalBooks = static_cast<int>(recentBooks.size());
+  const int safeSelector = std::clamp(selectorIndex, 0, totalBooks - 1);
+  const int currentPage = (safeSelector / BOOKS_PER_PAGE);
+  const int pageStart = currentPage * BOOKS_PER_PAGE;
+  const int pageCount = std::min(BOOKS_PER_PAGE, totalBooks - pageStart);
+
+  for (int i = 0; i < pageCount; ++i) {
+    const int col = i % kGridColumns;
+    const int row = i / kGridColumns;
+    const int coverX = startXOffset + col * (COVER_WIDTH + gridSpacing);
+    const int coverY = contentTop + kTitleStripHeight + kTitleGridGap + row * (COVER_HEIGHT + rowSpacing);
+    const int hitX = coverX - kSelectionOuterInset;
+    const int hitY = coverY - kSelectionOuterInset;
+    const int hitWidth = COVER_WIDTH + kSelectionOuterInset * 2;
+    const int hitHeight = COVER_HEIGHT + kSelectionOuterInset * 2;
+    if (x >= hitX && x < hitX + hitWidth && y >= hitY && y < hitY + hitHeight) {
+      return pageStart + i;
+    }
+  }
+
+  return -1;
+}
+
 void RecentBooksGridActivity::loop() {
   if (longPressFired) {
     if (!mappedInput.isPressed(MappedInputManager::Button::Confirm)) {
@@ -327,6 +365,20 @@ void RecentBooksGridActivity::loop() {
     longPressFired = true;
     showBookActionMenu(selectorIndex, true);
     return;
+  }
+
+  int touchX = 0;
+  int touchY = 0;
+  if (mappedInput.isScreenTouchLongPress(touchX, touchY, kLongPressMs)) {
+    const int touchedIndex = bookIndexFromPoint(touchX, touchY);
+    if (touchedIndex >= 0) {
+      selectorIndex = touchedIndex;
+      ensureProgressLoaded(selectorIndex);
+      mappedInput.suppressNextTouchTap();
+      longPressFired = true;
+      showBookActionMenu(selectorIndex);
+      return;
+    }
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
@@ -362,6 +414,32 @@ void RecentBooksGridActivity::loop() {
     ensureProgressLoaded(selectorIndex);
     requestUpdate();
   };
+  auto handlePageSwipe = [this, listSize](const bool nextPage) {
+    selectorIndex = nextPage ? ButtonNavigator::nextPageIndex(selectorIndex, listSize, BOOKS_PER_PAGE)
+                             : ButtonNavigator::previousPageIndex(selectorIndex, listSize, BOOKS_PER_PAGE);
+    ensureProgressLoaded(selectorIndex);
+    requestUpdate();
+  };
+
+  const auto swipe = mappedInput.wasSwipe();
+  if (swipe != MappedInputManager::SwipeDir::None) {
+    if (listSize > BOOKS_PER_PAGE) {
+      const bool nextPage = swipe == MappedInputManager::SwipeDir::Left || swipe == MappedInputManager::SwipeDir::Up;
+      handlePageSwipe(nextPage);
+    }
+    return;
+  }
+
+  if (mappedInput.wasScreenTapped(touchX, touchY)) {
+    const int touchedIndex = bookIndexFromPoint(touchX, touchY);
+    if (touchedIndex >= 0) {
+      selectorIndex = touchedIndex;
+      ensureProgressLoaded(selectorIndex);
+      LOG_DBG("RBGA", "Selected recent book: %s", recentBooks[selectorIndex].book.path.c_str());
+      onSelectBook(recentBooks[selectorIndex].book.path);
+      return;
+    }
+  }
 
   buttonNavigator.onRelease({MappedInputManager::Button::Right}, [&] { handleNav(NavDirection::Right); });
   buttonNavigator.onRelease({MappedInputManager::Button::Left}, [&] { handleNav(NavDirection::Left); });
@@ -555,11 +633,6 @@ void RecentBooksGridActivity::render(RenderLock&&) {
 
   CompactHeader::drawTitle(renderer, tr(STR_MENU_RECENT_BOOKS));
   const int contentTop = CompactHeader::contentTop(metrics);
-  constexpr int titleStripHeight = 32;
-  constexpr int titleGridGap = 8;
-  constexpr int selectionPadding = 4;
-  constexpr int selectionOutlineGap = 2;
-  constexpr int selectionOuterInset = selectionPadding + selectionOutlineGap;
   const int gridSpacing = metrics.verticalSpacing;
   const int rowSpacing = gridSpacing + 4;
   const int totalGridWidth = kGridColumns * COVER_WIDTH + (kGridColumns - 1) * gridSpacing;
@@ -580,7 +653,7 @@ void RecentBooksGridActivity::render(RenderLock&&) {
       // grid top, rather than only within titleStripHeight, so it stays vertically
       // centered after the grid was nudged up.
       const int headerBottomY = CompactHeader::headerBottomY(metrics);
-      const int gridTopY = contentTop + titleStripHeight + titleGridGap;
+      const int gridTopY = contentTop + kTitleStripHeight + kTitleGridGap;
       const int titleY = headerBottomY + (gridTopY - headerBottomY - titleLh) / 2;
       const auto& selectedBook = recentBooks[selectorIndex];
       const bool hasProgress = selectedBook.progressLoaded && RecentBookProgress::hasPercent(selectedBook.progress);
@@ -617,7 +690,7 @@ void RecentBooksGridActivity::render(RenderLock&&) {
       const int col = i % kGridColumns;
       const int row = i / kGridColumns;
       const int x = startXOffset + col * (COVER_WIDTH + gridSpacing);
-      const int y = contentTop + titleStripHeight + titleGridGap + row * (COVER_HEIGHT + rowSpacing);
+      const int y = contentTop + kTitleStripHeight + kTitleGridGap + row * (COVER_HEIGHT + rowSpacing);
 
       const int bx = x;
       const int by = y;
@@ -651,10 +724,10 @@ void RecentBooksGridActivity::render(RenderLock&&) {
         renderer.drawIcon(BookIcon, bx + (bw - 32) / 2, by + (bh - 32) / 2, 32, 32);
       }
       if (bookIdx == static_cast<int>(selectorIndex)) {
-        renderer.drawRoundedRect(bx - selectionPadding, by - selectionPadding, bw + selectionPadding * 2,
-                                 bh + selectionPadding * 2, 3, kCoverCornerRadius + selectionPadding, true);
-        renderer.drawRoundedRect(bx - selectionOuterInset, by - selectionOuterInset, bw + selectionOuterInset * 2,
-                                 bh + selectionOuterInset * 2, 1, kCoverCornerRadius + selectionOuterInset, true);
+        renderer.drawRoundedRect(bx - kSelectionPadding, by - kSelectionPadding, bw + kSelectionPadding * 2,
+                                 bh + kSelectionPadding * 2, 3, kCoverCornerRadius + kSelectionPadding, true);
+        renderer.drawRoundedRect(bx - kSelectionOuterInset, by - kSelectionOuterInset, bw + kSelectionOuterInset * 2,
+                                 bh + kSelectionOuterInset * 2, 1, kCoverCornerRadius + kSelectionOuterInset, true);
       }
     }
 

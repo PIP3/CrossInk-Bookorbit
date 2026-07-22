@@ -58,6 +58,7 @@
 #include "util/ScreenshotUtil.h"
 
 namespace {
+constexpr unsigned long TOUCH_DICTIONARY_LOOKUP_HOLD_MS = 1000;
 // pagesPerRefresh now comes from SETTINGS.getRefreshFrequency()
 constexpr unsigned long longPressMenuMs = 600;
 constexpr uint16_t DEFAULT_AUTO_PAGE_TURN_INTERVAL_S = 30;
@@ -257,6 +258,8 @@ struct TiledGrayscaleTimings {
   unsigned long grayMsb = 0;
   unsigned long grayDisplay = 0;
   unsigned long cleanup = 0;
+  bool overlappedRefresh = false;
+  uint8_t bufferedPlanes = 0;
 };
 
 struct ClippingPageMatch {
@@ -617,7 +620,8 @@ uint16_t resolveClippingJumpPage(Section& section, const Clipping& clipping, con
 
 bool runTiledGrayscalePass(GfxRenderer& renderer, const Page& page, const int fontId, const int marginLeft,
                            const int marginTop, const bool foregroundBlack, const bool needsTextGrayscale,
-                           const bool needsImageGrayscale, TiledGrayscaleTimings& timings) {
+                           const bool needsImageGrayscale, const bool asyncRefreshPending,
+                           TiledGrayscaleTimings& timings) {
   if ((!needsTextGrayscale && !needsImageGrayscale) || !renderer.supportsStripGrayscale()) {
     return false;
   }
@@ -625,8 +629,69 @@ bool runTiledGrayscalePass(GfxRenderer& renderer, const Page& page, const int fo
   constexpr int STRIP_ROWS = 80;
   const int displayHeight = renderer.getDisplayHeight();
   const int displayWidthBytes = renderer.getDisplayWidthBytes();
-  auto scratch =
-      std::unique_ptr<uint8_t[]>(new (std::nothrow) uint8_t[static_cast<size_t>(displayWidthBytes) * STRIP_ROWS]);
+  const size_t planeBytes = static_cast<size_t>(displayWidthBytes) * displayHeight;
+
+  const auto renderPlaneToBuffer = [&](const GfxRenderer::RenderMode mode, uint8_t* buffer) {
+    renderer.setRenderMode(mode);
+    for (int y = 0; y < displayHeight; y += STRIP_ROWS) {
+      const int rows = std::min(STRIP_ROWS, displayHeight - y);
+      renderer.beginStripTarget(buffer + static_cast<size_t>(y) * displayWidthBytes, y, rows);
+      renderer.clearScreen(0x00);
+      if (needsTextGrayscale) {
+        page.render(renderer, fontId, marginLeft, marginTop, foregroundBlack);
+      } else {
+        page.renderImages(renderer, fontId, marginLeft, marginTop);
+      }
+      renderer.endStripTarget();
+    }
+  };
+
+  // Whole-plane buffers are about 48 KB each, so they are unsuitable for the
+  // task stack or permanent activity storage. Allocate them only while a real
+  // deferred refresh can hide their render cost. One plane overlaps the LSB
+  // pass; a second plane also overlaps MSB when at least 60 KB remains free.
+  auto lsbPlaneBuf = asyncRefreshPending ? makeUniqueNoThrow<uint8_t[]>(planeBytes) : nullptr;
+  auto msbPlaneBuf =
+      (lsbPlaneBuf && ESP.getFreeHeap() >= planeBytes + 60000U) ? makeUniqueNoThrow<uint8_t[]>(planeBytes) : nullptr;
+
+  if (lsbPlaneBuf) {
+    timings.overlappedRefresh = true;
+    timings.bufferedPlanes = msbPlaneBuf ? 2 : 1;
+
+    renderPlaneToBuffer(GfxRenderer::GRAYSCALE_LSB, lsbPlaneBuf.get());
+    timings.grayLsb = millis();
+    if (msbPlaneBuf) {
+      renderPlaneToBuffer(GfxRenderer::GRAYSCALE_MSB, msbPlaneBuf.get());
+      timings.grayMsb = millis();
+    }
+
+    renderer.waitRefreshComplete();
+    renderer.writeGrayscalePlaneStrip(true, lsbPlaneBuf.get(), 0, displayHeight);
+    if (msbPlaneBuf) {
+      renderer.writeGrayscalePlaneStrip(false, msbPlaneBuf.get(), 0, displayHeight);
+    } else {
+      renderPlaneToBuffer(GfxRenderer::GRAYSCALE_MSB, lsbPlaneBuf.get());
+      timings.grayMsb = millis();
+      renderer.writeGrayscalePlaneStrip(false, lsbPlaneBuf.get(), 0, displayHeight);
+    }
+
+    renderer.setRenderMode(GfxRenderer::BW);
+    renderer.displayGrayBuffer();
+    timings.grayDisplay = millis();
+    renderer.cleanupGrayscaleWithFrameBuffer();
+    timings.cleanup = millis();
+    return true;
+  }
+
+  if (asyncRefreshPending) {
+    // Controller writes and the BW snapshot fallback both need the refresh to
+    // be complete when the whole-plane allocation cannot be satisfied.
+    renderer.waitRefreshComplete();
+  }
+
+  // An 8 KB strip is too large for the task stack. Keep one fallible heap
+  // allocation and reuse it across both grayscale planes.
+  auto scratch = makeUniqueNoThrow<uint8_t[]>(static_cast<size_t>(displayWidthBytes) * STRIP_ROWS);
   if (!scratch) {
     LOG_ERR("ERS", "OOM: grayscale strip scratch (%d bytes); falling back to BW snapshot",
             displayWidthBytes * STRIP_ROWS);
@@ -2010,6 +2075,8 @@ void EpubReaderActivity::loop() {
     return;
   }
 
+  const auto touch = ReaderUtils::detectTouchPageTurn(renderer, mappedInput);
+
   if (goHomeAfterBuildCancel.load(std::memory_order_relaxed) && !RenderLock::peek()) {
     goHomeAfterBuildCancel.store(false, std::memory_order_relaxed);
     sectionBuildCancelRequested.store(false, std::memory_order_relaxed);
@@ -2017,7 +2084,7 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  if (RenderLock::peek() && mappedInput.wasReleased(MappedInputManager::Button::Back) &&
+  if (RenderLock::peek() && !touch.prev && !touch.next && mappedInput.wasReleased(MappedInputManager::Button::Back) &&
       mappedInput.getHeldTime() < ReaderUtils::GO_HOME_MS) {
     sectionBuildCancelRequested.store(true, std::memory_order_relaxed);
     goHomeAfterBuildCancel.store(true, std::memory_order_relaxed);
@@ -2185,7 +2252,8 @@ void EpubReaderActivity::loop() {
 
   if (automaticPageTurnActive) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) ||
-        mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+        (!touch.prev && !touch.next && mappedInput.wasReleased(MappedInputManager::Button::Back)) ||
+        ReaderUtils::isTouchMenuGesture(mappedInput)) {
       automaticPageTurnActive = false;
       // updates chapter title space to indicate page turn disabled
       requestUpdate();
@@ -2263,8 +2331,12 @@ void EpubReaderActivity::loop() {
   }
 
   // Enter reader menu activity.
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) || ReaderUtils::isTouchMenuGesture(mappedInput)) {
     openReaderMenu();
+  }
+
+  if (handleTouchDictionaryLookup()) {
+    return;
   }
 
   if (longPressBackHandled) {
@@ -2284,7 +2356,7 @@ void EpubReaderActivity::loop() {
   }
 
   // Short press BACK goes directly to home (or restores position if viewing footnote)
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back) &&
+  if (!touch.prev && !touch.next && mappedInput.wasReleased(MappedInputManager::Button::Back) &&
       mappedInput.getHeldTime() < ReaderUtils::GO_HOME_MS) {
     if (footnoteDepth > 0) {
       restoreSavedPosition();
@@ -2407,6 +2479,8 @@ void EpubReaderActivity::loop() {
   }
 
   auto [prevTriggered, nextTriggered, fromSideBtn, fromTilt] = ReaderUtils::detectPageTurn(mappedInput);
+  prevTriggered = prevTriggered || touch.prev;
+  nextTriggered = nextTriggered || touch.next;
   const bool powerReleased = mappedInput.wasReleased(MappedInputManager::Button::Power);
   const bool shortPowerTurn = SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::PAGE_TURN && powerReleased &&
                               mappedInput.getHeldTime() < SETTINGS.getPowerButtonLongPressDuration();
@@ -2595,7 +2669,30 @@ void EpubReaderActivity::handleClippingJump(const ClippingJumpResult& clipping) 
   pauseReadingPaceTimer("clipping_jump");
 }
 
-void EpubReaderActivity::openWordSelect(bool framebufferContainsPage) {
+bool EpubReaderActivity::handleTouchDictionaryLookup() {
+  if (!SETTINGS.touchReaderControls || !mappedInput.hasTouch() || RenderLock::peek() || activeFootnotePreview ||
+      !epub || !Dictionary::exists(epub->getCachePath().c_str())) {
+    return false;
+  }
+
+  int touchX = 0;
+  int touchY = 0;
+  unsigned long heldMs = 0;
+  if (!mappedInput.isScreenTouchTapCandidate(touchX, touchY, heldMs)) {
+    touchDictionaryLookupHandled = false;
+    return false;
+  }
+  if (touchDictionaryLookupHandled || heldMs < TOUCH_DICTIONARY_LOOKUP_HOLD_MS) {
+    return false;
+  }
+
+  touchDictionaryLookupHandled = true;
+  openWordSelect(/*framebufferContainsPage=*/true, touchX, touchY, /*autoLookupInitialWord=*/true);
+  return true;
+}
+
+void EpubReaderActivity::openWordSelect(bool framebufferContainsPage, int initialTouchX, int initialTouchY,
+                                        bool autoLookupInitialWord) {
   std::unique_ptr<Page> pageForLookup;
   ReaderViewportLayout layout{};
   std::string bookCachePath;
@@ -2640,7 +2737,8 @@ void EpubReaderActivity::openWordSelect(bool framebufferContainsPage) {
   // object allocation fallible instead of aborting the firmware when memory is tight.
   auto wordSelect = makeUniqueNoThrow<DictionaryWordSelectActivity>(
       renderer, mappedInput, std::move(pageForLookup), layout.marginLeft, layout.marginTop, bookCachePath,
-      nextPageFirstWord, framebufferContainsPage, layout.marginBottom);
+      nextPageFirstWord, framebufferContainsPage, layout.marginBottom, initialTouchX, initialTouchY,
+      autoLookupInitialWord);
   if (!wordSelect) {
     LOG_ERR("DICT", "OOM allocating DictionaryWordSelectActivity (%u bytes)",
             static_cast<unsigned>(sizeof(DictionaryWordSelectActivity)));
@@ -2814,7 +2912,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       pauseReadingPaceTimer("delete_cache_confirm");
       startActivityForResult(
           std::make_unique<ConfirmationActivity>(renderer, mappedInput, confirmationHeading(StrId::STR_DELETE_CACHE),
-                                                 epub ? epub->getTitle() : std::string{}),
+                                                 epub ? epub->getTitle() : std::string{}, false, true),
           [this](const ActivityResult& result) {
             if (result.isCancelled) {
               resumeReadingPaceTimer("delete_cache_cancel");
@@ -3144,7 +3242,9 @@ void EpubReaderActivity::openAutoPageTurnIntervalPicker(const bool ignoreInitial
           renderer, mappedInput, "EpubReaderAutoPageTurnInterval", StrId::STR_AUTO_TURN_INTERVAL_SECONDS,
           getAutoPageTurnIntervalSeconds(), MIN_AUTO_PAGE_TURN_INTERVAL_S, MAX_AUTO_PAGE_TURN_INTERVAL_S, 1, 5,
           StrId::STR_NONE_OPT, /*readerActivity=*/true,
-          /*allowPowerAsConfirm=*/true, ignoreInitialConfirmRelease),
+          /*allowPowerAsConfirm=*/true, ignoreInitialConfirmRelease,
+          /*showPercentValue=*/false, StrId::STR_NONE_OPT,
+          /*overrideDisabledReaderTouchscreen=*/true),
       [this](const ActivityResult& result) {
         if (!result.isCancelled) {
           setAutoPageTurnIntervalSeconds(static_cast<uint16_t>(std::get<IntervalResult>(result.data).value));
@@ -4957,6 +5057,9 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int fo
   const bool needsImageGrayscale = pageHasImages;
   const bool needsTextGrayscale = SETTINGS.textAntiAliasing && foregroundBlack;
   const bool needsAnyGrayscale = needsTextGrayscale || needsImageGrayscale;
+  const bool tiledGrayscale = needsAnyGrayscale && renderer.supportsStripGrayscale();
+  const bool overlapRefresh =
+      tiledGrayscale && !pageHasImages && pagesUntilFullRefresh > 1 && renderer.supportsAsyncGrayscaleBase();
   const int contentBottom = renderer.getScreenHeight() - orientedMarginBottom;
 
   const auto finalizeBufferComposition = [&]() {
@@ -5065,6 +5168,8 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int fo
       renderer.displayBuffer(HalDisplay::HALF_REFRESH);
       renderer.preconditionGrayscale();
       pagesUntilFullRefresh = SETTINGS.getRefreshFrequency();
+    } else if (overlapRefresh) {
+      ReaderUtils::displayWithRefreshCycle(renderer, pagesUntilFullRefresh, /*async=*/true);
     } else {
       // Use the grayscale-aware base waveform so the first visible pass is
       // closer to the final anti-aliased result instead of flashing darker
@@ -5079,14 +5184,16 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int fo
 
   TiledGrayscaleTimings tiledTimings;
   if (runTiledGrayscalePass(renderer, *page, fontId, orientedMarginLeft, orientedMarginTop, foregroundBlack,
-                            needsTextGrayscale, needsImageGrayscale, tiledTimings)) {
+                            needsTextGrayscale, needsImageGrayscale, overlapRefresh, tiledTimings)) {
     const auto tEnd = millis();
     LOG_DBG("ERS",
             "Page render (tiled): prewarm=%lums bw_render=%lums display=%lums "
-            "gray_lsb=%lums gray_msb=%lums gray_display=%lums cleanup=%lums total=%lums",
+            "gray_lsb=%lums gray_msb=%lums gray_display=%lums cleanup=%lums total=%lums async=%d "
+            "buffered_planes=%u",
             tPrewarm - t0, tBwRender - tPrewarm, tDisplay - tBwRender, tiledTimings.grayLsb - tDisplay,
             tiledTimings.grayMsb - tiledTimings.grayLsb, tiledTimings.grayDisplay - tiledTimings.grayMsb,
-            tiledTimings.cleanup - tiledTimings.grayDisplay, tEnd - t0);
+            tiledTimings.cleanup - tiledTimings.grayDisplay, tEnd - t0, tiledTimings.overlappedRefresh,
+            static_cast<unsigned>(tiledTimings.bufferedPlanes));
     return;
   }
 

@@ -1,6 +1,7 @@
 #include "ControlsOptionsActivity.h"
 
 #include <GfxRenderer.h>
+#include <HalGPIO.h>
 #include <I18n.h>
 
 #include <algorithm>
@@ -14,6 +15,10 @@
 #include "fontIds.h"
 
 namespace {
+constexpr int touchControlsOptionsRowHeightScale = 2;
+
+int controlsOptionsRowHeightScale(const bool hasTouch) { return hasTouch ? touchControlsOptionsRowHeightScale : 1; }
+
 uint8_t enumDisplayIndexForRawValue(const SettingInfo& setting, uint8_t rawValue) {
   if (setting.enumRawValues.empty()) {
     return rawValue;
@@ -56,7 +61,9 @@ void ControlsOptionsActivity::rebuildSettingsList() {
   const auto allSettings = getSettingsList();
   settings = buildControlsSettingsParentList(allSettings);
   powerSettings = buildControlsPowerSettingsList(allSettings);
-  frontButtonSettings = buildControlsFrontButtonSettingsList(allSettings);
+  if (!gpio.hasTouch()) {
+    frontButtonSettings = buildControlsFrontButtonSettingsList(allSettings);
+  }
   sideButtonSettings = buildControlsSideButtonSettingsList(allSettings);
 
   setCurrentSettings();
@@ -120,6 +127,18 @@ void ControlsOptionsActivity::moveSelection(bool forward) {
 
 bool ControlsOptionsActivity::currentSettingUsesOptionMenu(const SettingInfo& setting) const {
   return setting.type == SettingType::ENUM && setting.valuePtr != nullptr && settingEnumOptionCount(setting) > 2;
+}
+
+bool ControlsOptionsActivity::handleTouchInput() {
+  int touchedIndex = -1;
+  if (mappedInput.wasItemTapped(touchedIndex) && touchedIndex >= 0 && touchedIndex < settingsCount) {
+    selectedIndex = touchedIndex;
+    toggleCurrentSetting();
+    requestUpdate();
+    return true;
+  }
+
+  return false;
 }
 
 void ControlsOptionsActivity::openEnumOptionPicker(const SettingInfo& setting) {
@@ -196,6 +215,11 @@ void ControlsOptionsActivity::toggleCurrentSetting() {
 
 void ControlsOptionsActivity::loop() {
   if (optionPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
+  if (mappedInput.wasHomeGesture()) {
+    finish();
+    return;
+  }
+  if (handleTouchInput()) return;
 
   buttonNavigator.onNextRelease([this] {
     moveSelection(true);
@@ -233,6 +257,7 @@ void ControlsOptionsActivity::render(RenderLock&&) {
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
   const auto& metrics = UITheme::getInstance().getMetrics();
+  const int rowHeightScale = controlsOptionsRowHeightScale(mappedInput.hasTouch());
 
   const auto orientation = renderer.getOrientation();
   const bool isLandscapeCw = orientation == GfxRenderer::Orientation::LandscapeClockwise;
@@ -283,7 +308,8 @@ void ControlsOptionsActivity::render(RenderLock&&) {
         }
         return valueText;
       },
-      true, nullptr, [&visibleSettings](int i) { return visibleSettings[i].type == SettingType::SECTION_HEADER; });
+      true, nullptr, [&visibleSettings](int i) { return visibleSettings[i].type == SettingType::SECTION_HEADER; },
+      rowHeightScale);
 
   const bool currentIsAction = selectedIndex >= 0 && selectedIndex < settingsCount &&
                                ((*currentSettings)[selectedIndex].type == SettingType::ACTION ||

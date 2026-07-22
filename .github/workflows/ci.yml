@@ -81,6 +81,26 @@ jobs:
           set -euo pipefail
           pio run -e tiny | tee pio.log
 
+      - name: Build CrossInk xlarge
+        run: |
+          set -euo pipefail
+          pio run -e xlarge
+
+      - name: Build CrossPoint (Seeed Sticky)
+        run: |
+          set -euo pipefail
+          pio run -e sticky
+
+      - name: Smoke test button simulator
+        run: |
+          set -euo pipefail
+          python3 scripts/run_simulator_smoke_test.py --env simulator --theme classic
+
+      - name: Smoke test touch simulator
+        run: |
+          set -euo pipefail
+          python3 scripts/run_simulator_smoke_test.py --env sticky-simulator --theme classic
+
       - name: Extract firmware stats
         run: |
           set -euo pipefail

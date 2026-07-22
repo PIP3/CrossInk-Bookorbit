@@ -5,6 +5,7 @@ in the same build directory.
 Default outputs:
   .pio/build/tiny/firmware-tiny.bin
   .pio/build/xlarge/firmware-xlarge.bin
+  .pio/build/sticky/firmware-sticky.bin
 
 Release-candidate outputs when CROSSPOINT_RC_ARTIFACTS=1:
   .pio/build/tiny/firmware-tiny-<branch>-<hash>-RC.bin
@@ -13,6 +14,7 @@ Release-candidate outputs when CROSSPOINT_RC_ARTIFACTS=1:
 Release outputs when CROSSPOINT_RELEASE_VERSION is set:
   .pio/build/tiny/firmware-tiny-v<version>.bin
   .pio/build/xlarge/firmware-xlarge-v<version>.bin
+  .pio/build/sticky/firmware-sticky-v<version>.bin
 """
 
 import os

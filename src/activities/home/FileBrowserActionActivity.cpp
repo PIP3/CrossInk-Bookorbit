@@ -41,6 +41,22 @@ void FileBrowserActionActivity::loop() {
     return;
   }
 
+  const int itemCount = static_cast<int>(items.size());
+  int touchedIndex = -1;
+  if (mappedInput.wasItemTouchedDown(touchedIndex) && touchedIndex >= 0 && touchedIndex < itemCount) {
+    if (selectedIndex != touchedIndex) {
+      selectedIndex = touchedIndex;
+      requestUpdate();
+    }
+    return;
+  }
+  if (mappedInput.wasItemTapped(touchedIndex) && touchedIndex >= 0 && touchedIndex < itemCount) {
+    selectedIndex = touchedIndex;
+    setResult(FileBrowserActionResult{static_cast<int>(items[selectedIndex].action)});
+    finish();
+    return;
+  }
+
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     setResult(FileBrowserActionResult{static_cast<int>(items[selectedIndex].action)});
     finish();
