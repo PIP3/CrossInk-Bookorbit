@@ -84,6 +84,25 @@ class CrossPointSettings {
     XTC_STATUS_BAR_MODE_COUNT
   };
   enum HIDE_CLOCK_MODE { HIDE_CLOCK_NEVER = 0, HIDE_CLOCK_IN_READER = 1, HIDE_CLOCK_ALWAYS = 2, HIDE_CLOCK_MODE_COUNT };
+  // Persisted date-format values mirror HalClock::DateFormat.
+  enum DATE_FORMAT {
+    DATE_FORMAT_MONTH_DAY_YEAR_LONG = 0,
+    DATE_FORMAT_DAY_MONTH_YEAR_LONG = 1,
+    DATE_FORMAT_MONTH_DAY_YEAR_NUMERIC = 2,
+    DATE_FORMAT_DAY_MONTH_YEAR_NUMERIC = 3,
+    DATE_FORMAT_YEAR_MONTH_DAY_NUMERIC = 4,
+    DATE_FORMAT_MONTH_DAY_NUMERIC = 5,
+    DATE_FORMAT_DAY_MONTH_NUMERIC = 6,
+    DATE_FORMAT_MONTH_DAY_LONG = 7,
+    DATE_FORMAT_DAY_MONTH_LONG = 8,
+    DATE_FORMAT_COUNT
+  };
+  enum DATE_SEPARATOR {
+    DATE_SEPARATOR_PERIOD = 0,
+    DATE_SEPARATOR_HYPHEN = 1,
+    DATE_SEPARATOR_SLASH = 2,
+    DATE_SEPARATOR_COUNT
+  };
 
   enum ORIENTATION {
     PORTRAIT = 0,       // 480x800 logical coordinates (current default)
@@ -337,8 +356,10 @@ class CrossPointSettings {
   uint8_t clockUtcOffsetQ = 48;
   // Clock display format: 0 = 24-hour, 1 = 12-hour
   uint8_t clockFormat = 0;
-  // Date display format. Values match HalClock::DateFormat; 0 preserves the existing "Jul 21, 2026" default.
-  uint8_t dateFormat = 0;
+  // Date display format. Values match HalClock::DateFormat; 0 preserves the existing "Jan 01, 2026" default.
+  uint8_t dateFormat = DATE_FORMAT_MONTH_DAY_YEAR_LONG;
+  // Separator for numeric dates. Text-based date formats do not use it.
+  uint8_t dateSeparator = DATE_SEPARATOR_SLASH;
   // Set once an NTP sync succeeds. Used to skip re-syncing on every WiFi connect.
   // Resetting to 0 (e.g. via the web UI) forces a re-sync on next WiFi connect.
   uint8_t clockHasBeenSynced = 0;

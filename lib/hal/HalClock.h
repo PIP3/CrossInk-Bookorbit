@@ -26,12 +26,11 @@ class HalClock {
     DAY_MONTH_YEAR_LONG = 1,
     MONTH_DAY_YEAR_NUMERIC = 2,
     DAY_MONTH_YEAR_NUMERIC = 3,
-    YEAR_MONTH_DAY_ISO = 4,
-    YEAR_MONTH_DAY_NUMERIC = 5,
-    MONTH_DAY_NUMERIC = 6,
-    DAY_MONTH_NUMERIC = 7,
-    MONTH_DAY_LONG = 8,
-    DAY_MONTH_LONG = 9,
+    YEAR_MONTH_DAY_NUMERIC = 4,
+    MONTH_DAY_NUMERIC = 5,
+    DAY_MONTH_NUMERIC = 6,
+    MONTH_DAY_LONG = 7,
+    DAY_MONTH_LONG = 8,
     DATE_FORMAT_COUNT
   };
 
@@ -62,7 +61,7 @@ class HalClock {
   // utcOffsetQuarterHoursBiased matches formatTime so the date rolls over at local midnight.
   // Returns false if RTC is not available or the RTC date is invalid.
   bool formatDate(char* buf, size_t bufSize, uint8_t utcOffsetQuarterHoursBiased = 48,
-                  DateFormat dateFormat = MONTH_DAY_YEAR_LONG) const;
+                  DateFormat dateFormat = MONTH_DAY_YEAR_LONG, char numericSeparator = '/') const;
 
   // Sync the RTC from an NTP server. Requires WiFi to be connected.
   // Blocks for up to ~5s while waiting for SNTP response.
