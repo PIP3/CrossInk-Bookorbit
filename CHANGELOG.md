@@ -13,6 +13,7 @@
 
 ### Changed
 
+- SD-card fonts now reuse their page-sized glyph buffers, reducing heap fragmentation during long reading sessions.
 - Downloaded-font size ranges now offer 8–12pt, 10–16pt, 14–20pt, and 8–20pt options.
 - File Transfer now starts from a lightweight network boot, providing more contiguous memory for web and Calibre transfers.
 - Downloaded-font size range options now show their actual point-size ranges instead of firmware build names.
