@@ -1176,14 +1176,16 @@ void SettingsActivity::render(RenderLock&&) {
 
   // Header via GUI.drawHeader (already FreeInkUI-themed) for the battery
   // indicator; the rest of the screen renders through the app.
-  // Version rides in the header's trailing label slot: the footer position
-  // conflicts with button hints on non-touch devices.
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_SETTINGS_TITLE),
-                 CROSSINK_VERSION);
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_SETTINGS_TITLE));
 
   uiReady = false;
   app.render();
   uiReady = true;
+
+  // Keep build information discoverable without crowding the common header.
+  if (selectedCategoryIndex == 3) {
+    drawSystemVersionFooter(renderer, pageWidth, renderer.getScreenHeight(), metrics);
+  }
 
   const auto confirmLabel =
       (selectedSettingIndex == 0)
