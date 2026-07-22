@@ -574,6 +574,74 @@ int ZipFile::fillUncompressedSizes(const SizeTarget* targets, const size_t targe
   return matched;
 }
 
+int ZipFile::fillEntryIdentities(const EntryTarget* targets, const size_t targetCount, EntryIdentity* identities,
+                                 const size_t identityCount) {
+  if (targets == nullptr || identities == nullptr || targetCount == 0) {
+    return 0;
+  }
+
+  const ScopedOpenClose zip{*this};
+  if (!zip) return 0;
+
+  if (!loadZipDetails()) return 0;
+
+  file.seek(zipDetails.centralDirOffset);
+
+  int matched = 0;
+  const auto expectedMatches = static_cast<int>(targetCount);
+  const EntryTarget* const targetEnd = targets + targetCount;
+  uint32_t sig;
+  char itemName[256];
+
+  while (file.available()) {
+    file.read(&sig, 4);
+    if (sig != 0x02014b50) break;
+
+    // Skip versions, flags, compression method, and modification time/date.
+    file.seekCur(12);
+    EntryIdentity identity;
+    file.read(&identity.crc32, 4);
+    file.read(&identity.compressedSize, 4);
+    file.read(&identity.uncompressedSize, 4);
+    uint16_t nameLen, extraLen, commentLen;
+    file.read(&nameLen, 2);
+    file.read(&extraLen, 2);
+    file.read(&commentLen, 2);
+    file.seekCur(12);
+
+    if (nameLen < sizeof(itemName)) {
+      file.read(itemName, nameLen);
+      itemName[nameLen] = '\0';
+
+      const uint64_t hash = fnvHash64(itemName, nameLen);
+      const EntryTarget key = {hash, nameLen, 0, nullptr};
+      auto it = std::lower_bound(targets, targetEnd, key, [](const EntryTarget& a, const EntryTarget& b) {
+        return a.hash < b.hash || (a.hash == b.hash && a.len < b.len);
+      });
+
+      while (it != targetEnd && it->hash == hash && it->len == nameLen) {
+        if (it->index < identityCount && it->path != nullptr && memcmp(it->path, itemName, nameLen) == 0 &&
+            it->path[nameLen] == '\0') {
+          identity.found = true;
+          identities[it->index] = identity;
+          ++matched;
+        }
+        ++it;
+      }
+
+      if (matched >= expectedMatches) {
+        break;
+      }
+    } else {
+      file.seekCur(nameLen);
+    }
+
+    file.seekCur(extraLen + commentLen);
+  }
+
+  return matched;
+}
+
 uint8_t* ZipFile::readFileToMemory(const char* filename, size_t* size, const bool trailingNullByte) {
   const ScopedOpenClose zip{*this};
   if (!zip) return nullptr;

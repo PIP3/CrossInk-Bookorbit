@@ -72,6 +72,23 @@ class ZipFile {
     uint16_t index;  // Caller's index (e.g. spine index)
   };
 
+  // Target and result for batch central-directory identity lookup. The full
+  // path check prevents a hash collision from treating unrelated files as
+  // byte-identical.
+  struct EntryTarget {
+    uint64_t hash;
+    uint16_t len;
+    uint16_t index;
+    const char* path;
+  };
+
+  struct EntryIdentity {
+    uint32_t crc32 = 0;
+    uint32_t compressedSize = 0;
+    uint32_t uncompressedSize = 0;
+    bool found = false;
+  };
+
   // FNV-1a 64-bit hash computed from char buffer (no std::string allocation)
   static uint64_t fnvHash64(const char* s, size_t len) {
     uint64_t hash = 14695981039346656037ull;
@@ -110,6 +127,10 @@ class ZipFile {
   // targets must be sorted by (hash, len). sizes[target.index] receives uncompressedSize.
   // Returns number of targets matched.
   int fillUncompressedSizes(const SizeTarget* targets, size_t targetCount, uint32_t* sizes, size_t sizeCount);
+  // Batch lookup for duplicate detection. Targets must be sorted by (hash,
+  // len); identities[target.index] receives the ZIP entry's CRC and sizes.
+  int fillEntryIdentities(const EntryTarget* targets, size_t targetCount, EntryIdentity* identities,
+                          size_t identityCount);
   // Due to the memory required to run each of these, it is recommended to not preopen the zip file for multiple
   // These functions will open and close the zip as needed
   uint8_t* readFileToMemory(const char* filename, size_t* size = nullptr, bool trailingNullByte = false);

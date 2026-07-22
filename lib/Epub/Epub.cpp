@@ -504,10 +504,55 @@ Epub::CssParseStatus Epub::parseCssFiles(const bool forceRebuild) const {
   // chapter layout can still use most of the book's stylesheet.
   bool parsedAllCss = true;
   size_t parsedCssFileCount = 0;
+  size_t skippedDuplicateCount = 0;
   size_t failedCssFileIndex = 0;
   std::string failedCssPath;
+
+  // Some EPUB generators emit a byte-identical stylesheet for every chapter.
+  // Resolve all CSS identities with one ZIP directory scan, then retain only
+  // identities whose first stylesheet parsed successfully. These temporary
+  // arrays are fallible and live only for this one-time cache build.
+  std::unique_ptr<ZipFile::EntryTarget[]> cssTargets;
+  std::unique_ptr<ZipFile::EntryIdentity[]> cssIdentities;
+  std::unique_ptr<ZipFile::EntryIdentity[]> parsedIdentities;
+  size_t parsedIdentityCount = 0;
+  if (cssFiles.size() > 1 && cssFiles.size() <= UINT16_MAX) {
+    cssTargets = makeUniqueNoThrow<ZipFile::EntryTarget[]>(cssFiles.size());
+    cssIdentities = makeUniqueNoThrow<ZipFile::EntryIdentity[]>(cssFiles.size());
+    parsedIdentities = makeUniqueNoThrow<ZipFile::EntryIdentity[]>(cssFiles.size());
+    if (!cssTargets || !cssIdentities || !parsedIdentities) {
+      LOG_ERR("EBP", "Could not allocate CSS duplicate metadata; parsing all stylesheets");
+      cssTargets.reset();
+      cssIdentities.reset();
+      parsedIdentities.reset();
+    } else {
+      for (size_t i = 0; i < cssFiles.size(); ++i) {
+        cssTargets[i] = {ZipFile::fnvHash64(cssFiles[i].data(), cssFiles[i].size()),
+                         static_cast<uint16_t>(cssFiles[i].size()), static_cast<uint16_t>(i), cssFiles[i].c_str()};
+      }
+      std::sort(cssTargets.get(), cssTargets.get() + cssFiles.size(),
+                [](const ZipFile::EntryTarget& a, const ZipFile::EntryTarget& b) {
+                  return a.hash < b.hash || (a.hash == b.hash && a.len < b.len);
+                });
+      ZipFile(filepath).fillEntryIdentities(cssTargets.get(), cssFiles.size(), cssIdentities.get(), cssFiles.size());
+    }
+  }
+
   for (size_t cssFileIndex = 0; cssFileIndex < cssFiles.size(); ++cssFileIndex) {
     const auto& cssPath = cssFiles[cssFileIndex];
+    const auto* identity = cssIdentities ? &cssIdentities[cssFileIndex] : nullptr;
+    if (identity && identity->found) {
+      const auto duplicate = std::find_if(parsedIdentities.get(), parsedIdentities.get() + parsedIdentityCount,
+                                          [identity](const ZipFile::EntryIdentity& parsed) {
+                                            return parsed.crc32 == identity->crc32 &&
+                                                   parsed.compressedSize == identity->compressedSize &&
+                                                   parsed.uncompressedSize == identity->uncompressedSize;
+                                          });
+      if (duplicate != parsedIdentities.get() + parsedIdentityCount) {
+        ++skippedDuplicateCount;
+        continue;
+      }
+    }
     LOG_DBG("EBP", "Parsing CSS file: %s", cssPath.c_str());
 
     // Check heap before parsing - CSS parsing allocates heavily
@@ -562,6 +607,9 @@ Epub::CssParseStatus Epub::parseCssFiles(const bool forceRebuild) const {
       parsedAllCss = false;
     } else {
       ++parsedCssFileCount;
+      if (identity && identity->found) {
+        parsedIdentities[parsedIdentityCount++] = *identity;
+      }
     }
     // Explicitly close() file before calling Storage.remove()
     tempCssFile.close();
@@ -592,6 +640,9 @@ Epub::CssParseStatus Epub::parseCssFiles(const bool forceRebuild) const {
 
   LOG_DBG("EBP", "Loaded %zu %s CSS style rules from %zu/%zu files", cssParser->ruleCount(),
           parsedAllCss ? "complete" : "partial", parsedCssFileCount, cssFiles.size());
+  if (skippedDuplicateCount > 0) {
+    LOG_DBG("EBP", "Skipped %zu byte-identical CSS files", skippedDuplicateCount);
+  }
   cssParser->clear();
   return parsedAllCss ? CssParseStatus::Complete : CssParseStatus::Partial;
 }

@@ -13,6 +13,7 @@
 
 ### Changed
 
+- EPUB books with repeated byte-identical stylesheets now parse each unique stylesheet only once when building caches.
 - ESP32 firmware now reserves less RAM for unused cloud features, WiFi hot paths, and oversized system task stacks.
 - SD-card fonts now reuse their page-sized glyph buffers, reducing heap fragmentation during long reading sessions.
 - Downloaded-font size ranges now offer 8–12pt, 10–16pt, 14–20pt, and 8–20pt options.
