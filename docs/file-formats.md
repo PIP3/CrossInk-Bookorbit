@@ -233,14 +233,16 @@ Binary layout:
 
 ## `section.bin`
 
-### Version 50
+### Version 53
 
 Each file in `sections/*.bin` stores one laid-out spine section. The header is
 also the cache-busting key: if any layout-affecting setting differs from the
 current reader settings, the section is discarded and rebuilt.
 
-Version 52 keeps Guide Dots centered when extra word spacing is enabled. Version
-51 preserves continuation state for oversized CJK word fragments. Version 50
+Version 53 stores each image's EPUB-internal source path so section indexing can
+read only its header and defer full extraction until the page is shown. Version
+52 keeps Guide Dots centered when extra word spacing is enabled. Version 51
+preserves continuation state for oversized CJK word fragments. Version 50
 paginates chapter-heading image runs within the reader viewport so they do not
 overflow into the reserved status-bar area. Version 49 stores Bionic Reading
 split-run offsets in visual order so RTL word prefixes render on the right.
@@ -282,7 +284,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 50
+#define EXPECTED_VERSION 53
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
 #define FOOTNOTE_HREF_LEN 96
@@ -373,6 +375,7 @@ struct TextBlock {
 
 struct ImageBlock {
     String imagePath;
+    String sourcePath;
     s16 width;
     s16 height;
 };

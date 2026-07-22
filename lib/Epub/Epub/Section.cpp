@@ -16,9 +16,8 @@
 
 namespace {
 constexpr uint32_t SECTION_CACHE_MAGIC = 0x535843FF;  // bytes: 0xFF, "CXS"
-// v52: Guide Dots split added word spacing around the dot, changing cached
-// per-word dot offsets and requiring existing section files to be rebuilt.
-constexpr uint8_t SECTION_FILE_VERSION = 52;
+// v53: ImageBlock stores its EPUB source path for first-render extraction.
+constexpr uint8_t SECTION_FILE_VERSION = 53;
 // Suspended incremental build: valid pages plus LUTs and a parse-watermark trailer.
 constexpr uint8_t SECTION_FILE_PARTIAL_VERSION = 0xFE;
 constexpr uint16_t INITIAL_SECTION_PAGE_LUT_ENTRIES = 1024;

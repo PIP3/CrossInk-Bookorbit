@@ -16,8 +16,16 @@
 // - uint16_t height
 // - uint8_t pixels[...] - 2 bits per pixel, packed (4 pixels per byte), row-major order
 
-ImageBlock::ImageBlock(std::string imagePath, int16_t width, int16_t height)
-    : imagePath(std::move(imagePath)), width(width), height(height) {}
+ImageBlock::ImageBlock(std::string imagePath, std::string sourcePath, int16_t width, int16_t height)
+    : imagePath(std::move(imagePath)), sourcePath(std::move(sourcePath)), width(width), height(height) {}
+
+void* ImageBlock::extractContext = nullptr;
+ImageBlock::ExtractFn ImageBlock::extractFn = nullptr;
+
+void ImageBlock::setExtractor(void* context, ExtractFn fn) {
+  extractContext = context;
+  extractFn = fn;
+}
 
 bool ImageBlock::imageExists() const { return Storage.exists(imagePath.c_str()); }
 
@@ -303,6 +311,13 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y, const b
     return;  // Successfully rendered from cache
   }
 
+  if (!sourcePath.empty() && extractFn && !Storage.exists(imagePath.c_str())) {
+    LOG_DBG("IMG", "Lazy-extracting %s -> %s", sourcePath.c_str(), imagePath.c_str());
+    if (!extractFn(extractContext, sourcePath.c_str(), imagePath.c_str())) {
+      LOG_ERR("IMG", "Lazy extraction failed: %s", sourcePath.c_str());
+    }
+  }
+
   // No cache - need to decode the image
   // Check if image file exists
   FsFile file;
@@ -359,8 +374,8 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y, const b
 }
 
 bool ImageBlock::serialize(FsFile& file) {
-  return serialization::tryWriteString(file, imagePath) && serialization::tryWritePod(file, width) &&
-         serialization::tryWritePod(file, height);
+  return serialization::tryWriteString(file, imagePath) && serialization::tryWriteString(file, sourcePath) &&
+         serialization::tryWritePod(file, width) && serialization::tryWritePod(file, height);
 }
 
 std::unique_ptr<ImageBlock> ImageBlock::deserialize(FsFile& file) {
@@ -369,13 +384,18 @@ std::unique_ptr<ImageBlock> ImageBlock::deserialize(FsFile& file) {
     LOG_ERR("IMG", "Deserialization failed: could not read image path");
     return nullptr;
   }
+  std::string source;
+  if (!serialization::tryReadString(file, source)) {
+    LOG_ERR("IMG", "Deserialization failed: could not read image source path");
+    return nullptr;
+  }
   int16_t w, h;
   if (!serialization::tryReadPod(file, w) || !serialization::tryReadPod(file, h)) {
     LOG_ERR("IMG", "Deserialization failed: truncated image metadata");
     return nullptr;
   }
 
-  auto* imageBlock = new (std::nothrow) ImageBlock(std::move(path), w, h);
+  auto* imageBlock = new (std::nothrow) ImageBlock(std::move(path), std::move(source), w, h);
   if (!imageBlock) {
     LOG_ERR("IMG", "Deserialization failed: could not allocate ImageBlock");
     return nullptr;

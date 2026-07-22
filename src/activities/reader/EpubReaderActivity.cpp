@@ -1854,6 +1854,9 @@ void EpubReaderActivity::onEnter() {
   loadBookReaderSettings();
   ensureReaderSdFontLoaded(renderer);
   ImageBlock::clearSessionRenderFailures();
+  ImageBlock::setExtractor(epub.get(), [](void* context, const char* source, const char* destination) {
+    return static_cast<Epub*>(context)->extractItemToFile(source, destination);
+  });
 
   // Configure screen orientation based on settings
   // NOTE: This affects layout math and must be applied before any render calls.
@@ -1932,6 +1935,9 @@ void EpubReaderActivity::onEnter() {
 }
 
 void EpubReaderActivity::onExit() {
+  // The extraction callback holds the Epub as a raw context pointer.
+  ImageBlock::setExtractor(nullptr, nullptr);
+
   // SD-font caches live in the renderer singleton, so leaving them resident after
   // the reader exits can fragment the contiguous heap needed for Home cover images.
   releaseReaderSdFontCachesForLowMemory(renderer, "ERS", "reader exit");

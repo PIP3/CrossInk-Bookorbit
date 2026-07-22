@@ -131,7 +131,9 @@ class Epub {
                                 int readerFontId = 0) const;
   uint8_t* readItemContentsToBytes(const std::string& itemHref, size_t* size = nullptr,
                                    bool trailingNullByte = false) const;
-  bool readItemContentsToStream(const std::string& itemHref, Print& out, size_t chunkSize) const;
+  bool readItemContentsToStream(const std::string& itemHref, Print& out, size_t chunkSize,
+                                bool allowEarlyStop = false) const;
+  bool extractItemToFile(const std::string& itemHref, const std::string& destPath) const;
   std::unique_ptr<ZipFileStreamReader> openItemContentsStream(const std::string& itemHref, size_t chunkSize) const;
   bool getItemSize(const std::string& itemHref, size_t* size) const;
   BookMetadataCache::SpineEntry getSpineItem(int spineIndex) const;
