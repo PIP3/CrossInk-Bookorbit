@@ -19,7 +19,6 @@
 #include "ClockSyncActivity.h"
 #include "CrossPointSettings.h"
 #include "FontDownloadActivity.h"
-#include "FontSelectionActivity.h"
 #include "KOReaderSettingsActivity.h"
 #include "MappedInputManager.h"
 #include "OpdsServerListActivity.h"
@@ -28,6 +27,7 @@
 #include "SettingsList.h"
 #include "SilentRestart.h"
 #include "StatusBarSettingsActivity.h"
+#include "TextSettingsActivity.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/reader/GlobalReadingStats.h"
 #include "activities/util/ConfirmationActivity.h"
@@ -842,15 +842,6 @@ void SettingsActivity::toggleCurrentSetting() {
     openStringEditor(setting);
     return;
   }
-  if (setting.nameId == StrId::STR_FONT_FAMILY && setting.type == SettingType::ENUM) {
-    startActivityForResult(std::make_unique<FontSelectionActivity>(renderer, mappedInput, &sdFontSystem.registry()),
-                           [this](const ActivityResult&) {
-                             SETTINGS.saveToFile();
-                             rebuildSettingsLists();
-                           });
-    return;
-  }
-
   if (currentSettingUsesOptionMenu(setting)) {
     openEnumOptionPicker(setting);
     return;
@@ -868,15 +859,6 @@ void SettingsActivity::toggleCurrentSetting() {
     const uint8_t nextIndex = (currentIndex + 1) % static_cast<uint8_t>(optionCount);
     SETTINGS.*(setting.valuePtr) = enumRawValueForDisplayIndex(setting, nextIndex);
   } else if (setting.type == SettingType::ENUM && setting.valueGetter && setting.valueSetter) {
-    if (setting.nameId == StrId::STR_FONT_FAMILY) {
-      // Launch font selection submenu instead of cycling
-      startActivityForResult(std::make_unique<FontSelectionActivity>(renderer, mappedInput, &sdFontSystem.registry()),
-                             [this](const ActivityResult&) {
-                               SETTINGS.saveToFile();
-                               rebuildSettingsLists();
-                             });
-      return;
-    }
     const size_t optionCount = settingEnumOptionCount(setting);
     if (optionCount == 0) return;
     const uint8_t totalValues = static_cast<uint8_t>(optionCount);
@@ -936,6 +918,13 @@ void SettingsActivity::toggleCurrentSetting() {
         break;
       case SettingAction::DownloadFonts:
         startActivityForResult(std::make_unique<FontDownloadActivity>(renderer, mappedInput),
+                               [this](const ActivityResult&) {
+                                 SETTINGS.saveToFile();
+                                 rebuildSettingsLists();
+                               });
+        break;
+      case SettingAction::TextSettings:
+        startActivityForResult(std::make_unique<TextSettingsActivity>(renderer, mappedInput, &sdFontSystem.registry()),
                                [this](const ActivityResult&) {
                                  SETTINGS.saveToFile();
                                  rebuildSettingsLists();

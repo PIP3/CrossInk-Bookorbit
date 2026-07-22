@@ -43,6 +43,7 @@ enum class SettingAction {
   Language,
   DownloadFonts,
   ClockSync,
+  TextSettings,
 };
 
 struct SettingInfo {
@@ -64,6 +65,7 @@ struct SettingInfo {
   const char* key = nullptr;             // JSON API key (nullptr for ACTION types)
   StrId category = StrId::STR_NONE_OPT;  // Category for web UI grouping
   bool obfuscated = false;               // Save/load via base64 obfuscation (passwords)
+  bool inTextSettings = false;           // Shown by Text Settings instead of the flat Reader settings list
 
   // Direct char[] string fields (for settings stored in CrossPointSettings)
   size_t stringOffset = 0;
@@ -77,6 +79,11 @@ struct SettingInfo {
 
   SettingInfo& withObfuscated() {
     obfuscated = true;
+    return *this;
+  }
+
+  SettingInfo& withTextSettings() {
+    inTextSettings = true;
     return *this;
   }
 

@@ -12,8 +12,8 @@
 #include "SdCardFontSystem.h"
 #include "SettingsList.h"
 #include "activities/settings/FontDownloadActivity.h"
-#include "activities/settings/FontSelectionActivity.h"
 #include "activities/settings/StatusBarSettingsActivity.h"
+#include "activities/settings/TextSettingsActivity.h"
 #include "activities/util/IntervalSelectionActivity.h"
 #include "activities/util/OptionSelectionActivity.h"
 #include "components/UITheme.h"
@@ -283,19 +283,6 @@ void ReaderOptionsActivity::toggleCurrentSetting() {
   if (selectedIndex < 0 || selectedIndex >= settingsCount) return;
   const auto& setting = (*currentSettings)[selectedIndex];
 
-  if (setting.nameId == StrId::STR_FONT_FAMILY && setting.type == SettingType::ENUM) {
-    startActivityForResult(std::make_unique<FontSelectionActivity>(renderer, mappedInput, &sdFontSystem.registry()),
-                           [this](const ActivityResult& result) {
-                             if (!result.isCancelled) {
-                               persistReaderSettings();
-                             }
-                             sdFontSystem.refreshIfDirty();
-                             rebuildSettingsList();
-                             requestUpdate();
-                           });
-    return;
-  }
-
   if (setting.type == SettingType::TOGGLE && setting.valuePtr != nullptr) {
     const bool cur = SETTINGS.*(setting.valuePtr);
     SETTINGS.*(setting.valuePtr) = !cur;
@@ -340,6 +327,21 @@ void ReaderOptionsActivity::toggleCurrentSetting() {
     }
     settingsDirty = true;
   } else if (setting.type == SettingType::ACTION) {
+    if (setting.action == SettingAction::TextSettings) {
+      if (settingsDirty) {
+        persistReaderSettings();
+        settingsDirty = false;
+      }
+      startActivityForResult(std::make_unique<TextSettingsActivity>(renderer, mappedInput, &sdFontSystem.registry(),
+                                                                    TextSettingsActivity::Tab::Family, true),
+                             [this](const ActivityResult&) {
+                               persistReaderSettings();
+                               sdFontSystem.refreshIfDirty();
+                               rebuildSettingsList();
+                               requestUpdate();
+                             });
+      return;
+    }
     if (setting.action == SettingAction::DownloadFonts) {
       if (settingsDirty) {
         persistReaderSettings();
