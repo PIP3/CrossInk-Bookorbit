@@ -1175,11 +1175,15 @@ void WifiSelectionActivity::renderConnecting(const Rect* screen, const ThemeMetr
                               autoConnecting ? tr(STR_CONNECTING_SAVED_WIFI) : tr(STR_CONNECTING), true,
                               EpdFontFamily::BOLD);
 
-    std::string ssidInfo = std::string(tr(STR_TO_PREFIX)) + selectedSSID;
-    if (ssidInfo.length() > 25) {
-      ssidInfo.replace(22, ssidInfo.length() - 22, "...");
+    const std::string ssidInfo = std::string(tr(STR_TO_PREFIX)) + selectedSSID;
+    const int textWidth = std::max(1, screen->width - metrics->contentSidePadding * 2);
+    const auto ssidLines = renderer.wrappedText(UI_10_FONT_ID, ssidInfo.c_str(), textWidth, 3);
+    const int ssidBlockHeight = static_cast<int>(ssidLines.size()) * height;
+    int ssidY = top - ssidBlockHeight / 2 + height / 2;
+    for (const auto& line : ssidLines) {
+      UITheme::drawCenteredText(renderer, *screen, UI_10_FONT_ID, ssidY, line.c_str());
+      ssidY += height;
     }
-    UITheme::drawCenteredText(renderer, *screen, UI_10_FONT_ID, top, ssidInfo.c_str());
     if (autoConnecting) {
       const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), tr(STR_SHOW_NETWORKS), "", "");
       GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);

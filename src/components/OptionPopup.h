@@ -166,8 +166,18 @@ class OptionPopup {
     const int optionCount = static_cast<int>(ownedStrings.size());
     const int maxDialogH = std::max(rowHeight + titleLineHeight + metrics.optionPopupTitleGap + innerPadding * 2,
                                     pageHeight - metrics.buttonHintsHeight - metrics.optionPopupDialogSideMargin * 2);
+    const int dialogW = std::min((maxTextWidth + innerPadding * 2 + selectionHPadding * 2 + metrics.scrollBarWidth +
+                                  metrics.scrollBarRightOffset + selectionHPadding) *
+                                     12 / 10,
+                                 pageWidth - metrics.optionPopupDialogSideMargin * 2);
+    const int titleContentWidth = std::max(1, dialogW - innerPadding * 2);
+    const int maxTitleLines =
+        std::max(1, (maxDialogH - innerPadding * 2 - metrics.optionPopupTitleGap - rowHeight) / titleLineHeight);
+    const auto titleLines =
+        renderer.wrappedText(UI_12_FONT_ID, title.c_str(), titleContentWidth, maxTitleLines, EpdFontFamily::BOLD);
+    const int titleHeight = static_cast<int>(titleLines.size()) * titleLineHeight;
     const int maxListHeight =
-        std::max(rowHeight, maxDialogH - innerPadding * 2 - titleLineHeight - metrics.optionPopupTitleGap);
+        std::max(rowHeight, maxDialogH - innerPadding * 2 - titleHeight - metrics.optionPopupTitleGap);
     const int rowStep = rowHeight + itemSpacing;
     const int visibleCount = std::max(1, std::min(optionCount, (maxListHeight + itemSpacing) / rowStep));
     const int safeSelectedIndex = std::clamp(selectedIndex, 0, optionCount - 1);
@@ -176,15 +186,13 @@ class OptionPopup {
     const bool hasHiddenOptions = visibleCount < optionCount;
     const int scrollBarGutter =
         hasHiddenOptions ? metrics.scrollBarWidth + metrics.scrollBarRightOffset + selectionHPadding : 0;
-    const int dialogW = std::min((maxTextWidth + innerPadding * 2 + selectionHPadding * 2 + scrollBarGutter) * 12 / 10,
-                                 pageWidth - metrics.optionPopupDialogSideMargin * 2);
-    const int contentHeight = titleLineHeight + metrics.optionPopupTitleGap + listHeight;
+    const int contentHeight = titleHeight + metrics.optionPopupTitleGap + listHeight;
     const int dialogH = contentHeight + innerPadding * 2;
     const int dialogX = (pageWidth - dialogW) / 2;
     const int dialogY = (pageHeight - dialogH) / 2;
     const int itemRectX = dialogX + innerPadding;
     const int itemRectW = std::max(1, dialogW - innerPadding * 2 - scrollBarGutter);
-    const int firstItemY = dialogY + innerPadding + titleLineHeight + metrics.optionPopupTitleGap;
+    const int firstItemY = dialogY + innerPadding + titleHeight + metrics.optionPopupTitleGap;
 
     layout.dialog = Rect{dialogX, dialogY, dialogW, dialogH};
     layout.firstOptionIndex = visibleStart;

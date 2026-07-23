@@ -2,8 +2,6 @@
 
 #include <I18n.h>
 
-#include <algorithm>
-
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -26,11 +24,6 @@ void ConfirmationActivity::onEnter() {
   if (overrideDisabledReaderTouchscreen) {
     mappedInput.setReaderTouchscreenOverride(true);
   }
-
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const int popupSideInset = metrics.optionPopupDialogSideMargin + metrics.optionPopupInnerPadding;
-  const int maxTitleWidth = std::max(1, renderer.getScreenWidth() - popupSideInset * 2);
-  popupTitle = renderer.truncatedText(UI_12_FONT_ID, popupTitle.c_str(), maxTitleWidth, EpdFontFamily::BOLD);
 
   const char* options[] = {I18N.get(StrId::STR_CANCEL), I18N.get(StrId::STR_CONFIRM)};
   confirmPopup.show(popupTitle.c_str(), options, 2, 0, [this](int idx) {

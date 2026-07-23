@@ -1097,8 +1097,21 @@ void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, 
 
   const int maxDialogH = std::max(rowHeight + titleLineHeight + metrics.optionPopupTitleGap + innerPadding * 2,
                                   pageHeight - metrics.buttonHintsHeight - metrics.optionPopupDialogSideMargin * 2);
+  // Reserve the narrow scroll gutter up front. A wrapped title may reduce the
+  // number of visible options, so deciding this after title layout would make
+  // the draw and cached touch geometry disagree.
+  const int dialogW = std::min((maxTextWidth + innerPadding * 2 + selectionHPadding * 2 + metrics.scrollBarWidth +
+                                metrics.scrollBarRightOffset + selectionHPadding) *
+                                   12 / 10,
+                               pageWidth - metrics.optionPopupDialogSideMargin * 2);
+  const int titleContentWidth = std::max(1, dialogW - innerPadding * 2);
+  const int maxTitleLines =
+      std::max(1, (maxDialogH - innerPadding * 2 - metrics.optionPopupTitleGap - rowHeight) / titleLineHeight);
+  const auto titleLines =
+      renderer.wrappedText(UI_12_FONT_ID, title, titleContentWidth, maxTitleLines, EpdFontFamily::BOLD);
+  const int titleHeight = static_cast<int>(titleLines.size()) * titleLineHeight;
   const int maxListHeight =
-      std::max(rowHeight, maxDialogH - innerPadding * 2 - titleLineHeight - metrics.optionPopupTitleGap);
+      std::max(rowHeight, maxDialogH - innerPadding * 2 - titleHeight - metrics.optionPopupTitleGap);
   const int rowStep = rowHeight + itemSpacing;
   const int maxVisibleOptions = std::max(1, std::min(optionCount, (maxListHeight + itemSpacing) / rowStep));
   const int safeSelectedIndex = std::clamp(selectedIndex, 0, optionCount - 1);
@@ -1109,9 +1122,7 @@ void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, 
   const bool hasHiddenOptions = visibleCount < optionCount;
   const int scrollBarGutter =
       hasHiddenOptions ? metrics.scrollBarWidth + metrics.scrollBarRightOffset + selectionHPadding : 0;
-  const int dialogW = std::min((maxTextWidth + innerPadding * 2 + selectionHPadding * 2 + scrollBarGutter) * 12 / 10,
-                               pageWidth - metrics.optionPopupDialogSideMargin * 2);
-  const int contentHeight = titleLineHeight + metrics.optionPopupTitleGap + listHeight;
+  const int contentHeight = titleHeight + metrics.optionPopupTitleGap + listHeight;
   const int dialogH = contentHeight + innerPadding * 2;
   const int dialogX = (pageWidth - dialogW) / 2;
   const int dialogY = (pageHeight - dialogH) / 2;
@@ -1134,8 +1145,11 @@ void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, 
 
   int y = dialogY + innerPadding;
 
-  renderer.drawCenteredText(UI_12_FONT_ID, y, title, true, EpdFontFamily::BOLD);
-  y += titleLineHeight;
+  for (const auto& line : titleLines) {
+    const int lineWidth = renderer.getTextWidth(UI_12_FONT_ID, line.c_str(), EpdFontFamily::BOLD);
+    renderer.drawText(UI_12_FONT_ID, dialogX + (dialogW - lineWidth) / 2, y, line.c_str(), true, EpdFontFamily::BOLD);
+    y += titleLineHeight;
+  }
 
   if (metrics.optionPopupTitleSeparator) {
     const int sepY = y + metrics.optionPopupTitleGap / 2;
