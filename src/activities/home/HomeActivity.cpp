@@ -959,7 +959,6 @@ std::string HomeActivity::getCurrentBookPath() const {
 }
 
 void HomeActivity::updateHighlightedBookContext(const bool allowEpubLoad) {
-  const auto start = millis();
   currentBookStats = BookReadingStats{};
   currentBookProgressPercent = -1.0f;
   currentBookChapterTitle.clear();
@@ -993,8 +992,6 @@ void HomeActivity::updateHighlightedBookContext(const bool allowEpubLoad) {
 
   hasReadingStats = hasAnyBookStats(currentBookStats) || hasAnyGlobalStats(globalStats) ||
                     (showAllDevicesStats && hasAnyGlobalStats(allDevicesGlobalStats));
-  LOG_DBG("HOME", "updateHighlightedBookContext idx=%d cached=%s epubLoad=%s took %lums", idx,
-          useCachedStats ? "yes" : "no", allowEpubLoad ? "yes" : "no", millis() - start);
 }
 
 void HomeActivity::onExit() {
@@ -2067,19 +2064,13 @@ void HomeActivity::render(RenderLock&&) {
 }
 
 void HomeActivity::renderCarouselFrame(int bookIdx, int slotIdx) {
-  const auto start = millis();
   uint8_t* frameBuffer = renderer.getFrameBuffer();
   if (!frameBuffer || !gCarouselCache.frames[slotIdx]) return;
-  BookReadingStats frameStats;
-  float frameProgressPercent = -1.0f;
-  bool usedCachedStats = false;
-  renderCarouselFrameToCurrentBuffer(bookIdx, &frameStats, &frameProgressPercent, &usedCachedStats);
+  renderCarouselFrameToCurrentBuffer(bookIdx, nullptr, nullptr, nullptr);
 
   memcpy(gCarouselCache.frames[slotIdx], frameBuffer, renderer.getBufferSize());
   gCarouselCache.frameBookIdx[slotIdx] = bookIdx;
   carouselFrames[slotIdx] = gCarouselCache.frames[slotIdx];
-  LOG_DBG("HOME", "carousel: renderCarouselFrame book=%d slot=%d cached=%s took %lums", bookIdx, slotIdx,
-          usedCachedStats ? "yes" : "no", millis() - start);
 }
 
 void HomeActivity::updateSlidingWindowCache(int centerIdx, int bookCount) {

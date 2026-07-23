@@ -144,14 +144,10 @@ uint32_t Section::onPageComplete(std::unique_ptr<Page> page) {
   }
 
   const uint32_t position = file.position();
-  const uint32_t serializeStart = millis();
   if (!page->serialize(file)) {
     LOG_ERR("SCT", "Failed to serialize page %d", builtPageCount_);
     return 0;
   }
-  LOG_DBG("SCT", "Page %d processed (pos=%lu, serialize=%lums, free=%u, maxAlloc=%u)", builtPageCount_,
-          static_cast<unsigned long>(position), static_cast<unsigned long>(millis() - serializeStart),
-          ESP.getFreeHeap(), ESP.getMaxAllocHeap());
 
   builtPageCount_++;
   // pageCount is the pages available to read: a rebuild over a partial only raises it
@@ -375,7 +371,6 @@ bool Section::loadSectionFile(const int fontId, const float lineCompression, con
 
   // Explicit close() required: member variable persists beyond function scope
   file.close();
-  LOG_DBG("SCT", "Deserialization succeeded: %d pages%s", pageCount, filePartial ? " (partial)" : "");
   return true;
 }
 
@@ -390,7 +385,6 @@ bool Section::clearCache() const {
     Storage.remove(backupPath.c_str());
   }
   if (!Storage.exists(filePath.c_str())) {
-    LOG_DBG("SCT", "Cache does not exist, no action needed");
     return true;
   }
 
@@ -399,7 +393,6 @@ bool Section::clearCache() const {
     return false;
   }
 
-  LOG_DBG("SCT", "Cache cleared successfully");
   return true;
 }
 
@@ -451,9 +444,7 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
       Storage.remove(tmpHtmlPath.c_str());
     }
   };
-  if (reusedHtml) {
-    LOG_DBG("SCT", "Reusing cached HTML %s", htmlPath.c_str());
-  } else {
+  if (!reusedHtml) {
     Storage.mkdir(htmlDir.c_str());
 
     // Retry logic for SD card timing issues
@@ -492,9 +483,6 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
       LOG_ERR("SCT", "Failed to stream item contents to temp file after retries");
       return false;
     }
-
-    LOG_DBG("SCT", "Streamed temp HTML to %s (%d bytes, free=%u, maxAlloc=%u)", tmpHtmlPath.c_str(), fileSize,
-            ESP.getFreeHeap(), ESP.getMaxAllocHeap());
 
     // Promote to the persistent HTML cache immediately -- the inflate is complete and the bytes are
     // valid regardless of whether the layout build finishes, so reopening (even a window-only spine
@@ -605,7 +593,6 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
       embeddedStyle, contentBase, imageBasePath, imageRendering, std::move(tocAnchors), popupFn, cssParser, renderMode,
       buildOptions.isPreview() ? std::string(buildOptions.previewAnchor) : std::string{}, buildOptions.previewMaxPages);
   Hyphenator::setPreferredLanguage(epub->getLanguage());
-  LOG_DBG("SCT", "Parser start: spine=%d free=%u maxAlloc=%u", spineIndex, ESP.getFreeHeap(), ESP.getMaxAllocHeap());
   const bool success = visitor.parseAndBuildPages();
   LOG_DBG("SCT", "Parser done: spine=%d success=%u pages=%u free=%u maxAlloc=%u", spineIndex, success, pageCount,
           ESP.getFreeHeap(), ESP.getMaxAllocHeap());
@@ -728,8 +715,6 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
   if (cssParser) {
     cssParser->clear();
   }
-  LOG_DBG("SCT", "Create section done: spine=%d pages=%u free=%u maxAlloc=%u", spineIndex, pageCount, ESP.getFreeHeap(),
-          ESP.getMaxAllocHeap());
   return true;
 }
 
@@ -778,9 +763,7 @@ bool Section::startBuild(const int fontId, const float lineCompression, const bo
       Storage.remove(tmpHtmlPath.c_str());
     }
   };
-  if (reusedHtml) {
-    LOG_DBG("SCT", "Reusing cached HTML %s", htmlPath.c_str());
-  } else {
+  if (!reusedHtml) {
     Storage.mkdir(htmlDir.c_str());
 
     bool streamed = false;
@@ -812,8 +795,6 @@ bool Section::startBuild(const int fontId, const float lineCompression, const bo
       LOG_ERR("SCT", "Failed to stream item contents to temp file after retries");
       return false;
     }
-    LOG_DBG("SCT", "Streamed temp HTML to %s (%d bytes, free=%u, maxAlloc=%u)", tmpHtmlPath.c_str(), fileSize,
-            ESP.getFreeHeap(), ESP.getMaxAllocHeap());
     if (Storage.rename(tmpHtmlPath.c_str(), htmlPath.c_str())) {
       htmlCached = true;
     } else {
@@ -1164,8 +1145,6 @@ bool Section::finalizeBuild() {
   partial_ = false;
   partialPageCount_ = 0;
   pageCount = builtPageCount_;
-  LOG_DBG("SCT", "Incremental section build complete: spine=%d pages=%u free=%u maxAlloc=%u", spineIndex, pageCount,
-          ESP.getFreeHeap(), ESP.getMaxAllocHeap());
   return true;
 }
 

@@ -39,8 +39,6 @@ bool thumbnailHasDimensions(const std::string& path, const uint16_t width, const
 }  // namespace
 
 bool Xtc::load() {
-  LOG_DBG("XTC", "Loading XTC: %s", filepath.c_str());
-
   // Initialize parser
   parser.reset(new xtc::XtcParser());
 
@@ -53,13 +51,11 @@ bool Xtc::load() {
   }
 
   loaded = true;
-  LOG_DBG("XTC", "Loaded XTC: %s (%lu pages)", filepath.c_str(), parser->getPageCount());
   return true;
 }
 
 bool Xtc::clearCache() const {
   if (!Storage.exists(cachePath.c_str())) {
-    LOG_DBG("XTC", "Cache does not exist, no action needed");
     return true;
   }
 
@@ -68,7 +64,6 @@ bool Xtc::clearCache() const {
     return false;
   }
 
-  LOG_DBG("XTC", "Cache cleared successfully");
   return true;
 }
 
@@ -282,7 +277,6 @@ bool Xtc::generateCoverBmp() const {
 
   free(pageBuffer);
 
-  LOG_DBG("XTC", "Generated cover BMP: %s", getCoverBmpPath().c_str());
   return true;
 }
 
@@ -481,7 +475,6 @@ bool Xtc::generateThumbBmp(uint16_t width, uint16_t height) const {
   free(rowBuffer);
   thumbBmp.close();
   free(pageBuffer);
-  LOG_DBG("XTC", "Generated thumb BMP (%dx%d): %s", thumbWidth, thumbHeight, getThumbBmpPath(width, height).c_str());
   return true;
 }
 

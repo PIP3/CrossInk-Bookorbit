@@ -208,7 +208,6 @@ ZipStreamStatus ZipFileStreamReader::pump(Print& out, const size_t maxOutputByte
                 totalProduced);
         result = ZipStreamStatus::Error;
       } else {
-        LOG_DBG("ZIP", "Decompressed %d bytes into %d bytes", compressedSize, uncompressedSize);
         active = false;
         result = ZipStreamStatus::Done;
       }
@@ -864,7 +863,6 @@ bool ZipFile::readFileToStream(const char* filename, Print& out, const size_t ch
                   totalProduced);
           break;
         }
-        LOG_DBG("ZIP", "Decompressed %d bytes into %d bytes", deflatedDataSize, inflatedDataSize);
         success = true;
         break;
       }

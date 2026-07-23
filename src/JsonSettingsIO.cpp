@@ -414,7 +414,5 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
   }
   s.clockDateHasBeenSynced = clamp(doc["clockDateHasBeenSynced"] | (uint8_t)0, (uint8_t)2, (uint8_t)0);
 
-  LOG_DBG("CPS", "Settings loaded from file");
-
   return true;
 }

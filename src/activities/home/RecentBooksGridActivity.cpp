@@ -383,7 +383,6 @@ void RecentBooksGridActivity::loop() {
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (!recentBooks.empty() && selectorIndex >= 0 && selectorIndex < static_cast<int>(recentBooks.size())) {
-      LOG_DBG("RBGA", "Selected recent book: %s", recentBooks[selectorIndex].book.path.c_str());
       onSelectBook(recentBooks[selectorIndex].book.path);
       return;
     }
@@ -435,7 +434,6 @@ void RecentBooksGridActivity::loop() {
     if (touchedIndex >= 0) {
       selectorIndex = touchedIndex;
       ensureProgressLoaded(selectorIndex);
-      LOG_DBG("RBGA", "Selected recent book: %s", recentBooks[selectorIndex].book.path.c_str());
       onSelectBook(recentBooks[selectorIndex].book.path);
       return;
     }
@@ -468,11 +466,9 @@ void RecentBooksGridActivity::promptDeleteBook(const RecentBook& book) {
   const std::string path = book.path;
   auto handler = [this, path](const ActivityResult& res) {
     if (res.isCancelled) {
-      LOG_DBG("RBGA", "Delete cancelled");
       return;
     }
 
-    LOG_DBG("RBGA", "Attempting to delete: %s", path.c_str());
     BookActions::clearFileMetadata(path);
     if (!Storage.remove(path.c_str())) {
       LOG_ERR("RBGA", "Failed to delete file: %s", path.c_str());
@@ -491,11 +487,9 @@ void RecentBooksGridActivity::promptDeleteBook(const RecentBook& book) {
 void RecentBooksGridActivity::promptRemoveBook(const std::string& path, const std::string& title) {
   auto handler = [this, path](const ActivityResult& res) {
     if (res.isCancelled) {
-      LOG_DBG("RBGA", "Remove from recents cancelled");
       return;
     }
     if (RECENT_BOOKS.removeByPath(path)) {
-      LOG_DBG("RBGA", "Removed from recents: %s", path.c_str());
       reloadAfterBookAction();
     }
   };

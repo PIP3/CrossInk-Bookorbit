@@ -93,7 +93,6 @@ bool KOReaderCredentialStore::fromJson(JsonVariantConst doc) {
 void KOReaderCredentialStore::setCredentials(const std::string& user, const std::string& pass) {
   username = user;
   password = pass;
-  LOG_DBG("KRS", "Set credentials for user: %s", user.c_str());
 }
 
 std::string KOReaderCredentialStore::getMd5Password() const {
@@ -116,13 +115,9 @@ void KOReaderCredentialStore::clearCredentials() {
   username.clear();
   password.clear();
   saveToFile();
-  LOG_DBG("KRS", "Cleared KOReader credentials");
 }
 
-void KOReaderCredentialStore::setServerUrl(const std::string& url) {
-  serverUrl = url;
-  LOG_DBG("KRS", "Set server URL: %s", url.empty() ? "(default)" : url.c_str());
-}
+void KOReaderCredentialStore::setServerUrl(const std::string& url) { serverUrl = url; }
 
 std::string KOReaderCredentialStore::getBaseUrl() const {
   std::string url;
@@ -143,20 +138,13 @@ std::string KOReaderCredentialStore::getBaseUrl() const {
   return url;
 }
 
-void KOReaderCredentialStore::setMatchMethod(DocumentMatchMethod method) {
-  matchMethod = method;
-  LOG_DBG("KRS", "Set match method: %s", method == DocumentMatchMethod::FILENAME ? "Filename" : "Binary");
-}
+void KOReaderCredentialStore::setMatchMethod(DocumentMatchMethod method) { matchMethod = method; }
 
-void KOReaderCredentialStore::setSendMetadata(bool enabled) {
-  sendMetadata = enabled;
-  LOG_DBG("KRS", "Set send metadata: %s", enabled ? "true" : "false");
-}
+void KOReaderCredentialStore::setSendMetadata(bool enabled) { sendMetadata = enabled; }
 
 void KOReaderCredentialStore::setSyncBehavior(KOReaderSyncBehavior behavior) {
   if (static_cast<uint8_t>(behavior) > static_cast<uint8_t>(KOReaderSyncBehavior::SMART)) {
     behavior = KOReaderSyncBehavior::ASK_EVERY_TIME;
   }
   syncBehavior = behavior;
-  LOG_DBG("KRS", "Set sync behavior: %s", behavior == KOReaderSyncBehavior::SMART ? "Smart" : "Ask");
 }

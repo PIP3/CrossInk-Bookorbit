@@ -44,8 +44,6 @@ void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
     return;
   }
 
-  LOG_DBG("OTA", "WiFi connected, checking for update");
-
   {
     RenderLock lock(*this);
     state = CHECKING_FOR_UPDATE;
@@ -73,7 +71,6 @@ void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
   }
 
   if (!updater.isUpdateNewer()) {
-    LOG_DBG("OTA", "No new update available");
     {
       RenderLock lock(*this);
       state = NO_UPDATE;
@@ -94,17 +91,14 @@ void OtaUpdateActivity::onEnter() {
   sdFontSystem.releaseLoadedFont(renderer);
 
   if (hasActiveWifiConnection()) {
-    LOG_DBG("OTA", "WiFi already connected, checking for update");
     onWifiSelectionComplete(true);
     return;
   }
 
   // Turn on WiFi immediately
-  LOG_DBG("OTA", "Turning on WiFi...");
   WiFi.mode(WIFI_STA);
 
   // Launch WiFi selection subactivity
-  LOG_DBG("OTA", "Launching WifiSelectionActivity...");
   startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput),
                          [this](const ActivityResult& result) { onWifiSelectionComplete(!result.isCancelled); });
 }
@@ -136,7 +130,6 @@ void OtaUpdateActivity::render(RenderLock&&) {
 
   float updaterProgress = 0;
   if (state == UPDATE_IN_PROGRESS) {
-    LOG_DBG("OTA", "Update progress: %d / %d", updater.getProcessedSize(), updater.getTotalSize());
     updaterProgress = static_cast<float>(updater.getProcessedSize()) / static_cast<float>(updater.getTotalSize());
     // Only update every 2% at the most
     if (static_cast<int>(updaterProgress * 50) == lastUpdaterPercentage / 2) {
@@ -197,7 +190,6 @@ void OtaUpdateActivity::render(RenderLock&&) {
 }
 
 void OtaUpdateActivity::runUpdateInstall() {
-  LOG_DBG("OTA", "New update available, starting download...");
   {
     RenderLock lock(*this);
     failureMessage = StrId::STR_UPDATE_FAILED;

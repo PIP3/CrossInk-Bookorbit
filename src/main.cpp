@@ -507,7 +507,6 @@ bool handleGlobalPowerButtonAction(const CrossPointSettings::SHORT_PWRBTN action
       enterDeepSleep();
       return true;
     case CrossPointSettings::SHORT_PWRBTN::FORCE_REFRESH: {
-      LOG_DBG("MAIN", "Manual screen refresh triggered");
       if (SETTINGS.textAntiAliasing && activityManager.requestManualReaderRefresh()) {
         return true;
       }
@@ -633,7 +632,6 @@ void enterDeepSleep(bool fromTimeout) {
 
   putTiltSensorToSleepForDeepSleep();
   display.deepSleep();
-  LOG_DBG("MAIN", "Entering deep sleep");
 
   powerManager.startDeepSleep(gpio);
 }
@@ -650,7 +648,6 @@ void setupDisplayAndFonts(const bool seamless = false, const bool loadReaderReso
   // screen builders share the task stack. Every lightweight network target
   // uses this shared 8 KB budget; reader rendering retains its 16 KB budget.
   activityManager.begin(loadReaderResources ? READER_RENDER_TASK_STACK_BYTES : NETWORK_RENDER_TASK_STACK_BYTES);
-  LOG_DBG("MAIN", "Display initialized");
 
   // Initialize font decompressor for compressed reader fonts
   if (!fontDecompressor.init()) {
@@ -717,8 +714,6 @@ void setupDisplayAndFonts(const bool seamless = false, const bool loadReaderReso
   } else {
     LOG_DBG("MAIN", "Skipping EPUB scratch workspace and SD fonts for minimal network boot");
   }
-
-  LOG_DBG("MAIN", "Fonts setup");
 }
 
 void setup() {

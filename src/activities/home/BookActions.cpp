@@ -80,7 +80,6 @@ void clearFileMetadata(const std::string& fullPath) {
   } else if (FsHelpers::hasTxtExtension(fullPath) || FsHelpers::hasMarkdownExtension(fullPath)) {
     BookmarkStore::deleteForFilePath(fullPath, "txt");
   }
-  LOG_DBG("BookActions", "Cleared metadata for: %s", fullPath.c_str());
 }
 
 bool clearBookCache(const std::string& fullPath) {

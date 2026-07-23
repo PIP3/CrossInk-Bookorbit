@@ -489,8 +489,6 @@ static void convertScanlineToGray(const PngDecodeContext& ctx, uint8_t* grayRow)
 
 bool PngToBmpConverter::pngFileToBmpStreamInternal(FsFile& pngFile, Print& bmpOut, int targetWidth, int targetHeight,
                                                    bool oneBit, bool crop, bool adaptiveContain) {
-  LOG_DBG("PNG", "Converting PNG to %s BMP (target: %dx%d)", oneBit ? "1-bit" : "2-bit", targetWidth, targetHeight);
-
   // Verify PNG signature
   uint8_t sig[8];
   if (pngFile.read(sig, 8) != 8 || memcmp(sig, PNG_SIGNATURE, 8) != 0) {
@@ -522,8 +520,6 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(FsFile& pngFile, Print& bmpOu
 
   // Skip IHDR CRC
   pngFile.seekCur(4);
-
-  LOG_DBG("PNG", "Image: %ux%u, depth=%u, color=%u, interlace=%u", width, height, bitDepth, colorType, interlace);
 
   if (compression != 0 || filter != 0) {
     LOG_ERR("PNG", "Unsupported compression/filter method");
@@ -669,9 +665,6 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(FsFile& pngFile, Print& bmpOu
   const int outWidth = geometry.outWidth;
   const int outHeight = geometry.outHeight;
   const bool needsScaling = geometry.needsScaling;
-  LOG_DBG("PNG", "Scaling %ux%u -> %dx%d (target %dx%d, mode=%s, offset %u,%u)", width, height, outWidth, outHeight,
-          targetWidth, targetHeight, cropOutput ? "cover" : "contain", geometry.srcXOffset_fp >> 16,
-          geometry.srcYOffset_fp >> 16);
 
   // Write BMP header
   int bytesPerRow;
@@ -902,7 +895,6 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(FsFile& pngFile, Print& bmpOu
   free(ctx.previousRow);
 
   if (success) {
-    LOG_DBG("PNG", "Successfully converted PNG to BMP");
   }
   return success;
 }

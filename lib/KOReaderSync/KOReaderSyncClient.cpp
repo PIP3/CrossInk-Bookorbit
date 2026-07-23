@@ -434,8 +434,6 @@ KOReaderSyncClient::Error KOReaderSyncClient::updateProgress(const KOReaderProgr
   std::string body;
   serializeJson(doc, body);
 
-  LOG_DBG("KOSync", "Request body: %s", body.c_str());
-
 #ifdef SIMULATOR
   HTTPClient http;
   std::unique_ptr<WiFiClientSecure> secureClient;

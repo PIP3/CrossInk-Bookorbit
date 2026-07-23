@@ -267,7 +267,6 @@ bool clearCacheDirectoryPreservingFiles(const std::string& cachePath, const Pres
   }
 
   if (!Storage.exists(cachePath.c_str())) {
-    LOG_DBG("BookCache", "Cache does not exist, no action needed: %s", cachePath.c_str());
     return true;
   }
 
@@ -344,7 +343,6 @@ bool clearBookCachePreservingUserState(const std::string& path) {
   const bool clearOk = clearBookCacheForPath(path);
   const bool restoreOk = restorePreservedFiles(cachePath, resolvedFiles, movedFiles);
   if (clearOk) {
-    LOG_DBG("BookCache", "Done checking metadata cache for: %s", path.c_str());
   }
   return clearOk && restoreOk;
 }

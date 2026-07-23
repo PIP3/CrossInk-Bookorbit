@@ -432,7 +432,6 @@ void ChapterHtmlSlimParser::startPreviewAtAnchor() {
                                                  : static_cast<CssTextAlign>(paragraphAlignment);
     startNewTextBlock(paragraphAlignmentBlockStyle);
   }
-  LOG_DBG("EHP", "Started preview at anchor '%s'", previewAnchor.c_str());
 }
 
 void ChapterHtmlSlimParser::stopPreviewIfPageLimitReached() {
@@ -444,7 +443,6 @@ void ChapterHtmlSlimParser::stopPreviewIfPageLimitReached() {
   if (activeParser) {
     XML_StopParser(activeParser, XML_TRUE);
   }
-  LOG_DBG("EHP", "Stopping preview after %u pages for anchor '%s'", previewMaxPages, previewAnchor.c_str());
 }
 
 void ChapterHtmlSlimParser::addPendingPublisherPageMarker(const char* label) {
@@ -556,10 +554,6 @@ void ChapterHtmlSlimParser::flushLongTextRunIfNeeded(const bool force) {
     return;
   }
 
-  LOG_DBG("EHP", "Text block flush: force=%u words=%u/%u bytes=%u/%u footnotes=%u/%u", force ? 1U : 0U,
-          static_cast<unsigned>(wordCount), static_cast<unsigned>(wordLimit),
-          static_cast<unsigned>(currentTextRunBytes), static_cast<unsigned>(byteLimit),
-          static_cast<unsigned>(pendingFootnotes.size()), static_cast<unsigned>(MAX_PENDING_FOOTNOTES_BEFORE_LAYOUT));
   const int horizontalInset = currentTextBlock->getBlockStyle().totalHorizontalInset();
   const uint16_t effectiveWidth =
       (horizontalInset < viewportWidth) ? static_cast<uint16_t>(viewportWidth - horizontalInset) : viewportWidth;
@@ -1606,7 +1600,6 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       }
 
       if (!src.empty() && self->imageRendering != 1) {
-        LOG_DBG("EHP", "Found image: src=%s", src.c_str());
         const std::string resolvedPath = FsHelpers::normalisePath(FsHelpers::decodeUriEscapes(self->contentBase + src));
         if (isSvgImagePath(resolvedPath)) {
           LOG_DBG("EHP", "Skipping unsupported SVG image: %s", resolvedPath.c_str());
@@ -1625,8 +1618,6 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
           }
 
           const auto heapBeforeImage = MemoryBudget::snapshot();
-          LOG_DBG("EHP", "Heap before image processing: free=%u maxAlloc=%u src=%s", heapBeforeImage.freeHeap,
-                  heapBeforeImage.maxAllocHeap, src.c_str());
 
           if (self->lowMemoryImageFallback) {
             self->skipCurrentElement();
@@ -1662,8 +1653,6 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
               } else if (self->epub->extractItemToFile(resolvedPath, cachedImagePath)) {
                 // Unusual headers fall back to the existing full-file decoder.
                 // Retry only if needed to tolerate slow SD-card sync.
-                LOG_DBG("EHP", "Heap after fallback image extraction: free=%u maxAlloc=%u path=%s", ESP.getFreeHeap(),
-                        ESP.getMaxAllocHeap(), cachedImagePath.c_str());
                 ImageToFramebufferDecoder* decoder = ImageDecoderFactory::getDecoder(cachedImagePath);
                 for (int attempt = 0; attempt < 3 && !gotDimensions; attempt++) {
                   if (attempt > 0) {
@@ -1674,8 +1663,6 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
               }
 
               if (gotDimensions) {
-                LOG_DBG("EHP", "Image dimensions: %dx%d", dims.width, dims.height);
-
                 if (!MemoryBudget::hasHeapForEpubInlineImage("EHP", cachedImagePath.c_str())) {
                   self->lowMemoryImageFallback = true;
                   Storage.remove(cachedImagePath.c_str());
@@ -1728,7 +1715,6 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                     if (displayWidth < 1) displayWidth = 1;
                     if (displayHeight < 1) displayHeight = 1;
                   }
-                  LOG_DBG("EHP", "Display size from CSS height+width: %dx%d", displayWidth, displayHeight);
                 } else if (hasCssHeight && !hasCssWidth && dims.width > 0 && dims.height > 0) {
                   // Use CSS height (resolve % against viewport height) and derive width from aspect ratio
                   displayHeight = static_cast<int>(
@@ -1751,7 +1737,6 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                     if (displayHeight < 1) displayHeight = 1;
                   }
                   if (displayWidth < 1) displayWidth = 1;
-                  LOG_DBG("EHP", "Display size from CSS height: %dx%d", displayWidth, displayHeight);
                 } else if (hasCssWidth && !hasCssHeight && dims.width > 0 && dims.height > 0) {
                   // Use CSS width (resolve % against container width) and derive height from aspect ratio
                   displayWidth =
@@ -1768,7 +1753,6 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                     if (displayWidth < 1) displayWidth = 1;
                   }
                   if (displayHeight < 1) displayHeight = 1;
-                  LOG_DBG("EHP", "Display size from CSS width: %dx%d", displayWidth, displayHeight);
                 } else {
                   // Scale to fit container while preserving aspect ratio
                   int maxWidth = containerWidth;
@@ -1780,7 +1764,6 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
 
                   displayWidth = (int)(dims.width * scale);
                   displayHeight = (int)(dims.height * scale);
-                  LOG_DBG("EHP", "Display size: %dx%d (scale %.2f)", displayWidth, displayHeight, scale);
                 }
 
                 // Flush any pending text block so it appears before the image
@@ -3014,7 +2997,6 @@ bool ChapterHtmlSlimParser::finishParse() {
     return false;
   }
 
-  LOG_DBG("EHP", "Parse arena used %u bytes", (unsigned)parseArena_.used());
   parseArena_.release();
   inlineStyleBuf_ = nullptr;
   blockStyleBuf_ = nullptr;

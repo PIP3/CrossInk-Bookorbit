@@ -249,7 +249,6 @@ HttpDownloader::DownloadError runGetWolfSsl(const std::string& url, const std::s
           if (sink.total == 0 && http.hasContentLength()) {
             sink.total = sink.resumeOffset + http.getContentLength();
             progressNotifier.setTotal(sink.total);
-            LOG_DBG("HTTP", "Content-Length: %zu", sink.total);
           }
           if (!sink.write(data, len)) return false;
           sink.downloaded += len;
@@ -425,9 +424,7 @@ HttpDownloader::DownloadError runGetDefault(const std::string& url, const std::s
     sink.total = bodyLength > 0 ? sink.resumeOffset + bodyLength : 0;
     sink.downloaded = sink.resumeOffset;
     if (sink.total > 0) {
-      LOG_DBG("HTTP", "Content-Length: %zu", sink.total);
     } else {
-      LOG_DBG("HTTP", "Content-Length: unknown");
     }
 #ifdef ESP_ERR_HTTP_EAGAIN
     err = esp_http_client_set_timeout_ms(client, HTTP_READ_POLL_TIMEOUT_MS);
@@ -448,7 +445,6 @@ HttpDownloader::DownloadError runGetDefault(const std::string& url, const std::s
 
     ProgressNotifier progressNotifier(sink.progress);
     progressNotifier.setTotal(sink.total);
-    LOG_DBG("HTTP", "Reading body: buffer=%zu bytes", bufferSize);
 #ifdef ESP_ERR_HTTP_EAGAIN
     uint32_t lastReadMs = millis();
 #endif
@@ -491,7 +487,6 @@ HttpDownloader::DownloadError runGetDefault(const std::string& url, const std::s
       lastReadMs = millis();
 #endif
       if (sink.total > 0 && sink.total <= PROGRESS_UPDATE_BYTES) {
-        LOG_DBG("HTTP", "Read progress: %zu/%zu bytes", sink.downloaded, sink.total);
       }
       progressNotifier.notify(sink.downloaded, false);
       if (sink.total > 0 && sink.downloaded >= sink.total) break;
@@ -558,8 +553,6 @@ HttpDownloader::DownloadError HttpDownloader::streamUrl(const std::string& url, 
   WifiPowerSaveGuard wifiPowerSaveGuard;
   (void)wifiPowerSaveGuard;
 
-  LOG_DBG("HTTP", "Fetching: %s", url.c_str());
-
   if (!onData) {
     LOG_ERR("HTTP", "Fetch failed: missing data callback");
     return HTTP_ERROR;
@@ -589,10 +582,6 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
       existingFile.close();
     }
   }
-
-  LOG_DBG("HTTP", "Downloading: %s", url.c_str());
-  LOG_DBG("HTTP", "Destination: %s", destPath.c_str());
-  LOG_DBG("HTTP", "Timeout: %d ms buffer=%zu bytes", HTTP_TIMEOUT_MS, bufferSize);
 
   if (resumeOffset == 0 && Storage.exists(destPath.c_str())) {
     Storage.remove(destPath.c_str());
@@ -671,6 +660,5 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
     return HTTP_ERROR;
   }
 
-  LOG_DBG("HTTP", "Downloaded %zu bytes", sink.downloaded);
   return OK;
 }

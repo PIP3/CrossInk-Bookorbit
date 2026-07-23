@@ -134,8 +134,6 @@ bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x,
   expectedWidth = cachedWidth;
   expectedHeight = cachedHeight;
 
-  LOG_DBG("IMG", "Loading from cache: %s (%dx%d)", cachePath.c_str(), cachedWidth, cachedHeight);
-
   const int screenWidth = renderer.getScreenWidth();
   const int screenHeight = renderer.getScreenHeight();
   int clipXStart = 0;
@@ -232,7 +230,6 @@ bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x,
 
   free(readBuffer);
   cacheFile.close();
-  LOG_DBG("IMG", "Cache render complete");
   return true;
 }
 
@@ -270,8 +267,6 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y, const b
   // passes; on first view this just moves the one-time decode to the BW pass.
   FontCacheManager* fcm = renderer.getFontCacheManager();
   if (fcm && fcm->isScanning()) return;
-
-  LOG_DBG("IMG", "Rendering image at %d,%d: %s (%dx%d)", x, y, imagePath.c_str(), width, height);
 
   const int screenWidth = renderer.getScreenWidth();
   const int screenHeight = renderer.getScreenHeight();
@@ -312,7 +307,6 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y, const b
   }
 
   if (!sourcePath.empty() && extractFn && !Storage.exists(imagePath.c_str())) {
-    LOG_DBG("IMG", "Lazy-extracting %s -> %s", sourcePath.c_str(), imagePath.c_str());
     if (!extractFn(extractContext, sourcePath.c_str(), imagePath.c_str())) {
       LOG_ERR("IMG", "Lazy extraction failed: %s", sourcePath.c_str());
     }
@@ -337,8 +331,6 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y, const b
     return;
   }
 
-  LOG_DBG("IMG", "Decoding and caching: %s", imagePath.c_str());
-
   RenderConfig config;
   config.x = x;
   config.y = y;
@@ -360,8 +352,6 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y, const b
     return;
   }
 
-  LOG_DBG("IMG", "Using %s decoder", decoder->getFormatName());
-
   bool success = decoder->decodeToFramebuffer(imagePath, renderer, config);
   if (!success) {
     LOG_ERR("IMG", "Failed to decode image: %s", imagePath.c_str());
@@ -369,8 +359,6 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y, const b
     renderPlaceholder(renderer, x, y, foregroundBlack);
     return;
   }
-
-  LOG_DBG("IMG", "Decode successful");
 }
 
 bool ImageBlock::serialize(FsFile& file) {

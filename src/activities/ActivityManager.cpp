@@ -117,7 +117,6 @@ void ActivityManager::loop() {
       pendingAction = PendingAction::None;
 
       if (stackActivities.empty()) {
-        LOG_DBG("ACT", "No more activities on stack, going home");
         lock.unlock();  // goHome may acquire its own lock
         goHome();
         continue;  // Will launch goHome immediately
@@ -125,11 +124,8 @@ void ActivityManager::loop() {
       } else {
         currentActivity = std::move(stackActivities.back());
         stackActivities.pop_back();
-        LOG_DBG("ACT", "Popped from activity stack, new size = %zu", stackActivities.size());
         // Handle result if necessary
         if (currentActivity->resultHandler) {
-          LOG_DBG("ACT", "Handling result for popped activity");
-
           // Move it here to avoid the case where handler calling another startActivityForResult()
           auto handler = std::move(currentActivity->resultHandler);
           currentActivity->resultHandler = nullptr;
@@ -165,7 +161,6 @@ void ActivityManager::loop() {
       } else if (pendingAction == PendingAction::Push) {
         // Move current activity to stack
         stackActivities.push_back(std::move(currentActivity));
-        LOG_DBG("ACT", "Pushed to activity stack, new size = %zu", stackActivities.size());
       }
       pendingAction = PendingAction::None;
       currentActivity = std::move(pendingActivity);

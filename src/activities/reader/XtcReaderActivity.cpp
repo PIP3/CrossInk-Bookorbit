@@ -388,9 +388,6 @@ bool XtcReaderActivity::currentPageReadingSecondsForStats(uint32_t& seconds, con
 
   const uint32_t thresholdSeconds = SETTINGS.getReadingIdleTimeThresholdSeconds();
   if (elapsedSeconds > thresholdSeconds) {
-    LOG_DBG("XTR", "Reading time interval rejected as idle: source=%s seconds=%lu threshold=%lu",
-            source ? source : "unknown", static_cast<unsigned long>(elapsedSeconds),
-            static_cast<unsigned long>(thresholdSeconds));
     return false;
   }
 
@@ -869,8 +866,6 @@ void XtcReaderActivity::renderPage() {
         pixelCounts[getPixelValue(x, y)]++;
       }
     }
-    LOG_DBG("XTR", "Pixel distribution: White=%lu, DarkGrey=%lu, LightGrey=%lu, Black=%lu", pixelCounts[0],
-            pixelCounts[1], pixelCounts[2], pixelCounts[3]);
 
     // Pass 1: BW buffer - draw all non-white pixels as black
     for (uint16_t y = 0; y < pageHeight; y++) {
@@ -938,7 +933,6 @@ void XtcReaderActivity::renderPage() {
 
     free(pageBuffer);
 
-    LOG_DBG("XTR", "Rendered page %lu/%lu (2-bit grayscale)", currentPage + 1, xtc->getPageCount());
     return;
   } else {
     // 1-bit mode: 8 pixels per byte, MSB first
@@ -971,8 +965,6 @@ void XtcReaderActivity::renderPage() {
 
   // Display with appropriate refresh
   ReaderUtils::displayWithRefreshCycle(renderer, pagesUntilFullRefresh);
-
-  LOG_DBG("XTR", "Rendered page %lu/%lu (%u-bit)", currentPage + 1, xtc->getPageCount(), bitDepth);
 }
 
 void XtcReaderActivity::saveProgress() const {
@@ -994,7 +986,6 @@ void XtcReaderActivity::loadProgress() {
     uint8_t data[4];
     if (f.read(data, 4) == 4) {
       currentPage = data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24);
-      LOG_DBG("XTR", "Loaded progress: page %lu", currentPage);
 
       // Validate page number
       if (currentPage >= xtc->getPageCount()) {

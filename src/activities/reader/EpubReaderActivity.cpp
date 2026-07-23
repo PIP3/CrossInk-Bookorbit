@@ -246,22 +246,6 @@ bool hasVisibleWordText(const char* text) {
 
 bool hasVisibleWordText(const std::string& text) { return hasVisibleWordText(text.c_str()); }
 
-uint8_t largestBlockPercent(const MemoryBudget::HeapSnapshot& heap) {
-  if (heap.freeHeap == 0) {
-    return 0;
-  }
-  return static_cast<uint8_t>(std::min<uint32_t>(100, (heap.maxAllocHeap * 100U) / heap.freeHeap));
-}
-
-struct TiledGrayscaleTimings {
-  unsigned long grayLsb = 0;
-  unsigned long grayMsb = 0;
-  unsigned long grayDisplay = 0;
-  unsigned long cleanup = 0;
-  bool overlappedRefresh = false;
-  uint8_t bufferedPlanes = 0;
-};
-
 struct ClippingPageMatch {
   uint16_t startWord = 0;
   uint16_t endWord = 0;
@@ -620,8 +604,7 @@ uint16_t resolveClippingJumpPage(Section& section, const Clipping& clipping, con
 
 bool runTiledGrayscalePass(GfxRenderer& renderer, const Page& page, const int fontId, const int marginLeft,
                            const int marginTop, const bool foregroundBlack, const bool needsTextGrayscale,
-                           const bool needsImageGrayscale, const bool asyncRefreshPending,
-                           TiledGrayscaleTimings& timings) {
+                           const bool needsImageGrayscale, const bool asyncRefreshPending) {
   if ((!needsTextGrayscale && !needsImageGrayscale) || !renderer.supportsStripGrayscale()) {
     return false;
   }
@@ -659,14 +642,9 @@ bool runTiledGrayscalePass(GfxRenderer& renderer, const Page& page, const int fo
   auto msbPlaneBuf = (lsbPlaneBuf && planeBufferFits()) ? makeUniqueNoThrow<uint8_t[]>(planeBytes) : nullptr;
 
   if (lsbPlaneBuf) {
-    timings.overlappedRefresh = true;
-    timings.bufferedPlanes = msbPlaneBuf ? 2 : 1;
-
     renderPlaneToBuffer(GfxRenderer::GRAYSCALE_LSB, lsbPlaneBuf.get());
-    timings.grayLsb = millis();
     if (msbPlaneBuf) {
       renderPlaneToBuffer(GfxRenderer::GRAYSCALE_MSB, msbPlaneBuf.get());
-      timings.grayMsb = millis();
     }
 
     renderer.waitRefreshComplete();
@@ -675,15 +653,12 @@ bool runTiledGrayscalePass(GfxRenderer& renderer, const Page& page, const int fo
       renderer.writeGrayscalePlaneStrip(false, msbPlaneBuf.get(), 0, displayHeight);
     } else {
       renderPlaneToBuffer(GfxRenderer::GRAYSCALE_MSB, lsbPlaneBuf.get());
-      timings.grayMsb = millis();
       renderer.writeGrayscalePlaneStrip(false, lsbPlaneBuf.get(), 0, displayHeight);
     }
 
     renderer.setRenderMode(GfxRenderer::BW);
     renderer.displayGrayBuffer();
-    timings.grayDisplay = millis();
     renderer.cleanupGrayscaleWithFrameBuffer();
-    timings.cleanup = millis();
     return true;
   }
 
@@ -726,16 +701,12 @@ bool runTiledGrayscalePass(GfxRenderer& renderer, const Page& page, const int fo
   };
 
   renderPlane(GfxRenderer::GRAYSCALE_LSB, true);
-  timings.grayLsb = millis();
 
   renderPlane(GfxRenderer::GRAYSCALE_MSB, false);
-  timings.grayMsb = millis();
 
   renderer.setRenderMode(GfxRenderer::BW);
   renderer.displayGrayBuffer();
-  timings.grayDisplay = millis();
   renderer.cleanupGrayscaleWithFrameBuffer();
-  timings.cleanup = millis();
   return true;
 }
 
@@ -1321,9 +1292,6 @@ bool EpubReaderActivity::currentPageReadingSecondsForStats(uint32_t& seconds, co
 
   const uint32_t thresholdSeconds = SETTINGS.getReadingIdleTimeThresholdSeconds();
   if (elapsedSeconds > thresholdSeconds) {
-    LOG_DBG("ERS", "Reading time interval rejected as idle: source=%s seconds=%lu threshold=%lu",
-            source ? source : "unknown", static_cast<unsigned long>(elapsedSeconds),
-            static_cast<unsigned long>(thresholdSeconds));
     return false;
   }
 
@@ -1350,15 +1318,11 @@ void EpubReaderActivity::recordForwardPagePaceSample(uint32_t seconds, const cha
   }
 
   if (seconds < MIN_READING_PACE_SAMPLE_SECONDS) {
-    LOG_DBG("ERS", "Time-left pace sample rejected: source=%s seconds=%lu minSeconds=%lu", source ? source : "unknown",
-            static_cast<unsigned long>(seconds), static_cast<unsigned long>(MIN_READING_PACE_SAMPLE_SECONDS));
     return;
   }
 
   const uint32_t maxReadingPaceSampleSeconds = SETTINGS.getReadingIdleTimeThresholdSeconds();
   if (seconds > maxReadingPaceSampleSeconds) {
-    LOG_DBG("ERS", "Time-left pace sample rejected: source=%s seconds=%lu maxSeconds=%lu", source ? source : "unknown",
-            static_cast<unsigned long>(seconds), static_cast<unsigned long>(maxReadingPaceSampleSeconds));
     return;
   }
 
@@ -1893,7 +1857,6 @@ void EpubReaderActivity::onEnter() {
         cachedChapterPageNumber = progress.pageNumber;
         cachedChapterTotalPageCount = progress.pageCount;
       }
-      LOG_DBG("ERS", "Loaded cache: %d, %d", currentSpineIndex, nextPageNumber);
     }
   }
   // We may want a better condition to detect if we are opening for the first time.
@@ -1902,7 +1865,6 @@ void EpubReaderActivity::onEnter() {
     int textSpineIndex = epub->getSpineIndexForTextReference();
     if (textSpineIndex != 0) {
       currentSpineIndex = textSpineIndex;
-      LOG_DBG("ERS", "Opened for first time, navigating to text reference at index %d", textSpineIndex);
     }
   }
 
@@ -4753,12 +4715,10 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       currentPageFootnotes = std::move(p->footnotes);
     }
 
-    const auto start = millis();
     const int renderFontId = activeSectionFontId != 0 ? activeSectionFontId : SETTINGS.getReaderFontId();
     renderContents(std::move(p), renderFontId, layout.marginTop, layout.marginRight, layout.marginBottom,
                    layout.marginLeft);
     pageShownAtMs = activeFootnotePreview ? 0UL : millis();
-    LOG_DBG("ERS", "Rendered page in %dms", millis() - start);
   }
   if (!activeFootnotePreview) {
     silentIndexNextChapterIfNeeded(viewportWidth, viewportHeight);
@@ -4814,8 +4774,6 @@ void EpubReaderActivity::silentIndexNextChapterIfNeeded(const uint16_t viewportW
                                    SETTINGS.imageRendering, SETTINGS.bionicReadingEnabled, SETTINGS.guideReadingEnabled,
                                    SETTINGS.wordSpacing, selectedRenderMode) &&
       !nextSection->isPartial()) {
-    LOG_DBG("ERS", "Skipping silent next-chapter indexing: cache already exists (chapter=%d pages=%u)", nextSpineIndex,
-            nextSection->pageCount);
     return;
   }
   // Close any loaded partial before rebuilding the same cache path. Real SdFat
@@ -5062,26 +5020,11 @@ void EpubReaderActivity::cacheCurrentSectionPosition() {
 void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int fontId, const int orientedMarginTop,
                                         const int orientedMarginRight, const int orientedMarginBottom,
                                         const int orientedMarginLeft) {
-  const auto t0 = millis();
-
   // Font prewarm: scan pass accumulates text, then prewarm, then real render
   auto* fcm = renderer.getFontCacheManager();
-  fcm->resetStats();
-  const auto heapBefore = MemoryBudget::snapshot();
   auto scope = fcm->createPrewarmScope();
   page->renderText(renderer, fontId, orientedMarginLeft, orientedMarginTop);  // scan pass
   scope.endScanAndPrewarm();
-  const auto heapAfter = MemoryBudget::snapshot();
-  fcm->logStats("prewarm");
-  const auto tPrewarm = millis();
-
-  LOG_DBG(
-      "ERS", "Heap prewarm: free=%u->%u delta=%ld maxAlloc=%u->%u delta=%ld largestPct=%u->%u", heapBefore.freeHeap,
-      heapAfter.freeHeap,
-      static_cast<long>(static_cast<int32_t>(heapAfter.freeHeap) - static_cast<int32_t>(heapBefore.freeHeap)),
-      heapBefore.maxAllocHeap, heapAfter.maxAllocHeap,
-      static_cast<long>(static_cast<int32_t>(heapAfter.maxAllocHeap) - static_cast<int32_t>(heapBefore.maxAllocHeap)),
-      largestBlockPercent(heapBefore), largestBlockPercent(heapAfter));
 
   const bool pageHasImages = page->hasImages();
   const bool pageHasImagesNeedingDecode = pageHasImages && page->hasImagesNeedingDecode();
@@ -5149,14 +5092,6 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int fo
   } else if (pendingRenderModeToast) {
     drawRenderModeToastBuffer(labelForRenderModeToast(normalizeRenderMode(renderModeToastMode)));
   }
-  fcm->logStats("bw_render");
-  const auto tBwRender = millis();
-  const auto logImagePageProfile = [](const uint32_t imageBlankDisplayMs, const uint32_t imageRestoreRenderMs,
-                                      const uint32_t imageFinalDisplayMs) {
-    LOG_DBG("ERS", "Image page profile: blank_display=%lums restore_render=%lums final_display=%lums",
-            imageBlankDisplayMs, imageRestoreRenderMs, imageFinalDisplayMs);
-  };
-
   if (pageHasImages) {
     // Double FAST_REFRESH with selective image blanking (pablohc's technique):
     // HALF_REFRESH sets particles too firmly for the grayscale LUT to adjust.
@@ -5166,22 +5101,15 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int fo
     int16_t imgX, imgY, imgW, imgH;
     if (page->getImageBoundingBox(imgX, imgY, imgW, imgH)) {
       renderer.fillRect(imgX + orientedMarginLeft, imgY + orientedMarginTop, imgW, imgH, false);
-      const auto tImageBlankDisplay = millis();
       renderer.displayBuffer(HalDisplay::FAST_REFRESH);
-      const uint32_t imageBlankDisplayMs = millis() - tImageBlankDisplay;
 
       // Re-render page content to restore images into the blanked area
       // Status bar is not re-rendered here to avoid reading stale dynamic values (e.g. battery %)
-      const auto tImageRestoreRender = millis();
       composePageBuffer();
-      const uint32_t imageRestoreRenderMs = millis() - tImageRestoreRender;
       // The restored image frame becomes the base for the grayscale image
       // planes below. On X3, use the same grayscale-aware base waveform as
       // text-only grayscale turns; other panels keep the FAST fallback behavior.
-      const auto tImageFinalDisplay = millis();
       renderer.displayGrayscaleBase(HalDisplay::FAST_REFRESH);
-      const uint32_t imageFinalDisplayMs = millis() - tImageFinalDisplay;
-      logImagePageProfile(imageBlankDisplayMs, imageRestoreRenderMs, imageFinalDisplayMs);
     } else {
       renderer.displayBuffer(HalDisplay::HALF_REFRESH);
     }
@@ -5212,28 +5140,13 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int fo
   } else {
     ReaderUtils::displayWithRefreshCycle(renderer, pagesUntilFullRefresh);
   }
-  const auto tDisplay = millis();
-
-  TiledGrayscaleTimings tiledTimings;
   if (runTiledGrayscalePass(renderer, *page, fontId, orientedMarginLeft, orientedMarginTop, foregroundBlack,
-                            needsTextGrayscale, needsImageGrayscale, overlapRefresh, tiledTimings)) {
-    const auto tEnd = millis();
-    LOG_DBG("ERS",
-            "Page render (tiled): prewarm=%lums bw_render=%lums display=%lums "
-            "gray_lsb=%lums gray_msb=%lums gray_display=%lums cleanup=%lums total=%lums async=%d "
-            "buffered_planes=%u",
-            tPrewarm - t0, tBwRender - tPrewarm, tDisplay - tBwRender, tiledTimings.grayLsb - tDisplay,
-            tiledTimings.grayMsb - tiledTimings.grayLsb, tiledTimings.grayDisplay - tiledTimings.grayMsb,
-            tiledTimings.cleanup - tiledTimings.grayDisplay, tEnd - t0, tiledTimings.overlappedRefresh,
-            static_cast<unsigned>(tiledTimings.bufferedPlanes));
+                            needsTextGrayscale, needsImageGrayscale, overlapRefresh)) {
     return;
   }
 
   // Save bw buffer to reset buffer state after grayscale data sync
-  const auto bwStoreHeapBefore = MemoryBudget::snapshot();
   const bool storedBwBuffer = needsAnyGrayscale && renderer.storeBwBuffer();
-  const auto bwStoreHeapAfter = MemoryBudget::snapshot();
-  const auto tBwStore = millis();
   const bool canApplyGrayscale = needsAnyGrayscale && storedBwBuffer;
   if (needsAnyGrayscale && !storedBwBuffer) {
     LOG_ERR("ERS", "Skipping grayscale enhancement: failed to store BW backup");
@@ -5245,58 +5158,23 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int fo
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
     composeGrayscaleBuffer();
     renderer.copyGrayscaleLsbBuffers();
-    const auto tGrayLsb = millis();
 
     // Render and copy to MSB buffer
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
     composeGrayscaleBuffer();
     renderer.copyGrayscaleMsbBuffers();
-    const auto tGrayMsb = millis();
 
     // display grayscale part
     renderer.displayGrayBuffer();
-    const auto tGrayDisplay = millis();
     renderer.setRenderMode(GfxRenderer::BW);
     // restore the bw data
     renderer.restoreBwBuffer();
-    const auto tBwRestore = millis();
-
-    const auto tEnd = millis();
-    LOG_DBG("ERS",
-            "Page render: prewarm=%lums bw_render=%lums display=%lums bw_store=%lums bw_store_ok=%d "
-            "bw_store_free=%u->%u delta=%ld bw_store_maxAlloc=%u->%u delta=%ld bw_store_largestPct=%u->%u "
-            "gray_lsb=%lums gray_msb=%lums gray_display=%lums bw_restore=%lums total=%lums",
-            tPrewarm - t0, tBwRender - tPrewarm, tDisplay - tBwRender, tBwStore - tDisplay, storedBwBuffer,
-            bwStoreHeapBefore.freeHeap, bwStoreHeapAfter.freeHeap,
-            static_cast<long>(static_cast<int32_t>(bwStoreHeapAfter.freeHeap) -
-                              static_cast<int32_t>(bwStoreHeapBefore.freeHeap)),
-            bwStoreHeapBefore.maxAllocHeap, bwStoreHeapAfter.maxAllocHeap,
-            static_cast<long>(static_cast<int32_t>(bwStoreHeapAfter.maxAllocHeap) -
-                              static_cast<int32_t>(bwStoreHeapBefore.maxAllocHeap)),
-            largestBlockPercent(bwStoreHeapBefore), largestBlockPercent(bwStoreHeapAfter), tGrayLsb - tBwStore,
-            tGrayMsb - tGrayLsb, tGrayDisplay - tGrayMsb, tBwRestore - tGrayDisplay, tEnd - t0);
   } else {
     if (storedBwBuffer) {
       // Restore the BW data when we skipped grayscale entirely.
       renderer.restoreBwBuffer();
     }
-    const auto tBwRestore = millis();
-
-    const auto tEnd = millis();
-    LOG_DBG("ERS",
-            "Page render: prewarm=%lums bw_render=%lums display=%lums bw_store=%lums bw_store_ok=%d "
-            "bw_store_free=%u->%u delta=%ld bw_store_maxAlloc=%u->%u delta=%ld bw_store_largestPct=%u->%u "
-            "bw_restore=%lums total=%lums",
-            tPrewarm - t0, tBwRender - tPrewarm, tDisplay - tBwRender, tBwStore - tDisplay, storedBwBuffer,
-            bwStoreHeapBefore.freeHeap, bwStoreHeapAfter.freeHeap,
-            static_cast<long>(static_cast<int32_t>(bwStoreHeapAfter.freeHeap) -
-                              static_cast<int32_t>(bwStoreHeapBefore.freeHeap)),
-            bwStoreHeapBefore.maxAllocHeap, bwStoreHeapAfter.maxAllocHeap,
-            static_cast<long>(static_cast<int32_t>(bwStoreHeapAfter.maxAllocHeap) -
-                              static_cast<int32_t>(bwStoreHeapBefore.maxAllocHeap)),
-            largestBlockPercent(bwStoreHeapBefore), largestBlockPercent(bwStoreHeapAfter), tBwRestore - tBwStore,
-            tEnd - t0);
   }
 }
 
@@ -5613,7 +5491,6 @@ void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool s
   if (savePosition && section && footnoteDepth < MAX_FOOTNOTE_DEPTH) {
     savedPositions[footnoteDepth] = {currentSpineIndex, section->currentPage};
     footnoteDepth++;
-    LOG_DBG("ERS", "Saved position [%d]: spine %d, page %d", footnoteDepth, currentSpineIndex, section->currentPage);
   }
 
   // Extract fragment anchor (e.g. "#note1" or "chapter2.xhtml#note1")
@@ -5651,7 +5528,6 @@ void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool s
   }
   armReadingPaceWarmup(savePosition ? "href_navigation" : "href_restore");
   requestUpdate();
-  LOG_DBG("ERS", "Navigated to spine %d for href: %s", targetSpineIndex, hrefStr.c_str());
 }
 
 void EpubReaderActivity::restoreSavedPosition() {
@@ -5659,7 +5535,6 @@ void EpubReaderActivity::restoreSavedPosition() {
   if (footnoteDepth <= 0) return;
   footnoteDepth--;
   const auto& pos = savedPositions[footnoteDepth];
-  LOG_DBG("ERS", "Restoring position [%d]: spine %d, page %d", footnoteDepth, pos.spineIndex, pos.pageNumber);
 
   {
     RenderLock lock(*this);

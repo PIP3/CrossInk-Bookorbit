@@ -258,24 +258,18 @@ void WifiSelectionActivity::onEnter() {
 void WifiSelectionActivity::onExit() {
   Activity::onExit();
 
-  LOG_DBG("WIFI", "Free heap at onExit start: %d bytes", ESP.getFreeHeap());
-
   // Stop any ongoing WiFi scan
-  LOG_DBG("WIFI", "Deleting WiFi scan...");
   WiFi.scanDelete();
-  LOG_DBG("WIFI", "Free heap after scanDelete: %d bytes", ESP.getFreeHeap());
 
   // Successful connections leave WiFi up for the parent activity. Canceled
   // flows own their cleanup because no parent may be present to tear WiFi down.
   if (tearDownWifiOnExit) {
-    LOG_DBG("WIFI", "Tearing down WiFi after cancelled selection...");
 #ifndef SIMULATOR
     sConnectionAttemptLoggingActive = false;
 #endif
     WiFi.disconnect(false);
     delay(30);
     WiFi.mode(WIFI_OFF);
-    LOG_DBG("WIFI", "Free heap after WiFi off: %d bytes", ESP.getFreeHeap());
   }
 
   LOG_DBG("WIFI", "Free heap at onExit end: %d bytes", ESP.getFreeHeap());
@@ -358,9 +352,6 @@ void WifiSelectionActivity::processWifiScanResults() {
       it->rssi = rssi;
       it->isEncrypted = (WiFi.encryptionType(i) != WIFI_AUTH_OPEN);
     }
-
-    LOG_DBG("WIFI", "Scan result: ssid=%s rssi=%d auth=%s saved=%d", ssid, rssi, wifiAuthName(authMode),
-            WIFI_STORE.hasSavedCredential(ssid));
   }
 
   // Sort: saved-password networks first, then by signal strength (strongest first)
@@ -427,7 +418,6 @@ void WifiSelectionActivity::selectNetwork(const int index) {
     usedSavedPassword = true;
     LOG_INF("WIFI", "Selected network: ssid=%s encrypted=%d saved=1 rssi=%d", selectedSSID.c_str(),
             selectedRequiresPassword, network.rssi);
-    LOG_DBG("WiFi", "Using saved password for %s, length: %zu", selectedSSID.c_str(), enteredPassword.size());
     attemptConnection();
     return;
   }
@@ -540,7 +530,6 @@ void WifiSelectionActivity::handleAutoConnectFailure() {
 }
 
 void WifiSelectionActivity::showNetworkListFromAutoConnect() {
-  LOG_DBG("WIFI", "User requested manual network list");
   WiFi.disconnect();
   autoConnecting = false;
   manualNetworkListRequested = true;
@@ -675,7 +664,6 @@ void WifiSelectionActivity::checkConnectionStatus() {
                 "completing immediately");
         onComplete(true);
       } else {
-        LOG_DBG("WIFI", "Connected from manual network settings, showing connected status");
         state = WifiSelectionState::CONNECTED;
         requestUpdate();
       }
@@ -777,7 +765,6 @@ void WifiSelectionActivity::loop() {
       // We already know this hidden network - connect with the saved password
       enteredPassword = savedCred->password;
       usedSavedPassword = true;
-      LOG_DBG("WiFi", "Using saved password for hidden network %s", selectedSSID.c_str());
       attemptConnection();
     } else {
       // Prompt for the password (empty password connects to open hidden APs)

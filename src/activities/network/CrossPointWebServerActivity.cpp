@@ -85,7 +85,6 @@ void CrossPointWebServerActivity::onEnter() {
   }
 
   // Launch network mode selection subactivity
-  LOG_DBG("WEBACT", "Launching NetworkModeSelectionActivity...");
   startActivityForResult(std::make_unique<NetworkModeSelectionActivity>(renderer, mappedInput),
                          [this](const ActivityResult& result) {
                            if (result.isCancelled) {
@@ -98,8 +97,6 @@ void CrossPointWebServerActivity::onEnter() {
 
 void CrossPointWebServerActivity::onExit() {
   Activity::onExit();
-
-  LOG_DBG("WEBACT", "Free heap at onExit start: %d bytes", ESP.getFreeHeap());
 
   state = WebServerActivityState::SHUTTING_DOWN;
 
@@ -123,7 +120,6 @@ void CrossPointWebServerActivity::onExit() {
   stopWebServer();
   MDNS.end();
   if (dnsServer) {
-    LOG_DBG("WEBACT", "Stopping DNS server...");
     dnsServer->stop();
     delete dnsServer;
     dnsServer = nullptr;
@@ -212,11 +208,9 @@ void CrossPointWebServerActivity::onNetworkModeSelected(const NetworkMode mode) 
 
   if (mode == NetworkMode::JOIN_NETWORK) {
     // STA mode - launch WiFi selection
-    LOG_DBG("WEBACT", "Turning on WiFi (STA mode)...");
     WiFi.mode(WIFI_STA);
 
     state = WebServerActivityState::WIFI_SELECTION;
-    LOG_DBG("WEBACT", "Launching WifiSelectionActivity...");
     startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput),
                            [this](const ActivityResult& result) {
                              if (!result.isCancelled) {
@@ -235,8 +229,6 @@ void CrossPointWebServerActivity::onNetworkModeSelected(const NetworkMode mode) 
 }
 
 void CrossPointWebServerActivity::onWifiSelectionComplete(const bool connected) {
-  LOG_DBG("WEBACT", "WifiSelectionActivity completed, connected=%d", connected);
-
   if (connected) {
     // Get connection info before exiting subactivity
     isApMode = false;
@@ -262,7 +254,6 @@ void CrossPointWebServerActivity::onWifiSelectionComplete(const bool connected) 
 }
 
 void CrossPointWebServerActivity::startAccessPoint() {
-  LOG_DBG("WEBACT", "Starting Access Point mode...");
   LOG_DBG("WEBACT", "Free heap before AP start: %d bytes", ESP.getFreeHeap());
 
   // Configure and start the AP
@@ -293,10 +284,6 @@ void CrossPointWebServerActivity::startAccessPoint() {
   connectedIP = ipStr;
   connectedSSID = AP_SSID;
 
-  LOG_DBG("WEBACT", "Access Point started!");
-  LOG_DBG("WEBACT", "SSID: %s", AP_SSID);
-  LOG_DBG("WEBACT", "IP: %s", connectedIP.c_str());
-
   // Start mDNS for hostname resolution
   restartMdns(AP_HOSTNAME, "WEBACT");
 
@@ -306,7 +293,6 @@ void CrossPointWebServerActivity::startAccessPoint() {
   dnsServer = new DNSServer();
   dnsServer->setErrorReplyCode(DNSReplyCode::NoError);
   dnsServer->start(DNS_PORT, "*", apIP);
-  LOG_DBG("WEBACT", "DNS server started for captive portal");
 
   LOG_DBG("WEBACT", "Free heap after AP start: %d bytes", ESP.getFreeHeap());
 
@@ -315,15 +301,12 @@ void CrossPointWebServerActivity::startAccessPoint() {
 }
 
 void CrossPointWebServerActivity::startWebServer() {
-  LOG_DBG("WEBACT", "Starting web server...");
-
   // Create the web server instance
   webServer.reset(new CrossPointWebServer());
   webServer->begin();
 
   if (webServer->isRunning()) {
     state = WebServerActivityState::SERVER_RUNNING;
-    LOG_DBG("WEBACT", "Web server started successfully");
     lastWifiBars = isApMode ? 0 : barsForRssi(WiFi.RSSI(), 0);
 
     // Force an immediate render since we're transitioning from a subactivity
@@ -357,9 +340,7 @@ void CrossPointWebServerActivity::exitToOrigin() {
 
 void CrossPointWebServerActivity::stopWebServer() {
   if (webServer && webServer->isRunning()) {
-    LOG_DBG("WEBACT", "Stopping web server...");
     webServer->stop();
-    LOG_DBG("WEBACT", "Web server stopped");
   }
   webServer.reset();
 }

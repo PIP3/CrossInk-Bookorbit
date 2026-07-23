@@ -558,7 +558,6 @@ bool CrossPointSettings::loadFromBinaryFile() {
 
   lineHeightPercent = legacyLineSpacingToPercent(lineSpacing, fontFamily, sdFontFamilyName[0] != '\0');
 
-  LOG_DBG("CPS", "Settings loaded from binary file");
   return true;
 }
 

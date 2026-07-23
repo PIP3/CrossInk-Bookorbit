@@ -54,7 +54,6 @@ void BackupStatsActivity::render(RenderLock&&) {
 }
 
 void BackupStatsActivity::runBackup() {
-  LOG_DBG("BACKUP_STATS", "Creating reading-stats backup");
   state = backupGlobalStats(true, backupFileName, sizeof(backupFileName)) ? SUCCESS : FAILED;
   requestUpdate();
 }

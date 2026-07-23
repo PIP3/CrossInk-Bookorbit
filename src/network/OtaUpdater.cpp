@@ -198,7 +198,6 @@ esp_err_t release_manifest_event_handler(esp_http_client_event_t* event) {
   }
 
   totalBytesReceived += static_cast<size_t>(event->data_len);
-  LOG_DBG("OTA", "HTTP chunk: %d bytes (total: %zu)", event->data_len, totalBytesReceived);
   parser->feed(static_cast<const char*>(event->data), event->data_len);
   return ESP_OK;
 }

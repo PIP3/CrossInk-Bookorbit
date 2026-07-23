@@ -654,7 +654,6 @@ void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
       uint32_t existingCrc = 0;
       if (computeFileCrc32(destPath, existingCrc) && existingCrc == file.crc32 &&
           fontInstaller_.validateCpfontFile(destPath)) {
-        LOG_DBG("FONT", "Skipping existing %s (crc32=%08x)", file.name.c_str(), existingCrc);
         {
           RenderLock lock(*this);
           fileProgress_ = file.size;
@@ -698,8 +697,6 @@ void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
       if (attempt > 1) {
         LOG_DBG("FONT", "Retrying %s (%d/%d)", file.name.c_str(), attempt, FONT_DOWNLOAD_MAX_ATTEMPTS);
       }
-      LOG_DBG("FONT", "Download attempt %d/%d: %s (%zu bytes)", attempt, FONT_DOWNLOAD_MAX_ATTEMPTS, file.name.c_str(),
-              file.size);
       requestUpdateAndWait();
       if (attempt > 1) delay(FONT_DOWNLOAD_RETRY_DELAY_MS);
 
@@ -727,8 +724,6 @@ void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
         return;
       }
       if (result == HttpDownloader::OK) {
-        LOG_DBG("FONT", "Download attempt succeeded: %s (%d/%d)", file.name.c_str(), attempt,
-                FONT_DOWNLOAD_MAX_ATTEMPTS);
         break;
       }
       LOG_ERR("FONT", "Download attempt failed: %s (%d/%d, error=%d)", file.name.c_str(), attempt,
@@ -754,7 +749,6 @@ void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
       failDownload("Downloaded file did not match: " + file.name, tr(STR_FONT_DOWNLOAD_CHECKSUM_HINT));
       return;
     }
-    LOG_DBG("FONT", "Downloaded %s (size=%zu crc32=%08x)", file.name.c_str(), file.size, actualCrc);
 
     if (!fontInstaller_.validateCpfontFile(tempPath)) {
       LOG_ERR("FONT", "Invalid .cpfont: %s", tempPath);

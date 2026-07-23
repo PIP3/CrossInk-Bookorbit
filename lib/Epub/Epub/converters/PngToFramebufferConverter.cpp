@@ -326,8 +326,6 @@ bool PngToFramebufferConverter::getDimensionsStatic(const std::string& imagePath
 
 bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath, GfxRenderer& renderer,
                                                     const RenderConfig& config) {
-  LOG_DBG("PNG", "Decoding PNG: %s", imagePath.c_str());
-
   if (!MemoryBudget::hasHeapForImageDecoder("PNG", "PNG", PNG_DECODER_APPROX_SIZE)) {
     return false;
   }
@@ -382,8 +380,6 @@ bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
 
   const int pixelType = png->getPixelType();
   const int bitsPerSample = png->getBpp();
-  LOG_DBG("PNG", "PNG %dx%d -> %dx%d (scale %.2f), type: %d, bpp: %d", ctx.srcWidth, ctx.srcHeight, ctx.dstWidth,
-          ctx.dstHeight, ctx.scale, pixelType, bitsPerSample);
 
   const int requiredInternal = requiredPngInternalBufferBytes(ctx.srcWidth, pixelType, bitsPerSample);
   if (requiredInternal > PNG_MAX_BUFFERED_PIXELS) {
@@ -441,9 +437,7 @@ bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
     }
   }
 
-  unsigned long decodeStart = millis();
   rc = png->decode(&ctx, 0);
-  unsigned long decodeTime = millis() - decodeStart;
 
   ctx.grayLineBuffer = nullptr;
 
@@ -457,7 +451,6 @@ bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
 
   png->close();
   delete png;
-  LOG_DBG("PNG", "PNG decoding complete - render time: %lu ms", decodeTime);
 
   // Finalize the streamed cache (caching may have been cleared on a flush error).
   if (ctx.caching) {

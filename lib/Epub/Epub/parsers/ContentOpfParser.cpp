@@ -161,7 +161,6 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
   if (self->state == IN_PACKAGE && (strcmp(name, "guide") == 0 || strcmp(name, "opf:guide") == 0)) {
     self->state = IN_GUIDE;
     // TODO Remove print
-    LOG_DBG("COF", "Entering guide state.");
     if (!Storage.openFileForRead("COF", self->cachePath + itemCacheFile, self->tempItemStore)) {
       LOG_ERR("COF", "Couldn't open temp items file for reading. This is probably going to be a fatal error.");
     }
@@ -255,7 +254,6 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
       // Properties is space-separated, check if "nav" is present as a word
       if (properties == "nav" || properties.find("nav ") == 0 || properties.find(" nav") != std::string::npos) {
         self->tocNavPath = href;
-        LOG_DBG("COF", "Found EPUB 3 nav document: %s", href.c_str());
       }
     }
 
@@ -323,10 +321,8 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
     }
     if (!guideHref.empty()) {
       if (type == "text" || (type == "start" && self->textReferenceHref.empty())) {
-        LOG_DBG("COF", "Found %s reference in guide: %s", type.c_str(), guideHref.c_str());
         self->textReferenceHref = guideHref;
       } else if ((type == "cover" || type == "cover-page") && self->guideCoverPageHref.empty()) {
-        LOG_DBG("COF", "Found cover reference in guide: %s", guideHref.c_str());
         self->guideCoverPageHref = guideHref;
       }
     }

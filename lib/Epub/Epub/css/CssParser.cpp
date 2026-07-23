@@ -800,8 +800,6 @@ bool CssParser::loadFromStream(FsFile& source) {
     return false;
   }
 
-  LOG_DBG("CSS", "Parsed %zu rules and %zu descendant rules from %zu bytes", rulesBySelector_.size(),
-          descendantRules_.size(), totalRead);
   return true;
 }
 
@@ -1228,8 +1226,6 @@ bool CssParser::saveToCache(const bool complete) const {
     Storage.remove(backupPath.c_str());
   }
 
-  LOG_DBG("CSS", "Saved %u rules + %u descendant rules to %s cache", ruleCount, descendantCount,
-          complete ? "complete" : "partial");
   return true;
 }
 
@@ -1401,8 +1397,6 @@ bool CssParser::loadFromCache() {
         break;
       }
     }
-    LOG_DBG("CSS", "Hydrated %u CSS rules into arena (%u bytes)", static_cast<unsigned>(cachedRuleTableCount_),
-            static_cast<unsigned>(cachedRuleArena_.used()));
   }
 
   // Read descendant rules

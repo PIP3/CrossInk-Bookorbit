@@ -74,8 +74,6 @@ void ClearCacheActivity::render(RenderLock&&) {
 }
 
 void ClearCacheActivity::clearCache() {
-  LOG_DBG("CLEAR_CACHE", "Clearing cache...");
-
   // Open .crosspoint directory
   auto root = Storage.open("/.crosspoint");
   if (!root || !root.isDirectory()) {
@@ -99,7 +97,6 @@ void ClearCacheActivity::clearCache() {
     // such as global_stats.bin are intentionally skipped.
     if (file.isDirectory() && isBookCacheDirectoryName(itemName.c_str())) {
       String fullPath = "/.crosspoint/" + itemName;
-      LOG_DBG("CLEAR_CACHE", "Removing cache: %s", fullPath.c_str());
 
       file.close();  // Close before attempting to delete
 
@@ -124,7 +121,6 @@ void ClearCacheActivity::clearCache() {
 void ClearCacheActivity::loop() {
   if (state == WARNING) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      LOG_DBG("CLEAR_CACHE", "User confirmed, starting cache clear");
       {
         RenderLock lock(*this);
         state = CLEARING;
@@ -143,7 +139,6 @@ void ClearCacheActivity::loop() {
     }
 
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      LOG_DBG("CLEAR_CACHE", "User cancelled");
       goBack();
     }
     return;

@@ -177,9 +177,6 @@ ClippingResult build(const std::vector<WordRef>& words, const uint16_t* wordOrde
     midText += wordText;
   }
 
-  LOG_DBG("CLIP", "Built clipping: words=%d start=\"%.24s\" end=\"%.24s\"", toOrder - fromOrder + 1,
-          startAnchor.c_str(), endAnchor.c_str());
-
   return ClippingResult{std::move(text),
                         wordOrder[fromOrder],
                         wordOrder[toOrder],

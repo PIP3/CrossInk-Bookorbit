@@ -404,8 +404,6 @@ void TxtReaderActivity::initializeReader() {
   linesPerPage = viewportHeight / lineHeight;
   if (linesPerPage < 1) linesPerPage = 1;
 
-  LOG_DBG("TRS", "Viewport: %dx%d, lines per page: %d", viewportWidth, viewportHeight, linesPerPage);
-
   // Try to load cached page index first
   if (!loadPageIndexCache()) {
     // Cache not found, build page index
@@ -426,8 +424,6 @@ void TxtReaderActivity::buildPageIndex() {
 
   size_t offset = 0;
   const size_t fileSize = txt->getFileSize();
-
-  LOG_DBG("TRS", "Building page index for %zu bytes...", fileSize);
 
   GUI.drawPopup(renderer, tr(STR_INDEXING));
 
@@ -456,7 +452,6 @@ void TxtReaderActivity::buildPageIndex() {
   }
 
   totalPages = pageOffsets.size();
-  LOG_DBG("TRS", "Built page index: %d pages", totalPages);
 }
 
 bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>& outLines, size_t& nextOffset) {
@@ -639,7 +634,6 @@ void TxtReaderActivity::loadProgress() {
       if (currentPage < 0) {
         currentPage = 0;
       }
-      LOG_DBG("TRS", "Loaded progress: page %d/%d", currentPage, totalPages);
     }
   }
 }
@@ -740,7 +734,6 @@ bool TxtReaderActivity::loadPageIndexCache() {
   }
 
   totalPages = pageOffsets.size();
-  LOG_DBG("TRS", "Loaded page index cache: %d pages", totalPages);
   return true;
 }
 
@@ -767,8 +760,6 @@ void TxtReaderActivity::savePageIndexCache() const {
   for (size_t offset : pageOffsets) {
     serialization::writePod(f, static_cast<uint32_t>(offset));
   }
-
-  LOG_DBG("TRS", "Saved page index cache: %d pages", totalPages);
 }
 
 bool TxtReaderActivity::drawCurrentPageToBuffer(const std::string& filePath, GfxRenderer& renderer) {

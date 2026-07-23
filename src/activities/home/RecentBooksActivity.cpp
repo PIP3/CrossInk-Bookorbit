@@ -58,7 +58,6 @@ void RecentBooksActivity::onRowEvent(const fui::ActionEvent& event, void* user) 
   // Opening the book leaves this screen; a lingering flash would gray an
   // unrelated row when the list next appears.
   self->app.clearTapFlash();
-  LOG_DBG("RBA", "Tapped recent book: %s", self->recentBooks[self->selectorIndex].path.c_str());
   self->onSelectBook(self->recentBooks[self->selectorIndex].path);
 }
 
@@ -143,7 +142,6 @@ void RecentBooksActivity::loop() {
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (!recentBooks.empty() && selectorIndex < recentBooks.size()) {
-      LOG_DBG("RBA", "Selected recent book: %s", recentBooks[selectorIndex].path.c_str());
       onSelectBook(recentBooks[selectorIndex].path);
       return;
     }
@@ -202,11 +200,9 @@ void RecentBooksActivity::promptDeleteBook(const RecentBook& book) {
   const std::string path = book.path;
   auto handler = [this, path](const ActivityResult& res) {
     if (res.isCancelled) {
-      LOG_DBG("RBA", "Delete cancelled");
       return;
     }
 
-    LOG_DBG("RBA", "Attempting to delete: %s", path.c_str());
     BookActions::clearFileMetadata(path);
     if (!Storage.remove(path.c_str())) {
       LOG_ERR("RBA", "Failed to delete file: %s", path.c_str());
@@ -225,11 +221,9 @@ void RecentBooksActivity::promptDeleteBook(const RecentBook& book) {
 void RecentBooksActivity::promptRemoveBook(const std::string& path, const std::string& title) {
   auto handler = [this, path](const ActivityResult& res) {
     if (res.isCancelled) {
-      LOG_DBG("RBA", "Remove from recents cancelled");
       return;
     }
     if (RECENT_BOOKS.removeByPath(path)) {
-      LOG_DBG("RBA", "Removed from recents: %s", path.c_str());
       reloadAfterBookAction();
     }
   };

@@ -71,13 +71,10 @@ bool BookMetadataCache::beginWrite() {
   buildMode = true;
   spineCount = 0;
   tocCount = 0;
-  LOG_DBG("BMC", "Entering write mode");
   return true;
 }
 
 bool BookMetadataCache::beginContentOpfPass() {
-  LOG_DBG("BMC", "Beginning content opf pass");
-
   // Open spine file for writing
   if (!Storage.openFileForWrite("BMC", cachePath + tmpSpineBinFile, spineFile)) {
     return false;
@@ -99,8 +96,6 @@ bool BookMetadataCache::endContentOpfPass() {
 }
 
 bool BookMetadataCache::beginTocPass() {
-  LOG_DBG("BMC", "Beginning toc pass");
-
   if (!Storage.openFileForRead("BMC", cachePath + tmpSpineBinFile, spineFile)) {
     return false;
   }
@@ -136,7 +131,6 @@ bool BookMetadataCache::beginTocPass() {
               });
     spineFile.seek(0);
     useSpineHrefIndex = true;
-    LOG_DBG("BMC", "Using fast index for %d spine items", spineCount);
   } else {
     useSpineHrefIndex = false;
   }
@@ -170,7 +164,6 @@ bool BookMetadataCache::endWrite() {
   }
 
   buildMode = false;
-  LOG_DBG("BMC", "Wrote %d spine, %d TOC entries", spineCount, tocCount);
   return true;
 }
 
@@ -296,8 +289,6 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
   bool useBatchSizes = false;
 
   if (spineCount >= LARGE_SPINE_THRESHOLD) {
-    LOG_DBG("BMC", "Using batch size lookup for %d spine items", spineCount);
-
     ArenaVector<ZipFile::SizeTarget> targets(metadataArena);
     if (!targets.resize(spineCount) || !spineSizes.resize(spineCount)) {
       LOG_ERR("BMC", "Failed to allocate batch size lookup scratch for %u spine items", spineCount);
@@ -323,8 +314,6 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
     });
 
     int matched = zip.fillUncompressedSizes(targets.data(), targets.size(), spineSizes.data(), spineSizes.size());
-    LOG_DBG("BMC", "Batch lookup matched %d/%d spine items (arena=%u bytes)", matched, spineCount,
-            static_cast<unsigned>(metadataArena.used()));
 
     useBatchSizes = true;
   }
@@ -399,7 +388,6 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
     return false;
   }
 
-  LOG_DBG("BMC", "Successfully built book.bin");
   return true;
 }
 
@@ -546,7 +534,6 @@ bool BookMetadataCache::load() {
   }
 
   loaded = true;
-  LOG_DBG("BMC", "Loaded cache data: %d spine, %d TOC entries", spineCount, tocCount);
   return true;
 }
 

@@ -95,7 +95,6 @@ void syncTimeWithNTP() {
   }
 
   if (retry < maxRetries) {
-    LOG_DBG("KOSync", "NTP time synced");
   } else {
     LOG_DBG("KOSync", "NTP sync timeout, using fallback");
   }
@@ -114,7 +113,6 @@ void wifiOff() {
 
 void KOReaderSyncActivity::ensureEpubLoaded() {
   if (!epub) {
-    LOG_DBG("KOSync", "Loading epub for progress mapping (heap: %u)", (unsigned)ESP.getFreeHeap());
     epub = std::make_shared<Epub>(epubPath, "/.crosspoint");
     epub->setupCacheDir();
     // Load metadata only (no CSS needed for progress mapping, don't rebuild if cache is missing).
@@ -123,7 +121,6 @@ void KOReaderSyncActivity::ensureEpubLoaded() {
       epub.reset();
       return;
     }
-    LOG_DBG("KOSync", "Epub loaded (heap: %u)", (unsigned)ESP.getFreeHeap());
   }
 }
 
@@ -210,7 +207,6 @@ void KOReaderSyncActivity::onWifiSelectionComplete(const bool success) {
     return;
   }
 
-  LOG_DBG("KOSync", "WiFi connected, starting sync");
   sdFontSystem.releaseForNetwork(renderer);
 
   {
@@ -246,8 +242,6 @@ void KOReaderSyncActivity::performSync() {
     return;
   }
   const std::string primaryHash = documentHash;
-
-  LOG_DBG("KOSync", "Document hash (%s): %s", matchMethodName(primaryMethod), documentHash.c_str());
 
   {
     RenderLock lock(*this);
@@ -473,7 +467,6 @@ void KOReaderSyncActivity::performUpload() {
 
   if (epub) {
     epub.reset();
-    LOG_DBG("KOSync", "Released epub before upload (heap: %u)", (unsigned)ESP.getFreeHeap());
   }
 
   // localProgress was pre-computed in EpubReaderActivity before the Epub was released.
@@ -581,13 +574,11 @@ void KOReaderSyncActivity::onEnter() {
 
   // Check if already connected (e.g. from settings page auth)
   if (hasActiveStationWifiConnection()) {
-    LOG_DBG("KOSync", "Already connected to WiFi");
     onWifiSelectionComplete(true);
     return;
   }
 
   // Launch WiFi selection subactivity
-  LOG_DBG("KOSync", "Launching WifiSelectionActivity...");
   startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput),
                          [this](const ActivityResult& result) { onWifiSelectionComplete(!result.isCancelled); });
 }

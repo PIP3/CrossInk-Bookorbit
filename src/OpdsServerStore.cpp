@@ -75,8 +75,6 @@ bool OpdsServerStore::fromJson(JsonVariantConst doc) {
     servers.push_back(std::move(server));
   }
 
-  LOG_DBG("OPS", "Loaded %zu OPDS servers from file", servers.size());
-
   if (needsResave) {
     LOG_DBG("OPS", "Resaving JSON with obfuscated passwords");
     saveToFile();
@@ -149,7 +147,6 @@ bool OpdsServerStore::addServer(const OpdsServer& server) {
   }
 
   servers.push_back(server);
-  LOG_DBG("OPS", "Added server: %s", server.name.c_str());
   return saveToFile();
 }
 
@@ -160,7 +157,6 @@ bool OpdsServerStore::updateServer(size_t index, const OpdsServer& server) {
   }
 
   servers[index] = server;
-  LOG_DBG("OPS", "Updated server: %s", server.name.c_str());
   return saveToFile();
 }
 
@@ -170,7 +166,6 @@ bool OpdsServerStore::removeServer(size_t index) {
     return false;
   }
 
-  LOG_DBG("OPS", "Removed server: %s", servers[index].name.c_str());
   servers.erase(servers.begin() + static_cast<ptrdiff_t>(index));
   return saveToFile();
 }

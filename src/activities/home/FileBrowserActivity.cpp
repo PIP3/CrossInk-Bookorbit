@@ -381,18 +381,15 @@ void FileBrowserActivity::onExit() {
 void FileBrowserActivity::promptDeleteFile(const std::string& fullPath, const std::string& entry) {
   auto handler = [this, fullPath](const ActivityResult& res) {
     if (res.isCancelled) {
-      LOG_DBG("FileBrowser", "Delete cancelled by user");
       return;
     }
 
-    LOG_DBG("FileBrowser", "Attempting to delete: %s", fullPath.c_str());
     BookActions::clearFileMetadata(fullPath);
     if (!Storage.remove(fullPath.c_str())) {
       LOG_ERR("FileBrowser", "Failed to delete file: %s", fullPath.c_str());
       return;
     }
 
-    LOG_DBG("FileBrowser", "Deleted successfully");
     if (isPinnedSleepFavorite(fullPath)) {
       unpinSleepFavorite();
     }
@@ -416,20 +413,17 @@ void FileBrowserActivity::promptDeleteDirectory(const std::string& fullPath, con
   auto handler = [this, dirPath](const ActivityResult& res) {
     longPressConfirmHandled = false;
     if (res.isCancelled) {
-      LOG_DBG("FileBrowser", "Delete cancelled by user");
       return;
     }
 
     std::vector<std::string> metadataPaths;
     collectMetadataPathsRecursively(dirPath, metadataPaths);
 
-    LOG_DBG("FileBrowser", "Attempting to delete directory: %s", dirPath.c_str());
     if (!Storage.removeDir(dirPath.c_str())) {
       LOG_ERR("FileBrowser", "Failed to delete directory: %s", dirPath.c_str());
       return;
     }
 
-    LOG_DBG("FileBrowser", "Deleted successfully");
     for (const auto& metadataPath : metadataPaths) {
       BookActions::clearFileMetadata(metadataPath);
     }
