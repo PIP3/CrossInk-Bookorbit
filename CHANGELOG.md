@@ -32,6 +32,7 @@
 
 ### Fixed
 
+- EPUB clipping selection no longer clips certain letters with long descenders.
 - Manage Fonts no longer runs out of memory while loading larger font catalogs.
 - Low-memory EPUB layout now fails cleanly when page or image elements cannot be allocated instead of risking a reboot.
 - EPUB background indexing now waits for sufficient contiguous memory instead of starting a layout pass that is likely to fail.

@@ -17,8 +17,7 @@ struct ClipWordStyle {
   enum Flags : uint8_t {
     NONE = 0,
     FILL = 1 << 0,
-    UNDERLINE = 1 << 2,
-    BORDER = 1 << 3,
+    BORDER = 1 << 1,
   };
 
   uint8_t flags = FILL;

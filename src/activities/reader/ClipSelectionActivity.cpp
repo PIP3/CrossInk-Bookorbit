@@ -331,11 +331,6 @@ void ClipSelectionActivity::applyWordStyle(const WordRef& word, const ClipWordSt
   if ((style.flags & ClipWordStyle::BORDER) != 0) {
     renderer.drawRect(drawX, word.y, drawW, word.h, true);
   }
-
-  if ((style.flags & ClipWordStyle::UNDERLINE) != 0) {
-    const int underlineY = word.y + renderer.getFontAscenderSize(renderFontId) + 2;
-    renderer.drawLine(drawX, underlineY, drawX + drawW, underlineY, true);
-  }
 }
 
 void ClipSelectionActivity::useFallbackFont(const char* reason) {
@@ -347,8 +342,11 @@ void ClipSelectionActivity::useFallbackFont(const char* reason) {
 }
 
 void ClipSelectionActivity::drawHighlights() {
-  static constexpr ClipWordStyle selectionStyle{ClipWordStyle::FILL | ClipWordStyle::UNDERLINE};
-  static constexpr ClipWordStyle cursorStyle{ClipWordStyle::BORDER | ClipWordStyle::UNDERLINE};
+  // An underline sits below the ascender and collides with descenders when
+  // the reader's line height has no spare leading. The fill and cursor border
+  // already distinguish the selected range and its active endpoint.
+  static constexpr ClipWordStyle selectionStyle{ClipWordStyle::FILL};
+  static constexpr ClipWordStyle cursorStyle{ClipWordStyle::BORDER};
 
   if (startMarkIdx != -1) {
     const int from = std::min(startMarkIdx, cursorIdx);
