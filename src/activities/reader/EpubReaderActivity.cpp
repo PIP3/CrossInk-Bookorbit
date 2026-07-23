@@ -2776,10 +2776,13 @@ void EpubReaderActivity::openWordSelect(bool framebufferContainsPage, int initia
   }
   startActivityForResult(std::move(wordSelect), [this](const ActivityResult&) {
     resumeReadingPaceTimer("dictionary_lookup_return");
+    MemoryBudget::logHeapShape("dict.child_destroyed");
     // Dictionary lookup warms multiple SD-font styles and large definition glyph
     // sets. The child activity has been destroyed before this callback runs, so
     // release those renderer-owned caches before the reader rebuilds its page cache.
     releaseReaderSdFontCachesForLowMemory(renderer, "DICT", "dictionary lookup exit");
+    MemoryBudget::logHeapShape("dict.after_font_release");
+    pendingHeapShapeReaderRedrawStages.fetch_or(HEAP_SHAPE_REDRAW_DICT, std::memory_order_relaxed);
     requestUpdate();
   });
 }
@@ -3313,6 +3316,8 @@ void EpubReaderActivity::startClipSelection() {
   std::string author;
   std::string chapterTitle;
 
+  MemoryBudget::logHeapShape("clip.before");
+
   {
     RenderLock lock(*this);
     if (!section || !epub) {
@@ -3362,6 +3367,7 @@ void EpubReaderActivity::startClipSelection() {
             renderer.ensureSdCardFontReady(readerFontId, block.wordText(i), styleMask);
           }
         }
+        MemoryBudget::logHeapShape("clip.after_advance_batch");
         for (uint16_t i = 0; i < count; ++i) {
           const char* wordText = block.wordText(i);
           if (!hasVisibleWordText(wordText)) continue;
@@ -3394,6 +3400,7 @@ void EpubReaderActivity::startClipSelection() {
           word.lineIsRtl = block.getBlockStyle().isRtl;
           words.push_back(std::move(word));
         }
+        MemoryBudget::logHeapShape("clip.after_word_store");
       }
     }
 
@@ -3442,6 +3449,7 @@ void EpubReaderActivity::startClipSelection() {
   startActivityForResult(
       std::move(clipSelection), [this, bookTitle = std::move(bookTitle), author = std::move(author),
                                  chapterTitle = std::move(chapterTitle)](const ActivityResult& result) {
+        MemoryBudget::logHeapShape("clip.child_destroyed");
         if (!result.isCancelled) {
           const auto& clip = std::get<ClippingResult>(result.data);
           if (!clip.text.empty()) {
@@ -3466,6 +3474,10 @@ void EpubReaderActivity::startClipSelection() {
           }
         }
         resumeReadingPaceTimer("clip_selection_return");
+        // Phase 0 establishes the no-release baseline for clipping. Phase 1 will
+        // release optional SD-font caches at this same checkpoint.
+        MemoryBudget::logHeapShape("clip.after_font_release");
+        pendingHeapShapeReaderRedrawStages.fetch_or(HEAP_SHAPE_REDRAW_CLIP, std::memory_order_relaxed);
         requestUpdate();
       });
 }
@@ -4797,6 +4809,13 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     const int renderFontId = activeSectionFontId != 0 ? activeSectionFontId : SETTINGS.getReaderFontId();
     renderContents(std::move(p), renderFontId, layout.marginTop, layout.marginRight, layout.marginBottom,
                    layout.marginLeft);
+    const uint8_t heapShapeRedrawStages = pendingHeapShapeReaderRedrawStages.exchange(0, std::memory_order_relaxed);
+    if (heapShapeRedrawStages & HEAP_SHAPE_REDRAW_CLIP) {
+      MemoryBudget::logHeapShape("clip.reader_redrawn");
+    }
+    if (heapShapeRedrawStages & HEAP_SHAPE_REDRAW_DICT) {
+      MemoryBudget::logHeapShape("dict.reader_redrawn");
+    }
     pageShownAtMs = activeFootnotePreview ? 0UL : millis();
   }
   if (!activeFootnotePreview) {

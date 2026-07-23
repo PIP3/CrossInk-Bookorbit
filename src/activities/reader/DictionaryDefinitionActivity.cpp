@@ -6,6 +6,7 @@
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
+#include <MemoryBudget.h>
 #include <Utf8.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -516,6 +517,7 @@ void DictionaryDefinitionActivity::drawModalFrame() const {
 // definition) and counts all lines to recompute totalPages. Called on entry and
 // on every page turn (Stage 2a: re-parse every turn, both directions).
 void DictionaryDefinitionActivity::loadPage(int page) {
+  MemoryBudget::logHeapShape("dict.page_before");
   layoutLines.clear();
   layoutLines.reserve(static_cast<size_t>(linesPerPage) + 1);
   pagePool_.clear();
@@ -529,6 +531,7 @@ void DictionaryDefinitionActivity::loadPage(int page) {
   }
 
   totalPages = DictLayout::paginate(collectLineCount_, linesPerPage);
+  MemoryBudget::logHeapShape("dict.page_after");
 }
 
 void DictionaryDefinitionActivity::collectDefinitionAdvanceText(const char* text, const EpdFontFamily::Style style) {

@@ -85,6 +85,9 @@ class EpubReaderActivity final : public Activity {
   uint16_t cachedPageParagraphIndex = UINT16_MAX;
   uint16_t cachedPageParagraphOffset = 0;
   uint16_t cachedPageParagraphSpan = 0;
+  std::atomic<uint8_t> pendingHeapShapeReaderRedrawStages{0};
+  static constexpr uint8_t HEAP_SHAPE_REDRAW_CLIP = 1U << 0;
+  static constexpr uint8_t HEAP_SHAPE_REDRAW_DICT = 1U << 1;
   unsigned long lastPageTurnTime = 0UL;
   unsigned long pageTurnDuration = 0UL;
   unsigned long pageShownAtMs = 0UL;

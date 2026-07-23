@@ -12,6 +12,7 @@
 #include "DictLookupTask.h"
 #include "MappedInputManager.h"
 #include "Memory.h"
+#include "MemoryBudget.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/Dictionary.h"
@@ -22,7 +23,19 @@ DictionaryLookupController::DictionaryLookupController(GfxRenderer& renderer, Ma
 
 DictionaryLookupController::~DictionaryLookupController() = default;
 
+namespace {
+
+void logDictionaryLookupTaskEnd() {
+  MemoryBudget::logHeapShape("dict.lookup_done");
+#if defined(ENABLE_SERIAL_LOG) && LOG_LEVEL >= 2
+  LOG_DBG("HEAP", "stage=dict.lookup_stack highWater=%u", static_cast<unsigned>(uxTaskGetStackHighWaterMark(nullptr)));
+#endif
+}
+
+}  // namespace
+
 void DictionaryLookupController::startLookup(const std::string& word, bool recordHistory) {
+  MemoryBudget::logHeapShape("dict.lookup_start");
   lookupWord = word;
   foundWord.clear();
   foundLocation = DictLocation{};
@@ -301,11 +314,13 @@ void DictionaryLookupController::runLookup() {
   if (lookupCancelRequested) {
     lookupCancelled = true;
     lookupDone = true;
+    logDictionaryLookupTaskEnd();
     return;
   }
   foundLocation = Dictionary::locate(lookupWord, cbs, cachePath.c_str());
   lookupCancelled = lookupCancelRequested;
   lookupDone = true;
+  logDictionaryLookupTaskEnd();
   // Don't call requestUpdate(true) here - it triggers an unnecessary e-ink refresh
   // of the word select activity before transitioning to the definition activity.
   // The main loop polls lookupDone every ~10ms, so response time is still fast.
