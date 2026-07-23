@@ -245,7 +245,11 @@ inline uint16_t solidAdvanceX(const EpdFontData* data, const EpdGlyph* emGlyph) 
 
 inline int solidHeight(const EpdFontData* data, uint32_t cp) {
   int ascender = data && data->ascender > 0 ? data->ascender : 8;
-  if (cp == BLACK_SQUARE || cp == BLACK_SMALL_SQUARE) {
+  if (cp == BLACK_SMALL_SQUARE) {
+    int height = (ascender + 1) / 2;
+    return height > 1 ? height : 1;
+  }
+  if (cp == BLACK_SQUARE) {
     int height = (ascender * 2 + 2) / 3;
     return height > 1 ? height : 1;
   }
