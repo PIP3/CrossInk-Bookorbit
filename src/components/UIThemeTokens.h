@@ -1,4 +1,7 @@
 #pragma once
+#ifndef SIMULATOR
+#include <BoardConfig.h>
+#endif
 #include <FreeInkUIGfxRenderer.h>
 #include <HalGPIO.h>
 #include <HalTiltSensor.h>
@@ -89,6 +92,11 @@ inline freeink::ui::ThemeTokens uiThemeTokens(const freeink::ui::GfxRendererTarg
   tokens.listSelectionStyle = static_cast<fui::SelectionStyle>(metrics.listSelectionStyle);
   tokens.listScrollWidth = static_cast<int16_t>(metrics.listScrollWidth);
   tokens.listScrollSide = static_cast<uint8_t>(metrics.listScrollSide);
+  // The X4 Pro panel sits recessed behind the bezel, so an edge-hugging scroll
+  // indicator disappears under it. Push it inward far enough to clear the bezel.
+#ifndef SIMULATOR
+  tokens.listScrollInset = BoardConfig::isX4Pro() ? 7 : 0;
+#endif
   tokens.headerSidePadding = static_cast<int16_t>(metrics.headerSidePadding);
   tokens.headerUnderline = static_cast<uint8_t>(metrics.headerUnderlineSize);
   tokens.headerTitleAlign = static_cast<fui::TextAlign>(metrics.headerTitleAlign);

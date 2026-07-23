@@ -44,6 +44,9 @@ class MappedInputManager {
 #if CROSSINK_APP_CAP_TOUCH
   bool hasTouch() const;
   bool hasTouchHardware() const;
+  // True on boards with a capacitive home key (X4 Pro), where the bottom-edge
+  // up-swipe is the reader-menu gesture rather than the exit-to-home gesture.
+  bool hasHomeKey() const { return hasHomeKeyHardware(); }
   bool wasScreenTapped(int& x, int& y) const;
   bool isScreenTouchLongPress(int& x, int& y, unsigned long thresholdMs) const;
   bool isInVerticalEdgeGestureZone(int y) const;
@@ -84,9 +87,12 @@ class MappedInputManager {
   // Frontlight quick panel: top-edge down-swipe, only on home-key boards where
   // that edge is no longer the menu gesture.
   bool wasLightPanelGesture() const;
+  // Reader-menu shortcut: a long press of the capacitive home key.
+  bool wasReaderMenuHold() const;
 #else
   constexpr bool hasTouch() const { return false; }
   constexpr bool hasTouchHardware() const { return false; }
+  constexpr bool hasHomeKey() const { return false; }
   constexpr bool wasScreenTapped(int&, int&) const { return false; }
   constexpr bool isScreenTouchLongPress(int&, int&, unsigned long) const { return false; }
   constexpr bool isInVerticalEdgeGestureZone(int) const { return false; }
@@ -116,6 +122,7 @@ class MappedInputManager {
   constexpr bool wasHomeGesture() const { return false; }
   constexpr bool wasMenuGesture() const { return false; }
   constexpr bool wasLightPanelGesture() const { return false; }
+  constexpr bool wasReaderMenuHold() const { return false; }
 #endif
   bool wasAnyPressed() const;
   bool wasAnyReleased() const;

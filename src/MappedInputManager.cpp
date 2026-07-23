@@ -557,7 +557,16 @@ bool MappedInputManager::wasHomeGesture() const {
 #ifdef SIMULATOR
   return false;
 #else
-  return gpio.wasHomeKeyPressed();
+  return gpio.wasHomeKeyTapped();
+#endif
+}
+
+bool MappedInputManager::wasReaderMenuHold() const {
+  if (!hasHomeKeyHardware()) return false;
+#ifdef SIMULATOR
+  return false;
+#else
+  return gpio.wasHomeKeyLongPressed();
 #endif
 }
 

@@ -277,6 +277,14 @@ void SettingsActivity::rebuildSettingsLists() {
   dictionaryRegistry.refreshIfDirty();
   const auto allSettings = getSettingsList(&sdFontSystem.registry(), &dictionaryRegistry);
   displaySettings = buildGroupedDisplaySettingsList(allSettings);
+#ifndef SIMULATOR
+  if (BoardConfig::isX4Pro()) {
+    displaySettings.erase(
+        std::remove_if(displaySettings.begin(), displaySettings.end(),
+                       [](const SettingInfo& setting) { return setting.valuePtr == &CrossPointSettings::fadingFix; }),
+        displaySettings.end());
+  }
+#endif
   displaySleepSettings = buildDisplaySleepSettingsList(allSettings);
   readerSettings = buildReaderSettingsParentList(allSettings);
   readerFontSettings = buildReaderFontSettingsList(allSettings);
