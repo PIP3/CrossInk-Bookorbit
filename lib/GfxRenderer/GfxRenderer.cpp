@@ -1011,7 +1011,12 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
   }
 
   if (fontCacheManager_ && fontCacheManager_->isScanning()) {
-    fontCacheManager_->recordText(text, fontId, style);
+    // Prewarm the exact codepoints the real pass will draw. Arabic shaping can
+    // replace logical characters with presentation forms; recording the input
+    // text here left those visual glyphs cold and produced replacement diamonds
+    // when the SD font's on-demand path was under memory pressure.
+    std::string visualBuffer;
+    fontCacheManager_->recordText(resolveVisualText(text, visualBuffer, baseDir), fontId, style);
     return;
   }
 

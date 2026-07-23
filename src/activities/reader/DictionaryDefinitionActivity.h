@@ -72,6 +72,10 @@ class DictionaryDefinitionActivity final : public Activity {
   // framebuffer while dictionary parsing is active.
   void* backgroundContext_ = nullptr;
   BackgroundRenderFn backgroundRender_ = nullptr;
+  // The framebuffer retains the book pixels outside the opaque modal. Normal
+  // page turns keep this false and redraw only the modal; screens and overlays
+  // that replace unrelated pixels set it true to rebuild the book.
+  bool modalBackgroundNeedsRedraw_ = true;
   int modalX_ = 0;
   int modalY_ = 0;
   int modalWidth_ = 0;

@@ -14,7 +14,6 @@
 #include <cstring>
 #include <memory>
 #include <numeric>
-#include <optional>
 
 #include "../settings/DictionarySelectActivity.h"
 #include "CrossPointSettings.h"
@@ -433,6 +432,9 @@ void DictionaryDefinitionActivity::wrapText() {
   isWordSelectMode = false;
   navigator.reset();
   currentPage = 0;  // new definition always starts at page 0
+  // A new definition can have different modal geometry. Rebuild the book once
+  // so a smaller modal cannot leave pixels from the prior definition behind.
+  if (hasModalBackground()) modalBackgroundNeedsRedraw_ = true;
 
   // Match the folder-name label shown by DictionarySelectActivity.
   dictionaryName_ = dictionaryNameFromPath(foundLocation.folderPath);
@@ -918,6 +920,10 @@ void DictionaryDefinitionActivity::openDictionarySwitch() {
   }
 
   startActivityForResult(std::move(picker), [this](const ActivityResult& result) {
+    // The picker replaced the full framebuffer. Its result handler runs before
+    // this activity is queued for repaint, so restore the reader background on
+    // that next frame whether the selection changed or was cancelled.
+    modalBackgroundNeedsRedraw_ = true;
     if (result.isCancelled) {
       requestUpdate();
       return;
@@ -1138,16 +1144,20 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
     }
   }
 
-  // Full repaint path. Reader lookups redraw the owned book page beneath a
-  // large modal. Other entry points (such as lookup history) retain the
-  // existing full-screen definition view.
+  // Full repaint path. The framebuffer retains the book pixels outside the
+  // opaque, stable modal, so ordinary definition page turns only repaint the
+  // modal. Rebuild the book after another screen or overlay disturbed it.
   if (hasModalBackground()) {
-    backgroundRender_(backgroundContext_);
+    if (modalBackgroundNeedsRedraw_) {
+      backgroundRender_(backgroundContext_);
+      modalBackgroundNeedsRedraw_ = false;
+    }
   } else {
     renderer.clearScreen();
   }
   if (controller.render()) {
     // Controller drew an overlay; framebuffer state is unknown.
+    if (hasModalBackground()) modalBackgroundNeedsRedraw_ = true;
     nextRenderMode_ = RenderMode::FullPage;
     prevHighlightIdx_ = -1;
     return;
@@ -1231,17 +1241,31 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
   // reader background above may have replaced that cache, so scan the visible
   // title and definition page before drawing them. The .dict reader was closed
   // by loadPage(), keeping font and dictionary SD access serialized.
-  std::optional<FontCacheManager::PrewarmScope> definitionFontScope;
   bool definitionTextRendered = false;
   if (renderer.isSdCardFont(bodyFontId)) {
     if (auto* fcm = renderer.getFontCacheManager()) {
-      definitionFontScope.emplace(*fcm);
-      renderTitle();
-      renderBody();  // scan pass
-      definitionFontScope->endScanAndPrewarm();
-      renderTitle();
-      renderBody();  // prepared render; scope keeps the glyph cache alive through highlighting
-      definitionTextRendered = true;
+      const auto prewarmAndRender = [&]() {
+        auto scope = fcm->createPrewarmScope();
+        renderTitle();
+        renderBody();  // scan pass
+        if (!scope.endScanAndPrewarm()) return false;
+        renderTitle();
+        renderBody();  // prepared render; scope keeps glyphs alive until this returns
+        return true;
+      };
+
+      definitionTextRendered = prewarmAndRender();
+      if (!definitionTextRendered) {
+        // A switched definition can require a different glyph/style set.
+        // Release optional bitmap/kern caches, retain the advance table used by
+        // layout, and retry once with the exact visible page glyphs.
+        LOG_ERR("DICT", "SD-font definition prewarm failed; releasing caches and retrying");
+        renderer.releaseSdCardFontForLowMemory(bodyFontId, /*preserveAdvanceTable=*/true);
+        definitionTextRendered = prewarmAndRender();
+        if (!definitionTextRendered) {
+          LOG_ERR("DICT", "SD-font definition prewarm retry failed; using on-demand glyph loading");
+        }
+      }
     }
   }
   if (!definitionTextRendered) {
