@@ -651,7 +651,7 @@ void renderEditBookDatesPage(GfxRenderer& renderer, const MappedInputManager* ma
   const int adjustButtonX = cardX + cardW - adjustButtonRightPadding - adjustButtonSize;
   const int fieldAreaW = showTouchControls ? adjustButtonX - cardX - adjustButtonGap : cardW;
 #else
-  constexpr int fieldAreaW = cardW;
+  const int fieldAreaW = cardW;
 #endif
   const int fieldStartX = cardX + (std::max(totalFieldW, fieldAreaW) - totalFieldW) / 2;
 
