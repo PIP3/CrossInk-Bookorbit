@@ -2045,6 +2045,14 @@ void EpubReaderActivity::openReaderMenu() {
       });
 }
 
+void EpubReaderActivity::showBuildPopup() {
+  if (!buildPopupPending || !renderer.hasFrameBuffer()) return;
+  GUI.drawPopup(renderer, tr(STR_INDEXING));
+  renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+  pagesUntilFullRefresh = 1;
+  buildPopupPending = false;
+}
+
 bool EpubReaderActivity::backgroundSectionBuildHasHeap() {
   const auto heap = MemoryBudget::snapshot();
   if (MemoryBudget::hasHeap(heap, MemoryBudget::EPUB_TEXT_LAYOUT_MIN_FREE,
@@ -4263,22 +4271,28 @@ void EpubReaderActivity::render(RenderLock&& lock) {
           } else {
             bool showPopup = false;
             if (anchorJump) {
-              showPopup = !anchorPageReady() && (!loadedSection || spineBytes > BUILD_POPUP_BYTE_THRESHOLD);
+              showPopup = !anchorPageReady() && spineBytes > BUILD_POPUP_BYTE_THRESHOLD;
             } else {
               const bool targetAvailable = target < static_cast<int>(section->pageCount);
-              showPopup =
-                  !targetAvailable && (!loadedSection || (spineBytes > BUILD_POPUP_BYTE_THRESHOLD && willInflate) ||
-                                       target > BUILD_POPUP_PAGE_THRESHOLD);
+              showPopup = !targetAvailable && ((spineBytes > BUILD_POPUP_BYTE_THRESHOLD && willInflate) ||
+                                               target > BUILD_POPUP_PAGE_THRESHOLD);
             }
             if (showPopup) {
               showIndexingPopup();
             }
-            GfxRenderer::FrameBufferLoan loan(renderer);
-            if (section->startBuild(fontId, SETTINGS.getReaderLineCompression(), SETTINGS.extraParagraphSpacing,
-                                    SETTINGS.forceParagraphIndents, SETTINGS.paragraphAlignment, viewportWidth,
-                                    viewportHeight, SETTINGS.hyphenationEnabled, profile.embeddedStyle,
-                                    SETTINGS.imageRendering, profile.bionicReadingEnabled, profile.guideReadingEnabled,
-                                    SETTINGS.wordSpacing, profile.renderMode, buildOptions)) {
+            buildPopupPending = !showPopup;
+            const unsigned long buildStartMs = millis();
+            bool started;
+            {
+              GfxRenderer::FrameBufferLoan loan(renderer);
+              started = section->startBuild(fontId, SETTINGS.getReaderLineCompression(), SETTINGS.extraParagraphSpacing,
+                                            SETTINGS.forceParagraphIndents, SETTINGS.paragraphAlignment, viewportWidth,
+                                            viewportHeight, SETTINGS.hyphenationEnabled, profile.embeddedStyle,
+                                            SETTINGS.imageRendering, profile.bionicReadingEnabled,
+                                            profile.guideReadingEnabled, SETTINGS.wordSpacing, profile.renderMode,
+                                            buildOptions, [this] { showBuildPopup(); });
+            }
+            if (started) {
               bool buildFailed = false;
               while (!section->isBuildComplete() &&
                      (anchorJump                  ? !anchorPageReady()
@@ -4286,6 +4300,9 @@ void EpubReaderActivity::render(RenderLock&& lock) {
                                                   : static_cast<int>(section->pageCount) <= target)) {
                 if (cancelBuildForBack()) {
                   break;
+                }
+                if (buildPopupPending && millis() - buildStartMs >= BUILD_POPUP_DEADLINE_MS) {
+                  showBuildPopup();
                 }
                 if (!section->buildSomeMore(BUILD_PAGES_PER_CHUNK)) {
                   LOG_ERR("ERS", "Failed during incremental section build");
@@ -4319,6 +4336,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
               attemptLayoutAbortedForLowMemory =
                   attemptLayoutAbortedForLowMemory || section->lastBuildLayoutAbortedForLowMemory();
             }
+            buildPopupPending = false;
           }
         }
         imagesWereSuppressed = imagesWereSuppressed || attemptImagesWereSuppressed;

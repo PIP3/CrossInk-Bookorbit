@@ -13,6 +13,7 @@
 
 ### Changed
 
+- Incremental EPUB indexing now keeps quick chapter openings popup-free and shows “Indexing” only for large, deep, or unexpectedly slow builds.
 - Image-heavy EPUB chapters now index by reading image headers first and extract each full image only when its page is shown.
 - EPUB books with repeated byte-identical stylesheets now parse each unique stylesheet only once when building caches.
 - SD-card fonts now reuse their page-sized glyph buffers, reducing heap fragmentation during long reading sessions.

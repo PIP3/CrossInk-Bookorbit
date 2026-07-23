@@ -230,6 +230,13 @@ class EpubReaderActivity final : public Activity {
   // whole HTML must be inflated before page 1 can lay out (the giant single-spine case), which is
   // a multi-second wait. Normal chapters are well under this and stay popup-free.
   static constexpr size_t BUILD_POPUP_BYTE_THRESHOLD = 96 * 1024;
+  // If a build predicted to be fast still has not produced the requested page within this
+  // window, show the popup while the blocking build continues.
+  static constexpr unsigned long BUILD_POPUP_DEADLINE_MS = 1000;
+  // Only true during the blocking build-to-target phase. The parser retains the callback during
+  // background indexing, so this guard prevents it from drawing over an already-visible page.
+  bool buildPopupPending = false;
+  void showBuildPopup();
   // Remap the cached reading position once the saved paragraph and prior readable watermark are rebuilt
   // (used after a settings change re-paginates a chapter). Returns true if currentPage moved.
   bool isRelayoutCatchUpComplete() const;
