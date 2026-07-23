@@ -1,6 +1,7 @@
 #include "CrossPointSettings.h"
 
 #include <BoardConfig.h>
+#include <HalClock.h>
 #include <HalGPIO.h>
 #include <HalStorage.h>
 #include <I18n.h>
@@ -37,6 +38,9 @@ constexpr char SETTINGS_FILE_BAK[] = "/.crosspoint/settings.bin.bak";
 constexpr char LANG_FILE_BIN[] = "/.crosspoint/language.bin";
 constexpr char LANG_FILE_BAK[] = "/.crosspoint/language.bin.bak";
 constexpr uint8_t INVALID_READER_FONT_SIZE = 0xFF;
+// X3 hardware predates this migration by less than a year. Reject the RTC's
+// factory/default year while preserving dates written by released firmware.
+constexpr uint16_t MIN_TRUSTED_MIGRATED_RTC_YEAR = 2025;
 constexpr uint8_t SLEEP_SCREEN_STORAGE_ORDER[] = {
     static_cast<uint8_t>(CrossPointSettings::DARK),
     static_cast<uint8_t>(CrossPointSettings::LIGHT),
@@ -77,6 +81,22 @@ bool isValidDeviceName(const char* name) {
   if (!name) return false;
   const size_t len = std::strlen(name);
   return len >= CrossPointSettings::MIN_DEVICE_NAME_LENGTH && len <= CrossPointSettings::MAX_DEVICE_NAME_LENGTH;
+}
+
+bool restoreLegacyRtcDateSyncState(CrossPointSettings& settings) {
+  if (!settings.clockHasBeenSynced || settings.clockDateHasBeenSynced || !halClock.isAvailable()) return false;
+
+  uint16_t year = 0;
+  uint8_t month = 0;
+  uint8_t day = 0;
+  uint8_t hour = 0;
+  uint8_t minute = 0;
+  if (!halClock.getDateTime(year, month, day, hour, minute) || year < MIN_TRUSTED_MIGRATED_RTC_YEAR) return false;
+
+  settings.clockDateHasBeenSynced = 1;
+  LOG_INF("CPS", "Restored RTC date sync state from valid persisted date: %04u-%02u-%02u", static_cast<unsigned>(year),
+          static_cast<unsigned>(month), static_cast<unsigned>(day));
+  return true;
 }
 
 uint8_t normalizedSdFontRange(uint8_t range) {
@@ -388,6 +408,9 @@ bool CrossPointSettings::loadFromFile() {
       {
         std::lock_guard<std::mutex> lock(_mutex);
         result = JsonSettingsIO::loadSettings(*this, json.c_str(), &resave);
+        if (result && restoreLegacyRtcDateSyncState(*this)) {
+          resave = true;
+        }
       }
       if (result && (resave || migrateToCurrentPath)) {
         if (saveToFile()) {
