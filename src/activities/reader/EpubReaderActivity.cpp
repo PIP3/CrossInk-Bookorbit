@@ -2744,6 +2744,10 @@ void EpubReaderActivity::openWordSelect(bool framebufferContainsPage, int initia
   }
   startActivityForResult(std::move(wordSelect), [this](const ActivityResult&) {
     resumeReadingPaceTimer("dictionary_lookup_return");
+    // Dictionary lookup warms multiple SD-font styles and large definition glyph
+    // sets. The child activity has been destroyed before this callback runs, so
+    // release those renderer-owned caches before the reader rebuilds its page cache.
+    releaseReaderSdFontCachesForLowMemory(renderer, "DICT", "dictionary lookup exit");
     requestUpdate();
   });
 }
