@@ -65,6 +65,7 @@
 - Chapter openers with an inline ornament image no longer stack an oversized gap between the chapter number, the ornament, and the title.
 - Unsupported EPUB chapter image formats no longer trigger the low-memory image warning.
 - EPUB progress now keeps saving while long chapters are still being indexed.
+- When incremental EPUB indexing runs out of memory at the first unindexed page, the reader now silently restarts once and resumes the book with a fresh heap.
 - Returning to Home after reading with an SD card font now releases the reader's font caches so covers and thumbnails retain enough contiguous memory to render.
 - EPUB footnote and cross-reference previews now show the whole note. Previews of notes whose link target sits in the middle of a paragraph no longer start mid-sentence with the opening text missing.
 

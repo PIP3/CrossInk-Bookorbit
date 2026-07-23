@@ -46,6 +46,7 @@
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
+#include "SilentRestart.h"
 #include "WordRef.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "activities/util/IntervalSelectionActivity.h"
@@ -1832,6 +1833,11 @@ void EpubReaderActivity::onEnter() {
   BOOKMARKS.loadForBook(epub->getPath(), epub->getTitle(), epub->getAuthor(), "epub");
   CLIPPINGS.loadForBook(epub->getPath(), epub->getTitle(), epub->getAuthor(), "epub");
 
+  uint16_t restartPageBuildSpine = UINT16_MAX;
+  uint16_t restartPageBuildTarget = 0;
+  const bool resumePageBuildAfterRestart =
+      consumeSilentRestartReaderPageBuild(epub->getPath(), restartPageBuildSpine, restartPageBuildTarget);
+
   if (APP_STATE.pendingBookmarkSpine != UINT16_MAX && APP_STATE.pendingBookmarkProgress >= 0.0f) {
     // Resume from a bookmark selected on the Home screen
     currentSpineIndex = APP_STATE.pendingBookmarkSpine;
@@ -1865,6 +1871,24 @@ void EpubReaderActivity::onEnter() {
     int textSpineIndex = epub->getSpineIndexForTextReference();
     if (textSpineIndex != 0) {
       currentSpineIndex = textSpineIndex;
+    }
+  }
+
+  if (resumePageBuildAfterRestart) {
+    if (static_cast<int>(restartPageBuildSpine) < epub->getSpineItemsCount()) {
+      currentSpineIndex = restartPageBuildSpine;
+      nextPageNumber = restartPageBuildTarget;
+      cachedSpineIndex = currentSpineIndex;
+      pendingPageJump = restartPageBuildTarget;
+      pendingPercentJump = false;
+      pendingParagraphIndex = UINT16_MAX;
+      pendingClippingIndex = UINT16_MAX;
+      lowMemoryPartialRestartAttempted = true;
+      LOG_INF("ERS", "Resuming low-memory partial build after silent restart: spine=%u target=%u",
+              restartPageBuildSpine, restartPageBuildTarget);
+    } else {
+      LOG_ERR("ERS", "Ignoring invalid low-memory partial restart target: spine=%u target=%u", restartPageBuildSpine,
+              restartPageBuildTarget);
     }
   }
 
@@ -4600,6 +4624,25 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   // already loaded but not actively building; pages already available do no work here.
   if (!activeFootnotePreview && partialRebuildAbortedForLowMemory && section->pageCount > 0 &&
       section->currentPage >= static_cast<int>(section->pageCount)) {
+    const bool shouldSilentRestartForPartialLowMemory =
+        !lowMemoryPartialRestartAttempted && section->lastBuildLayoutAbortedForLowMemory() &&
+        section->currentPage == static_cast<int>(section->pageCount) &&
+        section->pageCount < std::numeric_limits<uint16_t>::max() && currentSpineIndex >= 0 &&
+        currentSpineIndex <= std::numeric_limits<uint16_t>::max();
+    if (shouldSilentRestartForPartialLowMemory) {
+      const uint16_t lastReadablePage = section->pageCount - 1;
+      const uint16_t targetPage = section->pageCount;
+      const int estimatedPages = section->estimatedTotalPages();
+      LOG_ERR("ERS", "Low heap at partial watermark; silent restarting to retry page %u (spine=%d)", targetPage,
+              currentSpineIndex);
+      if (saveProgress(currentSpineIndex, lastReadablePage, estimatedPages)) {
+        armSilentRestartReaderPageBuild(epub->getPath(), static_cast<uint16_t>(currentSpineIndex), targetPage);
+        lowMemoryPartialRestartAttempted = true;
+        silentRestartToReader();
+        return;
+      }
+      LOG_ERR("ERS", "Skipping silent restart because progress save failed");
+    }
     LOG_ERR("ERS", "Requested page %d exceeds low-memory partial watermark %u; showing last readable page",
             section->currentPage, section->pageCount);
     section->currentPage = section->pageCount - 1;

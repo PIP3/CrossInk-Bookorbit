@@ -16,6 +16,7 @@
 #include <Memory.h>
 #include <SPI.h>
 #include <builtinFonts/all.h>
+#include <uzlib.h>
 
 #ifdef SIMULATOR
 using esp_reset_reason_t = int;
@@ -62,6 +63,7 @@ inline esp_sleep_wakeup_cause_t esp_sleep_get_wakeup_cause() { return ESP_SLEEP_
 
 #include <algorithm>
 #include <cstring>
+#include <string>
 
 #include "AppVersion.h"
 #include "CrossPointSettings.h"
@@ -86,8 +88,9 @@ inline esp_sleep_wakeup_cause_t esp_sleep_get_wakeup_cause() { return ESP_SLEEP_
 #include "fontIds.h"
 #include "network/UsbSerialFileTransfer.h"
 #ifdef SIMULATOR
-#include "simulator/SimulatorSmokeTest.h"
 #include <SimulatorLifecycle.h>
+
+#include "simulator/SimulatorSmokeTest.h"
 #endif
 #include "images/LoadingIcon.h"
 #include "util/ButtonNavigator.h"
@@ -350,9 +353,13 @@ void logMemoryStats(const char* phase) {
 RTC_NOINIT_ATTR uint32_t silentRebootMagic;
 RTC_NOINIT_ATTR uint32_t silentRebootTarget;
 RTC_NOINIT_ATTR uint32_t silentRebootPayload;
+RTC_NOINIT_ATTR uint32_t silentReaderPageBuildMagic;
+RTC_NOINIT_ATTR uint32_t silentReaderPageBuildBookHash;
+RTC_NOINIT_ATTR uint32_t silentReaderPageBuildPackedTarget;
 constexpr uint32_t SILENT_REBOOT_MAGIC = 0xC1EAB007;
 constexpr uint32_t SILENT_REBOOT_TARGET_HOME = 0;
 constexpr uint32_t SILENT_REBOOT_TARGET_READER = 1;
+constexpr uint32_t SILENT_READER_PAGE_BUILD_MAGIC = 0xC1EAB017;
 constexpr uint32_t NETWORK_RENDER_TASK_STACK_BYTES = 8192;
 constexpr uint32_t READER_RENDER_TASK_STACK_BYTES = 16384;
 
@@ -381,8 +388,19 @@ static void restartWithSilentToken() {
   ESP.restart();
 }
 
+static uint32_t silentRestartBookHash(const std::string& bookPath) {
+  return uzlib_crc32(bookPath.data(), static_cast<unsigned int>(bookPath.size()), 0);
+}
+
+static void clearSilentRestartReaderPageBuild() {
+  silentReaderPageBuildMagic = 0;
+  silentReaderPageBuildBookHash = 0;
+  silentReaderPageBuildPackedTarget = 0;
+}
+
 void silentRestart() {
   if (deepSleepInProgress) return;  // sleeping supersedes the heap-defrag reboot
+  clearSilentRestartReaderPageBuild();
   silentRebootTarget = SILENT_REBOOT_TARGET_HOME;
   silentRebootPayload = 0;
   silentRebootMagic = SILENT_REBOOT_MAGIC;
@@ -394,6 +412,27 @@ void silentRestart() {
   GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
   delay(50);
   restartWithSilentToken();
+}
+
+void armSilentRestartReaderPageBuild(const std::string& bookPath, const uint16_t spineIndex,
+                                     const uint16_t targetPage) {
+  silentReaderPageBuildBookHash = silentRestartBookHash(bookPath);
+  silentReaderPageBuildPackedTarget = (static_cast<uint32_t>(spineIndex) << 16) | targetPage;
+  silentReaderPageBuildMagic = SILENT_READER_PAGE_BUILD_MAGIC;
+}
+
+bool consumeSilentRestartReaderPageBuild(const std::string& bookPath, uint16_t& spineIndex, uint16_t& targetPage) {
+  const bool matches = silentReaderPageBuildMagic == SILENT_READER_PAGE_BUILD_MAGIC &&
+                       silentReaderPageBuildBookHash == silentRestartBookHash(bookPath);
+  const uint32_t packedTarget = silentReaderPageBuildPackedTarget;
+  clearSilentRestartReaderPageBuild();
+  if (!matches) {
+    return false;
+  }
+
+  spineIndex = static_cast<uint16_t>(packedTarget >> 16);
+  targetPage = static_cast<uint16_t>(packedTarget & 0xFFFFU);
+  return true;
 }
 
 void silentRestartToReader() {
@@ -409,6 +448,7 @@ void silentRestartToReader() {
 
 void silentRestartToNetwork(const NetworkBootTarget target, const uint32_t payload) {
   if (deepSleepInProgress) return;
+  clearSilentRestartReaderPageBuild();
   silentRebootTarget = static_cast<uint32_t>(target);
   silentRebootPayload = payload;
   silentRebootMagic = SILENT_REBOOT_MAGIC;
@@ -768,6 +808,9 @@ void setup() {
   silentRebootMagic = 0;
   silentRebootTarget = 0;
   silentRebootPayload = 0;
+  if (!isSilentReboot || snapshotTarget != SILENT_REBOOT_TARGET_READER) {
+    clearSilentRestartReaderPageBuild();
+  }
 
   gpio.begin();
   // Sticky shares Confirm and Power on one GPIO. Emit Power first so the
