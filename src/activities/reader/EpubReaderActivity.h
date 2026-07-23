@@ -185,6 +185,9 @@ class EpubReaderActivity final : public Activity {
   // hold the loop at full speed while it did. The reader keeps the pages already laid out; a
   // build is only re-attempted from render() if the reader actually pages past the watermark.
   bool partialRebuildAbortedForLowMemory = false;
+  // One-shot guard for the silent restart used only when a forward page turn reaches the first
+  // unbuilt page after a confirmed low-memory partial-build abort.
+  bool lowMemoryPartialRestartAttempted = false;
   bool backgroundBuildPausedForLowMemory = false;
   std::atomic<bool> sectionBuildCancelRequested{false};
   std::atomic<bool> goHomeAfterBuildCancel{false};
