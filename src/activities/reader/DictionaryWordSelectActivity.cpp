@@ -97,6 +97,7 @@ void DictionaryWordSelectActivity::onEnter() {
   // first deliberate tap and force them to press twice.
   const bool consumeInitialConfirm = mappedInput.isPressed(MappedInputManager::Button::Confirm);
   navigator.load(std::move(words), std::move(rows), std::move(textPool), consumeInitialConfirm);
+#if CROSSINK_APP_CAP_TOUCH
   navigator.setTouchDragCursorVisible(mappedInput.hasTouch());
   bool initialTouchHit = false;
   if (initialTouchX_ >= 0 && initialTouchY_ >= 0) {
@@ -114,6 +115,9 @@ void DictionaryWordSelectActivity::onEnter() {
     }
     touchDragLookup_ = navigator.beginTouchMultiSelect();
   }
+#else
+  navigator.setTouchDragCursorVisible(false);
+#endif
   requestUpdate();
 }
 
@@ -450,6 +454,7 @@ void DictionaryWordSelectActivity::loop() {
     requestUpdate();
   }
 
+#if CROSSINK_APP_CAP_TOUCH
   if (touchDragLookup_) {
     int dragX = 0;
     int dragY = 0;
@@ -489,6 +494,7 @@ void DictionaryWordSelectActivity::loop() {
     if (selected) controller.lookupOrPopup(navigator.getLookup(*selected));
     return;
   }
+#endif
 
   // Check Back early when not in multi-select mode. This allows exit even when
   // confirmReleaseConsumed is stuck true (menu-triggered entry has no Confirm release).

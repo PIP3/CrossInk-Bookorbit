@@ -463,26 +463,26 @@ void WordSelectNavigator::drawSingleHighlight(const GfxRenderer& renderer, int l
   const auto* w = getWordAt(wordIndex);
   if (!w) return;
   renderer.fillRect(w->screenX - 2, w->screenY - 2, w->width + 4, lineHeight + 4, true);
-  const char* display = getDisplay(*w);
+  const char* displayedText = getDisplay(*w);
   const auto baseDir = w->isRtl ? BidiUtils::BidiBaseDir::RTL : BidiUtils::BidiBaseDir::LTR;
   if (w->bionicBoundary > 0 && w->bionicSuffixX > 0) {
     const auto boldStyle = static_cast<EpdFontFamily::Style>(w->style | EpdFontFamily::BOLD);
     char boldBuf[40];
     const size_t boldLen =
-        std::min<size_t>({static_cast<size_t>(w->bionicBoundary), strlen(display), sizeof(boldBuf) - 1});
-    memcpy(boldBuf, display, boldLen);
+        std::min<size_t>({static_cast<size_t>(w->bionicBoundary), strlen(displayedText), sizeof(boldBuf) - 1});
+    memcpy(boldBuf, displayedText, boldLen);
     boldBuf[boldLen] = '\0';
     if (w->isRtl) {
-      renderer.drawText(w->fontId, w->screenX, w->screenY, display + boldLen, false, w->style, baseDir);
+      renderer.drawText(w->fontId, w->screenX, w->screenY, displayedText + boldLen, false, w->style, baseDir);
       renderer.drawText(w->fontId, w->screenX + w->bionicSuffixX, w->screenY, boldBuf, false, boldStyle, baseDir);
     } else {
       renderer.drawText(w->fontId, w->screenX, w->screenY, boldBuf, false, boldStyle, baseDir);
-      renderer.drawText(w->fontId, w->screenX + w->bionicSuffixX, w->screenY, display + boldLen, false, w->style,
+      renderer.drawText(w->fontId, w->screenX + w->bionicSuffixX, w->screenY, displayedText + boldLen, false, w->style,
                         baseDir);
     }
     return;
   }
-  renderer.drawText(w->fontId, w->screenX, w->screenY, display, false, w->style, baseDir);
+  renderer.drawText(w->fontId, w->screenX, w->screenY, displayedText, false, w->style, baseDir);
 }
 
 void WordSelectNavigator::drawTouchDragCursor(const GfxRenderer& renderer, int lineHeight, int wordIndex) const {

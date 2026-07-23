@@ -145,9 +145,11 @@ class DictionaryDefinitionActivity final : public Activity {
   void wrapPlain();
   void extractWordsFromLayout();
   void openDictionarySwitch();
+#if CROSSINK_APP_CAP_TOUCH
   bool showTouchDictionarySwitch() const;
-  int dictionaryFooterHeight() const;
   bool dictionarySwitchButtonContains(int x, int y) const;
+#endif
+  int dictionaryFooterHeight() const;
   bool hasModalBackground() const { return backgroundContext_ && backgroundRender_; }
   void sizeModalForCurrentPage();
   void drawModalFrame() const;

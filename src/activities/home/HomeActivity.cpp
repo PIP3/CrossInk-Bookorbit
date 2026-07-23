@@ -907,11 +907,7 @@ void HomeActivity::onEnter() {
                                                         includeContinueReading);
     const int menuIndex = findMenuActionIndex(menuItems, homeActionForInitialMenuItem(initialMenuItem));
     if (menuIndex >= 0) {
-      const int previousHighlightedBookIdx = getHighlightedBookIndex();
       selectorIndex = getHomeMenuSelectionOffset(recentBooks) + menuIndex;
-      if (getHighlightedBookIndex() != previousHighlightedBookIdx) {
-        updateHighlightedBookContext(false);
-      }
     }
   }
 

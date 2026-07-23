@@ -89,12 +89,6 @@ class FileBrowserActivity final : public Activity {
   const char* entryNameAt(size_t row);
   void toggleHiddenFiles();
   size_t findEntry(const std::string& name);
-  int compactPageEnd(int startIndex, int contentHeight);
-  int compactPageStartForSelection(int contentHeight);
-  int pageItemsForList(int contentHeight, bool compactFileRows);
-  bool entryIndexFromPoint(int x, int y, int contentTop, int contentHeight, bool compactFileRows, int& index);
-  size_t nextTouchPageIndex(int listSize, int contentHeight, bool compactFileRows);
-  size_t previousTouchPageIndex(int listSize, int contentHeight, bool compactFileRows);
 
  public:
   explicit FileBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string initialPath = "/",

@@ -581,9 +581,15 @@ bool MappedInputManager::wasReleased(const Button button) const {
       return true;
     }
 
+#if CROSSINK_APP_CAP_TOUCH
     if (!mapButton(button, &HalGPIO::wasReleased) && !wasFrontButtonHintTapped(mappedFrontButtonFor(button))) {
       return false;
     }
+#else
+    if (!mapButton(button, &HalGPIO::wasReleased)) {
+      return false;
+    }
+#endif
 
     if (suppressBackRelease) {
       suppressBackRelease = false;

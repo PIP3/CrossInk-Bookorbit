@@ -643,12 +643,16 @@ void renderEditBookDatesPage(GfxRenderer& renderer, const MappedInputManager* ma
   const int yearW = 68;
   const int gap = 14;
   const int totalFieldW = monthW + gap + dayW + gap + yearW;
+#if CROSSINK_APP_CAP_TOUCH
   const bool showTouchControls = mappedInput && mappedInput->hasTouch();
   constexpr int adjustButtonSize = 60;
   constexpr int adjustButtonRightPadding = 34;
   constexpr int adjustButtonGap = 24;
   const int adjustButtonX = cardX + cardW - adjustButtonRightPadding - adjustButtonSize;
   const int fieldAreaW = showTouchControls ? adjustButtonX - cardX - adjustButtonGap : cardW;
+#else
+  constexpr int fieldAreaW = cardW;
+#endif
   const int fieldStartX = cardX + (std::max(totalFieldW, fieldAreaW) - totalFieldW) / 2;
 
   char monthBuf[8];
@@ -688,6 +692,7 @@ void renderEditBookDatesPage(GfxRenderer& renderer, const MappedInputManager* ma
   drawDateField(renderer, fieldStartX + monthW + gap + dayW + gap, row2Y, yearW, yearBuf, selectedField == 5,
                 BookStatsTouchTarget::dateField(5));
 
+#if CROSSINK_APP_CAP_TOUCH
   if (showTouchControls) {
     const int fieldH = renderer.getLineHeight(UI_12_FONT_ID) + 10;
     drawDateAdjustButton(renderer, adjustButtonX, row1Y + (fieldH - adjustButtonSize) / 2, adjustButtonSize,
@@ -695,6 +700,7 @@ void renderEditBookDatesPage(GfxRenderer& renderer, const MappedInputManager* ma
     drawDateAdjustButton(renderer, adjustButtonX, row2Y + (fieldH - adjustButtonSize) / 2, adjustButtonSize,
                          icon_chevron_down_32, BookStatsTouchTarget::DateAdjustDown);
   }
+#endif
 
   if (showButtonHints && mappedInput) {
     const auto labels = mappedInput->mapLabels(tr(STR_BACK), tr(STR_NEXT_FIELD), tr(STR_DIR_UP), tr(STR_DIR_DOWN));

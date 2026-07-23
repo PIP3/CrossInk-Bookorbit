@@ -247,15 +247,15 @@ void ActivityManager::goToFileTransfer(std::string returnBookPath) {
   replaceActivity(std::make_unique<CrossPointWebServerActivity>(renderer, mappedInput, std::move(returnBookPath)));
 }
 
-void ActivityManager::goToCalibreWireless(std::string returnBookPath) {
+void ActivityManager::goToCalibreWireless(const std::string& returnBookPath) {
   restartToFileTransfer(NetworkMode::CONNECT_CALIBRE, returnBookPath);
 }
 
-void ActivityManager::goToJoinNetworkFileTransfer(std::string returnBookPath) {
+void ActivityManager::goToJoinNetworkFileTransfer(const std::string& returnBookPath) {
   restartToFileTransfer(NetworkMode::JOIN_NETWORK, returnBookPath);
 }
 
-void ActivityManager::goToHotspotFileTransfer(std::string returnBookPath) {
+void ActivityManager::goToHotspotFileTransfer(const std::string& returnBookPath) {
   restartToFileTransfer(NetworkMode::CREATE_HOTSPOT, returnBookPath);
 }
 

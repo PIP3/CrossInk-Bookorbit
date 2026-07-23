@@ -277,15 +277,26 @@ void SettingsActivity::rebuildSettingsLists() {
   systemGlobalStatsSettings = buildSystemGlobalStatsSettingsList(allSettings);
   controlsSettings = buildControlsSettingsParentList(allSettings);
   controlsPowerSettings = buildControlsPowerSettingsList(allSettings);
+#if CROSSINK_APP_CAP_TOUCH
   if (!gpio.hasTouch()) {
     controlsFrontButtonSettings = buildControlsFrontButtonSettingsList(allSettings);
   }
   controlsSideButtonSettings = buildControlsSideButtonSettingsList(allSettings);
 
-  const size_t expectedControlsCount = controlsParentBaseCount - (gpio.hasTouch() ? 1u : 0u) +
+  const bool hasTouch = gpio.hasTouch();
+  const size_t expectedControlsCount = controlsParentBaseCount - (hasTouch ? 1u : 0u) +
                                        (hasSettingByName(allSettings, StrId::STR_TILT_PAGE_TURN) ? 1u : 0u) +
                                        (hasSettingByName(allSettings, StrId::STR_TILT_PAGE_TURN_DIRECTION) ? 1u : 0u);
-  const size_t expectedFrontButtonCount = gpio.hasTouch() ? 0u : controlsFrontButtonCount;
+  const size_t expectedFrontButtonCount = hasTouch ? 0u : controlsFrontButtonCount;
+#else
+  controlsFrontButtonSettings = buildControlsFrontButtonSettingsList(allSettings);
+  controlsSideButtonSettings = buildControlsSideButtonSettingsList(allSettings);
+
+  const size_t expectedControlsCount = controlsParentBaseCount +
+                                       (hasSettingByName(allSettings, StrId::STR_TILT_PAGE_TURN) ? 1u : 0u) +
+                                       (hasSettingByName(allSettings, StrId::STR_TILT_PAGE_TURN_DIRECTION) ? 1u : 0u);
+  constexpr size_t expectedFrontButtonCount = controlsFrontButtonCount;
+#endif
   if (controlsSettings.size() != expectedControlsCount || controlsPowerSettings.size() < controlsPowerMinCount ||
       controlsPowerSettings.size() > controlsPowerMaxCount ||
       controlsFrontButtonSettings.size() != expectedFrontButtonCount ||

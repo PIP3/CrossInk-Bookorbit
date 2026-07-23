@@ -61,9 +61,13 @@ void ControlsOptionsActivity::rebuildSettingsList() {
   const auto allSettings = getSettingsList();
   settings = buildControlsSettingsParentList(allSettings);
   powerSettings = buildControlsPowerSettingsList(allSettings);
+#if CROSSINK_APP_CAP_TOUCH
   if (!gpio.hasTouch()) {
     frontButtonSettings = buildControlsFrontButtonSettingsList(allSettings);
   }
+#else
+  frontButtonSettings = buildControlsFrontButtonSettingsList(allSettings);
+#endif
   sideButtonSettings = buildControlsSideButtonSettingsList(allSettings);
 
   setCurrentSettings();

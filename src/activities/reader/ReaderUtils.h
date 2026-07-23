@@ -86,7 +86,12 @@ struct TouchPageTurn {
   unsigned long heldMs;
 };
 
-inline TouchPageTurn detectTouchPageTurn(GfxRenderer& renderer, const MappedInputManager& input) {
+inline TouchPageTurn detectTouchPageTurn(const GfxRenderer& renderer, const MappedInputManager& input) {
+#if !CROSSINK_APP_CAP_TOUCH
+  (void)renderer;
+  (void)input;
+  return {false, false, 0};
+#else
   TouchPageTurn result{false, false, 0};
   if (!SETTINGS.touchReaderControls || !input.hasTouch()) {
     return result;
@@ -125,6 +130,7 @@ inline TouchPageTurn detectTouchPageTurn(GfxRenderer& renderer, const MappedInpu
   result.next = x >= previousZoneWidth;
   result.heldMs = input.getHeldTime();
   return result;
+#endif
 }
 
 // Reader menu opens on a downward swipe from the top edge (replaces the old center tap-and-hold).

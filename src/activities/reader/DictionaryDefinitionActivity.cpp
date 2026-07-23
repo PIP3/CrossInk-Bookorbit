@@ -390,22 +390,30 @@ int DictionaryDefinitionActivity::getLineHeight() const {
   return static_cast<int>(renderer.getLineHeight(getDefinitionFontId()) * SETTINGS.getReaderLineCompression());
 }
 
+#if CROSSINK_APP_CAP_TOUCH
 bool DictionaryDefinitionActivity::showTouchDictionarySwitch() const {
   return hasModalBackground() && showLookupButton && mappedInput.hasTouch();
 }
+#endif
 
 int DictionaryDefinitionActivity::dictionaryFooterHeight() const {
   if (!hasModalBackground()) return 0;
 
   const auto metrics = UITheme::getInstance().getMetrics();
   const int dictionaryNameHeight = renderer.getLineHeight(UI_10_FONT_ID) + metrics.optionPopupTitleGap;
+#if CROSSINK_APP_CAP_TOUCH
   return dictionaryNameHeight + (showTouchDictionarySwitch() ? kDictionarySwitchTouchHeight : 0);
+#else
+  return dictionaryNameHeight;
+#endif
 }
 
+#if CROSSINK_APP_CAP_TOUCH
 bool DictionaryDefinitionActivity::dictionarySwitchButtonContains(const int x, const int y) const {
   const int buttonY = modalY_ + modalHeight_ - kDictionarySwitchTouchHeight;
   return x >= modalX_ && x < modalX_ + modalWidth_ && y >= buttonY && y < buttonY + kDictionarySwitchTouchHeight;
 }
+#endif
 
 // ---------------------------------------------------------------------------
 // Layout helpers — shared setup
@@ -600,7 +608,6 @@ void DictionaryDefinitionActivity::wrapHtml() {
 
 void DictionaryDefinitionActivity::feedSpanToWrapper(void* ctx, const StyledSpan& span) {
   auto* feedCtx = static_cast<DefinitionSpanFeedContext*>(ctx);
-  const EpdFontFamily::Style style = styleForSpan(span);
   const bool hasMarker = span.text && strstr(span.text, kEtymologyTreeMarker) != nullptr;
   const bool needsBoundarySpace = feedCtx->sawEtymologyTree && feedCtx->lastVisibleChar != '\0' &&
                                   (isAsciiWordChar(feedCtx->lastVisibleChar) || feedCtx->lastVisibleChar == '.') &&
@@ -887,12 +894,14 @@ void DictionaryDefinitionActivity::loop() {
       requestUpdate();
     }
 
+#if CROSSINK_APP_CAP_TOUCH
     int touchX = 0;
     int touchY = 0;
     if (mappedInput.wasScreenTapped(touchX, touchY) && navigator.selectWordAtPoint(touchX, touchY, getLineHeight())) {
       requestUpdate();
       return;
     }
+#endif
 
     if (controller.handleMultiSelect(navigator)) return;
 
@@ -911,6 +920,7 @@ void DictionaryDefinitionActivity::loop() {
   }
 
   // --- View mode ---
+#if CROSSINK_APP_CAP_TOUCH
   int touchX = 0;
   int touchY = 0;
   if (showTouchDictionarySwitch() && mappedInput.wasScreenTapped(touchX, touchY) &&
@@ -918,17 +928,20 @@ void DictionaryDefinitionActivity::loop() {
     openDictionarySwitch();
     return;
   }
+#endif
 
   if (showLookupButton && mappedInput.wasReleased(MappedInputManager::Button::Left)) {
     openDictionarySwitch();
     return;
   }
 
+#if CROSSINK_APP_CAP_TOUCH
   if (showLookupButton && mappedInput.hasTouch() && mappedInput.wasLeftEdgeGesture()) {
     setResult(ActivityResult{});
     finish();
     return;
   }
+#endif
 
   const auto swipe = mappedInput.wasSwipe();
   const bool prevPage = dictionaryPageButtonTriggered(mappedInput, true) || swipe == MappedInputManager::SwipeDir::Down;
@@ -1121,7 +1134,11 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
   if (hasModalBackground() && !dictionaryName_.empty()) {
     const int innerPadding = metrics.optionPopupInnerPadding;
     const int footerLineHeight = renderer.getLineHeight(UI_10_FONT_ID);
+#if CROSSINK_APP_CAP_TOUCH
     const int switchButtonHeight = showTouchDictionarySwitch() ? kDictionarySwitchTouchHeight : 0;
+#else
+    constexpr int switchButtonHeight = 0;
+#endif
     const int footerY = modalY_ + modalHeight_ - switchButtonHeight - innerPadding - footerLineHeight;
     const int separatorY = footerY - metrics.optionPopupTitleGap / 2;
     const int footerBottom = modalY_ + modalHeight_ - switchButtonHeight;
@@ -1132,6 +1149,7 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
     renderer.drawText(UI_10_FONT_ID, modalX_ + innerPadding, dictionaryNameY, visibleName.c_str());
   }
 
+#if CROSSINK_APP_CAP_TOUCH
   if (!isWordSelectMode && showTouchDictionarySwitch()) {
     const Rect buttonRect{modalX_, modalY_ + modalHeight_ - kDictionarySwitchTouchHeight, modalWidth_,
                           kDictionarySwitchTouchHeight};
@@ -1142,6 +1160,7 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
     const int labelY = buttonRect.y + (buttonRect.height - renderer.getLineHeight(UI_12_FONT_ID)) / 2;
     renderer.drawText(UI_12_FONT_ID, labelX, labelY, label, true, EpdFontFamily::BOLD);
   }
+#endif
 
   // Word-select mode: overlay highlighted word(s) and prime snapshot for next frame.
   // The -1 prevWordIdx literal is load-bearing: renderHighlightDifferential uses

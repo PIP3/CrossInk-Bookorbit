@@ -496,12 +496,12 @@ void ReaderOptionsActivity::buildOptionsScreen(UiApp::ScreenType& screen) {
     screen.target().text(titleRect, I18N.get(submenuTitleId), titleStyle);
   }
 
-  const auto& settings = *currentSettings;
-  std::vector<std::string> values(settings.size());
+  const auto& currentSettingsList = *currentSettings;
+  std::vector<std::string> values(currentSettingsList.size());
   std::vector<fui::ListItem> items;
-  items.reserve(settings.size());
-  for (size_t i = 0; i < settings.size(); ++i) {
-    const auto& setting = settings[i];
+  items.reserve(currentSettingsList.size());
+  for (size_t i = 0; i < currentSettingsList.size(); ++i) {
+    const auto& setting = currentSettingsList[i];
     if (settingShowsNavigationCaret(setting)) {
       values[i] = ">";
     } else if (setting.type == SettingType::TOGGLE && setting.valuePtr != nullptr) {

@@ -500,11 +500,12 @@ fui::Rect KeyboardEntryActivity::keyboardRect() const {
 }
 
 void KeyboardEntryActivity::loop() {
+#if CROSSINK_APP_CAP_TOUCH
   int tx = 0;
   int ty = 0;
 
-  size_t touchedCursorPos = 0;
   if (mappedInput.wasScreenTapped(tx, ty)) {
+    size_t touchedCursorPos = 0;
     const InputFieldTouchTarget inputTarget = inputFieldTouchTargetFromPoint(tx, ty, touchedCursorPos);
     if (inputTarget == InputFieldTouchTarget::PasswordToggle) {
       passwordVisible = !passwordVisible;
@@ -556,6 +557,7 @@ void KeyboardEntryActivity::loop() {
       return;
     }
   }
+#endif
 
   if (!cursorMode && mappedInput.wasPressed(MappedInputManager::Button::Up)) {
     upHeld = true;

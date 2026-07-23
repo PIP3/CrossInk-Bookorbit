@@ -132,14 +132,11 @@ void RoundedRaffTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
   }
   const int imgY = tileY + (tileHeight - RoundedRaffMetrics::values.homeCoverHeight) / 2;
   const int tileX = RoundedRaffMetrics::values.contentSidePadding;
-  if (hasContinueReading) {
-    TouchRegistry::getInstance().add(Rect{tileX, tileY, tileWidth, tileHeight}, 0, TouchRegistry::Cover);
-  }
-
   // Draw book card regardless, fill with message based on `hasContinueReading`
   // Draw cover image as background if available (inside the box)
   // Only load from SD on first render, then use stored buffer
   if (hasContinueReading) {
+    TouchRegistry::getInstance().add(Rect{tileX, tileY, tileWidth, tileHeight}, 0, TouchRegistry::Cover);
     RecentBook book = recentBooks[0];
     if (!coverRendered) {
       std::string coverPath = book.coverBmpPath;

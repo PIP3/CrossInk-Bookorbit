@@ -150,8 +150,7 @@ void EpdFontFamily::getTextDimensions(const char* string, int* w, int* h, const 
     }
 
     const auto anchor = combiningMark::anchorFor(cp);
-    const int raiseBy =
-        isCombining ? combiningMark::raiseAboveBase(anchor, glyph->top, glyph->height, lastBaseTop) : 0;
+    const int raiseBy = isCombining ? combiningMark::raiseAboveBase(anchor, glyph->top, glyph->height, lastBaseTop) : 0;
 
     if (!isCombining && prevCp != 0) {
       const auto kernFP = getKerning(prevCp, cp, style);
@@ -159,7 +158,7 @@ void EpdFontFamily::getTextDimensions(const char* string, int* w, int* h, const 
     }
 
     const int glyphBaseX = isCombining ? combiningMark::anchorOver(anchor, lastBaseX, lastBaseLeft, lastBaseWidth,
-                                                                  glyph->left, glyph->width)
+                                                                   glyph->left, glyph->width)
                                        : lastBaseX;
     const int glyphBaseY = -raiseBy;
 

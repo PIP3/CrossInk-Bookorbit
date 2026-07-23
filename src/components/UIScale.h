@@ -24,7 +24,6 @@ inline UIScaleSpec uiScaleSpec() {
       spec.titleFontId = UI_12_FONT_ID;
       break;
     default:
-      spec.smallFontId = UI_10_FONT_ID;
       spec.bodyFontId = UI_12_FONT_ID;
       spec.titleFontId = UI_12_FONT_ID;
       break;
