@@ -26,6 +26,7 @@
 #include "Epub/converters/ImageDimsProbe.h"
 #include "Epub/converters/ImageToFramebufferDecoder.h"
 #include "Epub/htmlEntities.h"
+#include "PreviewBlockLocator.h"
 
 // Minimum file size (in bytes) to show indexing popup - smaller chapters don't benefit from it
 constexpr size_t MIN_SIZE_FOR_POPUP = 10 * 1024;  // 10KB
@@ -404,7 +405,60 @@ void ChapterHtmlSlimParser::flushPendingAnchor() {
   pendingAnchorFromInlineA = false;
 }
 
+// Resolves previewAnchor to the element ordinal the preview should start rendering at. Runs before
+// the render pass so the preview can begin at the block enclosing the anchor instead of
+// mid-paragraph. Leaves previewStartOrdinal at 0 on any failure, which falls back to matching the
+// anchor id, i.e. the behaviour before block resolution existed.
+void ChapterHtmlSlimParser::locatePreviewBlockStart() {
+  PreviewBlockLocator locator(previewAnchor.c_str(), isHeaderOrBlock);
+  if (!locator.ok()) {
+    LOG_ERR("EHP", "Couldn't create parser to locate preview block");
+    return;
+  }
+
+  // Heap rather than stack: PARSE_BUFFER_SIZE is a quarter of the parsing task's stack. The buffer
+  // is released before the render pass opens the file, so the two never overlap.
+  auto buf = makeUniqueNoThrow<char[]>(PARSE_BUFFER_SIZE);
+  if (!buf) {
+    LOG_ERR("EHP", "Couldn't allocate buffer to locate preview block");
+    return;
+  }
+
+  FsFile file;
+  if (!Storage.openFileForRead("EHP", filepath, file)) {
+    return;
+  }
+
+  while (!locator.done()) {
+    const size_t len = file.read(buf.get(), PARSE_BUFFER_SIZE);
+    const bool isFinal = file.available() == 0;
+    if (len == 0 && !isFinal) {
+      LOG_ERR("EHP", "File read error while locating preview block");
+      break;
+    }
+    if (!locator.feed(buf.get(), static_cast<int>(len), isFinal) || isFinal) {
+      break;
+    }
+  }
+  file.close();
+
+  previewStartOrdinal = locator.startOrdinal();
+  if (previewStartOrdinal == 0) {
+    LOG_DBG("EHP", "No enclosing block located for preview anchor '%s'; starting at the anchor", previewAnchor.c_str());
+    return;
+  }
+  LOG_DBG("EHP", "Preview anchor '%s' resolves to block at element #%u", previewAnchor.c_str(), previewStartOrdinal);
+}
+
 bool ChapterHtmlSlimParser::handlePreviewScanStart(const XML_Char** atts) {
+  previewElementOrdinal += 1;
+  if (previewStartOrdinal != 0 && previewElementOrdinal == previewStartOrdinal) {
+    startPreviewAtAnchor();
+    return false;
+  }
+
+  // Fallback for when no block was located, and a safety net in case the two passes disagree on
+  // element ordinals: starting at the anchor is the pre-existing behaviour.
   const char* idValue = getAttribute(atts, "id");
   if (!idValue || strcmp(idValue, previewAnchor.c_str()) != 0) {
     depth += 1;
@@ -2795,6 +2849,10 @@ bool ChapterHtmlSlimParser::beginParse() {
   malformedMarkupTruncated = false;
   parseFileOffset_ = 0;
   parseFileSize_ = 0;
+  // Runs before the render pass opens the file, so only one reader is ever open at a time.
+  if (isPreviewBuild()) {
+    locatePreviewBlockStart();
+  }
   // Initialize block style stack with a root entry representing "no ancestor block elements".
   // The user's paragraph alignment is set as the default so child elements without explicit
   // text-align inherit it correctly through getCombinedBlockStyle.

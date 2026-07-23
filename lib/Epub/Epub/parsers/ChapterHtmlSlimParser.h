@@ -85,6 +85,10 @@ class ChapterHtmlSlimParser {
   uint16_t previewMaxPages = 0;
   bool previewAnchorFound = false;
   bool previewStopRequested = false;
+  // Element ordinals (1-based, counting every startElement) used to start a footnote preview at the
+  // block enclosing the anchor rather than at the anchor itself. 0 means "no block located".
+  uint32_t previewStartOrdinal = 0;
+  uint32_t previewElementOrdinal = 0;
   bool malformedMarkupTruncated = false;
   XML_Parser activeParser = nullptr;
   FsFile parseFile_;
@@ -219,6 +223,7 @@ class ChapterHtmlSlimParser {
   bool isPreviewBuild() const { return !previewAnchor.empty() && previewMaxPages > 0; }
   bool isScanningForPreviewAnchor() const { return isPreviewBuild() && !previewAnchorFound; }
   bool handlePreviewScanStart(const XML_Char** atts);
+  void locatePreviewBlockStart();
   void startPreviewAtAnchor();
   void stopPreviewIfPageLimitReached();
   bool usesSimpleCssLookup() const { return renderMode != EpubRenderMode::CrossInkDefault; }

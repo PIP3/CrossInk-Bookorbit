@@ -62,6 +62,7 @@
 - Unsupported EPUB chapter image formats no longer trigger the low-memory image warning.
 - EPUB progress now keeps saving while long chapters are still being indexed.
 - Returning to Home after reading with an SD card font now releases the reader's font caches so covers and thumbnails retain enough contiguous memory to render.
+- EPUB footnote and cross-reference previews now show the whole note. Previews of notes whose link target sits in the middle of a paragraph no longer start mid-sentence with the opening text missing.
 
 ## [v1.4.0] - 2026-07-10
 
