@@ -76,6 +76,7 @@ void NetworkModeSelectionActivity::loop() {
 
   // Handle confirm button - select current option
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+    mappedInput.suppressNextConfirmRelease();
     selectCurrent();
     return;
   }
