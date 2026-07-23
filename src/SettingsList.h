@@ -822,14 +822,16 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     v.erase(std::remove_if(v.begin(), v.end(),
                            [](const SettingInfo& s) {
                              return s.nameId == StrId::STR_TOUCH_READER_CONTROLS ||
-                                    s.nameId == StrId::STR_DISABLE_TOUCHSCREEN ||
-                                    s.nameId == StrId::STR_SUNLIGHT_FADING_FIX;
+                                    s.nameId == StrId::STR_DISABLE_TOUCHSCREEN;
                            }),
             v.end());
   }
   if (hasTouch) {
     v.erase(std::remove_if(v.begin(), v.end(),
-                           [](const SettingInfo& s) { return s.nameId == StrId::STR_FRONT_BTN_FOLLOW_ORIENTATION; }),
+                           [](const SettingInfo& s) {
+                             return s.nameId == StrId::STR_FRONT_BTN_FOLLOW_ORIENTATION ||
+                                    s.nameId == StrId::STR_SUNLIGHT_FADING_FIX;
+                           }),
             v.end());
 
     const auto themeIt =
