@@ -15,6 +15,8 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
+namespace fui = freeink::ui;
+
 namespace {
 enum MenuItem {
   ITEM_CHAPTER_PAGE_COUNT = 0,
@@ -66,9 +68,6 @@ const StrId timeLeftNames[TIME_LEFT_ITEMS] = {StrId::STR_HIDE, StrId::STR_CHAPTE
 
 constexpr int XTC_STATUS_BAR_ITEMS = 3;
 const StrId xtcStatusBarNames[XTC_STATUS_BAR_ITEMS] = {StrId::STR_HIDE, StrId::STR_BOTTOM, StrId::STR_TOP};
-constexpr int touchStatusBarSettingsRowHeightScale = 2;
-
-int statusBarSettingsRowHeightScale(const bool hasTouch) { return hasTouch ? touchStatusBarSettingsRowHeightScale : 1; }
 
 int optionCountForItem(const int item) {
   switch (item) {
@@ -193,6 +192,12 @@ void StatusBarSettingsActivity::onEnter() {
 
   selectedIndex = 0;
   visibleItemCount = stablePageNumbersAvailable ? ITEM_COUNT : ITEM_COUNT - 1;
+  uiReady = false;
+  visibleRows = 1;
+  topIndex = 0;
+  app.setTheme(uiThemeTokens(uiTarget));
+  app.on(ACTION_ROW, &StatusBarSettingsActivity::onRowEvent, this);
+  app.setScreen(&StatusBarSettingsActivity::settingsScreen, this);
 
   // Clamp statusBarProgressBar and statusBarTitle in case of corrupt/migrated data
   if (SETTINGS.statusBarProgressBar >= PROGRESS_BAR_ITEMS) {
@@ -223,12 +228,26 @@ void StatusBarSettingsActivity::onExit() { Activity::onExit(); }
 void StatusBarSettingsActivity::loop() {
   if (optionPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
 
-  int touched = -1;
-  if (mappedInput.wasItemTapped(touched) && touched >= 0 && touched < visibleItemCount) {
-    selectedIndex = touched;
-    handleSelection();
-    requestUpdate();
-    return;
+  if (uiReady) {
+    const fui::InputSnapshot snap = touchSnapshotFrom(mappedInput);
+    if (snap.touchPressed || snap.touchReleased) {
+      const auto event = app.route(snap);
+      if (app.invalidated()) requestUpdate();
+      if (event) return;
+    }
+  }
+
+  if (mappedInput.hasTouch()) {
+    const auto swipe = mappedInput.wasSwipe();
+    if (swipe == MappedInputManager::SwipeDir::Up || swipe == MappedInputManager::SwipeDir::Down) {
+      const int delta = swipe == MappedInputManager::SwipeDir::Up ? visibleRows : -visibleRows;
+      const int next = scrollListBy(topIndex, delta, visibleRows, visibleItemCount);
+      if (next != topIndex) {
+        topIndex = next;
+        requestUpdate();
+      }
+      return;
+    }
   }
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
@@ -245,21 +264,25 @@ void StatusBarSettingsActivity::loop() {
   // Handle navigation
   buttonNavigator.onNextRelease([this] {
     selectedIndex = ButtonNavigator::nextIndex(selectedIndex, visibleItemCount);
+    topIndex = followListSelection(selectedIndex, topIndex, visibleRows, visibleItemCount);
     requestUpdate();
   });
 
   buttonNavigator.onPreviousRelease([this] {
     selectedIndex = ButtonNavigator::previousIndex(selectedIndex, visibleItemCount);
+    topIndex = followListSelection(selectedIndex, topIndex, visibleRows, visibleItemCount);
     requestUpdate();
   });
 
   buttonNavigator.onNextContinuous([this] {
     selectedIndex = ButtonNavigator::nextIndex(selectedIndex, visibleItemCount);
+    topIndex = followListSelection(selectedIndex, topIndex, visibleRows, visibleItemCount);
     requestUpdate();
   });
 
   buttonNavigator.onPreviousContinuous([this] {
     selectedIndex = ButtonNavigator::previousIndex(selectedIndex, visibleItemCount);
+    topIndex = followListSelection(selectedIndex, topIndex, visibleRows, visibleItemCount);
     requestUpdate();
   });
 }
@@ -320,6 +343,68 @@ void StatusBarSettingsActivity::openOptionPicker() {
   requestUpdate();
 }
 
+void StatusBarSettingsActivity::settingsScreen(UiApp::ScreenType& screen, void* user) {
+  static_cast<StatusBarSettingsActivity*>(user)->buildSettingsScreen(screen);
+}
+
+void StatusBarSettingsActivity::onRowEvent(const fui::ActionEvent& event, void* user) {
+  auto* self = static_cast<StatusBarSettingsActivity*>(user);
+  if (self->optionPopup.isActive() || event.value < 0 || event.value >= self->visibleItemCount) return;
+  self->selectedIndex = event.value;
+  self->app.clearTapFlash();
+  self->handleSelection();
+}
+
+void StatusBarSettingsActivity::buildSettingsScreen(UiApp::ScreenType& screen) {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const int pageWidth = renderer.getScreenWidth();
+  const int pageHeight = renderer.getScreenHeight();
+  const auto orientation = renderer.getOrientation();
+  const bool isLandscapeCw = orientation == GfxRenderer::Orientation::LandscapeClockwise;
+  const bool isLandscapeCcw = orientation == GfxRenderer::Orientation::LandscapeCounterClockwise;
+  const int hintGutterWidth = (isLandscapeCw || isLandscapeCcw) ? metrics.buttonHintsHeight : 0;
+  const int contentX = isLandscapeCw ? hintGutterWidth : 0;
+  const int contentWidth = pageWidth - hintGutterWidth;
+  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+  const int previewLabelLineHeight = renderer.getLineHeight(UI_10_FONT_ID);
+  constexpr int previewLabelGap = 18;
+  const int previewSectionHeight = previewLabelLineHeight + previewLabelGap + UITheme::getStatusBarHeight();
+  const int contentHeight =
+      pageHeight - contentTop - metrics.buttonHintsHeight - previewSectionHeight - metrics.verticalSpacing * 2;
+
+  screen.setContentMargin(
+      fui::Insets{static_cast<int16_t>(contentTop), static_cast<int16_t>(pageWidth - (contentX + contentWidth)),
+                  static_cast<int16_t>(pageHeight - (contentTop + contentHeight)), static_cast<int16_t>(contentX)});
+
+  std::vector<std::string> values(visibleItemCount);
+  std::vector<fui::ListItem> items;
+  items.reserve(visibleItemCount);
+  for (int i = 0; i < visibleItemCount; ++i) {
+    const int itemIndex = itemForVisibleIndex(i);
+    values[i] = valueTextForItem(itemIndex);
+    fui::ListItem item;
+    item.label = I18N.get(menuNames[itemIndex]);
+    item.value = values[i].c_str();
+    item.actionValue = static_cast<int16_t>(i);
+    items.push_back(item);
+  }
+
+  fui::ListProps props;
+  props.items = items.data();
+  props.count = static_cast<uint16_t>(items.size());
+  props.selectedIndex = static_cast<int16_t>(selectedIndex);
+  props.action = ACTION_ROW;
+  props.inputMask = fui::InputTouch;
+  props.valueInset = 8;
+  props.labelText = screen.theme().bodyText;
+  props.labelText.maxLines = 2;
+  const auto rows = configureUiList(props, screen.theme(), screen.body());
+  visibleRows = rows > 0 ? rows : 1;
+  topIndex = scrollListBy(topIndex, 0, visibleRows, visibleItemCount);
+  props.topIndex = static_cast<uint16_t>(topIndex);
+  screen.list(props);
+}
+
 void StatusBarSettingsActivity::render(RenderLock&&) {
   if (optionPopup.processRender(renderer, mappedInput)) return;
 
@@ -328,7 +413,6 @@ void StatusBarSettingsActivity::render(RenderLock&&) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
-  const int rowHeightScale = statusBarSettingsRowHeightScale(mappedInput.hasTouch());
 
   const auto orientation = renderer.getOrientation();
   const bool isInverted = orientation == GfxRenderer::Orientation::PortraitInverted;
@@ -354,12 +438,9 @@ void StatusBarSettingsActivity::render(RenderLock&&) {
   GUI.drawHeader(renderer, Rect{contentX, metrics.topPadding, contentWidth, metrics.headerHeight},
                  tr(STR_CUSTOMISE_STATUS_BAR), nullptr, readerContext);
 
-  GUI.drawList(
-      renderer, Rect{contentX, contentTop, contentWidth, contentHeight}, visibleItemCount,
-      static_cast<int>(selectedIndex),
-      [this](int index) { return std::string(I18N.get(menuNames[itemForVisibleIndex(index)])); }, nullptr, nullptr,
-      [this](int index) -> std::string { return valueTextForItem(itemForVisibleIndex(index)); }, true, nullptr, nullptr,
-      rowHeightScale);
+  uiReady = false;
+  app.render();
+  uiReady = true;
   // Draw button hints
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4, true);
 
