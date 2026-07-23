@@ -1,5 +1,6 @@
 #include "DictionaryDefinitionActivity.h"
 
+#include <BidiUtils.h>
 #include <DictHtmlRenderer.h>
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
@@ -318,6 +319,15 @@ static void appendDictionaryApproximation(uint32_t cp, std::string& out) {
 
 static bool startsWithCapitalizedToken(const char* text) { return text && isAsciiUpper(text[0]); }
 
+static bool definitionTextMayNeedBidi(const char* text) {
+  if (!text) return false;
+  while (*text) {
+    const auto b = static_cast<unsigned char>(*text++);
+    if (b >= 0xD6 && b <= 0xDB) return true;  // Hebrew and Arabic UTF-8 lead bytes
+  }
+  return false;
+}
+
 static EpdFontFamily::Style styleForSpan(const StyledSpan& span) {
   if (span.bold && span.italic) return EpdFontFamily::BOLD_ITALIC;
   if (span.bold) return EpdFontFamily::BOLD;
@@ -463,6 +473,15 @@ void DictionaryDefinitionActivity::wrapText() {
   linesPerPage = (bodyBottom - bodyStartY) / getLineHeight();
   if (linesPerPage < 1) linesPerPage = 1;
 
+  // Resolve the immutable definition slice once. Page turns reuse it instead
+  // of reopening the dictionary metadata files before every layout pass.
+  const DictInfo info = Dictionary::readInfo(foundLocation.folderPath.c_str());
+  const DictDefinitionSlice slice = Dictionary::resolveDefinitionSlice(foundLocation, info);
+  definitionOffset_ = slice.offset;
+  definitionSize_ = slice.size;
+  definitionIsHtml_ = slice.isHtml;
+
+  prepareDefinitionFontAdvances();
   loadPage(currentPage);
   // Pick the modal height once per definition. Page turns re-fill the content
   // without moving the frame, so the last (usually shorter) page feels like
@@ -501,12 +520,6 @@ void DictionaryDefinitionActivity::loadPage(int page) {
   collectTargetPage_ = page;
   collectLineCount_ = 0;
 
-  // Choose rendering path based on dictionary content type
-  const DictInfo info = Dictionary::readInfo(foundLocation.folderPath.c_str());
-  const DictDefinitionSlice slice = Dictionary::resolveDefinitionSlice(foundLocation, info);
-  definitionOffset_ = slice.offset;
-  definitionSize_ = slice.size;
-  definitionIsHtml_ = slice.isHtml;
   if (definitionIsHtml_) {
     wrapHtml();
   } else {
@@ -514,6 +527,111 @@ void DictionaryDefinitionActivity::loadPage(int page) {
   }
 
   totalPages = DictLayout::paginate(collectLineCount_, linesPerPage);
+}
+
+void DictionaryDefinitionActivity::collectDefinitionAdvanceText(const char* text, const EpdFontFamily::Style style) {
+  if (!text || *text == '\0') return;
+
+  const uint8_t baseStyle = static_cast<uint8_t>(style) & 0x03;
+  definitionAdvanceStyleMask_ |= static_cast<uint8_t>(1u << baseStyle);
+
+  const auto collect = [this](const char* utf8) {
+    const auto* p = reinterpret_cast<const unsigned char*>(utf8);
+    uint32_t cp = 0;
+    while ((cp = utf8NextCodepoint(&p))) {
+      const auto begin = definitionAdvanceCodepoints_.begin();
+      const auto end = begin + definitionAdvanceCodepointCount_;
+      if (std::find(begin, end, cp) != end) continue;
+      if (definitionAdvanceCodepointCount_ >= definitionAdvanceCodepoints_.size()) {
+        definitionAdvanceCodepointsTruncated_ = true;
+        continue;
+      }
+      definitionAdvanceCodepoints_[definitionAdvanceCodepointCount_++] = cp;
+    }
+  };
+
+  collect(text);
+  if (definitionTextMayNeedBidi(text) &&
+      BidiUtils::applyBidiVisual(text, definitionAdvanceVisualText_, static_cast<int>(BidiUtils::BidiBaseDir::AUTO))) {
+    collect(definitionAdvanceVisualText_.c_str());
+  }
+}
+
+void DictionaryDefinitionActivity::collectSpanForAdvances(void* ctx, const StyledSpan& span) {
+  auto* self = static_cast<DictionaryDefinitionActivity*>(ctx);
+  self->collectDefinitionAdvanceText(span.text, styleForSpan(span));
+}
+
+void DictionaryDefinitionActivity::prepareDefinitionFontAdvances() {
+  const int fontId = getDefinitionFontId();
+  if (!renderer.isSdCardFont(fontId) || definitionSize_ == 0) return;
+
+  definitionAdvanceCodepointCount_ = 0;
+  definitionAdvanceStyleMask_ = 0;
+  definitionAdvanceCodepointsTruncated_ = false;
+  definitionAdvanceVisualText_.clear();
+
+  // The title is measured before the bitmap prewarm scan, so include it in the
+  // same batched advance read as the definition body.
+  collectDefinitionAdvanceText(headword.c_str(), EpdFontFamily::BOLD);
+  collectDefinitionAdvanceText(kBullet, EpdFontFamily::REGULAR);
+
+  const std::string dictPath = foundLocation.folderPath + ".dict";
+  if (definitionIsHtml_) {
+    const DictHtmlRenderer::SpanSink sink{this, &DictionaryDefinitionActivity::collectSpanForAdvances};
+    if (!htmlRenderer_.renderFromFileStreaming(dictPath.c_str(), definitionOffset_, definitionSize_, sink)) {
+      LOG_ERR("DICT", "Failed to collect SD-font advances from HTML definition");
+      return;
+    }
+  } else {
+    HalFile dictFile;
+    if (!Storage.openFileForRead("DICT", dictPath.c_str(), dictFile)) {
+      LOG_ERR("DICT", "Failed to open definition for SD-font advance preparation");
+      return;
+    }
+    if (!dictFile.seekSet(definitionOffset_)) {
+      LOG_ERR("DICT", "Failed to seek definition for SD-font advance preparation");
+      dictFile.close();
+      return;
+    }
+
+    // Keep only one word while streaming so UTF-8 sequences split across file
+    // chunks remain intact without retaining the full definition.
+    std::string word;
+    word.reserve(64);
+    uint32_t remaining = definitionSize_;
+    char chunk[512];
+    while (remaining > 0) {
+      const uint32_t toRead = std::min<uint32_t>(remaining, sizeof(chunk));
+      const int n = dictFile.read(reinterpret_cast<uint8_t*>(chunk), static_cast<int>(toRead));
+      if (n <= 0) break;
+      remaining -= static_cast<uint32_t>(n);
+      for (int i = 0; i < n; i++) {
+        const char c = chunk[i];
+        if (c == '\0' || c == '\n' || c == ' ') {
+          collectDefinitionAdvanceText(word.c_str(), EpdFontFamily::REGULAR);
+          word.clear();
+        } else {
+          word += c;
+        }
+      }
+    }
+    collectDefinitionAdvanceText(word.c_str(), EpdFontFamily::REGULAR);
+    dictFile.close();
+  }
+
+  if (definitionAdvanceCodepointCount_ == 0) return;
+  if (definitionAdvanceCodepointsTruncated_) {
+    LOG_DBG("DICT", "SD-font advance preparation capped at %u unique codepoints", kDefinitionAdvanceCodepointCapacity);
+  }
+
+  // The .dict reader is closed above. Batch the sorted font reads now so the
+  // wrapping pass below performs RAM lookups instead of opening .cpfont once
+  // per character while streaming the dictionary.
+  LOG_DBG("DICT", "Preparing %u SD-font advance codepoints (styles=0x%02X)", definitionAdvanceCodepointCount_,
+          definitionAdvanceStyleMask_);
+  renderer.ensureSdCardFontReady(fontId, definitionAdvanceCodepoints_.data(), definitionAdvanceCodepointCount_,
+                                 /*includeSpace=*/true, /*includeHyphen=*/false, definitionAdvanceStyleMask_);
 }
 
 void DictionaryDefinitionActivity::sizeModalForCurrentPage() {

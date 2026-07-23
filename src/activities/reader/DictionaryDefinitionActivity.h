@@ -3,6 +3,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
+#include <array>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -105,6 +106,18 @@ class DictionaryDefinitionActivity final : public Activity {
   uint32_t definitionSize_ = 0;
   bool definitionIsHtml_ = false;
 
+  // SD-font layout needs advance widths before the .dict stream is opened for
+  // wrapping. This fixed 1 KB buffer lives inside the heap-owned activity (not
+  // on the small task stack) and matches the SD font's persistent-cache budget.
+  static constexpr uint16_t kDefinitionAdvanceCodepointCapacity = 256;
+  std::array<uint32_t, kDefinitionAdvanceCodepointCapacity> definitionAdvanceCodepoints_{};
+  uint16_t definitionAdvanceCodepointCount_ = 0;
+  uint8_t definitionAdvanceStyleMask_ = 0;
+  bool definitionAdvanceCodepointsTruncated_ = false;
+  // Reused RTL shaping scratch; BidiUtils caps input at 512 codepoints, so the
+  // retained high-water capacity is about 2 KB in the worst UTF-8 case.
+  std::string definitionAdvanceVisualText_;
+
   // Reused across page turns (3.1-A): avoids re-allocating the renderer object +
   // its parser/buffers on every loadPage. A value member is fine — the activity
   // is heap-allocated, so this lives on the heap. reset()+re-feed each turn (NOT
@@ -143,6 +156,9 @@ class DictionaryDefinitionActivity final : public Activity {
   void loadPage(int page);
   void wrapHtml();
   void wrapPlain();
+  void prepareDefinitionFontAdvances();
+  void collectDefinitionAdvanceText(const char* text, EpdFontFamily::Style style);
+  static void collectSpanForAdvances(void* ctx, const StyledSpan& span);
   void extractWordsFromLayout();
   void openDictionarySwitch();
 #if CROSSINK_APP_CAP_TOUCH
