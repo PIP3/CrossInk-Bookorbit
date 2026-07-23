@@ -16,6 +16,7 @@
 - Image-heavy EPUB chapters now index by reading image headers first and extract each full image only when its page is shown.
 - EPUB books with repeated byte-identical stylesheets now parse each unique stylesheet only once when building caches.
 - SD-card fonts now reuse their page-sized glyph buffers, reducing heap fragmentation during long reading sessions.
+- Firmware builds now prioritize usable heap over oversized system timer stacks and maximum WiFi throughput, leaving more memory for reading and network operations.
 - Downloaded-font size ranges now offer 8–12pt, 10–16pt, 14–20pt, and 8–20pt options.
 - File Transfer now starts from a lightweight network boot, providing more contiguous memory for web and Calibre transfers.
 - Downloaded-font size range options now show their actual point-size ranges instead of firmware build names.

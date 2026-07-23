@@ -17,8 +17,8 @@ constexpr int kHeaderDateBottomGap = 10;
 bool formatHeaderDate(char* buf, const size_t len) {
   if (!halClock.isAvailable()) return false;
   if (!SETTINGS.clockDateHasBeenSynced) return false;
-#ifdef SIMULATOR
-  // The simulator has no RTC and keeps the legacy HalClock formatting API.
+#if defined(SIMULATOR) && !defined(CROSSPOINT_SIMULATOR_HAS_DATE_FORMAT)
+  // Keep compatibility with older downloaded simulator libraries.
   return halClock.formatDate(buf, len, SETTINGS.clockUtcOffsetQ);
 #else
   return halClock.formatDate(buf, len, SETTINGS.clockUtcOffsetQ,
