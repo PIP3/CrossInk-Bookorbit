@@ -27,6 +27,11 @@ Refer to https://freeink.org/llms.txt for guidance.
 - Kindle EPUBs may contain paired high-res and old-Kindle fallback images. `ChapterHtmlSlimParser` should skip `<img>` nodes with `data-AmznRemoved-M8` to avoid duplicate stacked images.
 - After image/layout pipeline changes that affect cached EPUB output, clear the affected `.crosspoint/epub_<hash>/` cache if behavior looks stale.
 
+## UI Consistency
+
+- Use FreeInkUI SDK components and input routing for list-style screens where possible. Row rendering, touch targets,
+  hit testing, and pagination should share the same FreeInkUI list configuration instead of custom touch scaling.
+
 ## Heap Baselines (X4 hardware, SD card font)
 
 - A normal resume-into-partial reading session runs at ~85-90KB free / ~49KB maxAlloc by

@@ -252,7 +252,7 @@ void ActivityManager::goToNearbyBookSend(std::string path, const bool returnToRe
   auto activity = makeUniqueNoThrow<NearbyBookTransferActivity>(
       renderer, mappedInput, NearbyBookTransferActivity::Mode::Send, std::move(path), returnToReader);
   if (!activity) {
-    LOG_ERR("ACT", "OOM: nearby book sender");
+    LOG_ERR("ACT", "OOM: nearby file sender");
     return;
   }
   replaceActivity(std::move(activity));
@@ -262,7 +262,7 @@ void ActivityManager::goToNearbyBookReceive() {
   auto activity =
       makeUniqueNoThrow<NearbyBookTransferActivity>(renderer, mappedInput, NearbyBookTransferActivity::Mode::Receive);
   if (!activity) {
-    LOG_ERR("ACT", "OOM: nearby book receiver");
+    LOG_ERR("ACT", "OOM: nearby file receiver");
     return;
   }
   replaceActivity(std::move(activity));

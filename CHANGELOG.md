@@ -2,7 +2,8 @@
 
 ### Added
 
-- Nearby Book Transfer can send EPUB, TXT, XTC, and XTCH books directly between two CrossInk devices without a Wi-Fi network.
+- Nearby File Transfer can send EPUB, TXT, XTC, XTCH, PNG, and BMP files directly between two CrossInk devices without a Wi-Fi network.
+- Recent Books and image-file long-press actions can send files directly to a nearby CrossInk device.
 - Dictionary lookup and lookup history
 - RTC-enabled devices can now choose the date format and numeric separator shown in headers from Settings > System > Device.
 - The web EPUB optimizer now splits oversized chapters into memory-friendlier sections before sending them to the reader.
@@ -33,6 +34,7 @@
 
 ### Fixed
 
+- Nearby File Transfer menus now use consistent touch-sized rows, respond to taps, and show the available navigation button hints.
 - EPUB clipping selection no longer clips certain letters with long descenders.
 - Manage Fonts no longer runs out of memory while loading larger font catalogs.
 - Low-memory EPUB layout now fails cleanly when page or image elements cannot be allocated instead of risking a reboot.

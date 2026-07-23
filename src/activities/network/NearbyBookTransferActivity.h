@@ -1,12 +1,17 @@
 #pragma once
 
+#include <FreeInkApp.h>
+#include <FreeInkUIGfxRenderer.h>
 #include <HalStorage.h>
 #include <NearbyTransfer.h>
 
 #include <array>
+#include <atomic>
 #include <string>
 
 #include "activities/Activity.h"
+#include "components/UIThemeTokens.h"
+#include "components/UiAppHelpers.h"
 #include "util/ButtonNavigator.h"
 
 class NearbyBookTransferActivity final : public Activity {
@@ -89,6 +94,12 @@ class NearbyBookTransferActivity final : public Activity {
 
   ButtonNavigator buttonNavigator_;
 
+  using UiApp = freeink::ui::FreeInkApp<8, 4>;
+  static constexpr freeink::ui::ActionId ACTION_ROW = 1;
+  freeink::ui::GfxRendererTarget uiTarget_;  // Must precede app_: app_ holds a reference to it.
+  UiApp app_;
+  std::atomic<bool> uiReady_{false};
+
   bool startRadio();
   void stopRadio();
   void startListening();
@@ -111,11 +122,17 @@ class NearbyBookTransferActivity final : public Activity {
   void setState(State state);
   void setError(const char* message);
   void exitAfterRadio();
-  void openReceivedBook();
+  void openReceivedFile();
   void chooseDestinationFolder();
   void updateTimers();
   void updateNavigation();
   void maybeRefreshProgress();
+  bool isMenuState() const;
+  int menuItemCount() const;
+  void activateSelected();
+  static void menuScreen(UiApp::ScreenType& screen, void* user);
+  static void onRowEvent(const freeink::ui::ActionEvent& event, void* user);
+  void buildMenuScreen(UiApp::ScreenType& screen);
 
   static bool supportedFile(const std::string& path);
   static bool safeFileName(const std::string& name);

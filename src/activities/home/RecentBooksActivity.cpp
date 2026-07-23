@@ -240,6 +240,9 @@ void RecentBooksActivity::showBookActionMenu(const size_t bookIndex, const bool 
   const RecentBook book = recentBooks[bookIndex];
   std::vector<FileBrowserActionActivity::MenuItem> items =
       BookActions::buildBookActionItems(book.path, /*includeRemoveFromRecents=*/true);
+  if (BookActions::canSendNearby(book.path)) {
+    items.push_back({FileBrowserAction::SendNearby, StrId::STR_SEND_NEARBY_BOOK});
+  }
 
   startActivityForResult(
       std::make_unique<FileBrowserActionActivity>(renderer, mappedInput, book.title, std::move(items),
@@ -340,6 +343,9 @@ void RecentBooksActivity::showBookActionMenu(const size_t bookIndex, const bool 
           case FileBrowserAction::RemoveFromRecents:
             promptRemoveBook(book.path, book.title);
             return;
+          case FileBrowserAction::SendNearby:
+            activityManager.goToNearbyBookSend(book.path, false);
+            return;
           case FileBrowserAction::PinFavorite:
           case FileBrowserAction::UnpinFavorite:
           case FileBrowserAction::SetSleepFolder:
@@ -348,7 +354,6 @@ void RecentBooksActivity::showBookActionMenu(const size_t bookIndex, const bool 
           case FileBrowserAction::ViewClippings:
           case FileBrowserAction::DeleteBookmarks:
           case FileBrowserAction::DeleteClippings:
-          case FileBrowserAction::SendNearby:
             return;
         }
       });

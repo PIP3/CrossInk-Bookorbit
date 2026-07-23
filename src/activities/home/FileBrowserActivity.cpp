@@ -579,8 +579,7 @@ void FileBrowserActivity::showFileActionMenu(const std::string& entry, bool igno
   const std::string fullPath = buildFullPath(basepath, entry);
   std::vector<FileBrowserActionActivity::MenuItem> items = BookActions::buildBookActionItems(fullPath, false);
 
-  if (FsHelpers::hasEpubExtension(fullPath) || FsHelpers::hasTxtExtension(fullPath) ||
-      FsHelpers::hasXtcExtension(fullPath)) {
+  if (BookActions::canSendNearby(fullPath)) {
     items.push_back({FileBrowserAction::SendNearby, StrId::STR_SEND_NEARBY_BOOK});
   }
 
@@ -937,18 +936,31 @@ void FileBrowserActivity::loop() {
     topIndex = followListSelection(static_cast<int>(selectorIndex), topIndex, visibleRows, listSize);
     requestUpdate();
   };
-  buttonNavigator.onNextRelease([this, listSize, &moveSelection] {
+  const auto moveNext = [this, listSize, &moveSelection] {
     moveSelection(ButtonNavigator::nextIndex(static_cast<int>(selectorIndex), listSize));
-  });
-  buttonNavigator.onPreviousRelease([this, listSize, &moveSelection] {
+  };
+  const auto movePrevious = [this, listSize, &moveSelection] {
     moveSelection(ButtonNavigator::previousIndex(static_cast<int>(selectorIndex), listSize));
-  });
-  buttonNavigator.onNextContinuous([this, listSize, &moveSelection] {
+  };
+  const auto pageNext = [this, listSize, &moveSelection] {
     moveSelection(ButtonNavigator::nextPageIndex(static_cast<int>(selectorIndex), listSize, visibleRows));
-  });
-  buttonNavigator.onPreviousContinuous([this, listSize, &moveSelection] {
+  };
+  const auto pagePrevious = [this, listSize, &moveSelection] {
     moveSelection(ButtonNavigator::previousPageIndex(static_cast<int>(selectorIndex), listSize, visibleRows));
-  });
+  };
+  if (mode == Mode::PickDirectory) {
+    // The front-right button selects this folder. Keep navigation on the side
+    // buttons so the remaining front-left button is not a misleading one-way control.
+    buttonNavigator.onRelease({MappedInputManager::Button::Down}, moveNext);
+    buttonNavigator.onRelease({MappedInputManager::Button::Up}, movePrevious);
+    buttonNavigator.onContinuous({MappedInputManager::Button::Down}, pageNext);
+    buttonNavigator.onContinuous({MappedInputManager::Button::Up}, pagePrevious);
+  } else {
+    buttonNavigator.onNextRelease(moveNext);
+    buttonNavigator.onPreviousRelease(movePrevious);
+    buttonNavigator.onNextContinuous(pageNext);
+    buttonNavigator.onPreviousContinuous(pagePrevious);
+  }
 }
 
 namespace {
@@ -1097,7 +1109,7 @@ void FileBrowserActivity::render(RenderLock&&) {
       mode == Mode::PickFirmware && visibleEntries > 0 && std::string(entryNameAt(selectorIndex)).back() != '/';
   const char* confirmLabel = visibleEntries == 0 ? "" : (selectingFirmwareFile ? tr(STR_SELECT) : tr(STR_OPEN));
   const auto labels = mappedInput.mapLabels(
-      backLabel, confirmLabel, visibleEntries == 0 ? "" : tr(STR_DIR_UP),
+      backLabel, confirmLabel, visibleEntries == 0 || mode == Mode::PickDirectory ? "" : tr(STR_DIR_UP),
       mode == Mode::PickDirectory ? tr(STR_SELECT) : (visibleEntries == 0 ? "" : tr(STR_DIR_DOWN)));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 

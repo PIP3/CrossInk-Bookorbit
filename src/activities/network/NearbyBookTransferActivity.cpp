@@ -24,6 +24,7 @@
 #endif
 
 namespace nearby = freeink::nearby;
+namespace fui = freeink::ui;
 
 namespace {
 constexpr const char* LOG_TAG = "NBOOK";
@@ -44,12 +45,15 @@ NearbyBookTransferActivity::NearbyBookTransferActivity(GfxRenderer& renderer, Ma
     : Activity("NearbyBookTransfer", renderer, mappedInput),
       mode_(mode),
       sourcePath_(std::move(sourcePath)),
-      returnToReader_(returnToReader) {}
+      returnToReader_(returnToReader),
+      uiTarget_(makeUiTarget(renderer)),
+      app_(uiTarget_, uiTarget_.deviceContext()) {}
 
 NearbyBookTransferActivity::~NearbyBookTransferActivity() { stopRadio(); }
 
 bool NearbyBookTransferActivity::supportedFile(const std::string& path) {
-  return FsHelpers::hasEpubExtension(path) || FsHelpers::hasTxtExtension(path) || FsHelpers::hasXtcExtension(path);
+  return FsHelpers::hasEpubExtension(path) || FsHelpers::hasTxtExtension(path) || FsHelpers::hasXtcExtension(path) ||
+         FsHelpers::hasPngExtension(path) || FsHelpers::hasBmpExtension(path);
 }
 
 bool NearbyBookTransferActivity::safeFileName(const std::string& name) {
@@ -88,6 +92,10 @@ void NearbyBookTransferActivity::onEnter() {
   Activity::onEnter();
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
   destinationFolder_ = SETTINGS.nearbyReceiveFolder[0] ? SETTINGS.nearbyReceiveFolder : "/";
+  uiReady_ = false;
+  app_.setTheme(uiThemeTokens(uiTarget_));
+  app_.on(ACTION_ROW, &NearbyBookTransferActivity::onRowEvent, this);
+  app_.setScreen(&NearbyBookTransferActivity::menuScreen, this);
 
   if (mode_ == Mode::Receive) {
     setState(State::ChooseReceiveAction);
@@ -489,6 +497,8 @@ void NearbyBookTransferActivity::cancelTransfer() {
 void NearbyBookTransferActivity::setState(const State state) {
   state_ = state;
   selectedIndex_ = 0;
+  uiReady_ = false;
+  app_.clearTapFlash();
   lastUiMs_ = millis();
   requestUpdate();
 }
@@ -520,7 +530,7 @@ void NearbyBookTransferActivity::exitAfterRadio() {
   }
 }
 
-void NearbyBookTransferActivity::openReceivedBook() {
+void NearbyBookTransferActivity::openReceivedFile() {
   if (finalPath_.empty()) return;
   APP_STATE.openEpubPath = finalPath_;
   APP_STATE.saveToFile();
@@ -583,11 +593,106 @@ void NearbyBookTransferActivity::maybeRefreshProgress() {
   requestUpdate();
 }
 
+bool NearbyBookTransferActivity::isMenuState() const {
+  return state_ == State::ChooseReceiveAction || state_ == State::DeviceList || state_ == State::CollisionPrompt;
+}
+
+int NearbyBookTransferActivity::menuItemCount() const {
+  if (state_ == State::ChooseReceiveAction) return 2;
+  if (state_ == State::DeviceList) return peerCount_;
+  if (state_ == State::CollisionPrompt) return 3;
+  return 0;
+}
+
+void NearbyBookTransferActivity::activateSelected() {
+  switch (state_) {
+    case State::ChooseReceiveAction:
+      if (selectedIndex_ == 0)
+        startListening();
+      else
+        chooseDestinationFolder();
+      break;
+    case State::DeviceList:
+      selectPeer();
+      break;
+    case State::OfferPrompt:
+      if (Storage.exists(finalPath_.c_str()))
+        setState(State::CollisionPrompt);
+      else
+        acceptOffer(false);
+      break;
+    case State::CollisionPrompt:
+      if (selectedIndex_ == 0) {
+        acceptOffer(false);
+      } else if (selectedIndex_ == 1) {
+        acceptOffer(true);
+      } else {
+        const uint8_t reason = REJECT_USER;
+        sendPacket(nearby::PacketType::Reject, peerMac_.data(), 0, &reason, 1);
+        startListening();
+      }
+      break;
+    case State::Success:
+      if (mode_ == Mode::Receive)
+        openReceivedFile();
+      else
+        exitAfterRadio();
+      break;
+    case State::Error:
+      exitAfterRadio();
+      break;
+    default:
+      break;
+  }
+}
+
+void NearbyBookTransferActivity::menuScreen(UiApp::ScreenType& screen, void* user) {
+  static_cast<NearbyBookTransferActivity*>(user)->buildMenuScreen(screen);
+}
+
+void NearbyBookTransferActivity::onRowEvent(const fui::ActionEvent& event, void* user) {
+  auto* self = static_cast<NearbyBookTransferActivity*>(user);
+  if (!self->isMenuState() || event.value < 0 || event.value >= self->menuItemCount()) return;
+  self->selectedIndex_ = event.value;
+  self->app_.clearTapFlash();
+  self->activateSelected();
+}
+
+void NearbyBookTransferActivity::buildMenuScreen(UiApp::ScreenType& screen) {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  screen.setContentMargin(
+      fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing), 0,
+                  static_cast<int16_t>(metrics.buttonHintsHeight + metrics.verticalSpacing), 0});
+
+  std::array<fui::ListItem, MAX_PEERS> items{};
+  const int count = menuItemCount();
+  for (int i = 0; i < count; ++i) {
+    if (state_ == State::ChooseReceiveAction) {
+      items[i].label = i == 0 ? tr(STR_START_RECEIVING) : tr(STR_CHANGE_FOLDER);
+      if (i == 1) items[i].value = destinationFolder_.c_str();
+    } else if (state_ == State::DeviceList) {
+      items[i].label = peers_[i].name.data();
+    } else if (state_ == State::CollisionPrompt) {
+      items[i].label = i == 0 ? tr(STR_REPLACE) : (i == 1 ? tr(STR_KEEP_BOTH) : tr(STR_CANCEL));
+    }
+    items[i].actionValue = static_cast<int16_t>(i);
+  }
+
+  fui::ListProps props;
+  props.items = items.data();
+  props.count = static_cast<uint16_t>(count);
+  props.selectedIndex = static_cast<int16_t>(selectedIndex_);
+  props.action = ACTION_ROW;
+  props.inputMask = fui::InputTouch;
+  props.valueInset = 8;
+  props.labelText = screen.theme().bodyText;
+  props.labelText.maxLines = 2;
+  configureUiList(props, screen.theme(), screen.body());
+  screen.list(props);
+}
+
 void NearbyBookTransferActivity::updateNavigation() {
-  int count = 0;
-  if (state_ == State::ChooseReceiveAction) count = 2;
-  if (state_ == State::DeviceList) count = peerCount_;
-  if (state_ == State::CollisionPrompt) count = 3;
+  const int count = menuItemCount();
   if (count <= 1) return;
   buttonNavigator_.onNextRelease([this, count] {
     selectedIndex_ = ButtonNavigator::nextIndex(selectedIndex_, count);
@@ -603,6 +708,15 @@ void NearbyBookTransferActivity::loop() {
   processPackets();
   updateTimers();
 
+  if (isMenuState() && uiReady_) {
+    const fui::InputSnapshot snap = touchSnapshotFrom(mappedInput);
+    if (snap.touchPressed || snap.touchReleased) {
+      const auto event = app_.route(snap);
+      if (app_.invalidated()) requestUpdate();
+      if (event) return;
+    }
+  }
+
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     if (state_ == State::OfferPrompt || state_ == State::CollisionPrompt) {
       const uint8_t reason = REJECT_USER;
@@ -615,45 +729,7 @@ void NearbyBookTransferActivity::loop() {
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    switch (state_) {
-      case State::ChooseReceiveAction:
-        if (selectedIndex_ == 0)
-          startListening();
-        else
-          chooseDestinationFolder();
-        break;
-      case State::DeviceList:
-        selectPeer();
-        break;
-      case State::OfferPrompt:
-        if (Storage.exists(finalPath_.c_str()))
-          setState(State::CollisionPrompt);
-        else
-          acceptOffer(false);
-        break;
-      case State::CollisionPrompt:
-        if (selectedIndex_ == 0) {
-          acceptOffer(false);
-        } else if (selectedIndex_ == 1) {
-          acceptOffer(true);
-        } else {
-          const uint8_t reason = REJECT_USER;
-          sendPacket(nearby::PacketType::Reject, peerMac_.data(), 0, &reason, 1);
-          startListening();
-        }
-        break;
-      case State::Success:
-        if (mode_ == Mode::Receive)
-          openReceivedBook();
-        else
-          exitAfterRadio();
-        break;
-      case State::Error:
-        exitAfterRadio();
-        break;
-      default:
-        break;
-    }
+    activateSelected();
     return;
   }
   updateNavigation();
@@ -666,9 +742,6 @@ void NearbyBookTransferActivity::render(RenderLock&&) {
   const int height = renderer.getScreenHeight();
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, width, metrics.headerHeight}, tr(STR_NEARBY_BOOK_TRANSFER));
 
-  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight = height - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
-  const Rect content{0, contentTop, width, contentHeight};
   const int textWidth = width - metrics.contentSidePadding * 2;
   auto centered = [this, height](const char* text, const int offset = 0, const int font = UI_10_FONT_ID) {
     renderer.drawCenteredText(font, height / 2 + offset, text, true,
@@ -686,23 +759,10 @@ void NearbyBookTransferActivity::render(RenderLock&&) {
     }
   };
 
-  if (state_ == State::ChooseReceiveAction) {
-    GUI.drawList(
-        renderer, content, 2, selectedIndex_,
-        [this](const int index) {
-          if (index == 0) return std::string(tr(STR_START_RECEIVING));
-          return std::string(tr(STR_CHANGE_FOLDER));
-        },
-        nullptr, nullptr, [this](const int index) { return index == 1 ? destinationFolder_ : std::string{}; });
-  } else if (state_ == State::DeviceList) {
-    GUI.drawList(renderer, content, peerCount_, selectedIndex_,
-                 [this](const int index) { return std::string(peers_[index].name.data()); });
-  } else if (state_ == State::CollisionPrompt) {
-    GUI.drawList(renderer, content, 3, selectedIndex_, [](const int index) {
-      if (index == 0) return std::string(tr(STR_REPLACE));
-      if (index == 1) return std::string(tr(STR_KEEP_BOTH));
-      return std::string(tr(STR_CANCEL));
-    });
+  uiReady_ = false;
+  if (isMenuState()) {
+    app_.render();
+    uiReady_ = true;
   } else if (state_ == State::Listening) {
     centered(tr(STR_NEARBY_TRANSFER_LISTENING));
     centeredWrapped(destinationFolder_.c_str(), renderer.getLineHeight(UI_10_FONT_ID) + 10, 2, SMALL_FONT_ID);
@@ -742,10 +802,13 @@ void NearbyBookTransferActivity::render(RenderLock&&) {
   else if (state_ == State::OfferPrompt)
     confirm = tr(STR_ACCEPT);
   else if (state_ == State::Success && mode_ == Mode::Receive)
-    confirm = tr(STR_READ);
+    confirm =
+        FsHelpers::hasPngExtension(finalPath_) || FsHelpers::hasBmpExtension(finalPath_) ? tr(STR_OPEN) : tr(STR_READ);
   else if (state_ == State::Success || state_ == State::Error)
     confirm = tr(STR_OK);
-  const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), confirm, "", "");
+  const bool showNavigation = !mappedInput.hasTouch() && menuItemCount() > 1;
+  const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), confirm, showNavigation ? tr(STR_DIR_UP) : "",
+                                            showNavigation ? tr(STR_DIR_DOWN) : "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer();
 }
