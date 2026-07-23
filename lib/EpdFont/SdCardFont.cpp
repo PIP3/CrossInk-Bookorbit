@@ -113,6 +113,8 @@ void SdCardFont::freeStyleMiniData(PerStyle& s) {
   s.miniBitmapCapacity = 0;
   s.miniBitmapUsed = 0;
   s.miniUnderuseRuns = 0;
+  s.miniMetadataOnly = false;
+  s.miniHysteresisPending = false;
   freeStyleMiniKern(s);
   memset(&s.miniData, 0, sizeof(s.miniData));
   s.epdFont.data = &s.stubData;
@@ -124,9 +126,15 @@ void SdCardFont::resetStyleMiniData(PerStyle& s) {
     return;
   }
 
-  // Release an outlier bitmap capacity after several consistently smaller pages,
-  // but do not react to metadata-only prewarms (miniBitmapUsed == 0).
-  if (s.miniBitmapCapacity > 0 && s.miniBitmapUsed > 0) {
+  // Underuse hysteresis, on the bitmap arena (the dominant allocation): an
+  // outlier page (e.g. three styles cramped together) would otherwise pin its
+  // high-water arena for the rest of the book. Keep while the page used at
+  // least 3/4 of capacity; release only after several consecutive rebuilds
+  // below that, so alternating dense/sparse pages never thrash. Evaluated at
+  // most once per rebuild (a scope both constructs and destructs through here,
+  // and subset hits load nothing new to judge).
+  if (s.miniHysteresisPending && s.miniBitmapCapacity > 0 && s.miniBitmapUsed > 0) {
+    s.miniHysteresisPending = false;
     if (s.miniBitmapUsed < s.miniBitmapCapacity - s.miniBitmapCapacity / 4) {
       if (++s.miniUnderuseRuns >= MINI_UNDERUSE_RUNS_BEFORE_FREE) {
         LOG_DBG("SDCF", "Releasing underused mini buffers: used=%u capacity=%u", s.miniBitmapUsed,
@@ -138,16 +146,9 @@ void SdCardFont::resetStyleMiniData(PerStyle& s) {
       s.miniUnderuseRuns = 0;
     }
   }
-
-  s.miniIntervalCount = 0;
-  s.miniGlyphCount = 0;
-  s.miniBitmapUsed = 0;
-  s.miniKernLeftEntryCount = 0;
-  s.miniKernRightEntryCount = 0;
-  s.miniKernLeftClassCount = 0;
-  s.miniKernRightClassCount = 0;
-  memset(&s.miniData, 0, sizeof(s.miniData));
-  s.epdFont.data = &s.stubData;
+  // Data (intervals/glyphs/bitmaps/kern) deliberately survives the scope: the
+  // next prewarm subset-checks against it, which is what lets the idle prewarm
+  // of page N+1 serve the actual page turn with zero SD reads.
 }
 
 void SdCardFont::freeStyleKernLigatureData(PerStyle& s) {
@@ -340,12 +341,22 @@ static uint8_t miniLookupKernClass(const EpdKernClassEntry* entries, uint16_t co
 // on this page simply returns class 0 (no kerning), which was the pre-existing
 // behavior for any codepoint outside the kern classes.
 bool SdCardFont::buildMiniKernMatrix(PerStyle& s, const uint32_t* codepoints, uint32_t cpCount) {
-  s.miniKernLeftEntryCount = 0;
-  s.miniKernRightEntryCount = 0;
-  s.miniKernLeftClassCount = 0;
-  s.miniKernRightClassCount = 0;
+  // No freeStyleMiniKern here: it zeroed the capacities, which forced the
+  // ensureArrayCapacity calls below to reallocate every page and defeated the
+  // buffer reuse. prewarmStyle is the only caller and the success path
+  // overwrites the contents and all four counts, so keeping the buffers is
+  // safe. The early returns zero the counts (buffers kept) so a page with no
+  // applicable kern pairs kerns as none instead of through the previous
+  // page's tables.
+  const auto resetMiniKernCounts = [&s]() {
+    s.miniKernLeftEntryCount = 0;
+    s.miniKernRightEntryCount = 0;
+    s.miniKernLeftClassCount = 0;
+    s.miniKernRightClassCount = 0;
+  };
   if (!s.kernLeftClasses || !s.kernRightClasses || s.header.kernLeftEntryCount == 0 ||
       s.header.kernRightEntryCount == 0) {
+    resetMiniKernCounts();
     return true;  // font has no kern classes — nothing to build
   }
 
@@ -379,6 +390,7 @@ bool SdCardFont::buildMiniKernMatrix(PerStyle& s, const uint32_t* codepoints, ui
     }
   }
   if (numLeft == 0 || numRight == 0) {
+    resetMiniKernCounts();
     return true;  // no kern pairs applicable on this page
   }
 
@@ -888,6 +900,36 @@ int SdCardFont::failPrewarm(const int missed) {
 int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint32_t cpCount, bool metadataOnly) {
   auto& s = styles_[styleIdx];
 
+  // Idle-prewarm hit: mini data persists across PrewarmScopes (resetStyleMiniData
+  // keeps it), so when the previous scope -- typically the idle prewarm of this
+  // exact page -- already loaded every requested codepoint the font covers, this
+  // page needs zero SD reads. A mini built metadata-only cannot serve a full
+  // request (no bitmaps). Any uncovered codepoint falls through to the rebuild.
+  if (s.miniGlyphCount > 0 && !(s.miniMetadataOnly && !metadataOnly)) {
+    bool covered = true;
+    int missedInMini = 0;
+    for (uint32_t i = 0; i < cpCount && covered; i++) {
+      const uint32_t cp = codepoints[i];
+      bool inMini = false;
+      for (uint32_t iv = 0; iv < s.miniIntervalCount; iv++) {
+        if (cp < s.miniIntervals[iv].first) break;  // intervals sorted ascending
+        if (cp <= s.miniIntervals[iv].last) {
+          inMini = true;
+          break;
+        }
+      }
+      if (inMini) continue;
+      if (findGlobalGlyphIndex(s, cp) < 0) {
+        missedInMini++;  // not in font coverage: the rebuild couldn't load it either
+      } else {
+        covered = false;
+      }
+    }
+    if (covered) {
+      return missedInMini;
+    }
+  }
+
   // Map codepoints to global glyph indices for this style
   struct CpGlyphMapping {
     uint32_t codepoint;
@@ -1088,6 +1130,8 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
   }
 
   // Populate miniData and swap
+  s.miniMetadataOnly = metadataOnly;
+  s.miniHysteresisPending = !metadataOnly;  // one hysteresis evaluation per rebuild
   memset(&s.miniData, 0, sizeof(s.miniData));
   s.miniData.bitmap = metadataOnly ? nullptr : s.miniBitmap;
   s.miniData.glyph = s.miniGlyphs;
