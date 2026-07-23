@@ -393,15 +393,17 @@ bool NearbyBookTransferActivity::acceptOffer(const bool keepBoth) {
     return false;
   }
   session_.begin(nearby::ReliableTransferSession::Role::Receiver, sessionId_, offeredFileSize_, negotiatedChunkBytes_);
+  retryCount_ = 0;
+  lastActionMs_ = millis();
+  setState(State::Receiving);
+  requestUpdateAndWait();
+
   uint8_t payload[2];
   nearby::writeU16(payload, negotiatedChunkBytes_);
   if (!sendPacket(nearby::PacketType::Accept, peerMac_.data(), 0, payload, sizeof(payload))) {
     setError(tr(STR_NEARBY_TRANSFER_RADIO_FAILED));
     return false;
   }
-  retryCount_ = 0;
-  lastActionMs_ = millis();
-  setState(State::Receiving);
   return true;
 }
 
@@ -667,9 +669,21 @@ void NearbyBookTransferActivity::render(RenderLock&&) {
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int contentHeight = height - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
   const Rect content{0, contentTop, width, contentHeight};
+  const int textWidth = width - metrics.contentSidePadding * 2;
   auto centered = [this, height](const char* text, const int offset = 0, const int font = UI_10_FONT_ID) {
     renderer.drawCenteredText(font, height / 2 + offset, text, true,
                               offset == 0 ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR);
+  };
+  auto centeredWrapped = [this, height, textWidth](const char* text, const int offset, const int maxLines,
+                                                   const int font = UI_10_FONT_ID) {
+    const auto lines = renderer.wrappedText(font, text, textWidth, maxLines);
+    const int lineHeight = renderer.getLineHeight(font);
+    const int extraLines = std::max(0, static_cast<int>(lines.size()) - 1);
+    int y = height / 2 + offset - extraLines * lineHeight / 2;
+    for (const auto& line : lines) {
+      renderer.drawCenteredText(font, y, line.c_str());
+      y += lineHeight;
+    }
   };
 
   if (state_ == State::ChooseReceiveAction) {
@@ -691,40 +705,35 @@ void NearbyBookTransferActivity::render(RenderLock&&) {
     });
   } else if (state_ == State::Listening) {
     centered(tr(STR_NEARBY_TRANSFER_LISTENING));
-    centered(destinationFolder_.c_str(), renderer.getLineHeight(UI_10_FONT_ID) + 10, SMALL_FONT_ID);
+    centeredWrapped(destinationFolder_.c_str(), renderer.getLineHeight(UI_10_FONT_ID) + 10, 2, SMALL_FONT_ID);
   } else if (state_ == State::Discovering) {
     centered(tr(STR_NEARBY_TRANSFER_DISCOVERING));
   } else if (state_ == State::WaitingForApproval) {
-    centered(tr(STR_NEARBY_TRANSFER_WAITING_APPROVAL));
-    centered(peers_[selectedIndex_].name.data(), renderer.getLineHeight(UI_10_FONT_ID) + 10, SMALL_FONT_ID);
+    centeredWrapped(tr(STR_NEARBY_TRANSFER_WAITING_APPROVAL), -10, 2);
+    centeredWrapped(peers_[selectedIndex_].name.data(), renderer.getLineHeight(UI_10_FONT_ID) + 18, 2, SMALL_FONT_ID);
   } else if (state_ == State::OfferPrompt) {
-    centered(tr(STR_NEARBY_TRANSFER_INCOMING));
-    centered(senderName_.c_str(), renderer.getLineHeight(UI_10_FONT_ID) + 8, SMALL_FONT_ID);
-    centered(offeredFileName_.c_str(), renderer.getLineHeight(UI_10_FONT_ID) * 2 + 12, SMALL_FONT_ID);
+    centeredWrapped(tr(STR_NEARBY_TRANSFER_INCOMING), -65, 2);
+    centeredWrapped(senderName_.c_str(), -25, 2, SMALL_FONT_ID);
+    centeredWrapped(offeredFileName_.c_str(), 25, 2, SMALL_FONT_ID);
     char sizeText[48];
     snprintf(sizeText, sizeof(sizeText), tr(STR_NEARBY_TRANSFER_SIZE), static_cast<unsigned long>(offeredFileSize_));
-    centered(sizeText, renderer.getLineHeight(UI_10_FONT_ID) * 3 + 16, SMALL_FONT_ID);
+    centered(sizeText, 70, SMALL_FONT_ID);
   } else if (state_ == State::Sending || state_ == State::Receiving) {
-    centered(state_ == State::Sending ? tr(STR_NEARBY_TRANSFER_SENDING) : tr(STR_NEARBY_TRANSFER_RECEIVING), -35);
+    centeredWrapped(state_ == State::Sending ? tr(STR_NEARBY_TRANSFER_SENDING) : tr(STR_NEARBY_TRANSFER_RECEIVING), -45,
+                    2);
     const uint64_t scale = std::max<uint64_t>(1, session_.totalBytes() / 10000 + 1);
     GUI.drawProgressBar(renderer,
                         Rect{metrics.contentSidePadding, height / 2 + 10, width - metrics.contentSidePadding * 2,
                              metrics.progressBarHeight},
                         static_cast<size_t>(session_.transferredBytes() / scale),
                         static_cast<size_t>(session_.totalBytes() / scale));
-    char progress[48];
-    const unsigned percent = session_.totalBytes() == 0
-                                 ? 0
-                                 : static_cast<unsigned>((session_.transferredBytes() * 100) / session_.totalBytes());
-    snprintf(progress, sizeof(progress), "%u%%", percent);
-    centered(progress, 55, SMALL_FONT_ID);
   } else if (state_ == State::Success) {
     centered(mode_ == Mode::Receive ? tr(STR_NEARBY_TRANSFER_RECEIVED) : tr(STR_NEARBY_TRANSFER_SENT));
-    centered(mode_ == Mode::Receive ? finalPath_.c_str() : offeredFileName_.c_str(),
-             renderer.getLineHeight(UI_10_FONT_ID) + 10, SMALL_FONT_ID);
+    centeredWrapped(mode_ == Mode::Receive ? finalPath_.c_str() : offeredFileName_.c_str(),
+                    renderer.getLineHeight(UI_10_FONT_ID) + 10, 3, SMALL_FONT_ID);
   } else if (state_ == State::Error) {
     centered(tr(STR_NEARBY_TRANSFER_FAILED));
-    centered(errorMessage_.c_str(), renderer.getLineHeight(UI_10_FONT_ID) + 10, SMALL_FONT_ID);
+    centeredWrapped(errorMessage_.c_str(), renderer.getLineHeight(UI_10_FONT_ID) + 10, 3, SMALL_FONT_ID);
   }
 
   const char* confirm = "";
