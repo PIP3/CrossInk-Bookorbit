@@ -223,6 +223,10 @@ uint32_t EpdFontFamily::getFallbackCodepoint(const uint32_t cp, const Style styl
   return REPLACEMENT_GLYPH;
 }
 
+bool EpdFontFamily::hasCodepoint(const uint32_t cp, const Style style) const {
+  return getFont(style)->hasCodepoint(cp);
+}
+
 int8_t EpdFontFamily::getKerning(const uint32_t leftCp, const uint32_t rightCp, const Style style) const {
   return getFont(style)->getKerning(leftCp, rightCp);
 }
