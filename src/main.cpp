@@ -87,6 +87,7 @@ inline esp_sleep_wakeup_cause_t esp_sleep_get_wakeup_cause() { return ESP_SLEEP_
 #include "network/UsbSerialFileTransfer.h"
 #ifdef SIMULATOR
 #include "simulator/SimulatorSmokeTest.h"
+#include <SimulatorLifecycle.h>
 #endif
 #include "images/LoadingIcon.h"
 #include "util/ButtonNavigator.h"
@@ -373,6 +374,13 @@ enum class BootResume : uint8_t {
 // startDeepSleep() does not return, so a set latch only ends at the wakeup reset.
 static bool deepSleepInProgress = false;
 
+static void restartWithSilentToken() {
+#ifdef SIMULATOR
+  SimulatorLifecycle::setSilentRebootToken(silentRebootMagic, silentRebootTarget, silentRebootPayload);
+#endif
+  ESP.restart();
+}
+
 void silentRestart() {
   if (deepSleepInProgress) return;  // sleeping supersedes the heap-defrag reboot
   silentRebootTarget = SILENT_REBOOT_TARGET_HOME;
@@ -385,7 +393,7 @@ void silentRestart() {
   // book, looking like a trampoline back to the reader they just exited.
   GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
   delay(50);
-  ESP.restart();
+  restartWithSilentToken();
 }
 
 void silentRestartToReader() {
@@ -396,7 +404,7 @@ void silentRestartToReader() {
   LOG_DBG("MAIN", "Silent restart (target=reader)");
   GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
   delay(50);
-  ESP.restart();
+  restartWithSilentToken();
 }
 
 void silentRestartToNetwork(const NetworkBootTarget target, const uint32_t payload) {
@@ -408,7 +416,7 @@ void silentRestartToNetwork(const NetworkBootTarget target, const uint32_t paylo
           static_cast<unsigned long>(payload));
   GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
   delay(50);
-  ESP.restart();
+  restartWithSilentToken();
 }
 
 void waitForPowerRelease() {
@@ -717,6 +725,9 @@ void setupDisplayAndFonts(const bool seamless = false, const bool loadReaderReso
 }
 
 void setup() {
+#ifdef SIMULATOR
+  SimulatorLifecycle::restoreSilentRebootToken(silentRebootMagic, silentRebootTarget, silentRebootPayload);
+#endif
   BoardConfig::holdPowerRails();
 
   t1 = millis();
