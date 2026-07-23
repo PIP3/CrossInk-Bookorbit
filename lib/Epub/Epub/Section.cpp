@@ -723,7 +723,7 @@ bool Section::startBuild(const int fontId, const float lineCompression, const bo
                          const uint16_t viewportWidth, const uint16_t viewportHeight, const bool hyphenationEnabled,
                          const bool embeddedStyle, const uint8_t imageRendering, const bool bionicReadingEnabled,
                          const bool guideReadingEnabled, const uint8_t wordSpacing, const EpubRenderMode renderMode,
-                         const SectionBuildOptions buildOptions) {
+                         const SectionBuildOptions buildOptions, const std::function<void()>& popupFn) {
   if (build_) {
     LOG_ERR("SCT", "startBuild called while a build is already active");
     return false;
@@ -898,7 +898,7 @@ bool Section::startBuild(const int fontId, const float lineCompression, const bo
         }
         ctxPtr->lut[ctxPtr->lutCount++] = {fileOffset, paragraphIndex, listItemIndex};
       },
-      embeddedStyle, ctxPtr->contentBase, ctxPtr->imageBasePath, imageRendering, std::move(tocAnchors), nullptr,
+      embeddedStyle, ctxPtr->contentBase, ctxPtr->imageBasePath, imageRendering, std::move(tocAnchors), popupFn,
       ctxPtr->cssParser, renderMode, buildOptions.isPreview() ? std::string(buildOptions.previewAnchor) : std::string{},
       buildOptions.previewMaxPages);
   if (!ctx->parser) {

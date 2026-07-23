@@ -111,7 +111,7 @@ class Section {
                   uint8_t paragraphAlignment, uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled,
                   bool embeddedStyle, uint8_t imageRendering, bool bionicReadingEnabled, bool guideReadingEnabled,
                   uint8_t wordSpacing, EpubRenderMode renderMode = EpubRenderMode::CrossInkDefault,
-                  SectionBuildOptions buildOptions = {});
+                  SectionBuildOptions buildOptions = {}, const std::function<void()>& popupFn = nullptr);
   bool buildSomeMore(int maxPages);
   void releaseBuildFile();
   bool lastBuildImagesWereSuppressed() const { return lastImagesWereSuppressed_; }
