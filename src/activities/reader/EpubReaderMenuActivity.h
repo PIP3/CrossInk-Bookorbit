@@ -31,6 +31,7 @@ class EpubReaderMenuActivity final : public Activity {
     GO_HOME,
     SYNC,
     NEARBY_POSITION_SYNC,
+    SEND_NEARBY_BOOK,
     DELETE_STATS,
     DELETE_CACHE,
     RESET_READING_PACE,

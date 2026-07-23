@@ -2762,6 +2762,20 @@ void EpubReaderActivity::openWordSelect(bool framebufferContainsPage, int initia
 
 void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action) {
   switch (action) {
+    case EpubReaderMenuActivity::MenuAction::SEND_NEARBY_BOOK: {
+      if (!epub) break;
+      const int page = section ? section->currentPage : nextPageNumber;
+      const int pageCount = section ? section->estimatedTotalPages() : cachedChapterTotalPageCount;
+      if (!saveProgress(currentSpineIndex, page, pageCount)) {
+        LOG_ERR("NBOOK", "Could not save EPUB progress before transfer");
+        drawToast(renderer, tr(STR_NEARBY_TRANSFER_PROGRESS_SAVE_FAILED));
+        delay(1200);
+        requestUpdate();
+        break;
+      }
+      activityManager.goToNearbyBookSend(epub->getPath(), true);
+      return;
+    }
     case EpubReaderMenuActivity::MenuAction::SELECT_CHAPTER: {
       const int spineIdx = currentSpineIndex;
       const std::string path = epub->getPath();

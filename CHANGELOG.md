@@ -2,6 +2,7 @@
 
 ### Added
 
+- Nearby Book Transfer can send EPUB, TXT, XTC, and XTCH books directly between two CrossInk devices without a Wi-Fi network.
 - Dictionary lookup and lookup history
 - RTC-enabled devices can now choose the date format and numeric separator shown in headers from Settings > System > Device.
 - The web EPUB optimizer now splits oversized chapters into memory-friendlier sections before sending them to the reader.

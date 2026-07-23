@@ -99,6 +99,8 @@ class ActivityManager {
   void goToHotspotFileTransfer(const std::string& returnBookPath = {});
   bool resumeFileTransferFromNetworkBoot(uint32_t payload);
   void goToNearbyStatsSync();
+  void goToNearbyBookSend(std::string path, bool returnToReader);
+  void goToNearbyBookReceive();
   void goToSettings();
   void goToFileBrowser(std::string path = {});
   void goToRecentBooks();

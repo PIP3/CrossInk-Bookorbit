@@ -17,8 +17,8 @@
 
 class FileBrowserActivity final : public Activity {
  public:
-  // Books = standard reader browser; PickFirmware = filter to .bin only and return path via ActivityResult.
-  enum class Mode { Books, PickFirmware };
+  // Picker modes return their selected path via ActivityResult.
+  enum class Mode { Books, PickFirmware, PickDirectory };
 
  private:
   // FreeInkApp hosts the file list (themed rows, icons, touch routing); the

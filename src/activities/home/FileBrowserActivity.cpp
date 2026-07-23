@@ -111,6 +111,11 @@ bool acceptFirmware(const char* name, bool isDir) {
   return isDir || FsHelpers::checkFileExtension(std::string_view{name}, ".bin");
 }
 
+bool acceptDirectory(const char* name, const bool isDir) {
+  return isDir && !isMacOSMetadataEntry(name) && !isWindowsMetadataEntry(name) &&
+         (SETTINGS.showHiddenFiles || name[0] != '.');
+}
+
 std::string buildFullPath(std::string basepath, const std::string& entry) {
   if (basepath.back() != '/') basepath += "/";
   return basepath + entry;
@@ -194,7 +199,8 @@ bool FileBrowserActivity::loadFilesIntoVector(size_t cap, bool& overflow) {
     return false;
   }
 
-  const auto accept = (mode == Mode::PickFirmware) ? acceptFirmware : acceptCommon;
+  const auto accept =
+      mode == Mode::PickFirmware ? acceptFirmware : (mode == Mode::PickDirectory ? acceptDirectory : acceptCommon);
 
   files.reserve(std::min<size_t>(cap, INDEX_THRESHOLD));
   for (auto file = root.openNextFile(); file; file = root.openNextFile()) {
@@ -266,7 +272,8 @@ void FileBrowserActivity::loadFiles() {
       GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
     }
 
-    const auto accept = (mode == Mode::PickFirmware) ? acceptFirmware : acceptCommon;
+    const auto accept =
+        mode == Mode::PickFirmware ? acceptFirmware : (mode == Mode::PickDirectory ? acceptDirectory : acceptCommon);
     if (fileIndex->open(basepath.c_str(), accept)) {
       usingIndex = true;
       requestUpdate(true);
@@ -491,6 +498,7 @@ void FileBrowserActivity::showDirectoryActionMenu(const std::string& entry, bool
                              case FileBrowserAction::DeleteClippings:
                              case FileBrowserAction::EpubRenderMode:
                              case FileBrowserAction::ResetReaderSettings:
+                             case FileBrowserAction::SendNearby:
                                return;
                            }
                          });
@@ -571,6 +579,11 @@ void FileBrowserActivity::showFileActionMenu(const std::string& entry, bool igno
   const std::string fullPath = buildFullPath(basepath, entry);
   std::vector<FileBrowserActionActivity::MenuItem> items = BookActions::buildBookActionItems(fullPath, false);
 
+  if (FsHelpers::hasEpubExtension(fullPath) || FsHelpers::hasTxtExtension(fullPath) ||
+      FsHelpers::hasXtcExtension(fullPath)) {
+    items.push_back({FileBrowserAction::SendNearby, StrId::STR_SEND_NEARBY_BOOK});
+  }
+
   const bool canPinFavorite = isSleepFavoriteFolder(basepath) && isSleepImageFile(entry);
   if (canPinFavorite) {
     items.push_back(
@@ -589,6 +602,9 @@ void FileBrowserActivity::showFileActionMenu(const std::string& entry, bool igno
 
         const auto action = static_cast<FileBrowserAction>(std::get<FileBrowserActionResult>(result.data).action);
         switch (action) {
+          case FileBrowserAction::SendNearby:
+            activityManager.goToNearbyBookSend(fullPath, false);
+            return;
           case FileBrowserAction::Delete:
             promptDeleteFile(fullPath, entry);
             return;
@@ -777,6 +793,16 @@ void FileBrowserActivity::loop() {
     }
   }
 
+  // In directory-picker mode the fourth front button selects the folder shown
+  // in the path band; Confirm continues to descend into the highlighted child.
+  if (mode == Mode::PickDirectory && mappedInput.wasReleased(MappedInputManager::Button::Right)) {
+    ActivityResult result{FilePathResult{normalizeDirectoryPath(basepath)}};
+    result.isCancelled = false;
+    setResult(std::move(result));
+    finish();
+    return;
+  }
+
   // Long press BACK (1s+) toggles hidden files (Books mode only).
   // In firmware-pick mode we keep navigation simple: short Back = up dir / cancel.
   if (mode == Mode::Books && !longPressBackHandled && mappedInput.isPressed(MappedInputManager::Button::Back) &&
@@ -878,7 +904,7 @@ void FileBrowserActivity::loop() {
         topIndex = followListSelection(static_cast<int>(selectorIndex), 0, visibleRows, static_cast<int>(entryCount()));
 
         requestUpdate();
-      } else if (mode == Mode::PickFirmware) {
+      } else if (mode != Mode::Books) {
         // Firmware picker at root: cancel back to caller instead of going home.
         ActivityResult res;
         res.isCancelled = true;
@@ -1050,9 +1076,11 @@ void FileBrowserActivity::render(RenderLock&&) {
   const auto& metrics = UITheme::getInstance().getMetrics();
 
   std::string folderName =
-      (mode == Mode::PickFirmware)
+      mode == Mode::PickFirmware
           ? std::string(tr(STR_SELECT_FIRMWARE_FILE))
-          : ((basepath == "/") ? std::string(tr(STR_SD_CARD)) : basepath.substr(basepath.rfind('/') + 1));
+          : (mode == Mode::PickDirectory
+                 ? std::string(tr(STR_SELECT_RECEIVE_FOLDER))
+                 : ((basepath == "/") ? std::string(tr(STR_SD_CARD)) : basepath.substr(basepath.rfind('/') + 1)));
   // Header via GUI.drawHeader (already FreeInkUI-themed) for the battery
   // indicator; the rest of the screen renders through the app.
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, folderName.c_str());
@@ -1062,14 +1090,15 @@ void FileBrowserActivity::render(RenderLock&&) {
   uiReady = true;
 
   const size_t visibleEntries = entryCount();
-  const char* backLabel = (basepath == "/") ? (mode == Mode::PickFirmware ? tr(STR_BACK) : tr(STR_HOME)) : tr(STR_BACK);
+  const char* backLabel = (basepath == "/") ? (mode == Mode::Books ? tr(STR_HOME) : tr(STR_BACK)) : tr(STR_BACK);
   // In PickFirmware mode, Confirm on a .bin returns the path to the caller (not "open"); show
   // STR_SELECT instead. Directories in the same picker still descend, so keep STR_OPEN there.
   const bool selectingFirmwareFile =
       mode == Mode::PickFirmware && visibleEntries > 0 && std::string(entryNameAt(selectorIndex)).back() != '/';
   const char* confirmLabel = visibleEntries == 0 ? "" : (selectingFirmwareFile ? tr(STR_SELECT) : tr(STR_OPEN));
-  const auto labels = mappedInput.mapLabels(backLabel, confirmLabel, visibleEntries == 0 ? "" : tr(STR_DIR_UP),
-                                            visibleEntries == 0 ? "" : tr(STR_DIR_DOWN));
+  const auto labels = mappedInput.mapLabels(
+      backLabel, confirmLabel, visibleEntries == 0 ? "" : tr(STR_DIR_UP),
+      mode == Mode::PickDirectory ? tr(STR_SELECT) : (visibleEntries == 0 ? "" : tr(STR_DIR_DOWN)));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   if (!mappedInput.hasTouch() && mode == Mode::Books && basepath == "/") {

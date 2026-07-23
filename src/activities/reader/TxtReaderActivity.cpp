@@ -5,6 +5,7 @@
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
+#include <Memory.h>
 #include <Serialization.h>
 #include <Utf8.h>
 
@@ -18,6 +19,7 @@
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
 #include "activities/boot_sleep/SleepCoverAssets.h"
+#include "activities/home/FileBrowserActionActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -140,11 +142,37 @@ void TxtReaderActivity::onExit() {
   txt.reset();
 }
 
+void TxtReaderActivity::openReaderMenu() {
+  if (!txt) return;
+  std::vector<FileBrowserActionActivity::MenuItem> items;
+  items.push_back({FileBrowserAction::SendNearby, StrId::STR_SEND_NEARBY_BOOK});
+  auto menu = makeUniqueNoThrow<FileBrowserActionActivity>(renderer, mappedInput, txt->getTitle(), std::move(items));
+  if (!menu) {
+    LOG_ERR("NBOOK", "OOM: TXT nearby transfer menu");
+    return;
+  }
+  startActivityForResult(std::move(menu), [this](const ActivityResult& result) {
+    const auto* action = std::get_if<FileBrowserActionResult>(&result.data);
+    if (!result.isCancelled && action &&
+        static_cast<FileBrowserAction>(action->action) == FileBrowserAction::SendNearby) {
+      saveProgress();
+      activityManager.goToNearbyBookSend(txt ? txt->getPath() : std::string{}, true);
+    } else {
+      requestUpdate();
+    }
+  });
+}
+
 void TxtReaderActivity::loop() {
   if (consumeLongPowerButtonRelease()) {
     return;
   }
   if (executePowerButtonAction()) {
+    return;
+  }
+
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    openReaderMenu();
     return;
   }
 

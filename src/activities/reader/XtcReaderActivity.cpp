@@ -658,6 +658,10 @@ void XtcReaderActivity::onReaderMenuConfirm(const int action) {
     case XtcReaderMenuActivity::MenuAction::DELETE_CACHE:
       deleteBookCache();
       break;
+    case XtcReaderMenuActivity::MenuAction::SEND_NEARBY_BOOK:
+      saveProgress();
+      activityManager.goToNearbyBookSend(xtc ? xtc->getPath() : std::string{}, true);
+      return;
     case XtcReaderMenuActivity::MenuAction::DISABLE_TOUCHSCREEN:
       break;
   }

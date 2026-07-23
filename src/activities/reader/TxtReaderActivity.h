@@ -49,6 +49,7 @@ class TxtReaderActivity final : public Activity {
   bool consumeLongPowerButtonHold();
   bool executePowerButtonAction();
   bool executeLongPressBackAction();
+  void openReaderMenu();
 
  public:
   explicit TxtReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Txt> txt)

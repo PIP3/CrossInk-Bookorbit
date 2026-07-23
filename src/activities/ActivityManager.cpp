@@ -23,6 +23,7 @@
 #include "home/RecentBooksActivity.h"
 #include "home/RecentBooksGridActivity.h"
 #include "network/CrossPointWebServerActivity.h"
+#include "network/NearbyBookTransferActivity.h"
 #include "network/NearbyStatsSyncActivity.h"
 #include "reader/ReaderActivity.h"
 #include "settings/OpdsServerListActivity.h"
@@ -245,6 +246,26 @@ void ActivityManager::replaceActivity(std::unique_ptr<Activity>&& newActivity) {
 
 void ActivityManager::goToFileTransfer(std::string returnBookPath) {
   replaceActivity(std::make_unique<CrossPointWebServerActivity>(renderer, mappedInput, std::move(returnBookPath)));
+}
+
+void ActivityManager::goToNearbyBookSend(std::string path, const bool returnToReader) {
+  auto activity = makeUniqueNoThrow<NearbyBookTransferActivity>(
+      renderer, mappedInput, NearbyBookTransferActivity::Mode::Send, std::move(path), returnToReader);
+  if (!activity) {
+    LOG_ERR("ACT", "OOM: nearby book sender");
+    return;
+  }
+  replaceActivity(std::move(activity));
+}
+
+void ActivityManager::goToNearbyBookReceive() {
+  auto activity =
+      makeUniqueNoThrow<NearbyBookTransferActivity>(renderer, mappedInput, NearbyBookTransferActivity::Mode::Receive);
+  if (!activity) {
+    LOG_ERR("ACT", "OOM: nearby book receiver");
+    return;
+  }
+  replaceActivity(std::move(activity));
 }
 
 void ActivityManager::goToCalibreWireless(const std::string& returnBookPath) {
