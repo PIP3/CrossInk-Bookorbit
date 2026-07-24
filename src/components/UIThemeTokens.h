@@ -43,10 +43,12 @@ inline int16_t uiListRowHeight(const freeink::ui::ThemeTokens& tokens, const UiL
 
 inline uint16_t configureUiList(freeink::ui::ListProps& props, const freeink::ui::ThemeTokens& tokens,
                                 const freeink::ui::Rect rect, const UiListRowType rowType = UiListRowType::SingleLine) {
+  // Button-only menus used compact, single-line rows before their FreeInkUI
+  // migration. Keep that layout unless the caller explicitly needs a subtitle.
+  if (!gpio.hasTouch() && rowType == UiListRowType::SingleLine) props.labelText.maxLines = 1;
   if (props.rowHeight <= 0) props.rowHeight = uiListRowHeight(tokens, rowType);
-  // Button-device theme metrics are compact single-line rows. When a caller
-  // opts into wrapped labels, retain FreeInkUI's font-derived two-line row so
-  // the second line cannot run into the following item.
+  // Subtitle rows may wrap their labels, so retain FreeInkUI's font-derived
+  // two-line height and avoid overlapping the following item.
   if (props.labelText.maxLines > 1) props.rowHeight = std::max(props.rowHeight, tokens.rowHeight);
   if (props.rowGap < 0) props.rowGap = tokens.listRowGap;
   return freeink::ui::listVisibleRows(rect, props.rowHeight, props.rowGap);
