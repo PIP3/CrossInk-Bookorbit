@@ -4,6 +4,7 @@
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalClock.h>
+#include <HalGPIO.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <PNGdec.h>
@@ -754,7 +755,13 @@ void SleepActivity::renderLastScreenSleepScreen() const {
   } else {
     renderer.drawImage(MoonIcon, 0, pageHeight - MOONICON_HEIGHT, MOONICON_WIDTH, MOONICON_HEIGHT);
   }
-  renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+  if (gpio.deviceIsX3()) {
+    // The controller still holds the displayed page, so its differential base
+    // waveform can add the moon without a full-screen flash.
+    renderer.displayGrayscaleBase(HalDisplay::FAST_REFRESH);
+  } else {
+    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+  }
 }
 
 void SleepActivity::renderBlankSleepScreen() const {

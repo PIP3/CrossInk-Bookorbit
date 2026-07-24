@@ -39,6 +39,13 @@ bool ReaderActivity::shouldShowLoadingPopup(const std::string& path) {
   return !Epub::hasCache(path, "/.crosspoint");
 }
 
+int ReaderActivity::initialRefreshCountdown() const {
+  if (!allowFastInitialRefresh) return 0;
+
+  const int refreshFrequency = SETTINGS.getRefreshFrequency();
+  return refreshFrequency > 1 ? refreshFrequency : 2;
+}
+
 std::unique_ptr<Epub> ReaderActivity::loadEpub(const std::string& path) {
   if (!Storage.exists(path.c_str())) {
     LOG_ERR("READER", "File does not exist: %s", path.c_str());
@@ -55,6 +62,8 @@ std::unique_ptr<Epub> ReaderActivity::loadEpub(const std::string& path) {
   // construction, so this check is valid before load(); a cached open loads in a blink -> no popup.
   const bool uncached = !Storage.exists((epub->getCachePath() + "/book.bin").c_str());
   if (uncached) {
+    // The popup replaces the restored Quick Resume frame, so the reader must clean it.
+    allowFastInitialRefresh = false;
     GUI.drawPopup(renderer, tr(STR_INDEXING));
   }
   // Lend the framebuffer's 48 KB for every EPUB load: even a cached book may
@@ -118,7 +127,8 @@ void ReaderActivity::goToLibrary(const std::string& fromBookPath) {
 void ReaderActivity::onGoToEpubReader(std::unique_ptr<Epub> epub) {
   const auto epubPath = epub->getPath();
   currentBookPath = epubPath;
-  activityManager.replaceActivity(std::make_unique<EpubReaderActivity>(renderer, mappedInput, std::move(epub)));
+  activityManager.replaceActivity(
+      std::make_unique<EpubReaderActivity>(renderer, mappedInput, std::move(epub), initialRefreshCountdown()));
 }
 
 void ReaderActivity::onGoToBmpViewer(const std::string& path) {
@@ -128,13 +138,15 @@ void ReaderActivity::onGoToBmpViewer(const std::string& path) {
 void ReaderActivity::onGoToXtcReader(std::unique_ptr<Xtc> xtc) {
   const auto xtcPath = xtc->getPath();
   currentBookPath = xtcPath;
-  activityManager.replaceActivity(std::make_unique<XtcReaderActivity>(renderer, mappedInput, std::move(xtc)));
+  activityManager.replaceActivity(
+      std::make_unique<XtcReaderActivity>(renderer, mappedInput, std::move(xtc), initialRefreshCountdown()));
 }
 
 void ReaderActivity::onGoToTxtReader(std::unique_ptr<Txt> txt) {
   const auto txtPath = txt->getPath();
   currentBookPath = txtPath;
-  activityManager.replaceActivity(std::make_unique<TxtReaderActivity>(renderer, mappedInput, std::move(txt)));
+  activityManager.replaceActivity(
+      std::make_unique<TxtReaderActivity>(renderer, mappedInput, std::move(txt), initialRefreshCountdown()));
 }
 
 void ReaderActivity::onEnter() {

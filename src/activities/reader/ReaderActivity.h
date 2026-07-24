@@ -12,6 +12,7 @@ class ReaderActivity final : public Activity {
   std::string initialBookPath;
   std::string currentBookPath;  // Track current book path for navigation
   bool suppressInitialBackRelease = false;
+  bool allowFastInitialRefresh = false;
   // Non-static (unlike the other loaders): draws the first-open indexing popup, which needs the renderer.
   std::unique_ptr<Epub> loadEpub(const std::string& path);
   static std::unique_ptr<Xtc> loadXtc(const std::string& path);
@@ -30,13 +31,15 @@ class ReaderActivity final : public Activity {
   void onGoToBmpViewer(const std::string& path);
 
   void onGoBack();
+  int initialRefreshCountdown() const;
 
  public:
   explicit ReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string initialBookPath,
-                          bool suppressInitialBackRelease = false)
+                          bool suppressInitialBackRelease = false, bool allowFastInitialRefresh = false)
       : Activity("Reader", renderer, mappedInput),
         initialBookPath(std::move(initialBookPath)),
-        suppressInitialBackRelease(suppressInitialBackRelease) {}
+        suppressInitialBackRelease(suppressInitialBackRelease),
+        allowFastInitialRefresh(allowFastInitialRefresh) {}
   void onEnter() override;
   bool isReaderActivity() const override { return true; }
 };
