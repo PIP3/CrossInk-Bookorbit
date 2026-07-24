@@ -106,12 +106,19 @@ ClippingResult build(const ClipWordStore& wordStore, const uint16_t* wordOrder, 
       continue;
     }
     const WordRef* previousWord = orderIdx > fromOrder ? &words[wordOrder[orderIdx - 1]] : nullptr;
+    const auto prevClean = previousWord ? cleanWordText(wordStore.text(*previousWord)) : std::string{};
+    const bool joinsInsertedHyphen =
+        previousWord && previousWord->endsWithInsertedHyphen && !prevClean.empty() && prevClean.back() == '-';
+    if (joinsInsertedHyphen) {
+      text += wordText;
+      continue;
+    }
+
     const bool yGap =
         previousWord && word.pageIdx == previousWord->pageIdx && word.y > previousWord->y + previousWord->h;
     const bool paragraphStart = previousWord && (hasEmSpace(wordStore.text(word)) || word.paragraphStart || yGap);
 
     if (previousWord && !text.empty() && !paragraphStart) {
-      const auto prevClean = cleanWordText(wordStore.text(*previousWord));
       if (!prevClean.empty() && prevClean.back() == '-' && !std::isspace(static_cast<unsigned char>(wordText[0])) &&
           !std::ispunct(static_cast<unsigned char>(wordText[0]))) {
         text += wordText;
