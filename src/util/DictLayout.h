@@ -31,6 +31,22 @@ struct LayoutLine {
   bool isListItem = false;
 };
 
+// A completed line borrowed from Wrapper's reusable scratch buffers. The sink
+// must copy anything it needs before returning.
+struct LayoutSegmentRef {
+  uint16_t offset = 0;
+  uint16_t length = 0;
+  EpdFontFamily::Style style = EpdFontFamily::REGULAR;
+  bool isIpa = false;
+};
+struct LayoutLineView {
+  const char* textPool = nullptr;
+  const LayoutSegmentRef* segments = nullptr;
+  uint16_t segmentCount = 0;
+  uint8_t indentLevel = 0;
+  bool isListItem = false;
+};
+
 // Width measurement injection. fn returns the pixel width of `text` rendered at
 // `style`, using the IPA font when isIpa is true and the body font otherwise.
 // Function-pointer + ctx (NOT std::function) per the project's binary-size rules.
@@ -54,8 +70,8 @@ struct WrapMetrics {
 // + ctx (NOT std::function) per the project's binary-size rules.
 struct LineSink {
   void* ctx = nullptr;
-  void (*fn)(void* ctx, LayoutLine&& line) = nullptr;
-  void operator()(LayoutLine&& line) const { fn(ctx, std::move(line)); }
+  void (*fn)(void* ctx, const LayoutLineView& line) = nullptr;
+  void operator()(const LayoutLineView& line) const { fn(ctx, line); }
 };
 
 // Stateful word-wrapper. Spans are fed one at a time via onSpan() (so the source
@@ -83,7 +99,10 @@ class Wrapper {
   const int bulletWidth_;
   Measurer measure_;
   LineSink sink_;
-  LayoutLine currentLine_;
+  std::string lineTextPool_;
+  std::vector<LayoutSegmentRef> lineSegments_;
+  uint8_t lineIndent_ = 0;
+  bool lineIsListItem_ = false;
   int currentX_ = 0;
   bool pendingInterSpanSpace_ = false;
   std::vector<IpaTextSpan> ipaRuns_;  // reused scratch for IPA run splitting

@@ -93,7 +93,8 @@ class DictionaryDefinitionActivity final : public Activity {
     bool isIpa = false;
   };
   struct PooledLine {
-    std::vector<PooledSegment> segments;
+    uint16_t firstSegment = 0;
+    uint16_t segmentCount = 0;
     uint8_t indentLevel = 0;
     bool isListItem = false;
   };
@@ -102,6 +103,7 @@ class DictionaryDefinitionActivity final : public Activity {
   // and extractWordsFromLayout index it from 0; loadPage() refills it per turn.
   // pagePool_ backs all segment text for the resident page.
   std::vector<PooledLine> layoutLines;
+  std::vector<PooledSegment> layoutSegments;
   std::string pagePool_;
   int currentPage = 0;
   int linesPerPage = 0;
@@ -181,7 +183,7 @@ class DictionaryDefinitionActivity final : public Activity {
   static int measureWidthAdapter(void* ctx, const char* text, EpdFontFamily::Style style, bool isIpa);
   // Line sink injected into DictLayout::wrapSpans: keeps collectTargetPage_'s
   // lines, counts the rest. ctx is `this`.
-  static void collectLineSink(void* ctx, DictLayout::LayoutLine&& line);
+  static void collectLineSink(void* ctx, const DictLayout::LayoutLineView& line);
   // Span sink bridge: sanitizes and forwards each streamed span into the DictLayout::Wrapper.
   static void feedSpanToWrapper(void* ctx, const StyledSpan& span);
   bool handleLongPressExitAll(bool enabled);
