@@ -9,7 +9,7 @@
 #include "../activities/Activity.h"
 #include "../activities/reader/DictionarySuggestionsActivity.h"
 #include "CrossPointSettings.h"
-#include "DictLookupTask.h"
+#include "DictionaryLookupWorker.h"
 #include "MappedInputManager.h"
 #include "Memory.h"
 #include "MemoryBudget.h"
@@ -21,7 +21,7 @@ DictionaryLookupController::DictionaryLookupController(GfxRenderer& renderer, Ma
                                                        Activity& owner, std::string cachePath)
     : renderer(renderer), mappedInput(mappedInput), owner(owner), cachePath(std::move(cachePath)) {}
 
-DictionaryLookupController::~DictionaryLookupController() = default;
+DictionaryLookupController::~DictionaryLookupController() { onExit(); }
 
 namespace {
 
@@ -55,14 +55,7 @@ void DictionaryLookupController::startLookup(const std::string& word, bool recor
     GUI.drawPopup(renderer, tr(STR_DICT_LOOKING_UP));
     renderer.displayBuffer(HalDisplay::FAST_REFRESH);
   }
-  task = makeUniqueNoThrow<DictLookupTask>(*this);
-  if (!task) {
-    LOG_ERR("DICT", "OOM: DictLookupTask");
-    showMemoryErrorAndReset();
-    return;
-  }
-  if (!task->start("DictLookup", 4096, 1)) {
-    task.reset();
+  if (!DictionaryLookupWorker::instance().start(*this)) {
     showMemoryErrorAndReset();
   }
 }
@@ -78,19 +71,14 @@ void DictionaryLookupController::setNotFound() {
 }
 
 void DictionaryLookupController::onExit() {
-  if (task) {
-    task->stop();
-    task->wait();
-    task.reset();
-  }
+  lookupCancelRequested = true;
+  DictionaryLookupWorker::instance().waitForOwner(*this);
 }
 
 DictionaryLookupController::LookupEvent DictionaryLookupController::handleInput() {
   if (state == LookupState::LookingUp) {
     if (lookupDone) {
       state = LookupState::Idle;
-      task.reset();
-
       if (lookupCancelled) {
         nextIsSuggestion = false;
         return LookupEvent::Cancelled;
@@ -318,7 +306,7 @@ void DictionaryLookupController::runLookup() {
     return;
   }
   foundLocation = Dictionary::locate(lookupWord, cbs, cachePath.c_str());
-  lookupCancelled = lookupCancelRequested;
+  lookupCancelled = lookupCancelRequested.load();
   lookupDone = true;
   logDictionaryLookupTaskEnd();
   // Don't call requestUpdate(true) here - it triggers an unnecessary e-ink refresh
