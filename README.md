@@ -19,7 +19,7 @@ My goal with this fork was to maintain the core Crosspoint firmware while integr
 
 ---
 
-**Note**: This firmware is confirmed to be working on both the X3 and X4.
+**Note**: This firmware is confirmed working on both the X3 and X4.
 
 ### Highlights
 
@@ -169,6 +169,22 @@ Replace `tiny` with another build variant if needed. The release variants are `t
 See [Testing and Debugging](./docs/contributing/testing-debugging.md) for serial logging, simulator checks, static analysis, and bug-report guidance.
 
 ---
+
+## Repository layout
+
+- `src/` - app orchestration, settings/state, and activity implementations (home, reader, settings, network, boot/sleep)
+- `lib/` - supporting libraries: EPUB parsing/layout, fonts, i18n, filesystem helpers, HAL wrappers, and more
+- `freeink-sdk/` - hardware SDK submodule for display, input, storage, and battery (docs: https://freeink.org/docs)
+- `web/` - web portal sources (`templates/`, `pages/`, `assets/`); compiled by `scripts/build_web.py` into `src/network/html/*.generated.h`
+- `docs/` - user and contributor documentation, published via the `site/` Astro site
+- `site/` - Astro project that builds `docs/` into the CrossInk documentation website
+- `test/` - unit tests and EPUB test fixtures
+- `scripts/` - build, codegen, and release tooling (i18n generation, web asset building, hyphenation tries, release packaging, etc.)
+- `bin/` - helper scripts for formatting (`clang-format-fix`) and CI checks
+- `fs_/` - sample SD card contents (books, sleep images, themes) used by the simulator
+- `nix/` - Nix/NixOS development shell definitions
+- `managed_components/` - ESP-IDF managed component dependencies, fetched automatically during build
+- [`SCOPE.md`](./SCOPE.md), [`GOVERNANCE.md`](./GOVERNANCE.md), [`CHANGELOG.md`](./CHANGELOG.md) - project scope, community guidelines, and release history
 
 ## Internals
 
