@@ -73,7 +73,7 @@ pio run -e simulator
 pio run -e default
 ```
 
-`pio run` without an environment builds the release variants listed in `platformio.ini`: `tiny` and `xlarge`.
+`pio run` without an environment builds the X3/X4 and Sticky firmware targets listed in `platformio.ini`.
 
 ## Flash
 

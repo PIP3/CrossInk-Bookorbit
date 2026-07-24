@@ -39,14 +39,10 @@ inline SettingInfo buildBuiltinFontSizeSetting() {
   s.enumStringValues.reserve(CrossPointSettings::FONT_SIZE_COUNT);
   s.enumRawValues.reserve(CrossPointSettings::FONT_SIZE_COUNT);
 
-  appendBuiltinFontSizeOption(s, CrossPointSettings::TEENSY);
-  appendBuiltinFontSizeOption(s, CrossPointSettings::ITTY_BITTY);
   appendBuiltinFontSizeOption(s, CrossPointSettings::TINY);
   appendBuiltinFontSizeOption(s, CrossPointSettings::SMALL);
   appendBuiltinFontSizeOption(s, CrossPointSettings::MEDIUM);
   appendBuiltinFontSizeOption(s, CrossPointSettings::LARGE);
-  appendBuiltinFontSizeOption(s, CrossPointSettings::EXTRA_LARGE);
-  appendBuiltinFontSizeOption(s, CrossPointSettings::HUGE_SIZE);
 
   return s;
 }

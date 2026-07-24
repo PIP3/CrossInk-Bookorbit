@@ -29,9 +29,9 @@ namespace {
 
 constexpr char latestReleaseUrl[] = CROSSINK_OTA_RELEASE_URL;
 
-#ifdef CROSSPOINT_FIRMWARE_VARIANT
-constexpr char firmwareAssetStem[] = "firmware-" CROSSPOINT_FIRMWARE_VARIANT;
-constexpr char firmwareAssetName[] = "firmware-" CROSSPOINT_FIRMWARE_VARIANT ".bin";
+#ifdef CROSSINK_FIRMWARE_DEVICE_TYPE
+constexpr char firmwareAssetStem[] = "firmware-" CROSSINK_FIRMWARE_DEVICE_TYPE;
+constexpr char firmwareAssetName[] = "firmware-" CROSSINK_FIRMWARE_DEVICE_TYPE ".bin";
 #else
 constexpr char firmwareAssetStem[] = "firmware";
 constexpr char firmwareAssetName[] = "firmware.bin";

@@ -162,17 +162,7 @@ class CrossPointSettings {
   enum FONT_FAMILY { LEXENDDECA = 0, BITTER = 1, FONT_FAMILY_COUNT };
   static constexpr uint8_t BUILTIN_FONT_COUNT = FONT_FAMILY_COUNT;
   // Font size options
-  enum FONT_SIZE {
-    TINY = 0,
-    SMALL = 1,
-    MEDIUM = 2,
-    LARGE = 3,
-    EXTRA_LARGE = 4,
-    TEENSY = 5,
-    HUGE_SIZE = 6,
-    ITTY_BITTY = 7,
-    FONT_SIZE_COUNT
-  };
+  enum FONT_SIZE { TINY = 0, SMALL = 1, MEDIUM = 2, LARGE = 3, FONT_SIZE_COUNT };
   enum SD_FONT_SIZE_RANGE {
     SD_FONT_RANGE_TEENSY = 0,
     SD_FONT_RANGE_TINY = 1,
@@ -405,15 +395,7 @@ class CrossPointSettings {
   // Reader font settings
   uint8_t fontFamily = LEXENDDECA;
   uint8_t fontSize = MEDIUM;
-#if defined(OMIT_EMOJI_FONTS)
-  uint8_t sdFontSizeRange = SD_FONT_RANGE_ALL;
-#elif defined(OMIT_TINY_FONT) && defined(OMIT_SMALL_FONT)
-  uint8_t sdFontSizeRange = SD_FONT_RANGE_XLARGE;
-#elif defined(OMIT_MEDIUM_FONT) && defined(OMIT_LARGE_FONT) && defined(OMIT_XLARGE_FONT) && defined(OMIT_HUGE_FONT)
-  uint8_t sdFontSizeRange = SD_FONT_RANGE_TEENSY;
-#else
   uint8_t sdFontSizeRange = SD_FONT_RANGE_TINY;
-#endif
   uint8_t lineSpacing = NORMAL;  // migration only; new saves use lineHeightPercent
   uint8_t lineHeightPercent = 100;
   uint8_t wordSpacing = 0;

@@ -19,13 +19,13 @@ My goal with this fork was to maintain the core Crosspoint firmware while integr
 
 ---
 
-**Note**: This firmware is confirmed to be working on both the X3 and X4.
+**Note**: This firmware is confirmed working on both the X3 and X4.
 
 ### Highlights
 
 - New reader fonts: Lexend Deca and Bitter.
 - Unicode emoji and miscellaneous symbols support (a limited subset).
-- Adjusted font sizes: 10 pt, 12 pt, 14 pt, 16 pt, 18 pt, and 20 pt. The available sizes depend on the installed build variant.
+- Reader font sizes: 10 pt, 12 pt, 14 pt, and 16 pt.
 - Added ~~strikethrough~~ support.
 - Made <u>underlines</u> thicker for better visibility.
 - Added a custom `Minimal` theme and sleep screen option for the minimalists out there.
@@ -68,7 +68,7 @@ The UI now uses [Inter](https://fonts.google.com/specimen/Inter) as the display 
 
 ### Font Sizes
 
-There are 2 available build variants to choose from due to build size constraints: `tiny`, and `xlarge`.
+CrossInk includes 10 pt, 12 pt, 14 pt, and 16 pt built-in reader font sizes.
 
 See [SD Card Fonts](./docs/sd-card-fonts.md) for installing additional font families and size ranges.
 
@@ -100,7 +100,7 @@ CrossInk runs on an ESP32-C3 with limited RAM, so very large folders or complex 
 
 ## Development Device Simulator
 
-The [device simulator](https://github.com/uxjulia/crosspoint-simulator) renders the e-ink display in an SDL2 window so firmware changes can be sanity-checked without flashing hardware.
+The [device simulator](https://github.com/uxjulia/crossink-simulator) renders the e-ink display in an SDL2 window so firmware changes can be sanity-checked without flashing hardware.
 
 See [Simulator](./docs/simulator.md) for setup, platform notes, keyboard controls, and cache tips.
 
@@ -161,14 +161,30 @@ After rebuilding the system configuration, reconnect the device or reload udev r
 Connect your Xteink X4 or X3 via USB-C and run:
 
 ```sh
-pio run -e tiny --target upload
+pio run -e default --target upload
 ```
 
-Replace `tiny` with another build variant if needed. The release variants are `tiny` and `xlarge`; their enabled sizes are defined in [platformio.ini](./platformio.ini).
+Use `-e sticky` only when building for a Seeed Sticky device. The X3/X4 firmware uses the default environment.
 
 See [Testing and Debugging](./docs/contributing/testing-debugging.md) for serial logging, simulator checks, static analysis, and bug-report guidance.
 
 ---
+
+## Repository layout
+
+- `src/` - app orchestration, settings/state, and activity implementations (home, reader, settings, network, boot/sleep)
+- `lib/` - supporting libraries: EPUB parsing/layout, fonts, i18n, filesystem helpers, HAL wrappers, and more
+- `freeink-sdk/` - hardware SDK submodule for display, input, storage, and battery (docs: https://freeink.org/docs)
+- `web/` - web portal sources (`templates/`, `pages/`, `assets/`); compiled by `scripts/build_web.py` into `src/network/html/*.generated.h`
+- `docs/` - user and contributor documentation, published via the `site/` Astro site
+- `site/` - Astro project that builds `docs/` into the CrossInk documentation website
+- `test/` - unit tests and EPUB test fixtures
+- `scripts/` - build, codegen, and release tooling (i18n generation, web asset building, hyphenation tries, release packaging, etc.)
+- `bin/` - helper scripts for formatting (`clang-format-fix`) and CI checks
+- `fs_/` - sample SD card contents (books, sleep images, themes) used by the simulator
+- `nix/` - Nix/NixOS development shell definitions
+- `managed_components/` - ESP-IDF managed component dependencies, fetched automatically during build
+- [`SCOPE.md`](./SCOPE.md), [`GOVERNANCE.md`](./GOVERNANCE.md), [`CHANGELOG.md`](./CHANGELOG.md) - project scope, community guidelines, and release history
 
 ## Internals
 

@@ -76,17 +76,12 @@ jobs:
       - name: Verify PlatformIO Core
         run: pio --version
 
-      - name: Build CrossInk tiny
+      - name: Build CrossInk X3/X4
         run: |
           set -euo pipefail
-          pio run -e tiny | tee pio.log
+          pio run -e default | tee pio.log
 
-      - name: Build CrossInk xlarge
-        run: |
-          set -euo pipefail
-          pio run -e xlarge
-
-      - name: Build CrossPoint (Seeed Sticky)
+      - name: Build CrossInk (Seeed Sticky)
         run: |
           set -euo pipefail
           pio run -e sticky
@@ -112,9 +107,9 @@ jobs:
       - name: Upload firmware artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: firmware-tiny
+          name: firmware-x3-x4
           path: |
-            .pio/build/tiny/firmware-tiny.bin
+            .pio/build/default/firmware-x3-x4.bin
           if-no-files-found: error
 
   # This job is used as the PR required actions check, allows for changes to other steps in the future without breaking

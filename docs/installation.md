@@ -18,7 +18,7 @@ nav_order: 2
 
 #### For installing newer versions of CrossInk. Can be used by USB locked devices.
 
-1. Download the `firmware-*.bin` file for the build variant of your choosing from the [releases page](https://github.com/uxjulia/CrossInk/releases).
+1. Download the firmware for your device type from the [releases page](https://github.com/uxjulia/CrossInk/releases): `firmware-x3-x4-*.bin` for X3 and X4, or `firmware-sticky-*.bin` for Seeed Sticky.
 2. Place the downloaded `firmware-*.bin` file in your SD card. You can place this file anywhere.
 3. Go to `Settings > System > SD Card Firmware Update` and navigate to the `.bin` file and update.
 

@@ -216,8 +216,7 @@ device model and build.
   - "Lexend Deca" (default)
   - "Bitter"
 
-- **Reader Font Size**: Adjust the text size for reading. The `tiny` release
-  build includes 10, 12, 14, and 16 pt; `xlarge` includes 16, 18, and 20 pt.
+- **Reader Font Size**: Adjust the text size for reading, built-in font sizes include: 10, 12, 14, and 16 pt.
 
 - **Reader Line Spacing**: Adjust the line height as a percentage.
 
@@ -235,7 +234,7 @@ device model and build.
 - **Reading Orientation**: Set the screen orientation for reading EPUB files:
   - "Portrait" (default) - Standard portrait orientation
   - "Landscape CW" - Landscape, rotated clockwise
-  - "Inverted" - Portrait, upside down
+  - "Portrait 180" - Portrait, upside down
   - "Landscape CCW" - Landscape, rotated counter-clockwise
 
 - **Extra Paragraph Spacing**: Set how to handle paragraph breaks:
@@ -246,7 +245,7 @@ device model and build.
   **Guide Dots** are directly available from the Reader settings. See
   [Reader Features](./reader-features.md) for their behavior.
 
-- **Customise Status Bar**: Configure the status bar displayed while reading:
+- **Customize Status Bar**: Configure the status bar displayed while reading:
   - Chapter Page Count - Show/Hide the current page in the chapter (ex: 5/25). Page count may change based on the font size and margins set.
   - Book Progress Percentage - Show/Hide the current percent progress in the book.
   - Progress Bar - Show/Hide a progress bar for either the book or chapter.

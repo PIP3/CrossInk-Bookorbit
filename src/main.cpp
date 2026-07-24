@@ -112,127 +112,50 @@ static void logBootHeap(const char* stage) {
 }
 
 // Fonts
-#ifndef OMIT_MEDIUM_FONT
-EpdFont lexenddeca14RegularFont(&lexenddeca_14_regular);
-EpdFont lexenddeca14BoldFont(&lexenddeca_14_bold);
-EpdFont lexenddeca14ItalicFont(&lexenddeca_14_italic);
-EpdFont lexenddeca14BoldItalicFont(&lexenddeca_14_bolditalic);
-EpdFontFamily lexenddeca14FontFamily(&lexenddeca14RegularFont, &lexenddeca14BoldFont, &lexenddeca14ItalicFont,
-                                     &lexenddeca14BoldItalicFont);
-#endif
-#ifndef OMIT_TEENSY_FONT
-EpdFont lexenddeca8RegularFont(&lexenddeca_8_regular);
-EpdFont lexenddeca8BoldFont(&lexenddeca_8_bold);
-EpdFont lexenddeca8ItalicFont(&lexenddeca_8_italic);
-EpdFont lexenddeca8BoldItalicFont(&lexenddeca_8_bolditalic);
-EpdFontFamily lexenddeca8FontFamily(&lexenddeca8RegularFont, &lexenddeca8BoldFont, &lexenddeca8ItalicFont,
-                                    &lexenddeca8BoldItalicFont);
-#endif
-#ifndef OMIT_ITTY_BITTY_FONT
-EpdFont lexenddeca9RegularFont(&lexenddeca_9_regular);
-EpdFont lexenddeca9BoldFont(&lexenddeca_9_bold);
-EpdFont lexenddeca9ItalicFont(&lexenddeca_9_italic);
-EpdFont lexenddeca9BoldItalicFont(&lexenddeca_9_bolditalic);
-EpdFontFamily lexenddeca9FontFamily(&lexenddeca9RegularFont, &lexenddeca9BoldFont, &lexenddeca9ItalicFont,
-                                    &lexenddeca9BoldItalicFont);
-#endif
-#ifndef OMIT_TINY_FONT
 EpdFont lexenddeca10RegularFont(&lexenddeca_10_regular);
 EpdFont lexenddeca10BoldFont(&lexenddeca_10_bold);
 EpdFont lexenddeca10ItalicFont(&lexenddeca_10_italic);
 EpdFont lexenddeca10BoldItalicFont(&lexenddeca_10_bolditalic);
 EpdFontFamily lexenddeca10FontFamily(&lexenddeca10RegularFont, &lexenddeca10BoldFont, &lexenddeca10ItalicFont,
                                      &lexenddeca10BoldItalicFont);
-#endif
-#ifndef OMIT_SMALL_FONT
 EpdFont lexenddeca12RegularFont(&lexenddeca_12_regular);
 EpdFont lexenddeca12BoldFont(&lexenddeca_12_bold);
 EpdFont lexenddeca12ItalicFont(&lexenddeca_12_italic);
 EpdFont lexenddeca12BoldItalicFont(&lexenddeca_12_bolditalic);
 EpdFontFamily lexenddeca12FontFamily(&lexenddeca12RegularFont, &lexenddeca12BoldFont, &lexenddeca12ItalicFont,
                                      &lexenddeca12BoldItalicFont);
-#endif
-#ifndef OMIT_LARGE_FONT
+EpdFont lexenddeca14RegularFont(&lexenddeca_14_regular);
+EpdFont lexenddeca14BoldFont(&lexenddeca_14_bold);
+EpdFont lexenddeca14ItalicFont(&lexenddeca_14_italic);
+EpdFont lexenddeca14BoldItalicFont(&lexenddeca_14_bolditalic);
+EpdFontFamily lexenddeca14FontFamily(&lexenddeca14RegularFont, &lexenddeca14BoldFont, &lexenddeca14ItalicFont,
+                                     &lexenddeca14BoldItalicFont);
 EpdFont lexenddeca16RegularFont(&lexenddeca_16_regular);
 EpdFont lexenddeca16BoldFont(&lexenddeca_16_bold);
 EpdFont lexenddeca16ItalicFont(&lexenddeca_16_italic);
 EpdFont lexenddeca16BoldItalicFont(&lexenddeca_16_bolditalic);
 EpdFontFamily lexenddeca16FontFamily(&lexenddeca16RegularFont, &lexenddeca16BoldFont, &lexenddeca16ItalicFont,
                                      &lexenddeca16BoldItalicFont);
-#endif
-#ifndef OMIT_XLARGE_FONT
-EpdFont lexenddeca18RegularFont(&lexenddeca_18_regular);
-EpdFont lexenddeca18BoldFont(&lexenddeca_18_bold);
-EpdFont lexenddeca18ItalicFont(&lexenddeca_18_italic);
-EpdFont lexenddeca18BoldItalicFont(&lexenddeca_18_bolditalic);
-EpdFontFamily lexenddeca18FontFamily(&lexenddeca18RegularFont, &lexenddeca18BoldFont, &lexenddeca18ItalicFont,
-                                     &lexenddeca18BoldItalicFont);
-#endif
-#ifndef OMIT_HUGE_FONT
-EpdFont lexenddeca20RegularFont(&lexenddeca_20_regular);
-EpdFont lexenddeca20BoldFont(&lexenddeca_20_bold);
-EpdFont lexenddeca20ItalicFont(&lexenddeca_20_italic);
-EpdFont lexenddeca20BoldItalicFont(&lexenddeca_20_bolditalic);
-EpdFontFamily lexenddeca20FontFamily(&lexenddeca20RegularFont, &lexenddeca20BoldFont, &lexenddeca20ItalicFont,
-                                     &lexenddeca20BoldItalicFont);
-#endif
-
-#ifndef OMIT_TEENSY_FONT
-EpdFont bitter8RegularFont(&bitter_8_regular);
-EpdFont bitter8BoldFont(&bitter_8_bold);
-EpdFont bitter8ItalicFont(&bitter_8_italic);
-EpdFont bitter8BoldItalicFont(&bitter_8_bolditalic);
-EpdFontFamily bitter8FontFamily(&bitter8RegularFont, &bitter8BoldFont, &bitter8ItalicFont, &bitter8BoldItalicFont);
-#endif
-#ifndef OMIT_ITTY_BITTY_FONT
-EpdFont bitter9RegularFont(&bitter_9_regular);
-EpdFont bitter9BoldFont(&bitter_9_bold);
-EpdFont bitter9ItalicFont(&bitter_9_italic);
-EpdFont bitter9BoldItalicFont(&bitter_9_bolditalic);
-EpdFontFamily bitter9FontFamily(&bitter9RegularFont, &bitter9BoldFont, &bitter9ItalicFont, &bitter9BoldItalicFont);
-#endif
-#ifndef OMIT_TINY_FONT
 EpdFont bitter10RegularFont(&bitter_10_regular);
 EpdFont bitter10BoldFont(&bitter_10_bold);
 EpdFont bitter10ItalicFont(&bitter_10_italic);
 EpdFont bitter10BoldItalicFont(&bitter_10_bolditalic);
 EpdFontFamily bitter10FontFamily(&bitter10RegularFont, &bitter10BoldFont, &bitter10ItalicFont, &bitter10BoldItalicFont);
-#endif
-#ifndef OMIT_SMALL_FONT
 EpdFont bitter12RegularFont(&bitter_12_regular);
 EpdFont bitter12BoldFont(&bitter_12_bold);
 EpdFont bitter12ItalicFont(&bitter_12_italic);
 EpdFont bitter12BoldItalicFont(&bitter_12_bolditalic);
 EpdFontFamily bitter12FontFamily(&bitter12RegularFont, &bitter12BoldFont, &bitter12ItalicFont, &bitter12BoldItalicFont);
-#endif
-#ifndef OMIT_MEDIUM_FONT
 EpdFont bitter14RegularFont(&bitter_14_regular);
 EpdFont bitter14BoldFont(&bitter_14_bold);
 EpdFont bitter14ItalicFont(&bitter_14_italic);
 EpdFont bitter14BoldItalicFont(&bitter_14_bolditalic);
 EpdFontFamily bitter14FontFamily(&bitter14RegularFont, &bitter14BoldFont, &bitter14ItalicFont, &bitter14BoldItalicFont);
-#endif
-#ifndef OMIT_LARGE_FONT
 EpdFont bitter16RegularFont(&bitter_16_regular);
 EpdFont bitter16BoldFont(&bitter_16_bold);
 EpdFont bitter16ItalicFont(&bitter_16_italic);
 EpdFont bitter16BoldItalicFont(&bitter_16_bolditalic);
 EpdFontFamily bitter16FontFamily(&bitter16RegularFont, &bitter16BoldFont, &bitter16ItalicFont, &bitter16BoldItalicFont);
-#endif
-#ifndef OMIT_XLARGE_FONT
-EpdFont bitter18RegularFont(&bitter_18_regular);
-EpdFont bitter18BoldFont(&bitter_18_bold);
-EpdFont bitter18ItalicFont(&bitter_18_italic);
-EpdFont bitter18BoldItalicFont(&bitter_18_bolditalic);
-EpdFontFamily bitter18FontFamily(&bitter18RegularFont, &bitter18BoldFont, &bitter18ItalicFont, &bitter18BoldItalicFont);
-#endif
-#ifndef OMIT_HUGE_FONT
-EpdFont bitter20RegularFont(&bitter_20_regular);
-EpdFont bitter20BoldFont(&bitter_20_bold);
-EpdFont bitter20ItalicFont(&bitter_20_italic);
-EpdFont bitter20BoldItalicFont(&bitter_20_bolditalic);
-EpdFontFamily bitter20FontFamily(&bitter20RegularFont, &bitter20BoldFont, &bitter20ItalicFont, &bitter20BoldItalicFont);
-#endif
 
 EpdFont smallFont(&inter_8_regular);
 EpdFontFamily smallFontFamily(&smallFont);
@@ -704,55 +627,14 @@ void setupDisplayAndFonts(const bool seamless = false, const bool loadReaderReso
   fontCacheManager.setFontDecompressor(&fontDecompressor);
   renderer.setFontCacheManager(&fontCacheManager);
 
-#ifndef OMIT_TEENSY_FONT
-  renderer.insertFont(LEXENDDECA_8_FONT_ID, lexenddeca8FontFamily);
-#endif
-#ifndef OMIT_ITTY_BITTY_FONT
-  renderer.insertFont(LEXENDDECA_9_FONT_ID, lexenddeca9FontFamily);
-#endif
-#ifndef OMIT_TINY_FONT
   renderer.insertFont(LEXENDDECA_10_FONT_ID, lexenddeca10FontFamily);
-#endif
-#ifndef OMIT_SMALL_FONT
   renderer.insertFont(LEXENDDECA_12_FONT_ID, lexenddeca12FontFamily);
-#endif
-#ifndef OMIT_MEDIUM_FONT
   renderer.insertFont(LEXENDDECA_14_FONT_ID, lexenddeca14FontFamily);
-#endif
-#ifndef OMIT_LARGE_FONT
   renderer.insertFont(LEXENDDECA_16_FONT_ID, lexenddeca16FontFamily);
-#endif
-#ifndef OMIT_XLARGE_FONT
-  renderer.insertFont(LEXENDDECA_18_FONT_ID, lexenddeca18FontFamily);
-#endif
-#ifndef OMIT_HUGE_FONT
-  renderer.insertFont(LEXENDDECA_20_FONT_ID, lexenddeca20FontFamily);
-#endif
-
-#ifndef OMIT_TEENSY_FONT
-  renderer.insertFont(BITTER_8_FONT_ID, bitter8FontFamily);
-#endif
-#ifndef OMIT_ITTY_BITTY_FONT
-  renderer.insertFont(BITTER_9_FONT_ID, bitter9FontFamily);
-#endif
-#ifndef OMIT_TINY_FONT
   renderer.insertFont(BITTER_10_FONT_ID, bitter10FontFamily);
-#endif
-#ifndef OMIT_SMALL_FONT
   renderer.insertFont(BITTER_12_FONT_ID, bitter12FontFamily);
-#endif
-#ifndef OMIT_MEDIUM_FONT
   renderer.insertFont(BITTER_14_FONT_ID, bitter14FontFamily);
-#endif
-#ifndef OMIT_LARGE_FONT
   renderer.insertFont(BITTER_16_FONT_ID, bitter16FontFamily);
-#endif
-#ifndef OMIT_XLARGE_FONT
-  renderer.insertFont(BITTER_18_FONT_ID, bitter18FontFamily);
-#endif
-#ifndef OMIT_HUGE_FONT
-  renderer.insertFont(BITTER_20_FONT_ID, bitter20FontFamily);
-#endif
   renderer.insertFont(UI_10_FONT_ID, ui10FontFamily);
   renderer.insertFont(UI_12_FONT_ID, ui12FontFamily);
   renderer.insertFont(SMALL_FONT_ID, smallFontFamily);

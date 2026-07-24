@@ -60,13 +60,17 @@ constexpr uint8_t SLEEP_SCREEN_STORAGE_ORDER_COUNT =
 static_assert(SLEEP_SCREEN_STORAGE_ORDER_COUNT == CrossPointSettings::SLEEP_SCREEN_MODE_COUNT,
               "Update sleep screen persisted-value mapping when adding modes");
 constexpr CrossPointSettings::FONT_SIZE READER_FONT_SIZE_STORAGE_ORDER[] = {
-    CrossPointSettings::TINY,      CrossPointSettings::SMALL,       CrossPointSettings::MEDIUM,
-    CrossPointSettings::LARGE,     CrossPointSettings::EXTRA_LARGE, CrossPointSettings::TEENSY,
-    CrossPointSettings::HUGE_SIZE, CrossPointSettings::ITTY_BITTY};
+    CrossPointSettings::TINY,
+    CrossPointSettings::SMALL,
+    CrossPointSettings::MEDIUM,
+    CrossPointSettings::LARGE,
+};
 constexpr CrossPointSettings::FONT_SIZE READER_FONT_SIZE_CYCLE_ORDER[] = {
-    CrossPointSettings::TEENSY,      CrossPointSettings::ITTY_BITTY, CrossPointSettings::TINY,
-    CrossPointSettings::SMALL,       CrossPointSettings::MEDIUM,     CrossPointSettings::LARGE,
-    CrossPointSettings::EXTRA_LARGE, CrossPointSettings::HUGE_SIZE};
+    CrossPointSettings::TINY,
+    CrossPointSettings::SMALL,
+    CrossPointSettings::MEDIUM,
+    CrossPointSettings::LARGE,
+};
 constexpr uint8_t SD_FONT_RANGE_POINT_SIZES[CrossPointSettings::SD_FONT_SIZE_RANGE_COUNT]
                                            [CrossPointSettings::SD_FONT_MAX_SIZE_STEPS] = {
                                                {8, 9, 10, 12},
@@ -107,110 +111,23 @@ uint8_t normalizedSdFontRange(uint8_t range) {
 }
 
 bool isReaderFontSizeAvailable(const CrossPointSettings::FONT_SIZE size) {
-  switch (size) {
-    case CrossPointSettings::TEENSY:
-#ifdef OMIT_TEENSY_FONT
-      return false;
-#else
-      return true;
-#endif
-    case CrossPointSettings::ITTY_BITTY:
-#ifdef OMIT_ITTY_BITTY_FONT
-      return false;
-#else
-      return true;
-#endif
-    case CrossPointSettings::TINY:
-#ifdef OMIT_TINY_FONT
-      return false;
-#else
-      return true;
-#endif
-    case CrossPointSettings::SMALL:
-#ifdef OMIT_SMALL_FONT
-      return false;
-#else
-      return true;
-#endif
-    case CrossPointSettings::MEDIUM:
-#ifdef OMIT_MEDIUM_FONT
-      return false;
-#else
-      return true;
-#endif
-    case CrossPointSettings::EXTRA_LARGE:
-#ifdef OMIT_XLARGE_FONT
-      return false;
-#else
-      return true;
-#endif
-    case CrossPointSettings::LARGE:
-#ifdef OMIT_LARGE_FONT
-      return false;
-#else
-      return true;
-#endif
-    case CrossPointSettings::HUGE_SIZE:
-#ifdef OMIT_HUGE_FONT
-      return false;
-#else
-      return true;
-#endif
-    default:
-      return true;
-  }
+  return size < CrossPointSettings::FONT_SIZE_COUNT;
 }
 
 CrossPointSettings::FONT_SIZE firstAvailableReaderFontSize() {
   const auto it =
       std::find_if(std::begin(READER_FONT_SIZE_STORAGE_ORDER), std::end(READER_FONT_SIZE_STORAGE_ORDER),
                    [](const CrossPointSettings::FONT_SIZE size) { return isReaderFontSizeAvailable(size); });
-  return (it != std::end(READER_FONT_SIZE_STORAGE_ORDER)) ? *it : CrossPointSettings::LARGE;
+  return (it != std::end(READER_FONT_SIZE_STORAGE_ORDER)) ? *it : CrossPointSettings::TINY;
 }
 
 int getFallbackReaderFontIdForFamily(const CrossPointSettings::FONT_FAMILY family) {
   switch (family) {
     case CrossPointSettings::BITTER:
-#ifndef OMIT_TINY_FONT
       return BITTER_10_FONT_ID;
-#elif !defined(OMIT_SMALL_FONT)
-      return BITTER_12_FONT_ID;
-#elif !defined(OMIT_MEDIUM_FONT)
-      return BITTER_14_FONT_ID;
-#elif !defined(OMIT_LARGE_FONT)
-      return BITTER_16_FONT_ID;
-#elif !defined(OMIT_XLARGE_FONT)
-      return BITTER_18_FONT_ID;
-#elif !defined(OMIT_HUGE_FONT)
-      return BITTER_20_FONT_ID;
-#elif !defined(OMIT_TEENSY_FONT)
-      return BITTER_8_FONT_ID;
-#elif !defined(OMIT_ITTY_BITTY_FONT)
-      return BITTER_9_FONT_ID;
-#else
-#error "No reader fonts enabled for BITTER"
-#endif
     case CrossPointSettings::LEXENDDECA:
     default:
-#ifndef OMIT_TINY_FONT
       return LEXENDDECA_10_FONT_ID;
-#elif !defined(OMIT_SMALL_FONT)
-      return LEXENDDECA_12_FONT_ID;
-#elif !defined(OMIT_MEDIUM_FONT)
-      return LEXENDDECA_14_FONT_ID;
-#elif !defined(OMIT_LARGE_FONT)
-      return LEXENDDECA_16_FONT_ID;
-#elif !defined(OMIT_XLARGE_FONT)
-      return LEXENDDECA_18_FONT_ID;
-#elif !defined(OMIT_HUGE_FONT)
-      return LEXENDDECA_20_FONT_ID;
-#elif !defined(OMIT_TEENSY_FONT)
-      return LEXENDDECA_8_FONT_ID;
-#elif !defined(OMIT_ITTY_BITTY_FONT)
-      return LEXENDDECA_9_FONT_ID;
-#else
-#error "No reader fonts enabled for LEXENDDECA"
-#endif
   }
 }
 
@@ -664,10 +581,6 @@ uint8_t CrossPointSettings::getStoredReaderFontSize(const FONT_SIZE size) {
 
 uint8_t CrossPointSettings::getReaderFontPointSize(const FONT_SIZE size) {
   switch (size) {
-    case TEENSY:
-      return 8;
-    case ITTY_BITTY:
-      return 9;
     case TINY:
       return 10;
     case SMALL:
@@ -677,10 +590,6 @@ uint8_t CrossPointSettings::getReaderFontPointSize(const FONT_SIZE size) {
       return 14;
     case LARGE:
       return 16;
-    case EXTRA_LARGE:
-      return 18;
-    case HUGE_SIZE:
-      return 20;
   }
 }
 
@@ -756,82 +665,28 @@ int CrossPointSettings::getBuiltInReaderFontId() const {
     case LEXENDDECA:
     default:
       switch (effectiveSize) {
-#ifndef OMIT_TEENSY_FONT
-        case TEENSY:
-          return LEXENDDECA_8_FONT_ID;
-#endif
-#ifndef OMIT_ITTY_BITTY_FONT
-        case ITTY_BITTY:
-          return LEXENDDECA_9_FONT_ID;
-#endif
-#ifndef OMIT_TINY_FONT
         case TINY:
           return LEXENDDECA_10_FONT_ID;
-#endif
-#ifndef OMIT_SMALL_FONT
         case SMALL:
           return LEXENDDECA_12_FONT_ID;
-#endif
-#ifndef OMIT_MEDIUM_FONT
         case MEDIUM:
         default:
           return LEXENDDECA_14_FONT_ID;
-#endif
-#ifndef OMIT_LARGE_FONT
         case LARGE:
-#ifdef OMIT_MEDIUM_FONT
-        default:
-#endif
           return LEXENDDECA_16_FONT_ID;
-#endif
-#ifndef OMIT_XLARGE_FONT
-        case EXTRA_LARGE:
-          return LEXENDDECA_18_FONT_ID;
-#endif
-#ifndef OMIT_HUGE_FONT
-        case HUGE_SIZE:
-          return LEXENDDECA_20_FONT_ID;
-#endif
       }
       return getFallbackReaderFontIdForFamily(LEXENDDECA);
     case BITTER:
       switch (effectiveSize) {
-#ifndef OMIT_TEENSY_FONT
-        case TEENSY:
-          return BITTER_8_FONT_ID;
-#endif
-#ifndef OMIT_ITTY_BITTY_FONT
-        case ITTY_BITTY:
-          return BITTER_9_FONT_ID;
-#endif
-#ifndef OMIT_TINY_FONT
         case TINY:
           return BITTER_10_FONT_ID;
-#endif
-#ifndef OMIT_SMALL_FONT
         case SMALL:
           return BITTER_12_FONT_ID;
-#endif
-#ifndef OMIT_MEDIUM_FONT
         case MEDIUM:
         default:
           return BITTER_14_FONT_ID;
-#endif
-#ifndef OMIT_LARGE_FONT
         case LARGE:
-#ifdef OMIT_MEDIUM_FONT
-        default:
-#endif
           return BITTER_16_FONT_ID;
-#endif
-#ifndef OMIT_XLARGE_FONT
-        case EXTRA_LARGE:
-          return BITTER_18_FONT_ID;
-#endif
-#ifndef OMIT_HUGE_FONT
-        case HUGE_SIZE:
-          return BITTER_20_FONT_ID;
-#endif
       }
       return getFallbackReaderFontIdForFamily(BITTER);
   }

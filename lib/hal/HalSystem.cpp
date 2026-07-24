@@ -123,7 +123,7 @@ std::string getPanicInfo(bool full) {
     std::string info;
 
     info += "CrossInk version: " CROSSINK_VERSION;
-    info += "\nCrossInk variant: " CROSSINK_FIRMWARE_VARIANT;
+    info += "\nCrossInk device type: " CROSSINK_FIRMWARE_DEVICE_TYPE;
     info += "\n\nPanic reason: " + std::string(panicMessage);
     info += "\n\nLast logs:\n" + getLastLogs();
     info += "\n\nStack memory:\n";
