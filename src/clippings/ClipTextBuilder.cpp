@@ -8,10 +8,7 @@
 namespace ClipTextBuilder {
 namespace {
 
-bool hasEmSpace(const std::string& word) {
-  return word.size() >= 3 && static_cast<unsigned char>(word[0]) == 0xE2 &&
-         static_cast<unsigned char>(word[1]) == 0x80 && static_cast<unsigned char>(word[2]) == 0x83;
-}
+bool hasEmSpace(const char* word) { return word[0] == '\xe2' && word[1] == '\x80' && word[2] == '\x83'; }
 
 bool isUtf8SpaceAt(const std::string& text, const size_t index, size_t& advance) {
   const auto c = static_cast<unsigned char>(text[index]);
@@ -78,9 +75,9 @@ bool areWordsVisuallyAttached(const WordRef& previousWord, const WordRef& word) 
 
 }  // namespace
 
-ClippingResult build(const std::vector<WordRef>& words, const uint16_t* wordOrder, const int fromOrder,
-                     const int toOrder, const int totalOrder, const int startPageInSection,
-                     const int sectionPageCount) {
+ClippingResult build(const ClipWordStore& wordStore, const uint16_t* wordOrder, const int fromOrder, const int toOrder,
+                     const int totalOrder, const int startPageInSection, const int sectionPageCount) {
+  const auto& words = wordStore.words;
   std::string text;
   text.reserve(256);
 
@@ -104,17 +101,17 @@ ClippingResult build(const std::vector<WordRef>& words, const uint16_t* wordOrde
 
   for (int orderIdx = fromOrder; orderIdx <= toOrder; ++orderIdx) {
     const WordRef& word = words[wordOrder[orderIdx]];
-    const auto wordText = stripTrailingInsertedHyphen(cleanWordText(word.text), word.endsWithInsertedHyphen);
+    const auto wordText = stripTrailingInsertedHyphen(cleanWordText(wordStore.text(word)), word.endsWithInsertedHyphen);
     if (wordText.empty()) {
       continue;
     }
     const WordRef* previousWord = orderIdx > fromOrder ? &words[wordOrder[orderIdx - 1]] : nullptr;
     const bool yGap =
         previousWord && word.pageIdx == previousWord->pageIdx && word.y > previousWord->y + previousWord->h;
-    const bool paragraphStart = previousWord && (hasEmSpace(word.text) || word.paragraphStart || yGap);
+    const bool paragraphStart = previousWord && (hasEmSpace(wordStore.text(word)) || word.paragraphStart || yGap);
 
     if (previousWord && !text.empty() && !paragraphStart) {
-      const auto prevClean = cleanWordText(previousWord->text);
+      const auto prevClean = cleanWordText(wordStore.text(*previousWord));
       if (!prevClean.empty() && prevClean.back() == '-' && !std::isspace(static_cast<unsigned char>(wordText[0])) &&
           !std::ispunct(static_cast<unsigned char>(wordText[0]))) {
         text += wordText;
@@ -143,7 +140,7 @@ ClippingResult build(const std::vector<WordRef>& words, const uint16_t* wordOrde
   anchorCount = 0;
   for (int orderIdx = toOrder; orderIdx >= fromOrder && anchorCount < ANCHOR_WORDS; --orderIdx) {
     const WordRef& word = words[wordOrder[orderIdx]];
-    const auto wordText = stripTrailingInsertedHyphen(cleanWordText(word.text), word.endsWithInsertedHyphen);
+    const auto wordText = stripTrailingInsertedHyphen(cleanWordText(wordStore.text(word)), word.endsWithInsertedHyphen);
     endAnchor = endAnchor.empty() ? wordText : wordText + ' ' + endAnchor;
     anchorCount++;
   }
@@ -152,14 +149,14 @@ ClippingResult build(const std::vector<WordRef>& words, const uint16_t* wordOrde
   std::string beforeStart;
   for (int orderIdx = fromOrder - 1; orderIdx >= 0 && (fromOrder - orderIdx) <= CONTEXT_WORDS; --orderIdx) {
     const WordRef& word = words[wordOrder[orderIdx]];
-    const auto stripped = stripTrailingInsertedHyphen(cleanWordText(word.text), word.endsWithInsertedHyphen);
+    const auto stripped = stripTrailingInsertedHyphen(cleanWordText(wordStore.text(word)), word.endsWithInsertedHyphen);
     if (stripped.find_first_not_of(' ') == std::string::npos) continue;
     beforeStart = beforeStart.empty() ? stripped : stripped + ' ' + beforeStart;
   }
   std::string afterEnd;
   for (int orderIdx = toOrder + 1; orderIdx < totalOrder && (orderIdx - toOrder) <= CONTEXT_WORDS; ++orderIdx) {
     const WordRef& word = words[wordOrder[orderIdx]];
-    const auto stripped = stripTrailingInsertedHyphen(cleanWordText(word.text), word.endsWithInsertedHyphen);
+    const auto stripped = stripTrailingInsertedHyphen(cleanWordText(wordStore.text(word)), word.endsWithInsertedHyphen);
     if (stripped.find_first_not_of(' ') == std::string::npos) continue;
     afterEnd = afterEnd.empty() ? stripped : afterEnd + ' ' + stripped;
   }
@@ -172,7 +169,7 @@ ClippingResult build(const std::vector<WordRef>& words, const uint16_t* wordOrde
   if (midEnd > toOrder) midEnd = toOrder;
   for (int orderIdx = midStart; orderIdx <= midEnd; ++orderIdx) {
     const WordRef& word = words[wordOrder[orderIdx]];
-    const auto wordText = stripTrailingInsertedHyphen(cleanWordText(word.text), word.endsWithInsertedHyphen);
+    const auto wordText = stripTrailingInsertedHyphen(cleanWordText(wordStore.text(word)), word.endsWithInsertedHyphen);
     if (!midText.empty()) midText += ' ';
     midText += wordText;
   }

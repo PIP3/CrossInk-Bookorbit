@@ -3348,7 +3348,7 @@ void EpubReaderActivity::startClipSelection() {
   }
 
   ReaderViewportLayout layout{};
-  std::vector<WordRef> words;
+  ClipWordStore wordStore;
   int readerFontId = 0;
   int startPage = 0;
   std::string bookTitle;
@@ -3388,6 +3388,7 @@ void EpubReaderActivity::startClipSelection() {
     static constexpr size_t CLIP_SELECTION_WORDS_PER_PAGE = 80;
     static constexpr size_t MAX_CLIP_SELECTION_WORDS = 240;
     static constexpr uint32_t CLIP_SELECTION_WORD_RESERVE_HEADROOM = 16U * 1024U;
+    static constexpr size_t CLIP_SELECTION_INITIAL_TEXT_RESERVE = 4U * 1024U;
     const size_t maxSelectableWords =
         std::min(MAX_CLIP_SELECTION_WORDS, static_cast<size_t>(pagesToLoad) * CLIP_SELECTION_WORDS_PER_PAGE);
     const uint32_t wordReserveBytes = static_cast<uint32_t>(maxSelectableWords * sizeof(WordRef));
@@ -3400,10 +3401,14 @@ void EpubReaderActivity::startClipSelection() {
       requestUpdate();
       return;
     }
-    words.reserve(maxSelectableWords);
+    wordStore.words.reserve(maxSelectableWords);
+    wordStore.textPool.reserve(CLIP_SELECTION_INITIAL_TEXT_RESERVE);
     bool wordLimitLogged = false;
+    bool textPoolLimitLogged = false;
+    bool textPoolFull = false;
 
     for (int pageIdx = 0; pageIdx < pagesToLoad; ++pageIdx) {
+      if (textPoolFull) break;
       section->currentPage = startPage + pageIdx;
       auto page = section->loadPage(section->currentPage);
       if (!page) break;
@@ -3445,7 +3450,33 @@ void EpubReaderActivity::startClipSelection() {
         MemoryBudget::logHeapShape("clip.after_advance_batch");
       }
 
+      // The pool keeps each word NUL-terminated, so estimate the page once
+      // and grow once before collecting it instead of reallocating per word.
+      size_t pageTextBytes = 0;
+      const size_t remainingWords = maxSelectableWords - wordStore.words.size();
+      size_t estimatedWords = 0;
       for (const auto& element : page->elements) {
+        if (estimatedWords >= remainingWords || element->getTag() != TAG_PageLine) continue;
+        const auto& line = static_cast<const PageLine&>(*element);
+        if (!line.getBlock()) continue;
+        const auto& block = *line.getBlock();
+        for (uint16_t i = 0; i < block.wordCount() && estimatedWords < remainingWords; ++i) {
+          const char* wordText = block.wordText(i);
+          if (!hasVisibleWordText(wordText)) continue;
+          const size_t wordBytes = strlen(wordText) + 1;
+          if (wordBytes > ClipWordStore::MAX_TEXT_POOL_BYTES - pageTextBytes) {
+            pageTextBytes = ClipWordStore::MAX_TEXT_POOL_BYTES;
+            break;
+          }
+          pageTextBytes += wordBytes;
+          estimatedWords++;
+        }
+      }
+      const size_t remainingTextBytes = ClipWordStore::MAX_TEXT_POOL_BYTES - wordStore.textPool.size();
+      wordStore.textPool.reserve(wordStore.textPool.size() + std::min(pageTextBytes, remainingTextBytes));
+
+      for (const auto& element : page->elements) {
+        if (textPoolFull) break;
         if (element->getTag() != TAG_PageLine) continue;
         const auto& line = static_cast<const PageLine&>(*element);
         if (!line.getBlock()) continue;
@@ -3455,7 +3486,7 @@ void EpubReaderActivity::startClipSelection() {
         for (uint16_t i = 0; i < count; ++i) {
           const char* wordText = block.wordText(i);
           if (!hasVisibleWordText(wordText)) continue;
-          if (words.size() >= maxSelectableWords) {
+          if (wordStore.words.size() >= maxSelectableWords) {
             if (!wordLimitLogged) {
               LOG_ERR("CLIP", "Selectable word cap hit (%u words); clipping range truncated",
                       static_cast<unsigned>(maxSelectableWords));
@@ -3478,11 +3509,18 @@ void EpubReaderActivity::startClipSelection() {
           word.h = lineHeight;
           word.pageIdx = pageIdx;
           word.pageWordIndex = pageWordCounts[pageIdx]++;
-          word.text = wordText;
+          if (!wordStore.appendText(word, wordText)) {
+            if (!textPoolLimitLogged) {
+              LOG_ERR("CLIP", "Selectable text pool reached its 64 KB limit; clipping range truncated");
+              textPoolLimitLogged = true;
+            }
+            textPoolFull = true;
+            break;
+          }
           word.style = textStyle;
           word.endsWithInsertedHyphen = block.wordEndsWithInsertedHyphen(i);
           word.lineIsRtl = block.getBlockStyle().isRtl;
-          words.push_back(std::move(word));
+          wordStore.words.push_back(word);
         }
       }
       MemoryBudget::logHeapShape("clip.after_word_store");
@@ -3490,19 +3528,23 @@ void EpubReaderActivity::startClipSelection() {
 
     section->currentPage = startPage;
 
-    auto endsWithHyphen = [](const std::string& word) { return !word.empty() && word.back() == '-'; };
+    auto endsWithHyphen = [&wordStore](const WordRef& word) {
+      const char* text = wordStore.text(word);
+      return word.textLength > 0 && text[word.textLength - 1] == '-';
+    };
     const int indentThreshold = renderer.getLineHeight(readerFontId) / 2;
     int previousLineFirstIdx = -1;
-    for (int i = 0; i < static_cast<int>(words.size()); ++i) {
-      const bool newLine = i == 0 || words[i].pageIdx != words[i - 1].pageIdx || words[i].y != words[i - 1].y;
+    for (int i = 0; i < static_cast<int>(wordStore.words.size()); ++i) {
+      const bool newLine = i == 0 || wordStore.words[i].pageIdx != wordStore.words[i - 1].pageIdx ||
+                           wordStore.words[i].y != wordStore.words[i - 1].y;
       if (!newLine) continue;
 
-      const bool byEmSpace = hasEmSpacePrefix(words[i].text);
+      const bool byEmSpace = hasEmSpacePrefix(wordStore.text(wordStore.words[i]));
       const bool byIndent = !byEmSpace && previousLineFirstIdx >= 0 &&
-                            words[i].x > words[previousLineFirstIdx].x + indentThreshold &&
-                            !endsWithHyphen(words[i - 1].text);
+                            wordStore.words[i].x > wordStore.words[previousLineFirstIdx].x + indentThreshold &&
+                            !endsWithHyphen(wordStore.words[i - 1]);
       if (byEmSpace || byIndent) {
-        words[i].paragraphStart = true;
+        wordStore.words[i].paragraphStart = true;
       }
       previousLineFirstIdx = i;
     }
@@ -3515,7 +3557,7 @@ void EpubReaderActivity::startClipSelection() {
     author = epub->getAuthor();
   }
 
-  if (words.empty()) {
+  if (wordStore.words.empty()) {
     LOG_ERR("CLIP", "No selectable words on current EPUB page");
     requestUpdate();
     return;
@@ -3523,8 +3565,9 @@ void EpubReaderActivity::startClipSelection() {
 
   advanceCollector.reset();
   pauseReadingPaceTimer("clip_selection");
-  auto clipSelection = makeUniqueNoThrow<ClipSelectionActivity>(
-      renderer, mappedInput, std::move(words), readerFontId, *section, startPage, layout.marginTop, layout.marginLeft);
+  auto clipSelection =
+      makeUniqueNoThrow<ClipSelectionActivity>(renderer, mappedInput, std::move(wordStore), readerFontId, *section,
+                                               startPage, layout.marginTop, layout.marginLeft);
   if (!clipSelection) {
     LOG_ERR("CLIP", "OOM: failed to allocate clip selection activity");
     resumeReadingPaceTimer("clip_selection_alloc_failed");

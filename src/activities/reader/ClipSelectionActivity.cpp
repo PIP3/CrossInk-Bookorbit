@@ -19,18 +19,15 @@ namespace {
 
 constexpr int CLIP_SELECTION_FALLBACK_FONT_ID = UI_12_FONT_ID;
 
-bool hasEmSpace(const std::string& text) {
-  return text.size() >= 3 && static_cast<unsigned char>(text[0]) == 0xE2 &&
-         static_cast<unsigned char>(text[1]) == 0x80 && static_cast<unsigned char>(text[2]) == 0x83;
-}
+bool hasEmSpace(const char* text) { return text[0] == '\xe2' && text[1] == '\x80' && text[2] == '\x83'; }
 
 }  // namespace
 
 ClipSelectionActivity::ClipSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                             std::vector<WordRef> words, const int fontId, Section& section,
+                                             ClipWordStore wordStore, const int fontId, Section& section,
                                              const int startPageInSection, const int marginTop, const int marginLeft)
     : Activity("ClipSelection", renderer, mappedInput),
-      words(std::move(words)),
+      wordStore(std::move(wordStore)),
       renderFontId(fontId),
       section(section),
       startPageInSection(startPageInSection),
@@ -40,7 +37,7 @@ ClipSelectionActivity::ClipSelectionActivity(GfxRenderer& renderer, MappedInputM
 void ClipSelectionActivity::onEnter() {
   Activity::onEnter();
 
-  if (words.empty()) {
+  if (wordStore.words.empty()) {
     LOG_ERR("CLIP", "No words available for selection");
     ActivityResult result;
     result.isCancelled = true;
@@ -147,6 +144,7 @@ void ClipSelectionActivity::buildReadingOrder() {
   readingOrderSize = 0;
 
   int lineStart = 0;
+  const auto& words = wordStore.words;
   const int total = static_cast<int>(words.size());
   while (lineStart < total) {
     int lineEnd = lineStart + 1;
@@ -184,9 +182,9 @@ void ClipSelectionActivity::loop() {
 
   auto moveCursor = [this](const int nextOrderIdx) {
     if (nextOrderIdx == cursorIdx || nextOrderIdx < 0 || nextOrderIdx >= static_cast<int>(readingOrderSize)) return;
-    const int previousPage = words[readingOrder[cursorIdx]].pageIdx;
+    const int previousPage = wordStore.words[readingOrder[cursorIdx]].pageIdx;
     cursorIdx = nextOrderIdx;
-    if (words[readingOrder[cursorIdx]].pageIdx != previousPage) {
+    if (wordStore.words[readingOrder[cursorIdx]].pageIdx != previousPage) {
       needsPageSwitch = true;
     }
     requestUpdate();
@@ -216,8 +214,8 @@ void ClipSelectionActivity::loop() {
     } else {
       const int from = std::min(startMarkIdx, cursorIdx);
       const int to = std::max(startMarkIdx, cursorIdx);
-      auto result =
-          ClipTextBuilder::build(words, readingOrder.data(), from, to, total, startPageInSection, section.pageCount);
+      auto result = ClipTextBuilder::build(wordStore, readingOrder.data(), from, to, total, startPageInSection,
+                                           section.pageCount);
       if (const auto paragraphIndex = section.getParagraphIndexForPage(result.sectionPage)) {
         result.paragraphIndex = *paragraphIndex;
       }
@@ -243,7 +241,7 @@ void ClipSelectionActivity::loop() {
 
 void ClipSelectionActivity::render(RenderLock&&) {
   if (needsPageSwitch) {
-    switchToPage(words[readingOrder[cursorIdx]].pageIdx);
+    switchToPage(wordStore.words[readingOrder[cursorIdx]].pageIdx);
     needsPageSwitch = false;
   } else if (hasSavedBuffer) {
     restoreSavedBuffer();
@@ -311,7 +309,8 @@ bool ClipSelectionActivity::switchToPage(const int pageIdx) {
 
 void ClipSelectionActivity::applyWordStyle(const WordRef& word, const ClipWordStyle& style) const {
   const auto textStyle = static_cast<EpdFontFamily::Style>(word.style & ~EpdFontFamily::UNDERLINE);
-  const int skipX = hasEmSpace(word.text) ? renderer.getTextAdvanceX(renderFontId, "\xe2\x80\x83", textStyle) : 0;
+  const int skipX =
+      hasEmSpace(wordStore.text(word)) ? renderer.getTextAdvanceX(renderFontId, "\xe2\x80\x83", textStyle) : 0;
   const int drawX = word.x + skipX;
   const int drawW = word.w - skipX;
   if (drawW <= 0) return;
@@ -352,14 +351,14 @@ void ClipSelectionActivity::drawHighlights() {
     const int from = std::min(startMarkIdx, cursorIdx);
     const int to = std::max(startMarkIdx, cursorIdx);
     for (int i = from; i <= to; i++) {
-      const WordRef& word = words[readingOrder[i]];
+      const WordRef& word = wordStore.words[readingOrder[i]];
       if (word.pageIdx == currentDisplayPage) {
         applyWordStyle(word, selectionStyle);
       }
     }
   }
 
-  const WordRef& cursorWord = words[readingOrder[cursorIdx]];
+  const WordRef& cursorWord = wordStore.words[readingOrder[cursorIdx]];
   if (cursorWord.pageIdx == currentDisplayPage) {
     applyWordStyle(cursorWord, cursorStyle);
   }
@@ -367,6 +366,7 @@ void ClipSelectionActivity::drawHighlights() {
 
 int ClipSelectionActivity::lineEndForward(const int orderIdx) const {
   const int total = static_cast<int>(readingOrder.size());
+  const auto& words = wordStore.words;
   const WordRef& current = words[readingOrder[orderIdx]];
   for (int i = orderIdx + 1; i < total; ++i) {
     const WordRef& word = words[readingOrder[i]];
@@ -376,6 +376,7 @@ int ClipSelectionActivity::lineEndForward(const int orderIdx) const {
 }
 
 int ClipSelectionActivity::lineEndBackward(const int orderIdx) const {
+  const auto& words = wordStore.words;
   const WordRef& current = words[readingOrder[orderIdx]];
   int i = orderIdx - 1;
   for (; i >= 0; --i) {
