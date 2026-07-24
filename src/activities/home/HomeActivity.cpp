@@ -1873,7 +1873,7 @@ void HomeActivity::loop() {
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    onContinueReading();
+    activateSelectedHomeItem();
   }
 }
 
