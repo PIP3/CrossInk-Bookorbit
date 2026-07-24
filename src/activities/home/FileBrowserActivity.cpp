@@ -38,6 +38,10 @@ constexpr size_t INDEX_THRESHOLD = 200;
 constexpr uint32_t FILE_BROWSER_APPEND_MIN_FREE_AFTER_ALLOC = 48U * 1024U;
 constexpr uint32_t FILE_BROWSER_APPEND_MIN_MAX_ALLOC_AFTER_ALLOC = 16U * 1024U;
 
+bool usesTwoLineFileBrowserRows() {
+  return SETTINGS.fileBrowserDisplay == CrossPointSettings::FILE_BROWSER_DISPLAY_2_LINES;
+}
+
 bool isDefaultSleepFolderPath(const std::string& path) { return path == "/sleep" || path == "/.sleep"; }
 
 bool isSleepImageFile(const std::string& path) {
@@ -821,7 +825,8 @@ void FileBrowserActivity::loop() {
   const int contentBottom = renderer.getScreenHeight() - metrics.buttonHintsHeight -
                             renderer.getLineHeight(SMALL_FONT_ID) - metrics.verticalSpacing;
   const auto tokens = uiThemeTokens(uiTarget);
-  const int rowStep = uiListRowHeight(tokens, UiListRowType::SingleLine) + tokens.listRowGap;
+  const auto rowType = usesTwoLineFileBrowserRows() ? UiListRowType::WithSubtitle : UiListRowType::SingleLine;
+  const int rowStep = uiListRowHeight(tokens, rowType) + tokens.listRowGap;
   const int listSize = static_cast<int>(entryCount());
   int touchX = 0;
   int touchY = 0;
@@ -1040,7 +1045,11 @@ void FileBrowserActivity::buildListScreen(UiApp::ScreenType& screen) {
   }
 
   fui::ListProps props;
-  const auto rows = configureUiList(props, screen.theme(), screen.body());
+  const bool twoLineRows = usesTwoLineFileBrowserRows();
+  const auto rowType = twoLineRows ? UiListRowType::WithSubtitle : UiListRowType::SingleLine;
+  props.labelText = screen.theme().bodyText;
+  props.labelText.maxLines = twoLineRows ? 2 : 1;
+  const auto rows = configureUiList(props, screen.theme(), screen.body(), rowType);
   visibleRows = rows > 0 ? rows : 1;
   topIndex = scrollListBy(topIndex, 0, visibleRows, static_cast<int>(totalEntries));
   const size_t drawCount = std::min<size_t>(visibleRows, totalEntries - static_cast<size_t>(topIndex));
@@ -1063,7 +1072,7 @@ void FileBrowserActivity::buildListScreen(UiApp::ScreenType& screen) {
     fui::ListItem item;
     item.label = names[i].c_str();
     if (!values[i].empty()) item.value = values[i].c_str();
-    item.icon = listIconFor(UITheme::getFileIcon(entry));
+    item.icon = listIconFor(UITheme::getFileIcon(entry), twoLineRows ? 32 : 24);
     item.actionValue = static_cast<int16_t>(entryIndex);
     items.push_back(item);
   }
