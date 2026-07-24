@@ -2589,6 +2589,19 @@ function isIgnorableSectionSplitNode(node) {
   return node?.nodeType === Node.TEXT_NODE && !(node.textContent || "").trim();
 }
 
+function chunkHasReaderContent(nodes) {
+  const visit = (node, hidden) => {
+    if (node.nodeType === Node.TEXT_NODE) return !hidden && !!(node.textContent || "").trim();
+    if (node.nodeType !== Node.ELEMENT_NODE) return false;
+    const name = localName(node);
+    const nextHidden = hidden || node.hasAttribute("data-AmznRemoved-M8") || ["script", "style", "svg", "metadata"].includes(name);
+    if (nextHidden) return false;
+    if (name === "img") return true;
+    return Array.from(node.childNodes).some((child) => visit(child, nextHidden));
+  };
+  return nodes.some((node) => visit(node, false));
+}
+
 function shouldKeepSectionSplitCluster(node) {
   if (!node || node.nodeType !== Node.ELEMENT_NODE) return false;
   const name = localName(node);
@@ -2623,6 +2636,68 @@ function makeSectionSplitPath(path, partIndex) {
 
 function splitBaseHref(href) {
   return href.replace(SECTION_SPLIT_SUFFIX_RE, "");
+}
+
+function readerSectionIdentity(content) {
+  const doc = new DOMParser().parseFromString(content, "application/xhtml+xml");
+  if (doc.querySelector("parsererror") || !doc.body) return null;
+  const id = doc.body.getAttribute("id") || "";
+  const title = doc.querySelector("title")?.textContent?.trim() || "";
+  return id && title ? `${id}\u0000${title}` : null;
+}
+
+function hasReaderContent(content) {
+  const doc = new DOMParser().parseFromString(content, "application/xhtml+xml");
+  if (doc.querySelector("parsererror") || !doc.body) return true;
+  const body = doc.body.cloneNode(true);
+  body.querySelectorAll("script,style,svg,metadata,[data-AmznRemoved-M8]").forEach((node) => node.remove());
+  return !!(body.textContent || "").trim() || !!body.querySelector("img");
+}
+
+function collapseReaderEmptySpineItems(xhtmlFiles, opfContent, opfPath) {
+  const doc = new DOMParser().parseFromString(opfContent, "application/xml");
+  const redirects = new Map();
+  if (doc.querySelector("parsererror")) return { opfContent, redirects };
+  const manifestById = new Map(Array.from(doc.getElementsByTagNameNS("*", "item")).map((item) => [item.getAttribute("id"), item]));
+  const spine = doc.getElementsByTagNameNS("*", "spine")[0];
+  if (!spine) return { opfContent, redirects };
+  const refs = Array.from(spine.getElementsByTagNameNS("*", "itemref"));
+  for (let index = 0; index + 1 < refs.length; index++) {
+    const item = manifestById.get(refs[index].getAttribute("idref"));
+    const nextItem = manifestById.get(refs[index + 1].getAttribute("idref"));
+    const href = item?.getAttribute("href");
+    const nextHref = nextItem?.getAttribute("href");
+    if (!href || !nextHref) continue;
+    const path = resolvePath(opfPath, decodeHref(href.split("#")[0]));
+    const nextPath = resolvePath(opfPath, decodeHref(nextHref.split("#")[0]));
+    const content = xhtmlFiles[path];
+    const nextContent = xhtmlFiles[nextPath];
+    if (!content || !nextContent || hasReaderContent(content) || !hasReaderContent(nextContent)) continue;
+    const identity = readerSectionIdentity(content);
+    if (!identity || identity !== readerSectionIdentity(nextContent)) continue;
+    redirects.set(path, nextPath);
+    spine.removeChild(refs[index]);
+  }
+  return { opfContent: safeSerialize(doc, opfContent), redirects };
+}
+
+function rewriteCollapsedSpineReferences(content, sourcePath, redirects) {
+  if (redirects.size === 0) return content;
+  const doc = new DOMParser().parseFromString(content, "application/xml");
+  if (doc.querySelector("parsererror")) return content;
+  let changed = false;
+  for (const element of Array.from(doc.getElementsByTagName("*"))) {
+    for (const attribute of ["href", "src", "xlink:href"]) {
+      const value = element.getAttribute(attribute);
+      if (!value || value.startsWith("#") || /^[a-z][a-z0-9+.-]*:/i.test(value)) continue;
+      const [href, fragment = ""] = value.split(/#(.*)/s, 2);
+      const target = redirects.get(resolvePath(sourcePath, decodeHref(href)));
+      if (!target) continue;
+      element.setAttribute(attribute, `${relativeZipPath(sourcePath, target)}${fragment ? `#${fragment}` : ""}`);
+      changed = true;
+    }
+  }
+  return changed ? safeSerialize(doc, content) : content;
 }
 
 function splitLongXhtmlSections(xhtmlFiles, opfContent, opfPath) {
@@ -2706,6 +2781,18 @@ function splitLongXhtmlSections(xhtmlFiles, opfContent, opfPath) {
       if (currentBytes >= SECTION_SPLIT_HARD_BYTE_LIMIT && canBreakAfter) flush();
     }
     flush();
+    const mergedChunks = [];
+    let pending = [];
+    for (const chunk of chunks) {
+      if (chunkHasReaderContent(chunk)) {
+        mergedChunks.push([...pending, ...chunk]);
+        pending = [];
+      } else {
+        pending.push(...chunk);
+      }
+    }
+    if (pending.length && mergedChunks.length) mergedChunks[mergedChunks.length - 1].push(...pending);
+    chunks.splice(0, chunks.length, ...mergedChunks);
 
     if (chunks.length < 2) {
       out[path] = content;
@@ -4134,6 +4221,15 @@ async function convertEpubFile(file, progressCallback) {
     processedXhtmlFiles[xhtmlPath] = t;
   }
 
+  const collapseResult = collapseReaderEmptySpineItems(processedXhtmlFiles, opfContent, opfPath);
+  opfContent = collapseResult.opfContent;
+  for (const [xhtmlPath, content] of Object.entries(processedXhtmlFiles)) {
+    processedXhtmlFiles[xhtmlPath] = rewriteCollapsedSpineReferences(content, xhtmlPath, collapseResult.redirects);
+  }
+  if (collapseResult.redirects.size > 0) {
+    logFix("EPUB sections", `Collapsed ${collapseResult.redirects.size} empty chapter stubs`);
+  }
+
   const sectionSplitResult = splitLongXhtmlSections(processedXhtmlFiles, opfContent, opfPath);
   processedXhtmlFiles = sectionSplitResult.files;
   if (Object.keys(sectionSplitResult.splitSections).length > 0) {
@@ -4156,7 +4252,9 @@ async function convertEpubFile(file, progressCallback) {
     if (fileObj.dir || path === "mimetype") continue;
     const low = path.toLowerCase();
     if (low.endsWith(".ncx") || low.match(/\.(xml|svg)$/)) {
-      extraTextFiles[path] = scrubEpubTextResource(path, await safeReadText(fileObj));
+      extraTextFiles[path] = rewriteCollapsedSpineReferences(
+        scrubEpubTextResource(path, await safeReadText(fileObj)), path, collapseResult.redirects,
+      );
     }
   }
 
