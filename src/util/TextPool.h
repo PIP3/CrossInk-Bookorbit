@@ -14,11 +14,16 @@
 namespace TextPool {
 
 // Append a copy of s[0..len) plus a '\0' to `pool`; return the byte offset of the
-// copy. Manual +256 linear growth avoids std::string's 2x doubling (which would
-// over-reserve and re-fragment on a small heap).
+// copy. Reserve the exact required capacity rounded to 256 bytes, avoiding a
+// too-small +256 request for long entries and repeat reallocations afterwards.
 inline uint16_t append(std::string& pool, const char* s, size_t len) {
   const uint16_t offset = static_cast<uint16_t>(pool.size());
-  if (pool.size() + len + 1 > pool.capacity()) pool.reserve(pool.capacity() + 256);
+  const size_t required = pool.size() + len + 1;
+  if (required > pool.capacity()) {
+    constexpr size_t GROWTH_GRANULARITY = 256;
+    const size_t rounded = required + (GROWTH_GRANULARITY - required % GROWTH_GRANULARITY) % GROWTH_GRANULARITY;
+    pool.reserve(rounded);
+  }
   pool.append(s, len);
   pool.push_back('\0');
   return offset;
