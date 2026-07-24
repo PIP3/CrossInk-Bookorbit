@@ -379,7 +379,7 @@ void DictionaryWordSelectActivity::mergeHyphenatedWords(std::vector<WordSelectNa
   // Cross-page hyphenation: update lookup text when the last word on this page
   // ends with a hyphen and its continuation begins the next page.
   if (!nextPageFirstWord.empty() && !rows.empty()) {
-    int lastWordIdx = rows.back().wordIndices.back();
+    const int lastWordIdx = rows.back().firstWord + rows.back().wordCount - 1;
     const char* lastWord = textPool.data() + words[lastWordIdx].textOffset;
     uint16_t lastLen = words[lastWordIdx].textLen;
     if (lastLen > 0 && utf8EndsWithHyphen(lastWord, lastLen) && lastWord[0] != '-') {
@@ -391,10 +391,6 @@ void DictionaryWordSelectActivity::mergeHyphenatedWords(std::vector<WordSelectNa
       words[lastWordIdx].lookupLen = static_cast<uint16_t>(merged.size());
     }
   }
-
-  rows.erase(
-      std::remove_if(rows.begin(), rows.end(), [](const WordSelectNavigator::Row& r) { return r.wordIndices.empty(); }),
-      rows.end());
 }
 
 void DictionaryWordSelectActivity::loop() {

@@ -11,6 +11,7 @@
 #include <Logging.h>
 #include <Memory.h>
 #include <MemoryBudget.h>
+#include <Utf8.h>
 
 #include <algorithm>
 #include <array>
@@ -89,6 +90,44 @@ constexpr uint8_t BOOK_PROGRESS_ESTIMATE_FLOOR_PERCENT = 90;
 constexpr uint16_t FOOTNOTE_PREVIEW_MAX_PAGES = 3;
 constexpr uint8_t PUBLISHER_PAGE_NUMBER_LEFT_MARGIN_MIN = 15;
 constexpr int PUBLISHER_PAGE_NUMBER_X = 5;
+constexpr uint16_t CLIP_ADVANCE_CODEPOINT_CAPACITY = 256;
+
+struct ClipAdvanceCollector {
+  static constexpr uint8_t STYLE_COUNT = 4;
+  uint32_t codepoints[STYLE_COUNT][CLIP_ADVANCE_CODEPOINT_CAPACITY]{};
+  uint16_t counts[STYLE_COUNT]{};
+  uint8_t truncatedStyles = 0;
+  std::string rtlTokenScratch;
+  std::string rtlVisualScratch;
+
+  void reset() {
+    std::fill(std::begin(counts), std::end(counts), 0);
+    truncatedStyles = 0;
+    rtlTokenScratch.clear();
+    rtlVisualScratch.clear();
+  }
+
+  bool addCodepoint(const uint8_t style, const uint32_t codepoint) {
+    auto& count = counts[style];
+    auto* bucket = codepoints[style];
+    if (std::find(bucket, bucket + count, codepoint) != bucket + count) return false;
+    if (count >= CLIP_ADVANCE_CODEPOINT_CAPACITY) {
+      truncatedStyles |= static_cast<uint8_t>(1U << style);
+      return true;
+    }
+    bucket[count++] = codepoint;
+    return false;
+  }
+
+  bool addLogicalText(const uint8_t style, const char* text) {
+    const auto* p = reinterpret_cast<const unsigned char*>(text);
+    uint32_t codepoint = 0;
+    while ((codepoint = utf8NextCodepoint(&p))) {
+      if (addCodepoint(style, codepoint)) return true;
+    }
+    return false;
+  }
+};
 
 uint32_t pagesCentipages(const float pages) {
   if (pages <= 0.0f) {
@@ -2776,10 +2815,13 @@ void EpubReaderActivity::openWordSelect(bool framebufferContainsPage, int initia
   }
   startActivityForResult(std::move(wordSelect), [this](const ActivityResult&) {
     resumeReadingPaceTimer("dictionary_lookup_return");
+    MemoryBudget::logHeapShape("dict.child_destroyed");
     // Dictionary lookup warms multiple SD-font styles and large definition glyph
     // sets. The child activity has been destroyed before this callback runs, so
     // release those renderer-owned caches before the reader rebuilds its page cache.
     releaseReaderSdFontCachesForLowMemory(renderer, "DICT", "dictionary lookup exit");
+    MemoryBudget::logHeapShape("dict.after_font_release");
+    pendingHeapShapeReaderRedrawStages.fetch_or(HEAP_SHAPE_REDRAW_DICT, std::memory_order_relaxed);
     requestUpdate();
   });
 }
@@ -3306,12 +3348,16 @@ void EpubReaderActivity::startClipSelection() {
   }
 
   ReaderViewportLayout layout{};
-  std::vector<WordRef> words;
+  ClipWordStore wordStore;
   int readerFontId = 0;
   int startPage = 0;
   std::string bookTitle;
   std::string author;
   std::string chapterTitle;
+  std::unique_ptr<ClipAdvanceCollector> advanceCollector;
+  uint8_t clipAdvanceCapLoggedStyles = 0;
+
+  MemoryBudget::logHeapShape("clip.before");
 
   {
     RenderLock lock(*this);
@@ -3322,13 +3368,27 @@ void EpubReaderActivity::startClipSelection() {
 
     layout = computeReaderViewportLayout(renderer, automaticPageTurnActive);
     readerFontId = activeSectionFontId > 0 ? activeSectionFontId : SETTINGS.getReaderFontId();
-    const int lineHeight = renderer.getLineHeight(readerFontId);
     startPage = section->currentPage;
+    if (renderer.isSdCardFont(readerFontId)) {
+      // Four 256-entry buckets (~4.2 KB plus reusable RTL strings) cannot fit
+      // on the reader task stack. They live only while clipping pages are scanned.
+      advanceCollector = makeUniqueNoThrow<ClipAdvanceCollector>();
+      if (!advanceCollector) {
+        LOG_ERR("CLIP", "OOM: clipping advance collector (%u bytes)",
+                static_cast<unsigned>(sizeof(ClipAdvanceCollector)));
+        section->currentPage = startPage;
+        drawToast(renderer, tr(STR_MEMORY_ERROR));
+        requestUpdate();
+        return;
+      }
+    }
+    const int lineHeight = renderer.getLineHeight(readerFontId);
     const int pagesToLoad = std::min(3, section->pageCount - startPage);
     std::array<uint16_t, 3> pageWordCounts{};
     static constexpr size_t CLIP_SELECTION_WORDS_PER_PAGE = 80;
     static constexpr size_t MAX_CLIP_SELECTION_WORDS = 240;
     static constexpr uint32_t CLIP_SELECTION_WORD_RESERVE_HEADROOM = 16U * 1024U;
+    static constexpr size_t CLIP_SELECTION_INITIAL_TEXT_RESERVE = 4U * 1024U;
     const size_t maxSelectableWords =
         std::min(MAX_CLIP_SELECTION_WORDS, static_cast<size_t>(pagesToLoad) * CLIP_SELECTION_WORDS_PER_PAGE);
     const uint32_t wordReserveBytes = static_cast<uint32_t>(maxSelectableWords * sizeof(WordRef));
@@ -3341,31 +3401,92 @@ void EpubReaderActivity::startClipSelection() {
       requestUpdate();
       return;
     }
-    words.reserve(maxSelectableWords);
+    wordStore.words.reserve(maxSelectableWords);
+    wordStore.textPool.reserve(CLIP_SELECTION_INITIAL_TEXT_RESERVE);
     bool wordLimitLogged = false;
+    bool textPoolLimitLogged = false;
+    bool textPoolFull = false;
 
     for (int pageIdx = 0; pageIdx < pagesToLoad; ++pageIdx) {
+      if (textPoolFull) break;
       section->currentPage = startPage + pageIdx;
       auto page = section->loadPage(section->currentPage);
       if (!page) break;
 
+      if (advanceCollector) {
+        advanceCollector->reset();
+        for (const auto& element : page->elements) {
+          if (element->getTag() != TAG_PageLine) continue;
+          const auto& line = static_cast<const PageLine&>(*element);
+          if (!line.getBlock()) continue;
+
+          const auto& block = *line.getBlock();
+          for (uint16_t i = 0; i < block.wordCount(); ++i) {
+            const uint8_t style = static_cast<uint8_t>(block.wordStyle(i)) & 0x03;
+            const char* wordText = block.wordText(i);
+            advanceCollector->addLogicalText(style, wordText);
+            if ((advanceCollector->truncatedStyles & static_cast<uint8_t>(1U << style)) == 0) {
+              if (renderer.collectSdCardFontShapedRtlCodepoints(
+                      wordText, advanceCollector->codepoints[style], advanceCollector->counts[style],
+                      CLIP_ADVANCE_CODEPOINT_CAPACITY, advanceCollector->rtlTokenScratch,
+                      advanceCollector->rtlVisualScratch)) {
+                advanceCollector->truncatedStyles |= static_cast<uint8_t>(1U << style);
+              }
+            }
+          }
+        }
+        for (uint8_t style = 0; style < ClipAdvanceCollector::STYLE_COUNT; ++style) {
+          if ((advanceCollector->truncatedStyles & static_cast<uint8_t>(1U << style)) &&
+              (clipAdvanceCapLoggedStyles & static_cast<uint8_t>(1U << style)) == 0) {
+            LOG_ERR("CLIP", "SD-font advance bucket cap hit for style %u; using glyph-miss fallback", style);
+            clipAdvanceCapLoggedStyles |= static_cast<uint8_t>(1U << style);
+          }
+          if (advanceCollector->counts[style] > 0) {
+            renderer.ensureSdCardFontReady(readerFontId, advanceCollector->codepoints[style],
+                                           advanceCollector->counts[style], false, false,
+                                           static_cast<uint8_t>(1U << style));
+          }
+        }
+        MemoryBudget::logHeapShape("clip.after_advance_batch");
+      }
+
+      // The pool keeps each word NUL-terminated, so estimate the page once
+      // and grow once before collecting it instead of reallocating per word.
+      size_t pageTextBytes = 0;
+      const size_t remainingWords = maxSelectableWords - wordStore.words.size();
+      size_t estimatedWords = 0;
       for (const auto& element : page->elements) {
+        if (estimatedWords >= remainingWords || element->getTag() != TAG_PageLine) continue;
+        const auto& line = static_cast<const PageLine&>(*element);
+        if (!line.getBlock()) continue;
+        const auto& block = *line.getBlock();
+        for (uint16_t i = 0; i < block.wordCount() && estimatedWords < remainingWords; ++i) {
+          const char* wordText = block.wordText(i);
+          if (!hasVisibleWordText(wordText)) continue;
+          const size_t wordBytes = strlen(wordText) + 1;
+          if (wordBytes > ClipWordStore::MAX_TEXT_POOL_BYTES - pageTextBytes) {
+            pageTextBytes = ClipWordStore::MAX_TEXT_POOL_BYTES;
+            break;
+          }
+          pageTextBytes += wordBytes;
+          estimatedWords++;
+        }
+      }
+      const size_t remainingTextBytes = ClipWordStore::MAX_TEXT_POOL_BYTES - wordStore.textPool.size();
+      wordStore.textPool.reserve(wordStore.textPool.size() + std::min(pageTextBytes, remainingTextBytes));
+
+      for (const auto& element : page->elements) {
+        if (textPoolFull) break;
         if (element->getTag() != TAG_PageLine) continue;
         const auto& line = static_cast<const PageLine&>(*element);
         if (!line.getBlock()) continue;
 
         const auto& block = *line.getBlock();
         const uint16_t count = block.wordCount();
-        if (renderer.isSdCardFont(readerFontId)) {
-          for (uint16_t i = 0; i < count; ++i) {
-            const uint8_t styleMask = static_cast<uint8_t>(1u << (static_cast<uint8_t>(block.wordStyle(i)) & 0x03));
-            renderer.ensureSdCardFontReady(readerFontId, block.wordText(i), styleMask);
-          }
-        }
         for (uint16_t i = 0; i < count; ++i) {
           const char* wordText = block.wordText(i);
           if (!hasVisibleWordText(wordText)) continue;
-          if (words.size() >= maxSelectableWords) {
+          if (wordStore.words.size() >= maxSelectableWords) {
             if (!wordLimitLogged) {
               LOG_ERR("CLIP", "Selectable word cap hit (%u words); clipping range truncated",
                       static_cast<unsigned>(maxSelectableWords));
@@ -3388,30 +3509,42 @@ void EpubReaderActivity::startClipSelection() {
           word.h = lineHeight;
           word.pageIdx = pageIdx;
           word.pageWordIndex = pageWordCounts[pageIdx]++;
-          word.text = wordText;
+          if (!wordStore.appendText(word, wordText)) {
+            if (!textPoolLimitLogged) {
+              LOG_ERR("CLIP", "Selectable text pool reached its 64 KB limit; clipping range truncated");
+              textPoolLimitLogged = true;
+            }
+            textPoolFull = true;
+            break;
+          }
           word.style = textStyle;
           word.endsWithInsertedHyphen = block.wordEndsWithInsertedHyphen(i);
           word.lineIsRtl = block.getBlockStyle().isRtl;
-          words.push_back(std::move(word));
+          wordStore.words.push_back(word);
         }
       }
+      MemoryBudget::logHeapShape("clip.after_word_store");
     }
 
     section->currentPage = startPage;
 
-    auto endsWithHyphen = [](const std::string& word) { return !word.empty() && word.back() == '-'; };
+    auto endsWithHyphen = [&wordStore](const WordRef& word) {
+      const char* text = wordStore.text(word);
+      return word.textLength > 0 && text[word.textLength - 1] == '-';
+    };
     const int indentThreshold = renderer.getLineHeight(readerFontId) / 2;
     int previousLineFirstIdx = -1;
-    for (int i = 0; i < static_cast<int>(words.size()); ++i) {
-      const bool newLine = i == 0 || words[i].pageIdx != words[i - 1].pageIdx || words[i].y != words[i - 1].y;
+    for (int i = 0; i < static_cast<int>(wordStore.words.size()); ++i) {
+      const bool newLine = i == 0 || wordStore.words[i].pageIdx != wordStore.words[i - 1].pageIdx ||
+                           wordStore.words[i].y != wordStore.words[i - 1].y;
       if (!newLine) continue;
 
-      const bool byEmSpace = hasEmSpacePrefix(words[i].text);
+      const bool byEmSpace = hasEmSpacePrefix(wordStore.text(wordStore.words[i]));
       const bool byIndent = !byEmSpace && previousLineFirstIdx >= 0 &&
-                            words[i].x > words[previousLineFirstIdx].x + indentThreshold &&
-                            !endsWithHyphen(words[i - 1].text);
+                            wordStore.words[i].x > wordStore.words[previousLineFirstIdx].x + indentThreshold &&
+                            !endsWithHyphen(wordStore.words[i - 1]);
       if (byEmSpace || byIndent) {
-        words[i].paragraphStart = true;
+        wordStore.words[i].paragraphStart = true;
       }
       previousLineFirstIdx = i;
     }
@@ -3424,15 +3557,17 @@ void EpubReaderActivity::startClipSelection() {
     author = epub->getAuthor();
   }
 
-  if (words.empty()) {
+  if (wordStore.words.empty()) {
     LOG_ERR("CLIP", "No selectable words on current EPUB page");
     requestUpdate();
     return;
   }
 
+  advanceCollector.reset();
   pauseReadingPaceTimer("clip_selection");
-  auto clipSelection = makeUniqueNoThrow<ClipSelectionActivity>(
-      renderer, mappedInput, std::move(words), readerFontId, *section, startPage, layout.marginTop, layout.marginLeft);
+  auto clipSelection =
+      makeUniqueNoThrow<ClipSelectionActivity>(renderer, mappedInput, std::move(wordStore), readerFontId, *section,
+                                               startPage, layout.marginTop, layout.marginLeft);
   if (!clipSelection) {
     LOG_ERR("CLIP", "OOM: failed to allocate clip selection activity");
     resumeReadingPaceTimer("clip_selection_alloc_failed");
@@ -3442,6 +3577,7 @@ void EpubReaderActivity::startClipSelection() {
   startActivityForResult(
       std::move(clipSelection), [this, bookTitle = std::move(bookTitle), author = std::move(author),
                                  chapterTitle = std::move(chapterTitle)](const ActivityResult& result) {
+        MemoryBudget::logHeapShape("clip.child_destroyed");
         if (!result.isCancelled) {
           const auto& clip = std::get<ClippingResult>(result.data);
           if (!clip.text.empty()) {
@@ -3466,6 +3602,9 @@ void EpubReaderActivity::startClipSelection() {
           }
         }
         resumeReadingPaceTimer("clip_selection_return");
+        releaseReaderSdFontCachesForLowMemory(renderer, "CLIP", "clipping selection exit");
+        MemoryBudget::logHeapShape("clip.after_font_release");
+        pendingHeapShapeReaderRedrawStages.fetch_or(HEAP_SHAPE_REDRAW_CLIP, std::memory_order_relaxed);
         requestUpdate();
       });
 }
@@ -4797,6 +4936,13 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     const int renderFontId = activeSectionFontId != 0 ? activeSectionFontId : SETTINGS.getReaderFontId();
     renderContents(std::move(p), renderFontId, layout.marginTop, layout.marginRight, layout.marginBottom,
                    layout.marginLeft);
+    const uint8_t heapShapeRedrawStages = pendingHeapShapeReaderRedrawStages.exchange(0, std::memory_order_relaxed);
+    if (heapShapeRedrawStages & HEAP_SHAPE_REDRAW_CLIP) {
+      MemoryBudget::logHeapShape("clip.reader_redrawn");
+    }
+    if (heapShapeRedrawStages & HEAP_SHAPE_REDRAW_DICT) {
+      MemoryBudget::logHeapShape("dict.reader_redrawn");
+    }
     pageShownAtMs = activeFootnotePreview ? 0UL : millis();
   }
   if (!activeFootnotePreview) {

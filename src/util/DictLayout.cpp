@@ -25,6 +25,8 @@ Wrapper::Wrapper(const WrapMetrics& metrics, const Measurer& measure, const Line
       measure_(measure),
       sink_(sink) {
   ipaRuns_.reserve(4);
+  lineTextPool_.reserve(128);
+  lineSegments_.reserve(4);
   startLine(0, false);
 }
 
@@ -39,27 +41,30 @@ int Wrapper::getMixedWidth(const char* text, EpdFontFamily::Style style) {
 }
 
 void Wrapper::flushLine() {
-  if (!currentLine_.segments.empty()) {
-    sink_(std::move(currentLine_));
-    currentLine_ = LayoutLine{};
+  if (!lineSegments_.empty()) {
+    sink_({lineTextPool_.c_str(), lineSegments_.data(), static_cast<uint16_t>(lineSegments_.size()), lineIndent_,
+           lineIsListItem_});
+    lineTextPool_.clear();
+    lineSegments_.clear();
   }
   pendingInterSpanSpace_ = false;
 }
 
 void Wrapper::startLine(uint8_t indent, bool listItem) {
-  currentLine_.indentLevel = indent;
-  currentLine_.isListItem = listItem;
+  lineIndent_ = indent;
+  lineIsListItem_ = listItem;
   currentX_ = indent * indentStep_ + (listItem ? bulletWidth_ : 0);
   pendingInterSpanSpace_ = false;
 }
 
 void Wrapper::appendToLine(const std::string& text, EpdFontFamily::Style style, bool isIpa, int width) {
-  if (!currentLine_.segments.empty() && currentLine_.segments.back().style == style &&
-      currentLine_.segments.back().isIpa == isIpa) {
-    currentLine_.segments.back().text += text;
+  if (!lineSegments_.empty() && lineSegments_.back().style == style && lineSegments_.back().isIpa == isIpa) {
+    lineSegments_.back().length = static_cast<uint16_t>(lineSegments_.back().length + text.size());
   } else {
-    currentLine_.segments.push_back({text, style, isIpa});
+    lineSegments_.push_back(
+        {static_cast<uint16_t>(lineTextPool_.size()), static_cast<uint16_t>(text.size()), style, isIpa});
   }
+  lineTextPool_ += text;
   currentX_ += width;
 }
 
@@ -135,7 +140,7 @@ void Wrapper::onSpan(const StyledSpan& span) {
         ++p;
       }
       if (!*p) {
-        pendingInterSpanSpace_ = hadSpace && !currentLine_.segments.empty();
+        pendingInterSpanSpace_ = hadSpace && !lineSegments_.empty();
         break;
       }
 
@@ -143,7 +148,7 @@ void Wrapper::onSpan(const StyledSpan& span) {
       while (*p && *p != ' ') ++p;
       const std::string tok(tokStart, p - tokStart);
 
-      bool lineIsEmpty = currentLine_.segments.empty();
+      bool lineIsEmpty = lineSegments_.empty();
       bool useSpace = !lineIsEmpty && (hadSpace || pendingInterSpanSpace_);
       pendingInterSpanSpace_ = false;
       const int tokWidth = getMixedWidth(tok.c_str(), style);
@@ -182,8 +187,18 @@ void wrapSpans(const std::vector<StyledSpan>& spans, const WrapMetrics& metrics,
                std::vector<LayoutLine>& out) {
   out.clear();
   out.reserve(32);
-  const LineSink sink{&out, [](void* ctx, LayoutLine&& line) {
-                        static_cast<std::vector<LayoutLine>*>(ctx)->push_back(std::move(line));
+  const LineSink sink{&out, [](void* ctx, const LayoutLineView& line) {
+                        auto& lines = *static_cast<std::vector<LayoutLine>*>(ctx);
+                        LayoutLine owned;
+                        owned.indentLevel = line.indentLevel;
+                        owned.isListItem = line.isListItem;
+                        owned.segments.reserve(line.segmentCount);
+                        for (uint16_t i = 0; i < line.segmentCount; ++i) {
+                          const auto& segment = line.segments[i];
+                          owned.segments.push_back({std::string(line.textPool + segment.offset, segment.length),
+                                                    segment.style, segment.isIpa});
+                        }
+                        lines.push_back(std::move(owned));
                       }};
   wrapSpans(spans, metrics, measure, sink);
 }

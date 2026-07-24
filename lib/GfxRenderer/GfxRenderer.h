@@ -161,6 +161,12 @@ class GfxRenderer {
                              uint8_t styleMask = 0x0F) const;
   void ensureSdCardFontReady(int fontId, const uint32_t* codepoints, uint32_t cpCount, bool includeSpace,
                              bool includeHyphen, uint8_t styleMask = 0x0F) const;
+  // Adds shaped RTL presentation forms to one bounded style bucket. The caller
+  // owns the reusable scratch strings so clipping can batch pages without a
+  // temporary heap allocation for every word.
+  bool collectSdCardFontShapedRtlCodepoints(const char* utf8Text, uint32_t* codepoints, uint16_t& cpCount,
+                                            uint16_t capacity, std::string& tokenScratch,
+                                            std::string& visualScratch) const;
   bool releaseSdCardFontForLowMemory(int fontId, bool preserveAdvanceTable = false) const;
 
   // Orientation control (affects logical width/height and coordinate transforms)

@@ -8,7 +8,7 @@
 
 namespace ClipTextBuilder {
 
-ClippingResult build(const std::vector<WordRef>& words, const uint16_t* wordOrder, int fromOrder, int toOrder,
+ClippingResult build(const ClipWordStore& wordStore, const uint16_t* wordOrder, int fromOrder, int toOrder,
                      int totalOrder, int startPageInSection, int sectionPageCount);
 
 }  // namespace ClipTextBuilder

@@ -74,10 +74,9 @@ const char* resolveVisualText(const char* text, std::string& visualBuffer, BidiU
 // glyph metadata + bitmap into the 8-slot overflow ring, once per glyph.
 // Tokens without RTL lead bytes (0xD6-0xDB) are skipped with a byte scan, so
 // pure-LTR text pays almost nothing.
-void appendShapedRtlTokens(const char* text, std::string& shapedOut) {
+template <typename Sink>
+void forEachShapedRtlToken(const char* text, std::string& tokenScratch, std::string& visualScratch, Sink&& sink) {
   const auto isBreak = [](const char c) { return c == ' ' || c == '\n' || c == '\r' || c == '\t'; };
-  std::string token;
-  std::string visual;
   const char* p = text;
   while (*p) {
     while (*p && isBreak(*p)) ++p;
@@ -89,11 +88,18 @@ void appendShapedRtlTokens(const char* text, std::string& shapedOut) {
       ++p;
     }
     if (!hasRtlBytes) continue;
-    token.assign(start, p - start);
-    if (BidiUtils::applyBidiVisual(token.c_str(), visual, static_cast<int>(BidiUtils::BidiBaseDir::AUTO))) {
-      shapedOut += visual;
+    tokenScratch.assign(start, p - start);
+    if (BidiUtils::applyBidiVisual(tokenScratch.c_str(), visualScratch,
+                                   static_cast<int>(BidiUtils::BidiBaseDir::AUTO))) {
+      sink(visualScratch.c_str());
     }
   }
+}
+
+void appendShapedRtlTokens(const char* text, std::string& shapedOut) {
+  std::string token;
+  std::string visual;
+  forEachShapedRtlToken(text, token, visual, [&shapedOut](const char* shaped) { shapedOut += shaped; });
 }
 }  // namespace
 
@@ -188,6 +194,27 @@ void GfxRenderer::ensureSdCardFontReady(int fontId, const uint32_t* codepoints, 
       LOG_DBG("GFX", "ensureSdCardFontReady: %d glyph(s) not found", missed);
     }
   }
+}
+
+bool GfxRenderer::collectSdCardFontShapedRtlCodepoints(const char* utf8Text, uint32_t* codepoints, uint16_t& cpCount,
+                                                       const uint16_t capacity, std::string& tokenScratch,
+                                                       std::string& visualScratch) const {
+  if (!utf8Text || !codepoints || cpCount >= capacity) return cpCount >= capacity;
+
+  bool truncated = false;
+  forEachShapedRtlToken(utf8Text, tokenScratch, visualScratch, [&](const char* shaped) {
+    const auto* p = reinterpret_cast<const unsigned char*>(shaped);
+    uint32_t cp = 0;
+    while ((cp = utf8NextCodepoint(&p))) {
+      if (std::find(codepoints, codepoints + cpCount, cp) != codepoints + cpCount) continue;
+      if (cpCount >= capacity) {
+        truncated = true;
+        return;
+      }
+      codepoints[cpCount++] = cp;
+    }
+  });
+  return truncated;
 }
 
 bool GfxRenderer::releaseSdCardFontForLowMemory(int fontId, const bool preserveAdvanceTable) const {

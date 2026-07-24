@@ -25,7 +25,7 @@ struct ClipWordStyle {
 
 class ClipSelectionActivity final : public Activity {
  public:
-  ClipSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::vector<WordRef> words, int fontId,
+  ClipSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, ClipWordStore wordStore, int fontId,
                         Section& section, int startPageInSection, int marginTop, int marginLeft);
 
   void onEnter() override;
@@ -40,7 +40,7 @@ class ClipSelectionActivity final : public Activity {
   static constexpr size_t MAX_SAVED_BUFFER_CHUNKS = 16;
   static constexpr size_t MAX_READING_ORDER_WORDS = 240;
 
-  std::vector<WordRef> words;
+  ClipWordStore wordStore;
   int renderFontId = 0;
   Section& section;
   int startPageInSection = 0;

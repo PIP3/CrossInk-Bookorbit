@@ -1,6 +1,6 @@
 #pragma once
+#include <atomic>
 #include <cstdint>
-#include <memory>
 #include <string>
 
 #include "Dictionary.h"
@@ -8,7 +8,7 @@
 #include "WordSelectNavigator.h"
 
 class Activity;
-class DictLookupTask;
+class DictionaryLookupWorker;
 class GfxRenderer;
 class MappedInputManager;
 
@@ -18,7 +18,7 @@ class MappedInputManager;
 // alt-form prompt, not-found popup).  The calling activity delegates input and
 // render to this class whenever isActive() returns true.
 class DictionaryLookupController {
-  friend class DictLookupTask;
+  friend class DictionaryLookupWorker;
 
  public:
   enum class LookupState { Idle, LookingUp, AltFormPrompt, NotFound };
@@ -47,7 +47,8 @@ class DictionaryLookupController {
                              std::string cachePath = "");
   ~DictionaryLookupController();
 
-  // Start a lookup.  Transitions Idle → LookingUp, spawns background task.
+  // Start a lookup. Transitions Idle → LookingUp and notifies the shared
+  // background worker.
   // If recordHistory is true (default), adds the word to lookup history on success.
   void startLookup(const std::string& word, bool recordHistory = true);
 
@@ -58,7 +59,8 @@ class DictionaryLookupController {
   // Transitions to NotFound state.
   void setNotFound();
 
-  // Must be called from the activity's onExit() to kill any running task.
+  // Must be called from the activity's onExit() to cancel and drain any
+  // running shared-worker request before this controller is destroyed.
   void onExit();
 
   // True when the controller owns input/render (LookingUp, AltFormPrompt, NotFound).
@@ -115,12 +117,10 @@ class DictionaryLookupController {
   uint32_t csptEntryCountCached = UINT32_MAX;  // sentinel: not yet read
   bool shouldShowPopup();
 
-  volatile int lookupProgress = 0;
-  volatile bool lookupDone = false;
-  volatile bool lookupCancelled = false;
-  volatile bool lookupCancelRequested = false;
-
-  std::unique_ptr<DictLookupTask> task;
+  std::atomic<int> lookupProgress = 0;
+  std::atomic<bool> lookupDone = false;
+  std::atomic<bool> lookupCancelled = false;
+  std::atomic<bool> lookupCancelRequested = false;
 
   void runLookup();
   void handleLookupFailed();

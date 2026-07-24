@@ -6,6 +6,7 @@
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
+#include <MemoryBudget.h>
 #include <Utf8.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -516,8 +517,11 @@ void DictionaryDefinitionActivity::drawModalFrame() const {
 // definition) and counts all lines to recompute totalPages. Called on entry and
 // on every page turn (Stage 2a: re-parse every turn, both directions).
 void DictionaryDefinitionActivity::loadPage(int page) {
+  MemoryBudget::logHeapShape("dict.page_before");
   layoutLines.clear();
   layoutLines.reserve(static_cast<size_t>(linesPerPage) + 1);
+  layoutSegments.clear();
+  layoutSegments.reserve(static_cast<size_t>(linesPerPage) * 4);
   pagePool_.clear();
   collectTargetPage_ = page;
   collectLineCount_ = 0;
@@ -529,6 +533,7 @@ void DictionaryDefinitionActivity::loadPage(int page) {
   }
 
   totalPages = DictLayout::paginate(collectLineCount_, linesPerPage);
+  MemoryBudget::logHeapShape("dict.page_after");
 }
 
 void DictionaryDefinitionActivity::collectDefinitionAdvanceText(const char* text, const EpdFontFamily::Style style) {
@@ -652,7 +657,7 @@ void DictionaryDefinitionActivity::sizeModalForCurrentPage() {
   bodyStartY = modalY_ + metrics.optionPopupInnerPadding + titleLineHeight + metrics.optionPopupTitleGap;
 }
 
-void DictionaryDefinitionActivity::collectLineSink(void* ctx, DictLayout::LayoutLine&& line) {
+void DictionaryDefinitionActivity::collectLineSink(void* ctx, const DictLayout::LayoutLineView& line) {
   auto* self = static_cast<DictionaryDefinitionActivity*>(ctx);
   const int idx = self->collectLineCount_++;
   const int start = self->collectTargetPage_ * self->linesPerPage;
@@ -663,14 +668,16 @@ void DictionaryDefinitionActivity::collectLineSink(void* ctx, DictLayout::Layout
   PooledLine pooled;
   pooled.indentLevel = line.indentLevel;
   pooled.isListItem = line.isListItem;
-  pooled.segments.reserve(line.segments.size());
-  for (const auto& seg : line.segments) {
+  pooled.firstSegment = static_cast<uint16_t>(self->layoutSegments.size());
+  pooled.segmentCount = line.segmentCount;
+  for (uint16_t i = 0; i < line.segmentCount; ++i) {
+    const auto& seg = line.segments[i];
     PooledSegment ps;
-    ps.offset = TextPool::append(self->pagePool_, seg.text.c_str(), seg.text.size());
-    ps.len = static_cast<uint16_t>(seg.text.size());
+    ps.offset = TextPool::append(self->pagePool_, line.textPool + seg.offset, seg.length);
+    ps.len = seg.length;
     ps.style = seg.style;
     ps.isIpa = seg.isIpa;
-    pooled.segments.push_back(ps);
+    self->layoutSegments.push_back(ps);
   }
   self->layoutLines.push_back(std::move(pooled));
 }
@@ -760,24 +767,34 @@ void DictionaryDefinitionActivity::feedSpanToWrapper(void* ctx, const StyledSpan
 
 void DictionaryDefinitionActivity::wrapPlain() {
   std::vector<IpaTextSpan> ipaRuns;
+  ipaRuns.reserve(4);
   const int screenWidth = renderer.getScreenWidth();
   const int maxWidth = screenWidth - leftPadding - rightPadding;
   const int spaceWidth = renderer.getSpaceWidth(getDefinitionFontId(), EpdFontFamily::REGULAR);
 
   std::string currentWord;
   std::string currentLineText;
+  std::string lineTextPool;
+  std::vector<DictLayout::LayoutSegmentRef> lineSegments;
+  currentWord.reserve(64);
+  currentLineText.reserve(128);
+  lineTextPool.reserve(128);
+  lineSegments.reserve(4);
   int currentLineWidth = 0;
 
   DictLayout::LineSink sink{this, &DictionaryDefinitionActivity::collectLineSink};
   auto flushLine = [&]() {
     if (currentLineText.empty()) return;
-    DictLayout::LayoutLine line;
+    lineTextPool.clear();
+    lineSegments.clear();
     ipaRuns.clear();
     splitIpaRuns(currentLineText.c_str(), ipaRuns);
     for (const auto& run : ipaRuns) {
-      line.segments.push_back({run.text, EpdFontFamily::REGULAR, run.isIpa});
+      lineSegments.push_back({static_cast<uint16_t>(lineTextPool.size()), static_cast<uint16_t>(run.text.size()),
+                              EpdFontFamily::REGULAR, run.isIpa});
+      lineTextPool += run.text;
     }
-    sink(std::move(line));
+    sink({lineTextPool.c_str(), lineSegments.data(), static_cast<uint16_t>(lineSegments.size()), 0, false});
     currentLineText.clear();
     currentLineWidth = 0;
   };
@@ -869,7 +886,8 @@ void DictionaryDefinitionActivity::extractWordsFromLayout() {
       x += renderer.getTextWidth(bodyFontId, kBullet);
     }
 
-    for (const auto& seg : line.segments) {
+    for (uint16_t segmentIdx = 0; segmentIdx < line.segmentCount; ++segmentIdx) {
+      const PooledSegment& seg = layoutSegments[line.firstSegment + segmentIdx];
       const int segFontId = getDefinitionFontId(seg.isIpa);
       const int spaceWidth = renderer.getSpaceWidth(segFontId, seg.style);
       const char* p = pagePool_.data() + seg.offset;
@@ -1223,7 +1241,8 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
         x += renderer.getTextWidth(bodyFontId, kBullet);
       }
 
-      for (const auto& seg : line.segments) {
+      for (uint16_t segmentIdx = 0; segmentIdx < line.segmentCount; ++segmentIdx) {
+        const PooledSegment& seg = layoutSegments[line.firstSegment + segmentIdx];
         const int segFontId = getDefinitionFontId(seg.isIpa);
         const char* segText = pagePool_.data() + seg.offset;
         renderer.drawText(segFontId, x, y, segText, true, seg.style);
