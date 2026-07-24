@@ -337,6 +337,7 @@ static EpdFontFamily::Style styleForSpan(const StyledSpan& span) {
 
 void DictionaryDefinitionActivity::onEnter() {
   Activity::onEnter();
+  definitionFontId_ = SETTINGS.getReaderFontId();
   wrapText();
   requestUpdate();
   // SD write overlaps the e-ink refresh kicked by requestUpdate() on the render task.
@@ -354,7 +355,27 @@ void DictionaryDefinitionActivity::onExit() {
   Activity::onExit();
 }
 
-int DictionaryDefinitionActivity::getDefinitionFontId(bool) const { return SETTINGS.getReaderFontId(); }
+int DictionaryDefinitionActivity::getDefinitionFontId(bool) const {
+  return definitionFontId_ != 0 ? definitionFontId_ : SETTINGS.getReaderFontId();
+}
+
+void DictionaryDefinitionActivity::useBuiltInDefinitionFontFallback() {
+  if (usingBuiltInDefinitionFontFallback_) return;
+
+  const int failedFontId = getDefinitionFontId();
+  definitionFontId_ = SETTINGS.getBuiltInReaderFontId();
+  usingBuiltInDefinitionFontFallback_ = true;
+  LOG_ERR("DICT", "SD font %d failed to prepare dictionary glyphs; using built-in font %d", failedFontId,
+          definitionFontId_);
+
+  // The fallback font has different metrics. Reflow before the next frame so
+  // line breaks, hit targets, and rendered glyphs all use the same font.
+  const int requestedPage = currentPage;
+  wrapText();
+  currentPage = std::min(requestedPage, std::max(0, totalPages - 1));
+  if (currentPage > 0) loadPage(currentPage);
+  if (hasModalBackground()) sizeModalForCurrentPage();
+}
 
 bool DictionaryDefinitionActivity::shouldApproximateDefinitionCodepoint(const uint32_t cp) const {
   if (!shouldSanitizeDefinitionCodepoint(cp)) return false;
@@ -1282,7 +1303,9 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
         renderer.releaseSdCardFontForLowMemory(bodyFontId, /*preserveAdvanceTable=*/true);
         definitionTextRendered = prewarmAndRender();
         if (!definitionTextRendered) {
-          LOG_ERR("DICT", "SD-font definition prewarm retry failed; using on-demand glyph loading");
+          useBuiltInDefinitionFontFallback();
+          requestUpdate();
+          return;
         }
       }
     }

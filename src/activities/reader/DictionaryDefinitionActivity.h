@@ -111,6 +111,10 @@ class DictionaryDefinitionActivity final : public Activity {
   uint32_t definitionOffset_ = 0;
   uint32_t definitionSize_ = 0;
   bool definitionIsHtml_ = false;
+  // Kept per lookup so a failed SD-font prewarm can use the matching built-in
+  // reader font without changing the user's selected font setting.
+  int definitionFontId_ = 0;
+  bool usingBuiltInDefinitionFontFallback_ = false;
 
   // SD-font layout needs advance widths before the .dict stream is opened for
   // wrapping. This fixed 1 KB buffer lives inside the heap-owned activity (not
@@ -188,5 +192,6 @@ class DictionaryDefinitionActivity final : public Activity {
   static void feedSpanToWrapper(void* ctx, const StyledSpan& span);
   bool handleLongPressExitAll(bool enabled);
   int getDefinitionFontId(bool isIpa = false) const;
+  void useBuiltInDefinitionFontFallback();
   int getLineHeight() const;
 };
