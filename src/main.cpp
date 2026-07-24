@@ -107,6 +107,12 @@ SdCardFontSystem sdFontSystem;
 DictionaryRegistry dictionaryRegistry;
 FontCacheManager fontCacheManager(renderer.getFontMap(), renderer.getSdCardFonts());
 static unsigned long allowSleepAt = 0;
+static unsigned long lastX4ProPowerClickAt = 0;
+
+namespace {
+constexpr unsigned long X4PRO_POWER_DOUBLE_CLICK_MS = 500;
+constexpr unsigned long X4PRO_POWER_CLICK_MAX_HOLD_MS = 400;
+}  // namespace
 
 static void logBootHeap(const char* stage) {
   LOG_DBG("BOOTMEM", "%s: free=%u maxAlloc=%u", stage, ESP.getFreeHeap(), ESP.getMaxAllocHeap());
@@ -545,6 +551,35 @@ void putTiltSensorToSleepForDeepSleep() {
     delay(TILT_SLEEP_RETRY_DELAY_MS);
   }
   LOG_ERR("MAIN", "Tilt sensor did not confirm sleep before deep sleep");
+}
+
+bool handleX4ProFrontlightDoubleClick() {
+#ifdef SIMULATOR
+  return false;
+#else
+  if (!BoardConfig::isX4Pro() || !gpio.wasReleased(HalGPIO::BTN_POWER)) {
+    return false;
+  }
+
+  const unsigned long now = millis();
+  if (gpio.getPowerButtonHeldTime() > X4PRO_POWER_CLICK_MAX_HOLD_MS) {
+    lastX4ProPowerClickAt = 0;
+    return false;
+  }
+
+  if (lastX4ProPowerClickAt == 0 || now - lastX4ProPowerClickAt > X4PRO_POWER_DOUBLE_CLICK_MS) {
+    lastX4ProPowerClickAt = now;
+    return false;
+  }
+
+  lastX4ProPowerClickAt = 0;
+  const bool lightOn = !Frontlight.isOn();
+  Frontlight.setOn(lightOn);
+  SETTINGS.frontlightOn = lightOn ? 1 : 0;
+  SETTINGS.saveToFile();
+  LOG_INF("LIGHT", "Frontlight toggled %s by power-button double-click", lightOn ? "on" : "off");
+  return true;
+#endif
 }
 }  // namespace
 
@@ -1025,6 +1060,11 @@ void loop() {
     return;
   }
 #endif
+  // X4 Pro-only frontlight shortcut. Consume the second release so a configured
+  // short-power action does not also run for the click that toggled the light.
+  if (handleX4ProFrontlightDoubleClick()) {
+    return;
+  }
 
   const unsigned long sleepTimeoutMs = SETTINGS.getSleepTimeoutMs();
   if (sleepTimeoutMs > 0 && millis() - lastActivityTime >= sleepTimeoutMs) {
