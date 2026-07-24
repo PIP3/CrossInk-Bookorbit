@@ -50,7 +50,8 @@ class WordSelectNavigator {
 
   struct Row {
     int16_t yPos = 0;
-    std::vector<int> wordIndices;
+    uint16_t firstWord = 0;
+    uint16_t wordCount = 0;
   };
 
   // Bounding rectangle in framebuffer coordinates. Used by the differential
