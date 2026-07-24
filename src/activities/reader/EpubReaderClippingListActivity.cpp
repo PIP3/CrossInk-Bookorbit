@@ -167,19 +167,14 @@ void EpubReaderClippingListActivity::onEnter() {
 }
 
 int EpubReaderClippingListActivity::getDetailTextWidth() const {
-  const auto orientation = renderer.getOrientation();
-  const bool isLandscapeCw = orientation == GfxRenderer::Orientation::LandscapeClockwise;
-  const bool isLandscapeCcw = orientation == GfxRenderer::Orientation::LandscapeCounterClockwise;
-  const int hintGutterWidth = (isLandscapeCw || isLandscapeCcw) ? 30 : 0;
-  return std::max(1, renderer.getScreenWidth() - hintGutterWidth - DETAIL_SIDE_MARGIN * 2);
+  const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+  return std::max(1, safe.width - DETAIL_SIDE_MARGIN * 2);
 }
 
 int EpubReaderClippingListActivity::getDetailLinesPerPage() const {
-  const auto orientation = renderer.getOrientation();
-  const bool isPortraitInverted = orientation == GfxRenderer::Orientation::PortraitInverted;
-  const int hintGutterHeight = isPortraitInverted ? 50 : 0;
+  const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
   const int lineStep = renderer.getLineHeight(UI_10_FONT_ID) + DETAIL_LINE_GAP;
-  const int available = renderer.getScreenHeight() - (DETAIL_START_Y + hintGutterHeight) - DETAIL_BOTTOM_RESERVE;
+  const int available = safe.height - DETAIL_START_Y - DETAIL_BOTTOM_RESERVE;
   return std::max(1, available / std::max(1, lineStep));
 }
 
@@ -345,11 +340,9 @@ void EpubReaderClippingListActivity::loop() {
   if (detailMode) {
     int touchX = 0;
     int touchY = 0;
-    const auto orientation = renderer.getOrientation();
-    const bool isPortraitInverted = orientation == GfxRenderer::Orientation::PortraitInverted;
-    const int contentY = isPortraitInverted ? 50 : 0;
+    const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
     if (!longPressConfirmHandled && mappedInput.isScreenTouchLongPress(touchX, touchY, CLIPPING_DELETE_HOLD_MS) &&
-        touchY >= DETAIL_START_Y + contentY && touchY < renderer.getScreenHeight() - DETAIL_BOTTOM_RESERVE) {
+        touchY >= safe.y + DETAIL_START_Y && touchY < safe.y + safe.height - DETAIL_BOTTOM_RESERVE) {
       mappedInput.suppressNextTouchTap();
       longPressConfirmHandled = true;
       showClippingActionMenu(false);
@@ -506,16 +499,13 @@ void EpubReaderClippingListActivity::buildListScreen(UiApp::ScreenType& screen) 
 void EpubReaderClippingListActivity::renderDetail() {
   rebuildDetailLayoutIfNeeded();
 
-  const auto pageWidth = renderer.getScreenWidth();
-  const auto orientation = renderer.getOrientation();
-  const bool isLandscapeCw = orientation == GfxRenderer::Orientation::LandscapeClockwise;
-  const bool isLandscapeCcw = orientation == GfxRenderer::Orientation::LandscapeCounterClockwise;
-  const bool isPortraitInverted = orientation == GfxRenderer::Orientation::PortraitInverted;
-  const int hintGutterWidth = (isLandscapeCw || isLandscapeCcw) ? 30 : 0;
-  const int contentX = isLandscapeCw ? hintGutterWidth : 0;
-  const int contentWidth = pageWidth - hintGutterWidth;
-  const int hintGutterHeight = isPortraitInverted ? 50 : 0;
-  const int contentY = hintGutterHeight;
+  // Front-button hints move to a different physical edge for each reader
+  // orientation. Keep all detail content inside the same safe area used by
+  // the list view so it cannot render beneath that hint band.
+  const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+  const int contentX = safe.x;
+  const int contentWidth = safe.width;
+  const int contentY = safe.y;
 
   const char* chapter = tr(STR_CLIPPINGS);
   const Clipping* selectedClipping =
@@ -546,7 +536,7 @@ void EpubReaderClippingListActivity::renderDetail() {
     snprintf(pageBuf, sizeof(pageBuf), "%d/%d", detailPage + 1, detailPageCount);
     const int pageLabelWidth = renderer.getTextWidth(SMALL_FONT_ID, pageBuf);
     renderer.drawText(SMALL_FONT_ID, contentX + contentWidth - DETAIL_SIDE_MARGIN - pageLabelWidth,
-                      renderer.getScreenHeight() - 35, pageBuf);
+                      safe.y + safe.height - 35, pageBuf);
   }
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_OPEN), detailPage > 0 ? tr(STR_DIR_UP) : "",
