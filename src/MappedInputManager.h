@@ -48,6 +48,8 @@ class MappedInputManager {
   // up-swipe is the reader-menu gesture rather than the exit-to-home gesture.
   bool hasHomeKey() const { return hasHomeKeyHardware(); }
   bool wasScreenTapped(int& x, int& y) const;
+  // Also reports how long the finger was held before release.
+  bool wasScreenTapped(int& x, int& y, unsigned long& heldMs) const;
   bool isScreenTouchLongPress(int& x, int& y, unsigned long thresholdMs) const;
   bool isInVerticalEdgeGestureZone(int y) const;
   bool wasScreenTouchDown(int& x, int& y) const;
@@ -94,6 +96,7 @@ class MappedInputManager {
   constexpr bool hasTouchHardware() const { return false; }
   constexpr bool hasHomeKey() const { return false; }
   constexpr bool wasScreenTapped(int&, int&) const { return false; }
+  constexpr bool wasScreenTapped(int&, int&, unsigned long&) const { return false; }
   constexpr bool isScreenTouchLongPress(int&, int&, unsigned long) const { return false; }
   constexpr bool isInVerticalEdgeGestureZone(int) const { return false; }
   constexpr bool wasScreenTouchDown(int&, int&) const { return false; }

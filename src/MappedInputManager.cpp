@@ -235,6 +235,12 @@ bool MappedInputManager::wasScreenTapped(int& x, int& y) const {
   return true;
 }
 
+bool MappedInputManager::wasScreenTapped(int& x, int& y, unsigned long& heldMs) const {
+  if (!wasScreenTapped(x, y)) return false;
+  heldMs = touchHeldOverrideMs;
+  return true;
+}
+
 bool MappedInputManager::isScreenTouchLongPress(int& x, int& y, const unsigned long thresholdMs) const {
   unsigned long heldMs = 0;
   return isScreenTouchTapCandidate(x, y, heldMs) && heldMs >= thresholdMs;
