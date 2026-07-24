@@ -34,6 +34,7 @@
 
 ### Fixed
 
+- Reader popups and KOReader Sync's WiFi connection labels now stay correctly oriented when reading upside down.
 - Nearby File Transfer menus now use consistent touch-sized rows, respond to taps, and show the available navigation button hints.
 - EPUB clipping selection no longer clips certain letters with long descenders.
 - Manage Fonts no longer runs out of memory while loading larger font catalogs.
