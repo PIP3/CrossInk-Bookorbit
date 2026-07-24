@@ -122,7 +122,7 @@ void RecentBooksActivity::loop() {
     selectorIndex = static_cast<size_t>(heldIndex);
     mappedInput.suppressNextTouchTap();
     longPressFired = true;
-    showBookActionMenu(selectorIndex);
+    showBookActionMenu(selectorIndex, true);
     return;
   }
 

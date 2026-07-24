@@ -841,9 +841,9 @@ void FileBrowserActivity::loop() {
     longPressConfirmHandled = true;
     const std::string entry = entryNameAt(selectorIndex);
     if (entry.back() == '/') {
-      showDirectoryActionMenu(entry);
+      showDirectoryActionMenu(entry, true);
     } else {
-      showFileActionMenu(entry);
+      showFileActionMenu(entry, true);
     }
     return;
   }

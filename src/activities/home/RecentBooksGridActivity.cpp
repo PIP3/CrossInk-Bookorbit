@@ -376,7 +376,7 @@ void RecentBooksGridActivity::loop() {
       ensureProgressLoaded(selectorIndex);
       mappedInput.suppressNextTouchTap();
       longPressFired = true;
-      showBookActionMenu(selectorIndex);
+      showBookActionMenu(selectorIndex, true);
       return;
     }
   }

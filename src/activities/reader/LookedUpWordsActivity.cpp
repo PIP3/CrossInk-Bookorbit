@@ -10,10 +10,22 @@
 #include "Memory.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "components/UITheme.h"
+#include "components/UIThemeTokens.h"
+#include "components/UiAppHelpers.h"
 #include "fontIds.h"
 #include "util/Dictionary.h"
 #include "util/DictionaryActivityUtils.h"
 #include "util/LookupHistory.h"
+
+namespace fui = freeink::ui;
+
+LookedUpWordsActivity::LookedUpWordsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
+                                             std::string bookCachePath)
+    : Activity("LookedUpWords", renderer, mappedInput),
+      cachePath(std::move(bookCachePath)),
+      controller(renderer, mappedInput, *this, cachePath),
+      uiTarget(makeUiTarget(renderer)),
+      app(uiTarget, uiTarget.deviceContext()) {}
 
 const char* LookedUpWordsActivity::glyphFor(LookupHistory::Status s) {
   switch (s) {
@@ -34,8 +46,65 @@ const char* LookedUpWordsActivity::glyphFor(LookupHistory::Status s) {
 
 void LookedUpWordsActivity::onEnter() {
   Activity::onEnter();
-  entries = LookupHistory::load(cachePath);
+  selectedIndex = 0;
+  topIndex = 0;
+  visibleRows = 1;
+  uiReady = false;
+  app.setTheme(uiThemeTokens(uiTarget));
+  app.on(ACTION_ROW, &LookedUpWordsActivity::onRowEvent, this);
+  app.setScreen(&LookedUpWordsActivity::historyScreen, this);
+  reloadEntries();
   requestUpdate();
+}
+
+void LookedUpWordsActivity::reloadEntries() {
+  entries = LookupHistory::load(cachePath);
+  labels.clear();
+  labels.reserve(entries.size());
+  uiItems.clear();
+  uiItems.reserve(entries.size());
+  for (size_t i = 0; i < entries.size(); ++i) {
+    labels.push_back(std::string(glyphFor(entries[i].status)) + " " + entries[i].word);
+    fui::ListItem item;
+    item.label = labels.back().c_str();
+    item.actionValue = static_cast<int16_t>(i);
+    uiItems.push_back(item);
+  }
+  topIndex = scrollListBy(topIndex, 0, visibleRows, static_cast<int>(entries.size()));
+}
+
+void LookedUpWordsActivity::onRowEvent(const fui::ActionEvent& event, void* user) {
+  auto* self = static_cast<LookedUpWordsActivity*>(user);
+  if (event.value < 0 || event.value >= static_cast<int16_t>(self->entries.size())) return;
+  self->selectedIndex = event.value;
+  self->app.clearTapFlash();
+  self->controller.startLookup(self->entries[self->selectedIndex].word);
+}
+
+void LookedUpWordsActivity::historyScreen(UiApp::ScreenType& screen, void* user) {
+  static_cast<LookedUpWordsActivity*>(user)->buildHistoryScreen(screen);
+}
+
+void LookedUpWordsActivity::buildHistoryScreen(UiApp::ScreenType& screen) {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  screen.setContentMargin(
+      fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing), 0,
+                  static_cast<int16_t>(metrics.buttonHintsHeight + metrics.verticalSpacing), 0});
+
+  fui::ListProps props;
+  props.items = uiItems.data();
+  props.count = static_cast<uint16_t>(uiItems.size());
+  props.selectedIndex = static_cast<int16_t>(selectedIndex);
+  props.topIndex = static_cast<uint16_t>(topIndex);
+  props.action = ACTION_ROW;
+  props.inputMask = fui::InputTouch;
+  props.labelText = screen.theme().bodyText;
+  props.labelText.maxLines = 2;
+  const auto rows = configureUiList(props, screen.theme(), screen.body());
+  visibleRows = rows > 0 ? rows : 1;
+  topIndex = scrollListBy(topIndex, 0, visibleRows, static_cast<int>(entries.size()));
+  props.topIndex = static_cast<uint16_t>(topIndex);
+  screen.list(props);
 }
 
 void LookedUpWordsActivity::onExit() {
@@ -56,7 +125,7 @@ void LookedUpWordsActivity::showDeleteConfirmation(const bool ignoreInitialConfi
   startActivityForResult(std::move(confirmation), [this](const ActivityResult& result) {
     if (!result.isCancelled) {
       LookupHistory::removeRecentAt(cachePath, selectedIndex);
-      entries = LookupHistory::load(cachePath);
+      reloadEntries();
       if (selectedIndex >= static_cast<int>(entries.size())) {
         selectedIndex = std::max(0, static_cast<int>(entries.size()) - 1);
       }
@@ -74,7 +143,7 @@ void LookedUpWordsActivity::loop() {
                                    true, cachePath, controller.getRecordHistory(), controller.getLookupWord(),
                                    DictionaryLookupController::toHistStatus(controller.getFoundStatus())),
                                [this](const ActivityResult& result) {
-                                 entries = LookupHistory::load(cachePath);
+                                 reloadEntries();
                                  if (!result.isCancelled) {
                                    setResult(ActivityResult{});
                                    finish();
@@ -85,7 +154,7 @@ void LookedUpWordsActivity::loop() {
         break;
       }
       case DictionaryLookupController::LookupEvent::NotFoundDismissedBack:
-        entries = LookupHistory::load(cachePath);
+        reloadEntries();
         requestUpdate();
         break;
       case DictionaryLookupController::LookupEvent::NotFoundDismissedDone:
@@ -115,17 +184,42 @@ void LookedUpWordsActivity::loop() {
     return;
   }
 
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight =
-      renderer.getScreenHeight() - metrics.buttonHintsHeight - contentTop - metrics.verticalSpacing;
-  int heldIndex = -1;
-  if (mappedInput.isListItemTouchLongPressed(heldIndex, static_cast<int>(entries.size()), selectedIndex, contentTop,
-                                             contentHeight, false, Dictionary::LONG_PRESS_MS)) {
-    selectedIndex = heldIndex;
-    mappedInput.suppressNextTouchTap();
-    showDeleteConfirmation(false);
+  if (uiReady) {
+    const fui::InputSnapshot snap = touchSnapshotFrom(mappedInput);
+    if (snap.touchPressed || snap.touchReleased) {
+      const auto event = app.route(snap);
+      if (app.invalidated()) requestUpdate();
+      if (event) return;
+    }
+  }
+
+  const auto swipe = mappedInput.wasSwipe();
+  if (swipe == MappedInputManager::SwipeDir::Up || swipe == MappedInputManager::SwipeDir::Down) {
+    const int delta = swipe == MappedInputManager::SwipeDir::Up ? visibleRows : -visibleRows;
+    const int next = scrollListBy(topIndex, delta, visibleRows, static_cast<int>(entries.size()));
+    if (next != topIndex) {
+      topIndex = next;
+      requestUpdate();
+    }
     return;
+  }
+
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  int touchX = 0;
+  int touchY = 0;
+  if (mappedInput.isScreenTouchLongPress(touchX, touchY, Dictionary::LONG_PRESS_MS)) {
+    const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+    const int rowHeight = uiListRowHeight(app.theme(), UiListRowType::SingleLine);
+    const int rowStep = rowHeight + app.theme().listRowGap;
+    const int row = rowStep > 0 ? (touchY - contentTop) / rowStep : -1;
+    const int heldIndex = topIndex + row;
+    if (touchY >= contentTop && row >= 0 && touchY - contentTop - row * rowStep < rowHeight && row < visibleRows &&
+        heldIndex < static_cast<int>(entries.size())) {
+      selectedIndex = heldIndex;
+      mappedInput.suppressNextTouchTap();
+      showDeleteConfirmation(false);
+      return;
+    }
   }
 
   const int totalItems = static_cast<int>(entries.size());
@@ -133,18 +227,22 @@ void LookedUpWordsActivity::loop() {
 
   buttonNavigator.onNextRelease([this, totalItems] {
     selectedIndex = ButtonNavigator::nextIndex(selectedIndex, totalItems);
+    topIndex = followListSelection(selectedIndex, topIndex, visibleRows, totalItems);
     requestUpdate();
   });
   buttonNavigator.onPreviousRelease([this, totalItems] {
     selectedIndex = ButtonNavigator::previousIndex(selectedIndex, totalItems);
+    topIndex = followListSelection(selectedIndex, topIndex, visibleRows, totalItems);
     requestUpdate();
   });
   buttonNavigator.onNextContinuous([this, totalItems, pageItems] {
     selectedIndex = ButtonNavigator::nextPageIndex(selectedIndex, totalItems, pageItems);
+    topIndex = followListSelection(selectedIndex, topIndex, visibleRows, totalItems);
     requestUpdate();
   });
   buttonNavigator.onPreviousContinuous([this, totalItems, pageItems] {
     selectedIndex = ButtonNavigator::previousPageIndex(selectedIndex, totalItems, pageItems);
+    topIndex = followListSelection(selectedIndex, topIndex, visibleRows, totalItems);
     requestUpdate();
   });
 
@@ -180,12 +278,9 @@ void LookedUpWordsActivity::render(RenderLock&&) {
     return;
   }
 
-  const int contentHeight = pageHeight - metrics.buttonHintsHeight - contentTop - metrics.verticalSpacing;
-
-  GUI.drawList(
-      renderer, Rect{0, contentTop, pageWidth, contentHeight}, static_cast<int>(entries.size()), selectedIndex,
-      [this](int i) { return std::string(glyphFor(entries[i].status)) + " " + entries[i].word; }, nullptr, nullptr,
-      nullptr, false);
+  uiReady = false;
+  app.render();
+  uiReady = true;
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);

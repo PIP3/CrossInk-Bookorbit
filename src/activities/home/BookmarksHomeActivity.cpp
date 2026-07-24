@@ -91,7 +91,7 @@ void BookmarksHomeActivity::loop() {
     selectedIndex = touchedIndex;
     mappedInput.suppressNextTouchTap();
     longPressOpenHandled = true;
-    showBookmarkBookActionMenu(selectedIndex);
+    showBookmarkBookActionMenu(selectedIndex, true);
     return;
   }
   if (uiReady) {

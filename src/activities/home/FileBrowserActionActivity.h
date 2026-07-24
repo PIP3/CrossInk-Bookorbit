@@ -57,6 +57,7 @@ class FileBrowserActionActivity final : public Activity {
   std::vector<freeink::ui::ListItem> uiItems;
   int selectedIndex = 0;
   bool ignoreConfirmRelease = false;
+  bool ignoreTouchRelease = false;
   freeink::ui::GfxRendererTarget uiTarget;
   UiApp app;
   bool uiReady = false;

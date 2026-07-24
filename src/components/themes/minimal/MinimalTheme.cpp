@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <Bitmap.h>
 #include <Epub.h>
+#include <FreeInkUIGfxRenderer.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalGPIO.h>
@@ -22,7 +23,9 @@
 #include "activities/reader/GlobalReadingStats.h"
 #include "activities/reader/ReadingStatsUtils.h"
 #include "components/TouchRegistry.h"
+#include "components/UIScale.h"
 #include "components/UITheme.h"
+#include "components/UIThemeTokens.h"
 #include "components/icons/afternoon.h"
 #include "components/icons/book24.h"
 #include "components/icons/cover.h"
@@ -764,6 +767,11 @@ void MinimalTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCo
   const int panelY = panel.y;
   const int panelW = panel.width;
   const int panelH = panel.height;
+  const auto scale = uiScaleSpec();
+  freeink::ui::GfxRendererFrame<1> ui(renderer, scale.smallFontId, scale.bodyFontId, scale.titleFontId);
+  freeink::ui::TextStyle labelText = uiThemeTokens(ui.target).bodyText;
+  labelText.align = freeink::ui::TextAlign::Center;
+  labelText.maxLines = 1;
   renderer.drawRoundedRect(panelX, panelY, panelW, panelH, 1, kMenuPanelRadius, true);
 
   for (int i = 0; i < buttonCount; ++i) {
@@ -781,8 +789,8 @@ void MinimalTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCo
 
     const char* label = buttonLabel != nullptr ? buttonLabel(i) : "";
     if (!label) label = "";
-    const int labelW = renderer.getTextWidth(UI_12_FONT_ID, label);
-    const int labelY = rowY + (kMenuRowHeight - renderer.getLineHeight(UI_12_FONT_ID)) / 2;
-    renderer.drawText(UI_12_FONT_ID, panelX + (panelW - labelW) / 2, labelY, label);
+    ui.target.text(freeink::ui::Rect{static_cast<int16_t>(panelX), static_cast<int16_t>(rowY),
+                                     static_cast<int16_t>(panelW), static_cast<int16_t>(kMenuRowHeight)},
+                   label, labelText);
   }
 }

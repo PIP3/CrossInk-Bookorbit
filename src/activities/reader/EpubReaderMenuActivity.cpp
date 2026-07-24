@@ -17,6 +17,7 @@
 #include "components/UIThemeTokens.h"
 #include "components/UiAppHelpers.h"
 #include "components/icons/home24.h"
+#include "components/icons/reader_menu_icons.h"
 #include "components/icons/settings2.h"
 #include "fontIds.h"
 
@@ -37,6 +38,10 @@ constexpr int tabIconSize = 24;
 constexpr int selectedTabBoxWidth = 50;
 constexpr int selectedTabBoxHeight = 34;
 constexpr int selectedTabBoxRadius = 2;
+constexpr int headerActionHitSize = 44;
+constexpr int headerActionGap = 10;
+constexpr int headerActionRightPadding = 10;
+constexpr int inlineBatteryReserve = 72;
 constexpr int touchReaderMenuRowHeightScale = 2;
 constexpr int touchReaderMenuTabBarHeightScale = 2;
 static_assert(sizeof(icon_home_24_bits) == tabIconSize * ((tabIconSize + 7) / 8),
@@ -165,13 +170,22 @@ void drawReaderMenuBitmapIcon(const GfxRenderer& renderer, const uint8_t bitmap[
   }
 }
 
-void drawSdkIcon(const GfxRenderer& renderer, const freeink::Icon& icon, const int x, const int y) {
-  const auto bitmap = freeink::ui::bitmapFromIcon(icon);
-  freeink::ui::forEachBitmapPixel(
-      freeink::ui::Rect{static_cast<int16_t>(x), static_cast<int16_t>(y), static_cast<int16_t>(icon.w),
-                        static_cast<int16_t>(icon.h)},
-      bitmap, freeink::ui::BitmapMode::Center,
-      [&renderer](const int16_t px, const int16_t py) { renderer.drawPixel(px, py, true); });
+Rect readerMenuHeaderActionRect(const Rect& header, const ThemeMetrics& metrics) {
+  const int actionHeight = std::min(header.height, headerActionHitSize);
+  // Compact headers keep the battery inline at the right edge, so leave its
+  // widest percentage-and-glyph band untouched. Tall detached headers place
+  // Home in the lower title band, as in the touch-menu design.
+  const int rightInset = (metrics.headerBatteryDetached ? 0 : inlineBatteryReserve) + headerActionRightPadding;
+  return Rect{header.x + header.width - rightInset - headerActionHitSize, header.y + header.height - actionHeight,
+              headerActionHitSize, actionHeight};
+}
+
+void drawSdkIcon(fui::GfxRendererTarget& target, const freeink::Icon& icon, const int x, const int y) {
+  // FreeInkUI's target maps logical pixels through the renderer, keeping the
+  // non-pre-rotated SDK assets upright in every reader orientation.
+  target.bitmap(fui::Rect{static_cast<int16_t>(x), static_cast<int16_t>(y), static_cast<int16_t>(icon.w),
+                          static_cast<int16_t>(icon.h)},
+                fui::bitmapFromIcon(icon), fui::BitmapMode::Center);
 }
 
 }  // namespace
@@ -188,7 +202,7 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(
     ReaderOptionsActivity::GlobalSettingsEditCallback endGlobalSettingsEditCallback, void* endGlobalSettingsEditContext)
     : Activity("EpubReaderMenu", renderer, mappedInput),
       menuItems(buildMenuItems(hasFootnotes, hasBookmarks, hasClippings, isCurrentPageBookmarked, isBookCompleted,
-                               showReadingPaceReset, hasDictionary, mappedInput.hasTouchHardware())),
+                               showReadingPaceReset, hasDictionary)),
       title(title),
       pendingOrientation(currentOrientation),
       currentPage(currentPage),
@@ -210,7 +224,7 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(
 
 EpubReaderMenuActivity::TabMenuItems EpubReaderMenuActivity::buildMenuItems(
     bool hasFootnotes, bool hasBookmarks, bool hasClippings, bool isCurrentPageBookmarked, bool isBookCompleted,
-    bool showReadingPaceReset, bool hasDictionary, bool hasTouch) {
+    bool showReadingPaceReset, bool hasDictionary) {
   TabMenuItems items;
   auto& mainItems = items[MAIN_TAB_INDEX];
   auto& bookmarkItems = items[BOOKMARKS_TAB_INDEX];
@@ -218,7 +232,7 @@ EpubReaderMenuActivity::TabMenuItems EpubReaderMenuActivity::buildMenuItems(
 
   mainItems.reserve(9 + (hasFootnotes ? 1u : 0u) + (hasDictionary ? 2u : 0u));
   bookmarkItems.reserve(9 + (hasBookmarks ? 2u : 0u) + (hasClippings ? 1u : 0u));
-  settingsItems.reserve(3 + (showReadingPaceReset ? 1u : 0u) + (hasTouch ? 1u : 0u));
+  settingsItems.reserve(3 + (showReadingPaceReset ? 1u : 0u));
 
   if (hasFootnotes) {
     mainItems.push_back({MenuAction::FOOTNOTES, StrId::STR_FOOTNOTES});
@@ -254,9 +268,6 @@ EpubReaderMenuActivity::TabMenuItems EpubReaderMenuActivity::buildMenuItems(
   settingsItems.push_back({MenuAction::DELETE_STATS, StrId::STR_DELETE_BOOK_STATS});
   settingsItems.push_back({MenuAction::DELETE_CACHE, StrId::STR_DELETE_CACHE});
   settingsItems.push_back({MenuAction::SET_BOOK_DICTIONARY, StrId::STR_BOOK_DICTIONARY});
-  if (hasTouch) {
-    settingsItems.push_back({MenuAction::DISABLE_TOUCHSCREEN, StrId::STR_DISABLE_TOUCHSCREEN});
-  }
   if (showReadingPaceReset) {
     settingsItems.push_back({MenuAction::RESET_READING_PACE, StrId::STR_RESET_READING_PACE});
   }
@@ -346,13 +357,6 @@ bool EpubReaderMenuActivity::activateSelectedItem() {
     return true;
   }
 
-  if (selectedAction == MenuAction::DISABLE_TOUCHSCREEN) {
-    SETTINGS.disableReaderTouchscreen = SETTINGS.disableReaderTouchscreen ? 0 : 1;
-    SETTINGS.saveToFile();
-    requestUpdate();
-    return true;
-  }
-
   if (selectedAction == MenuAction::VIEW_CLIPPINGS) {
     startActivityForResult(std::make_unique<EpubReaderClippingListActivity>(renderer, mappedInput),
                            [this](const ActivityResult& result) {
@@ -384,6 +388,12 @@ bool EpubReaderMenuActivity::activateSelectedItem() {
 bool EpubReaderMenuActivity::handleTouchInput() {
   int tabIndex = -1;
   if (mappedInput.wasTabTapped(tabIndex) && tabIndex >= 0) {
+    if (mappedInput.hasTouchHardware() && tabIndex == static_cast<int>(TOUCH_LOCK_ICON_INDEX)) {
+      SETTINGS.disableReaderTouchscreen = SETTINGS.disableReaderTouchscreen ? 0 : 1;
+      SETTINGS.saveToFile();
+      requestUpdate();
+      return true;
+    }
     if (mappedInput.hasTouchHardware() && tabIndex == static_cast<int>(TOUCH_HOME_ICON_INDEX)) {
       setResult(MenuResult{static_cast<int>(MenuAction::GO_HOME), pendingOrientation, settingsChanged});
       finish();
@@ -408,7 +418,7 @@ void EpubReaderMenuActivity::onRowEvent(const fui::ActionEvent& event, void* use
   self->activateSelectedItem();
 }
 
-void EpubReaderMenuActivity::drawIconTabBar(const Rect rect) const {
+void EpubReaderMenuActivity::drawIconTabBar(const Rect rect) {
   renderer.drawLine(rect.x, rect.y, rect.x + rect.width - 1, rect.y, true);
   renderer.drawLine(rect.x, rect.y + rect.height - 1, rect.x + rect.width - 1, rect.y + rect.height - 1, true);
 
@@ -447,7 +457,7 @@ void EpubReaderMenuActivity::drawIconTabBar(const Rect rect) const {
     }
 #if CROSSINK_APP_CAP_TOUCH
     else {
-      drawSdkIcon(renderer, icon_home_24, iconX, iconY);
+      drawSdkIcon(uiTarget, SETTINGS.disableReaderTouchscreen ? icon_pointer_off_24 : icon_pointer_24, iconX, iconY);
     }
 #endif
   }
@@ -561,8 +571,6 @@ void EpubReaderMenuActivity::buildMenuScreen(UiApp::ScreenType& screen) {
     } else if (menuItem.action == MenuAction::AUTO_PAGE_TURN) {
       if (autoPageTurnActive) values[i] = std::to_string(autoPageTurnIntervalSeconds);
       item.value = values[i].empty() ? nullptr : values[i].c_str();
-    } else if (menuItem.action == MenuAction::DISABLE_TOUCHSCREEN) {
-      item.value = I18N.get(SETTINGS.disableReaderTouchscreen ? StrId::STR_ON : StrId::STR_OFF);
     }
     item.actionValue = static_cast<int16_t>(items.size());
     items.push_back(item);
@@ -596,8 +604,27 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
 
   // Header via GUI.drawHeader (already FreeInkUI-themed) for the battery
   // indicator; the rest of the screen renders through the app.
-  GUI.drawHeader(renderer, Rect{screen.x, screen.y + metrics.topPadding, screen.width, metrics.headerHeight},
-                 title.c_str(), nullptr, true);
+  const Rect headerRect{screen.x, screen.y + metrics.topPadding, screen.width, metrics.headerHeight};
+  const Rect homeRect = readerMenuHeaderActionRect(headerRect, metrics);
+  // BaseTheme left-aligns reader titles while the clock is visible. Reserve
+  // the Home slot from that real title edge, rather than applying the
+  // narrower centered-header calculation.
+  int titleMaxWidth = homeRect.x - headerRect.x - metrics.headerSidePadding - headerActionGap;
+  const bool headerTitleIsCentered = !ReaderUtils::shouldShowTopClockStatusBar() &&
+                                     metrics.headerTitleAlign == static_cast<int>(fui::TextAlign::Center);
+  if (headerTitleIsCentered) {
+    // Centered headers expand equally around the middle, so cap the title at
+    // twice the space between that middle and Home's reserved action slot.
+    const int headerCenterX = headerRect.x + headerRect.width / 2;
+    titleMaxWidth = std::min(titleMaxWidth, 2 * (homeRect.x - headerActionGap - headerCenterX));
+  }
+  titleMaxWidth = std::max(0, titleMaxWidth);
+  const std::string headerTitle =
+      renderer.truncatedText(uiScaleSpec().titleFontId, title.c_str(), titleMaxWidth, EpdFontFamily::BOLD);
+  GUI.drawHeader(renderer, headerRect, headerTitle.c_str(), nullptr, true);
+  TouchRegistry::getInstance().add(homeRect, static_cast<int>(TOUCH_HOME_ICON_INDEX), TouchRegistry::Tab);
+  drawSdkIcon(uiTarget, icon_home_24, homeRect.x + (homeRect.width - tabIconSize) / 2,
+              homeRect.y + (homeRect.height - tabIconSize) / 2);
 
   // Progress summary
   std::string progressLine;

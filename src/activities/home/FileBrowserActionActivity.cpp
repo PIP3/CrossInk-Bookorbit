@@ -36,6 +36,11 @@ void FileBrowserActionActivity::onEnter() {
   Activity::onEnter();
   selectedIndex = 0;
   uiReady = false;
+  // A touch long-press opens this activity while the finger is still down.
+  // Wait for that contact to end so its release cannot activate a menu row.
+  int touchX = 0;
+  int touchY = 0;
+  ignoreTouchRelease = mappedInput.isScreenTouchHeld(touchX, touchY);
   app.setTheme(uiThemeTokens(uiTarget));
   app.on(ACTION_ROW, &FileBrowserActionActivity::onRowEvent, this);
   app.setScreen(&FileBrowserActionActivity::actionMenuScreen, this);
@@ -82,6 +87,13 @@ void FileBrowserActionActivity::buildActionMenuScreen(UiApp::ScreenType& screen)
 }
 
 void FileBrowserActionActivity::loop() {
+  if (ignoreTouchRelease) {
+    if (mappedInput.wasScreenTouchReleased()) {
+      ignoreTouchRelease = false;
+    }
+    return;
+  }
+
   if (ignoreConfirmRelease) {
     const bool confirmReleased = mappedInput.wasReleased(MappedInputManager::Button::Confirm);
     if (confirmReleased || !mappedInput.isPressed(MappedInputManager::Button::Confirm)) {

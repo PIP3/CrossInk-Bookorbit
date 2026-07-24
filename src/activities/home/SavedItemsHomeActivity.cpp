@@ -140,7 +140,7 @@ void SavedItemsHomeActivity::loop() {
     selectedIndex = touchedIndex;
     mappedInput.suppressNextTouchTap();
     longPressOpenHandled = true;
-    showSavedBookActionMenu(selectedIndex, false);
+    showSavedBookActionMenu(selectedIndex, true);
     return;
   }
   if (uiReady) {

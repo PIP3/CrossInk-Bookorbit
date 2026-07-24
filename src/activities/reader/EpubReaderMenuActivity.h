@@ -46,8 +46,7 @@ class EpubReaderMenuActivity final : public Activity {
     VIEW_CLIPPINGS,
     LOOKUP,
     LOOKUP_HISTORY,
-    SET_BOOK_DICTIONARY,
-    DISABLE_TOUCHSCREEN
+    SET_BOOK_DICTIONARY
   };
 
   explicit EpubReaderMenuActivity(
@@ -84,13 +83,14 @@ class EpubReaderMenuActivity final : public Activity {
   static constexpr size_t BOOKMARKS_TAB_INDEX = 1;
   static constexpr size_t SETTINGS_TAB_INDEX = 2;
   static constexpr size_t MENU_TAB_COUNT = 3;
-  static constexpr size_t TOUCH_HOME_ICON_INDEX = MENU_TAB_COUNT;
+  static constexpr size_t TOUCH_LOCK_ICON_INDEX = MENU_TAB_COUNT;
+  static constexpr size_t TOUCH_HOME_ICON_INDEX = MENU_TAB_COUNT + 1;
   static constexpr size_t TOUCH_ICON_COUNT = MENU_TAB_COUNT + 1;
   using TabMenuItems = std::array<std::vector<MenuItem>, MENU_TAB_COUNT>;
 
   static TabMenuItems buildMenuItems(bool hasFootnotes, bool hasBookmarks, bool hasClippings,
                                      bool isCurrentPageBookmarked, bool isBookCompleted, bool showReadingPaceReset,
-                                     bool hasDictionary, bool hasTouch);
+                                     bool hasDictionary);
   [[nodiscard]] const std::vector<MenuItem>& activeMenuItems() const;
   [[nodiscard]] size_t activeTabIndex() const { return static_cast<size_t>(activeTab); }
   void cycleActiveTab();
@@ -98,7 +98,7 @@ class EpubReaderMenuActivity final : public Activity {
   void finishCancelled();
   bool activateSelectedItem();
   bool handleTouchInput();
-  void drawIconTabBar(Rect rect) const;
+  void drawIconTabBar(Rect rect);
 
   // FreeInkApp hosts the menu list (themed rows, touch routing); the header
   // stays on GUI.drawHeader for the battery indicator, and OptionPopup keeps
