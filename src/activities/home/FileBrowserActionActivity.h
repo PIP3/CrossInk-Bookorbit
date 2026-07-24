@@ -1,5 +1,7 @@
 #pragma once
 
+#include <FreeInkApp.h>
+#include <FreeInkUIGfxRenderer.h>
 #include <I18n.h>
 
 #include <string>
@@ -35,20 +37,29 @@ class FileBrowserActionActivity final : public Activity {
   };
 
   FileBrowserActionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string title,
-                            std::vector<MenuItem> items, bool ignoreInitialConfirmRelease = false)
-      : Activity("FileBrowserAction", renderer, mappedInput),
-        title(std::move(title)),
-        items(std::move(items)),
-        ignoreConfirmRelease(ignoreInitialConfirmRelease) {}
+                            std::vector<MenuItem> items, bool ignoreInitialConfirmRelease = false);
 
   void onEnter() override;
   void loop() override;
   void render(RenderLock&&) override;
 
  private:
+  using UiApp = freeink::ui::FreeInkApp<20, 4>;
+  static constexpr freeink::ui::ActionId ACTION_ROW = 1;
+
+  static void actionMenuScreen(UiApp::ScreenType& screen, void* user);
+  static void onRowEvent(const freeink::ui::ActionEvent& event, void* user);
+  void buildActionMenuScreen(UiApp::ScreenType& screen);
+
   ButtonNavigator buttonNavigator;
   std::string title;
   std::vector<MenuItem> items;
+  std::vector<freeink::ui::ListItem> uiItems;
   int selectedIndex = 0;
   bool ignoreConfirmRelease = false;
+  freeink::ui::GfxRendererTarget uiTarget;
+  UiApp app;
+  bool uiReady = false;
+  int contentTop = 0;
+  int contentBottom = 0;
 };
