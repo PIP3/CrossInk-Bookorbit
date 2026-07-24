@@ -17,6 +17,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstring>
 #include <iterator>
 
 #include "AppVersion.h"
@@ -68,6 +69,85 @@ uint8_t enumRawValueForDisplayIndex(const SettingInfo& setting, uint8_t displayI
   }
   return setting.enumRawValues[displayIndex];
 }
+
+// Streams a font-catalog JSON response in bounded pieces. This avoids holding
+// both an ArduinoJson document and its serialized String in the fragmented
+// network heap, and gives WiFi a chance to drain each piece before the next.
+class FontListJsonWriter {
+ public:
+  explicit FontListJsonWriter(WebServer& server) : server_(server) {}
+
+  void append(const char* text) { append(text, strlen(text)); }
+
+  void append(const char* text, size_t textLength) {
+    while (textLength > 0) {
+      if (length_ == sizeof(buffer_)) flush();
+      const size_t copyLength = std::min(textLength, sizeof(buffer_) - length_);
+      memcpy(buffer_ + length_, text, copyLength);
+      length_ += copyLength;
+      text += copyLength;
+      textLength -= copyLength;
+    }
+  }
+
+  void appendUnsigned(unsigned long value) {
+    char number[16];
+    const int length = snprintf(number, sizeof(number), "%lu", value);
+    append(number, static_cast<size_t>(length));
+  }
+
+  void appendJsonString(const char* value) {
+    append("\"");
+    for (const unsigned char* p = reinterpret_cast<const unsigned char*>(value); *p; ++p) {
+      switch (*p) {
+        case '\"':
+          append("\\\"");
+          break;
+        case '\\':
+          append("\\\\");
+          break;
+        case '\b':
+          append("\\b");
+          break;
+        case '\f':
+          append("\\f");
+          break;
+        case '\n':
+          append("\\n");
+          break;
+        case '\r':
+          append("\\r");
+          break;
+        case '\t':
+          append("\\t");
+          break;
+        default:
+          if (*p < 0x20) {
+            static constexpr char HEX[] = "0123456789ABCDEF";
+            const char escaped[] = {'\\', 'u', '0', '0', HEX[*p >> 4], HEX[*p & 0x0F]};
+            append(escaped, sizeof(escaped));
+          } else {
+            append(reinterpret_cast<const char*>(p), 1);
+          }
+          break;
+      }
+    }
+    append("\"");
+  }
+
+  void flush() {
+    if (length_ == 0) return;
+    esp_task_wdt_reset();
+    server_.sendContent(buffer_, length_);
+    length_ = 0;
+  }
+
+ private:
+  static constexpr size_t BUFFER_SIZE = 192;
+  WebServer& server_;
+  char buffer_[BUFFER_SIZE];
+  size_t length_ = 0;
+};
 
 // WebSocket upload state
 HalFile wsUploadFile;
@@ -1788,40 +1868,67 @@ void CrossPointWebServer::handleFontList() const {
   sdFontSystem.ensureRegistry();
   const auto& families = sdFontSystem.registry().getFamilies();
 
-  JsonDocument doc;
-  JsonArray arr = doc["families"].to<JsonArray>();
-  doc["maxFamilies"] = SdCardFontRegistry::MAX_SD_FAMILIES;
+  // Send the catalog as it is enumerated. Building an ArduinoJson document and
+  // then serializing it to a String keeps two complete copies in RAM, which
+  // can exhaust the fragmented network heap with larger font collections.
+  server->setContentLength(CONTENT_LENGTH_UNKNOWN);
+  server->send(200, "application/json", "");
+  FontListJsonWriter json(*server);
+  json.append("{\"families\":[");
 
+  bool firstFamily = true;
   for (const auto& family : families) {
-    JsonObject fObj = arr.add<JsonObject>();
-    fObj["name"] = family.name;
+    if (!firstFamily) json.append(",");
+    firstFamily = false;
 
-    JsonArray sizes = fObj["sizes"].to<JsonArray>();
+    json.append("{\"name\":");
+    json.appendJsonString(family.name.c_str());
+    json.append(",\"sizes\":[");
+
+    bool firstSize = true;
     for (uint8_t s : family.availableSizes()) {
-      sizes.add(s);
+      if (!firstSize) json.append(",");
+      firstSize = false;
+      json.appendUnsigned(s);
     }
+    json.append("],\"files\":[");
 
-    JsonArray files = fObj["files"].to<JsonArray>();
+    bool firstFile = true;
     for (const auto& file : family.files) {
-      JsonObject fileObj = files.add<JsonObject>();
+      if (!firstFile) json.append(",");
+      firstFile = false;
+
       // Extract filename from full path
       const char* name = strrchr(file.path.c_str(), '/');
-      fileObj["name"] = name ? name + 1 : file.path.c_str();
+      json.append("{\"name\":");
+      json.appendJsonString(name ? name + 1 : file.path.c_str());
 
       // Stat the file for size
       HalFile f;
+      unsigned long fileSize = 0;
       if (Storage.openFileForRead("WEB", file.path.c_str(), f)) {
-        fileObj["size"] = static_cast<unsigned long>(f.size());
+        fileSize = static_cast<unsigned long>(f.size());
         f.close();
-      } else {
-        fileObj["size"] = 0;
       }
+
+      json.append(",\"size\":");
+      json.appendUnsigned(fileSize);
+      json.append("}");
+      json.flush();
+      esp_task_wdt_reset();
+      yield();
     }
+    json.append("]}");
+    json.flush();
+    esp_task_wdt_reset();
+    yield();
   }
 
-  String json;
-  serializeJson(doc, json);
-  server->send(200, "application/json", json);
+  json.append("],\"maxFamilies\":");
+  json.appendUnsigned(SdCardFontRegistry::MAX_SD_FAMILIES);
+  json.append("}");
+  json.flush();
+  server->sendContent("");
 }
 
 void CrossPointWebServer::handleFontUploadData() {

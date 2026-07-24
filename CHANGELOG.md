@@ -35,6 +35,7 @@
 
 ### Fixed
 
+- Opening the web Fonts tab now streams the font catalog instead of building the entire response in memory, preventing watchdog resets on large SD-card font collections.
 - The web EPUB optimizer now removes decorative empty chapter stubs and keeps their table-of-contents links pointing at the readable chapter.
 - Reader popups and KOReader Sync's WiFi connection labels now stay correctly oriented when reading upside down.
 - EPUB clipping now batches SD-card font preparation and releases temporary font caches on return, reducing memory fragmentation during repeated selections.
