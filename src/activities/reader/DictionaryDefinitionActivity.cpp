@@ -1194,6 +1194,21 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
   } else {
     renderer.clearScreen();
   }
+
+  // After the picker closes, ActivityManager queues a repaint before the
+  // replacement lookup finishes. Repainting the previous definition here
+  // pushes stale glyph pixels through e-ink's fast-refresh waveform, which
+  // briefly distorts the old page. Keep the restored reader background and
+  // show the existing lookup popup until the new definition is ready.
+  if (dictionarySwitchLookupInProgress && controller.isLookingUp()) {
+    GUI.drawPopup(renderer, tr(STR_DICT_LOOKING_UP));
+    // The popup sits outside the definition modal, so rebuild the reader
+    // background before rendering either the new definition or a failure UI.
+    if (hasModalBackground()) modalBackgroundNeedsRedraw_ = true;
+    nextRenderMode_ = RenderMode::FullPage;
+    prevHighlightIdx_ = -1;
+    return;
+  }
   if (controller.render()) {
     // Controller drew an overlay; framebuffer state is unknown.
     if (hasModalBackground()) modalBackgroundNeedsRedraw_ = true;

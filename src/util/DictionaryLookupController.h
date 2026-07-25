@@ -76,6 +76,10 @@ class DictionaryLookupController {
   // Inform the activity's skipLoopDelay() override.
   bool skipLoopDelay() const { return state == LookupState::LookingUp; }
 
+  // Lets a definition view avoid redrawing stale content while a replacement
+  // dictionary lookup is resolving in the background.
+  bool isLookingUp() const { return state == LookupState::LookingUp; }
+
   // Show the "no word" popup with a 1-second delay, then request update.
   void showNoWordPopup();
 
