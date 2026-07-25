@@ -95,10 +95,13 @@ void ActivityManager::loop() {
   if (currentActivity) {
     mappedInput.setPowerAsConfirmInReaderMode(currentActivity->allowPowerAsConfirmInReaderMode());
 
-    // Frontlight quick panel: global top-edge down-swipe on boards where the
-    // home key freed that edge (X4 Pro). Pushed, so it returns to whatever
-    // was underneath — including mid-book.
-    if (Frontlight.present() && currentActivity->name != "FrontlightPanel" && mappedInput.wasLightPanelGesture()) {
+    // Frontlight quick panel: top-edge down-swipe on home-key boards, except
+    // that the open EPUB reader exposes the same action across the whole page.
+    // Pushed, so it returns to whatever was underneath — including mid-book.
+    const bool lightPanelGesture = currentActivity->usesFullScreenReaderVerticalSwipes()
+                                       ? mappedInput.wasReaderLightPanelGesture()
+                                       : mappedInput.wasLightPanelGesture();
+    if (Frontlight.present() && currentActivity->name != "FrontlightPanel" && lightPanelGesture) {
       pushActivity(std::make_unique<FrontlightPanelActivity>(renderer, mappedInput));
       return;
     }
@@ -204,7 +207,9 @@ bool ActivityManager::handleGlobalHomeGesture() {
     return false;
   }
 
-  if (!mappedInput.wasHomeGesture()) {
+  const bool homeGesture = currentActivity->usesFullScreenReaderVerticalSwipes() ? mappedInput.wasReaderHomeGesture()
+                                                                                   : mappedInput.wasHomeGesture();
+  if (!homeGesture) {
     return false;
   }
 

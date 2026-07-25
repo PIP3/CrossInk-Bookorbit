@@ -565,6 +565,19 @@ bool MappedInputManager::wasMenuGesture() const {
   return hasHomeKeyHardware() ? wasBottomEdgeUpSwipe() : wasTopEdgeDownSwipe();
 }
 
+bool MappedInputManager::wasReaderMenuGesture() const {
+  const SwipeDir direction = wasSwipe();
+  return hasHomeKeyHardware() ? direction == SwipeDir::Up : direction == SwipeDir::Down;
+}
+
+bool MappedInputManager::wasReaderHomeGesture() const {
+  return !hasHomeKeyHardware() && wasSwipe() == SwipeDir::Up;
+}
+
+bool MappedInputManager::wasReaderLightPanelGesture() const {
+  return hasHomeKeyHardware() && wasSwipe() == SwipeDir::Down;
+}
+
 bool MappedInputManager::wasHomeGesture() const {
   if (!hasHomeKeyHardware()) return wasBottomEdgeUpSwipe();
 #ifdef SIMULATOR

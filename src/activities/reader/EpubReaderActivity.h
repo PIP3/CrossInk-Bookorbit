@@ -26,6 +26,8 @@ struct ToastRect {
 
 class EpubReaderActivity final : public Activity {
  public:
+  bool usesFullScreenReaderVerticalSwipes() const override { return true; }
+
   struct ReaderSettingsSnapshot {
     uint8_t fontFamily = 0;
     uint8_t fontSize = 0;

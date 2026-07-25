@@ -89,6 +89,11 @@ class MappedInputManager {
   // Frontlight quick panel: top-edge down-swipe, only on home-key boards where
   // that edge is no longer the menu gesture.
   bool wasLightPanelGesture() const;
+  // Full-screen vertical reader gestures. These preserve each board's existing
+  // action mapping, but intentionally do not apply to reader submenus or lists.
+  bool wasReaderMenuGesture() const;
+  bool wasReaderHomeGesture() const;
+  bool wasReaderLightPanelGesture() const;
   // Reader-menu shortcut: a long press of the capacitive home key.
   bool wasReaderMenuHold() const;
 #else
@@ -125,6 +130,9 @@ class MappedInputManager {
   constexpr bool wasHomeGesture() const { return false; }
   constexpr bool wasMenuGesture() const { return false; }
   constexpr bool wasLightPanelGesture() const { return false; }
+  constexpr bool wasReaderMenuGesture() const { return false; }
+  constexpr bool wasReaderHomeGesture() const { return false; }
+  constexpr bool wasReaderLightPanelGesture() const { return false; }
   constexpr bool wasReaderMenuHold() const { return false; }
 #endif
   bool wasAnyPressed() const;

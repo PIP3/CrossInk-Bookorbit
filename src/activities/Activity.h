@@ -52,6 +52,9 @@ class Activity {
   virtual bool preventAutoSleep() { return false; }
   virtual bool isReaderActivity() const { return false; }
   virtual bool isHomeActivity() const { return false; }
+  // The open book uses its vertical swipe actions across the entire page;
+  // dialogs and lists retain their normal edge or scroll gestures.
+  virtual bool usesFullScreenReaderVerticalSwipes() const { return false; }
   virtual bool allowPowerAsConfirmInReaderMode() const { return false; }
   virtual bool allowGlobalHomeGesture() const { return true; }
   // Let overlays consume the global Home gesture as a dismiss action.
