@@ -233,12 +233,16 @@ Binary layout:
 
 ## `section.bin`
 
-### Version 53
+### Version 54
 
 Each file in `sections/*.bin` stores one laid-out spine section. The header is
 also the cache-busting key: if any layout-affecting setting differs from the
 current reader settings, the section is discarded and rebuilt.
 
+Version 54 adds compact ruby-text annotations to serialized text blocks. Only
+words that begin a ruby group store annotation text; continuation words use a
+dedicated style bit. This keeps books without ruby markup unchanged apart from
+the cache version while avoiding an empty string allocation for every word.
 Version 53 stores each image's EPUB-internal source path so section indexing can
 read only its header and defer full extraction until the page is shown. Version
 52 keeps Guide Dots centered when extra word spacing is enabled. Version 51
@@ -284,7 +288,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 53
+#define EXPECTED_VERSION 54
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
 #define FOOTNOTE_HREF_LEN 96

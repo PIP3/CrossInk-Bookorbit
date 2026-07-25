@@ -100,15 +100,17 @@ void TextBlock::bindArenaPointers() {
 TextBlock::TextBlock(const std::vector<std::string>& words, const std::vector<int16_t>& wordXpos,
                      const std::vector<EpdFontFamily::Style>& wordStyles, const std::vector<uint8_t>& bionicBoundary,
                      const std::vector<uint16_t>& bionicRunOffset, const std::vector<uint16_t>& guideDotXOffset,
-                     const std::vector<uint8_t>& wordFlags, const BlockStyle& blockStyle)
-    : blockStyle(blockStyle) {
+                     const std::vector<uint8_t>& wordFlags, const BlockStyle& blockStyle,
+                     std::vector<std::string> rubyTexts)
+    : blockStyle(blockStyle), rubyTexts(std::move(rubyTexts)) {
   const bool hasBionic = !bionicBoundary.empty();
   const bool hasGuideDots = !guideDotXOffset.empty();
   const bool hasWordFlags = !wordFlags.empty();
   if (words.size() != wordXpos.size() || words.size() != wordStyles.size() || words.size() > MAX_WORDS_PER_TEXT_BLOCK ||
       (hasBionic && (words.size() != bionicBoundary.size() || words.size() != bionicRunOffset.size())) ||
       (!hasBionic && !bionicRunOffset.empty()) || (hasGuideDots && words.size() != guideDotXOffset.size()) ||
-      (hasWordFlags && words.size() != wordFlags.size())) {
+      (hasWordFlags && words.size() != wordFlags.size()) ||
+      (!this->rubyTexts.empty() && words.size() != this->rubyTexts.size())) {
     LOG_ERR("TXB",
             "Construction failed: size mismatch (words=%u, xpos=%u, styles=%u, boundary=%u, runOffset=%u, "
             "dotX=%u, flags=%u)",
@@ -192,6 +194,13 @@ TextBlock::TextBlock(const std::vector<std::string>& words, const std::vector<in
   }
 }
 
+bool TextBlock::hasRuby() const {
+  for (const auto& ruby : rubyTexts) {
+    if (!ruby.empty()) return true;
+  }
+  return false;
+}
+
 void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int x, const int y,
                        const bool foregroundBlack) const {
   if (!isValid) {
@@ -217,7 +226,7 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
       }
     }
 
-    int wordY = y;
+    int wordY = y + getRubyShift(ascender);
     if ((currentStyle & EpdFontFamily::SUP) != 0) {
       wordY -= ascender * 2 / 5;
     } else if ((currentStyle & EpdFontFamily::SUB) != 0) {
@@ -241,6 +250,22 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
       }
     } else {
       renderer.drawText(fontId, wordX, wordY, word, foregroundBlack, currentStyle, baseDir);
+    }
+
+    if (i < rubyTexts.size() && !rubyTexts[i].empty() && (currentStyle & EpdFontFamily::RUBY_CONTINUE) == 0) {
+      uint16_t groupWords = 1;
+      while (i + groupWords < numWords && (wordStyle(i + groupWords) & EpdFontFamily::RUBY_CONTINUE) != 0) {
+        ++groupWords;
+      }
+      int groupWidth = 0;
+      for (uint16_t j = 0; j < groupWords; ++j) {
+        groupWidth += renderer.getTextAdvanceX(fontId, wordText(i + j), wordStyle(i + j));
+      }
+      const int rubyWidth = renderer.getTextAdvanceX(fontId, rubyTexts[i].c_str(), EpdFontFamily::SUP);
+      const int unclampedX = wordX + (groupWidth - rubyWidth) / 2;
+      const int rubyX = std::max(0, std::min(unclampedX, renderer.getScreenWidth() - rubyWidth));
+      renderer.drawText(fontId, rubyX, wordY - ascender, rubyTexts[i].c_str(), foregroundBlack, EpdFontFamily::SUP,
+                        baseDir);
     }
 
     const uint16_t dotOffset = guideDotXOffset(i);
@@ -320,6 +345,16 @@ bool TextBlock::serialize(HalFile& file) const {
       LOG_ERR("TXB", "Serialization failed: arena write (%u bytes)", static_cast<uint32_t>(size));
       return false;
     }
+  }
+
+  uint16_t rubyCount = 0;
+  for (uint16_t i = 0; i < numWords && i < rubyTexts.size(); ++i) {
+    if (!rubyTexts[i].empty()) ++rubyCount;
+  }
+  if (!serialization::tryWritePod(file, rubyCount)) return false;
+  for (uint16_t i = 0; i < numWords && i < rubyTexts.size(); ++i) {
+    if (rubyTexts[i].empty()) continue;
+    if (!serialization::tryWritePod(file, i) || !serialization::tryWriteString(file, rubyTexts[i])) return false;
   }
 
   return serialization::tryWritePod(file, blockStyle.alignment) &&
@@ -407,6 +442,22 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(HalFile& file) {
         return nullptr;
       }
     }
+  }
+
+  uint16_t rubyCount = 0;
+  if (!serialization::tryReadPod(file, rubyCount) || rubyCount > wc) {
+    LOG_ERR("TXB", "Deserialization failed: invalid ruby count %u", rubyCount);
+    return nullptr;
+  }
+  if (rubyCount > 0) block->rubyTexts.resize(wc);
+  for (uint16_t i = 0; i < rubyCount; ++i) {
+    uint16_t wordIndex = 0;
+    std::string ruby;
+    if (!serialization::tryReadPod(file, wordIndex) || wordIndex >= wc || !serialization::tryReadString(file, ruby)) {
+      LOG_ERR("TXB", "Deserialization failed: invalid ruby annotation");
+      return nullptr;
+    }
+    block->rubyTexts[wordIndex] = std::move(ruby);
   }
 
   BlockStyle& blockStyle = block->blockStyle;

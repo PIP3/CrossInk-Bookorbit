@@ -436,6 +436,11 @@ bool isWordCharacter(uint32_t cp) {
   return true;
 }
 
+bool isCjkIdeograph(const uint32_t cp) {
+  return (cp >= 0x4E00 && cp <= 0x9FFF) || (cp >= 0x3400 && cp <= 0x4DBF) || (cp >= 0xF900 && cp <= 0xFAFF) ||
+         (cp >= 0x20000 && cp <= 0x3FFFF);
+}
+
 }  // namespace
 
 void ParsedText::reserveTokenCapacity(const size_t additionalTokens) {
@@ -443,7 +448,7 @@ void ParsedText::reserveTokenCapacity(const size_t additionalTokens) {
   if (words.capacity() >= requiredSize && wordStyles.capacity() >= requiredSize &&
       wordContinues.capacity() >= requiredSize && wordNoSpaceBefore.capacity() >= requiredSize &&
       wordBionicBoundary.capacity() >= requiredSize && wordGuideDotBefore.capacity() >= requiredSize &&
-      wordBackgroundBlack.capacity() >= requiredSize) {
+      wordBackgroundBlack.capacity() >= requiredSize && (rubyTexts.empty() || rubyTexts.capacity() >= requiredSize)) {
     return;
   }
 
@@ -459,6 +464,7 @@ void ParsedText::reserveTokenCapacity(const size_t additionalTokens) {
   wordBionicBoundary.reserve(newCapacity);
   wordGuideDotBefore.reserve(newCapacity);
   wordBackgroundBlack.reserve(newCapacity);
+  if (!rubyTexts.empty()) rubyTexts.reserve(newCapacity);
 }
 
 void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle, const bool underline,
@@ -492,12 +498,14 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
     wordGuideDotBefore.push_back(guideDotBeforeNextToken);
     guideDotBeforeNextToken = false;
     wordBackgroundBlack.push_back(backgroundBlack ? TextBlock::WORD_FLAG_BACKGROUND_BLACK : 0);
+    if (!rubyTexts.empty()) {
+      rubyTexts.push_back("");
+    }
   };
 
   bool effectiveAttachToPrevious = attachToPrevious;
   bool effectiveNoSpaceBefore = false;
-  if (attachToPrevious && !words.empty() &&
-      hasCjkBreakOpportunityBetween(lastCodepoint(words.back()), firstCodepoint(word))) {
+  if (!words.empty() && hasCjkBreakOpportunityBetween(lastCodepoint(words.back()), firstCodepoint(word))) {
     effectiveAttachToPrevious = false;
     effectiveNoSpaceBefore = true;
   }
@@ -606,6 +614,39 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
   }
 }
 
+void ParsedText::setRubyForWordAt(size_t index, const std::string& ruby) {
+  if (index >= words.size()) return;
+  if (rubyTexts.size() <= index) {
+    rubyTexts.resize(words.size());
+  }
+  rubyTexts[index] = ruby;
+}
+
+void ParsedText::setRubyGroupAt(size_t startIndex, size_t count, const std::string& ruby) {
+  if (startIndex >= words.size()) return;
+  if (rubyTexts.size() <= startIndex) {
+    rubyTexts.resize(words.size());
+  }
+  rubyTexts[startIndex] = ruby;
+  for (size_t i = 1; i < count; i++) {
+    size_t idx = startIndex + i;
+    if (idx >= words.size()) break;
+    if (rubyTexts.size() <= idx) {
+      rubyTexts.resize(words.size());
+    }
+    rubyTexts[idx] = "";
+    wordStyles[idx] =
+        static_cast<EpdFontFamily::Style>(static_cast<uint8_t>(wordStyles[idx]) | EpdFontFamily::RUBY_CONTINUE);
+    wordContinues[idx] = true;  // Prevent page breaker from splitting the Group Ruby!
+  }
+}
+
+void ParsedText::ensureRubyCapacity() {
+  if (rubyTexts.capacity() < words.capacity()) {
+    rubyTexts.reserve(words.capacity());
+  }
+}
+
 int ParsedText::resolveFirstLineIndent(const bool isFirstLine, const GfxRenderer& renderer, const int fontId) const {
   const bool naturalAlign =
       blockStyle.alignment == CssTextAlign::Justify || blockStyle.alignment == CssTextAlign::None ||
@@ -670,6 +711,9 @@ bool ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
     }
     if (styleMask == 0) styleMask = 0x01;  // defensive: regular only
     renderer.ensureSdCardFontReady(fontId, words, hyphenationEnabled, styleMask);
+    if (!rubyTexts.empty()) {
+      renderer.ensureSdCardFontReady(fontId, rubyTexts, false, 0x01);
+    }
     if (guideReadingEnabled) {
       renderer.ensureSdCardFontReady(fontId, GUIDE_DOT_UTF8, 0x01);
     }
@@ -719,6 +763,10 @@ bool ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
     wordBionicBoundary.erase(wordBionicBoundary.begin(), wordBionicBoundary.begin() + consumed);
     wordGuideDotBefore.erase(wordGuideDotBefore.begin(), wordGuideDotBefore.begin() + consumed);
     wordBackgroundBlack.erase(wordBackgroundBlack.begin(), wordBackgroundBlack.begin() + consumed);
+    if (!rubyTexts.empty()) {
+      const size_t rtConsumed = std::min(consumed, rubyTexts.size());
+      rubyTexts.erase(rubyTexts.begin(), rubyTexts.begin() + rtConsumed);
+    }
   }
   if (lineCount > 0) {
     // A partial flush leaves the remaining words in this same logical
@@ -743,6 +791,99 @@ bool ParsedText::calculateWordWidths(ArenaVector<uint16_t>& wordWidths, const Gf
   for (size_t i = 0; i < words.size(); ++i) {
     if (!wordWidths.push_back(measureTokenWidth(renderer, fontId, words[i], wordStyles[i], wordBionicBoundary[i]))) {
       return false;
+    }
+  }
+
+  // Adjust widths for ruby groups to comply with JLReq standards
+  if (!rubyTexts.empty()) {
+    const int ascender = renderer.getFontAscenderSize(fontId);
+    const int maxOverhang = ascender / 2;  // Maximum overhang over non-ideographic characters (Kana, punctuation, etc.)
+
+    struct RubyGroupInfo {
+      size_t start;
+      size_t count;
+      int baseWidth;
+      int rubyWidth;
+      int leftOverlap;
+      int rightOverlap;
+    };
+
+    std::vector<RubyGroupInfo> groups;
+    for (size_t i = 0; i < words.size(); ++i) {
+      if (i < rubyTexts.size() && !rubyTexts[i].empty() && (wordStyles[i] & EpdFontFamily::RUBY_CONTINUE) == 0) {
+        RubyGroupInfo g;
+        g.start = i;
+        g.baseWidth = wordWidths[i];
+        g.count = 1;
+        while (i + g.count < words.size() && (wordStyles[i + g.count] & EpdFontFamily::RUBY_CONTINUE) != 0) {
+          g.baseWidth += wordWidths[i + g.count];
+          g.count++;
+        }
+        g.rubyWidth = renderer.getTextAdvanceX(fontId, rubyTexts[i].c_str(), EpdFontFamily::SUP);
+        g.leftOverlap = std::max(0, (g.rubyWidth - g.baseWidth) / 2);
+        g.rightOverlap = std::max(0, (g.rubyWidth - g.baseWidth) / 2);
+        groups.push_back(g);
+        i += g.count - 1;
+      }
+    }
+
+    // Adjust widths based on adjacent characters and group-to-group spacing
+    for (size_t gIdx = 0; gIdx < groups.size(); ++gIdx) {
+      const auto& g = groups[gIdx];
+
+      // 1. Preceding character (left overhang)
+      if (g.start > 0) {
+        const uint32_t cpPrev = lastCodepoint(words[g.start - 1]);
+        if (isCjkIdeograph(cpPrev)) {
+          wordWidths[g.start] += g.leftOverlap;
+        } else {
+          wordWidths[g.start] += std::max(0, g.leftOverlap - maxOverhang);
+        }
+      }
+
+      // 2. Succeeding character (right overhang / group collision)
+      const size_t nextIdx = g.start + g.count;
+      if (nextIdx < words.size()) {
+        if (gIdx + 1 < groups.size() && groups[gIdx + 1].start == nextIdx) {
+          // Adjacent ruby groups: compute collision
+          const auto& nextG = groups[gIdx + 1];
+          const int collision = g.rightOverlap + nextG.leftOverlap;
+          if (collision > 0) {
+            wordWidths[g.start + g.count - 1] += collision;
+          }
+        } else {
+          // Regular character following: check if it's Kanji
+          const uint32_t cpNext = firstCodepoint(words[nextIdx]);
+          if (isCjkIdeograph(cpNext)) {
+            wordWidths[g.start + g.count - 1] += g.rightOverlap;
+          } else {
+            wordWidths[g.start + g.count - 1] += std::max(0, g.rightOverlap - maxOverhang);
+          }
+
+          // Check if there is another ruby group further ahead separated only by non-ideographs
+          if (gIdx + 1 < groups.size()) {
+            const auto& nextG = groups[gIdx + 1];
+            bool onlyNonIdeographsInBetween = true;
+            int gapWidth = 0;
+            for (size_t k = nextIdx; k < nextG.start; ++k) {
+              const uint32_t cp = firstCodepoint(words[k]);
+              if (isCjkIdeograph(cp)) {
+                onlyNonIdeographsInBetween = false;
+                break;
+              }
+              gapWidth += wordWidths[k];
+            }
+            if (onlyNonIdeographsInBetween) {
+              const int allowedRight = std::min(g.rightOverlap, maxOverhang);
+              const int allowedLeft = std::min(nextG.leftOverlap, maxOverhang);
+              const int touchOverlap = allowedRight + allowedLeft - gapWidth;
+              if (touchOverlap > 0) {
+                wordWidths[g.start + g.count - 1] += touchOverlap;
+              }
+            }
+          }
+        }
+      }
     }
   }
 
@@ -838,7 +979,40 @@ bool ParsedText::computeLineBreaks(Arena& scratchArena, const GfxRenderer& rende
       if (j > static_cast<size_t>(i)) {
         gap = naturalGaps[j];
       }
-      currlen += wordWidths[j] + gap;
+
+      // Calculate extraStartOffset for the first word on the line (i) (protect left margin)
+      int extraStartOffset = 0;
+      if (j == i && !rubyTexts.empty() && i < rubyTexts.size() && !rubyTexts[i].empty() &&
+          (wordStyles[i] & EpdFontFamily::RUBY_CONTINUE) == 0) {
+        int groupWordCount = 1;
+        while (i + groupWordCount < totalWordCount &&
+               (wordStyles[i + groupWordCount] & EpdFontFamily::RUBY_CONTINUE) != 0) {
+          groupWordCount++;
+        }
+        int groupActualWidth = 0;
+        for (int k = 0; k < groupWordCount; ++k) {
+          groupActualWidth += measureWordWidth(renderer, fontId, words[i + k], wordStyles[i + k]);
+        }
+        const int rubyWidth = renderer.getTextAdvanceX(fontId, rubyTexts[i].c_str(), EpdFontFamily::SUP);
+        if (rubyWidth > groupActualWidth) {
+          const int leftOverlap = (rubyWidth - groupActualWidth) / 2;
+          const int ascender = renderer.getFontAscenderSize(fontId);
+          const int maxOverhang = ascender / 2;
+
+          int expansion_added = 0;
+          if (i > 0) {
+            const uint32_t cpPrev = lastCodepoint(words[i - 1]);
+            if (isCjkIdeograph(cpPrev)) {
+              expansion_added = leftOverlap;
+            } else {
+              expansion_added = std::max(0, leftOverlap - maxOverhang);
+            }
+          }
+          extraStartOffset = leftOverlap - expansion_added;
+        }
+      }
+
+      currlen += wordWidths[j] + gap + (j == i ? extraStartOffset : 0);
 
       if (currlen > effectivePageWidth) {
         break;
@@ -847,6 +1021,51 @@ bool ParsedText::computeLineBreaks(Arena& scratchArena, const GfxRenderer& rende
       // Cannot break after word j if the next word attaches to it (continuation group)
       if (nextTokenAttaches(j, totalWordCount)) {
         continue;
+      }
+
+      // Calculate extraEndOffset if we break after word j (protect right margin)
+      int extraEndOffset = 0;
+      if (!rubyTexts.empty() && j < rubyTexts.size()) {
+        bool isLastOfGroup = false;
+        size_t leaderIdx = j;
+        while (true) {
+          if (!rubyTexts[leaderIdx].empty() && (wordStyles[leaderIdx] & EpdFontFamily::RUBY_CONTINUE) == 0) {
+            isLastOfGroup = true;
+            break;
+          }
+          if (leaderIdx == 0 || (wordStyles[leaderIdx] & EpdFontFamily::RUBY_CONTINUE) == 0) {
+            break;
+          }
+          leaderIdx--;
+        }
+
+        if (isLastOfGroup && (j + 1 == totalWordCount || (wordStyles[j + 1] & EpdFontFamily::RUBY_CONTINUE) == 0)) {
+          int groupActualWidth = 0;
+          for (size_t k = leaderIdx; k <= j; ++k) {
+            groupActualWidth += measureWordWidth(renderer, fontId, words[k], wordStyles[k]);
+          }
+          const int rubyWidth = renderer.getTextAdvanceX(fontId, rubyTexts[leaderIdx].c_str(), EpdFontFamily::SUP);
+          if (rubyWidth > groupActualWidth) {
+            const int rightOverlap = (rubyWidth - groupActualWidth) / 2;
+            const int ascender = renderer.getFontAscenderSize(fontId);
+            const int maxOverhang = ascender / 2;
+
+            int expansion_added = 0;
+            if (j + 1 < totalWordCount) {
+              const uint32_t cpNext = firstCodepoint(words[j + 1]);
+              if (isCjkIdeograph(cpNext)) {
+                expansion_added = rightOverlap;
+              } else {
+                expansion_added = std::max(0, rightOverlap - maxOverhang);
+              }
+            }
+            extraEndOffset = rightOverlap - expansion_added;
+          }
+        }
+      }
+
+      if (currlen + extraEndOffset > effectivePageWidth) {
+        continue;  // Cannot split here as it would overflow the right margin
       }
 
       int cost;
@@ -1052,6 +1271,9 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
   wordBionicBoundary.insert(wordBionicBoundary.begin() + wordIndex + 1, remainderBionic.boundary);
   wordGuideDotBefore.insert(wordGuideDotBefore.begin() + wordIndex + 1, false);
   wordBackgroundBlack[wordIndex + 1] &= TextBlock::WORD_FLAG_BACKGROUND_BLACK;
+  if (wordIndex + 1 <= rubyTexts.size()) {
+    rubyTexts.insert(rubyTexts.begin() + wordIndex + 1, "");
+  }
 
   // Continuation flag handling after splitting a word into prefix + remainder.
   //
@@ -1075,6 +1297,9 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
   // wordContinues[wordIndex] is intentionally left unchanged — the prefix keeps its original attachment.
   wordContinues.insert(wordContinues.begin() + wordIndex + 1, false);
   wordNoSpaceBefore.insert(wordNoSpaceBefore.begin() + wordIndex + 1, false);
+  if (!rubyTexts.empty()) {
+    rubyTexts.insert(rubyTexts.begin() + wordIndex + 1, "");
+  }
 
   // Update cached widths to reflect the new prefix/remainder pairing.
   wordWidths[wordIndex] = static_cast<uint16_t>(chosenWidth);
@@ -1176,6 +1401,12 @@ bool ParsedText::extractLine(Arena& scratchArena, const size_t breakIndex, const
   lineBionicBoundary.clear();
   lineGuideDotBefore.clear();
   lineBackgroundBlack.clear();
+  std::vector<std::string> lineRubyTexts;
+  if (!rubyTexts.empty() && lastBreakAt < rubyTexts.size()) {
+    lineRubyTexts.resize(lineWordCount);
+    const size_t copyCount = std::min(lineBreak, rubyTexts.size()) - lastBreakAt;
+    std::copy(rubyTexts.begin() + lastBreakAt, rubyTexts.begin() + lastBreakAt + copyCount, lineRubyTexts.begin());
+  }
   lineWords.reserve(lineWordCount);
   lineWordStyles.reserve(lineWordCount);
   lineWordWidths.reserve(lineWordCount);
@@ -1239,6 +1470,8 @@ bool ParsedText::extractLine(Arena& scratchArena, const size_t breakIndex, const
   int activeJustifyExtra = justifyExtra;
 
   if (willReorder) {
+    std::vector<std::string> reorderedRubyTexts;
+    if (!lineRubyTexts.empty()) reorderedRubyTexts.reserve(visualOrderScratch.size());
     reorderedWordsScratch.clear();
     reorderedStylesScratch.clear();
     reorderedWidthsScratch.clear();
@@ -1263,6 +1496,7 @@ bool ParsedText::extractLine(Arena& scratchArena, const size_t breakIndex, const
       reorderedWidthsScratch.push_back(lineWordWidths[src]);
       reorderedBionicBoundaryScratch.push_back(lineBionicBoundary[src]);
       reorderedBackgroundBlackScratch.push_back(lineBackgroundBlack[src]);
+      if (!lineRubyTexts.empty()) reorderedRubyTexts.push_back(std::move(lineRubyTexts[src]));
 
       bool continues = false;
       bool guideDotBefore = false;
@@ -1353,6 +1587,7 @@ bool ParsedText::extractLine(Arena& scratchArena, const size_t breakIndex, const
     lineBionicBoundary.swap(reorderedBionicBoundaryScratch);
     lineGuideDotBefore.swap(reorderedGuideDotBeforeScratch);
     lineBackgroundBlack.swap(reorderedBackgroundBlackScratch);
+    if (!lineRubyTexts.empty()) lineRubyTexts.swap(reorderedRubyTexts);
     lineWordCount = lineWords.size();
   } else {
     // Standard LTR/RTL positioning loop when no visual reordering is needed
@@ -1487,8 +1722,9 @@ bool ParsedText::extractLine(Arena& scratchArena, const size_t breakIndex, const
     }
   }
 
-  auto block = std::make_shared<TextBlock>(outWords, outXPos, outStyles, outBoundaries, outRunOffsets,
-                                           outGuideDotXOffset, outBackgroundBlack, blockStyle);
+  auto block =
+      std::make_shared<TextBlock>(outWords, outXPos, outStyles, outBoundaries, outRunOffsets, outGuideDotXOffset,
+                                  outBackgroundBlack, blockStyle, std::move(lineRubyTexts));
   if (!block->valid()) {
     LOG_ERR("PTX", "Dropping line: TextBlock arena allocation failed");
     return false;

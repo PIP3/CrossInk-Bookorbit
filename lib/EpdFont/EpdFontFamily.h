@@ -15,6 +15,7 @@ class EpdFontFamily {
     SUP = 16,
     SUB = 32,
     SMALL_CAPS = 64,
+    RUBY_CONTINUE = 128,
   };
   struct GlyphData {
     const EpdFontData* fontData;

@@ -229,6 +229,7 @@ void DictionaryWordSelectActivity::extractWords(std::vector<WordSelectNavigator:
     if (!block) continue;
 
     const uint16_t wordCount = block->wordCount();
+    const int rubyShift = block->getRubyShift(renderer.getFontAscenderSize(SETTINGS.getReaderFontId()));
 
     // Per-line gap = xPos[1] - xPos[0] - firstWordWidth. Justified blocks
     // stretch the gap (ParsedText.cpp:514-553 adds justifyExtra), so a
@@ -255,7 +256,7 @@ void DictionaryWordSelectActivity::extractWords(std::vector<WordSelectNavigator:
 
     for (uint16_t wordIndex = 0; wordIndex < wordCount; ++wordIndex) {
       int16_t screenX = line->xPos + block->wordXpos(wordIndex) + marginLeft;
-      int16_t screenY = line->yPos + marginTop;
+      int16_t screenY = line->yPos + marginTop + rubyShift;
       const std::string wordText(block->wordText(wordIndex), block->wordTextLen(wordIndex));
       const EpdFontFamily::Style wordStyle = block->wordStyle(wordIndex);
       const uint8_t bionicBoundary = block->bionicBoundary(wordIndex);

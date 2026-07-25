@@ -70,7 +70,7 @@ static constexpr const char* const ITALIC_TAGS[] = {"i", "em"};
 static constexpr const char* const UNDERLINE_TAGS[] = {"u", "ins"};
 static constexpr const char* const STRIKETHROUGH_TAGS[] = {"s", "strike", "del"};
 static constexpr const char* const IMAGE_TAGS[] = {"img", "image"};
-static constexpr const char* const SKIP_TAGS[] = {"head"};
+static constexpr const char* const SKIP_TAGS[] = {"head", "rp"};
 
 bool isWhitespace(const char c) { return c == ' ' || c == '\r' || c == '\n' || c == '\t'; }
 
@@ -151,6 +151,34 @@ static bool tokenEqualsIgnoreCase(const char* value, const char* token, const si
     if (asciiLower(value[i]) != asciiLower(token[i])) return false;
   }
   return true;
+}
+
+std::string trimAndNormalize(const std::string& str) {
+  if (str.empty()) return "";
+  size_t start = 0;
+  while (start < str.size() && isWhitespace(str[start])) {
+    start++;
+  }
+  if (start == str.size()) return "";
+  size_t end = str.size() - 1;
+  while (end > start && isWhitespace(str[end])) {
+    end--;
+  }
+  std::string result;
+  result.reserve(end - start + 1);
+  bool inSpace = false;
+  for (size_t i = start; i <= end; i++) {
+    if (isWhitespace(str[i])) {
+      if (!inSpace) {
+        result.push_back(' ');
+        inSpace = true;
+      }
+    } else {
+      result.push_back(str[i]);
+      inSpace = false;
+    }
+  }
+  return result;
 }
 
 bool matches(const char* tag_name, const char* const* possible_tags, size_t count) {
@@ -1941,6 +1969,25 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     }
   }
 
+  // Ruby tag handling
+  if (strcmp(name, "ruby") == 0) {
+    self->flushPartWordBuffer();
+    self->inRuby = true;
+    self->rubyStartWordIndex = self->currentTextBlock ? static_cast<int>(self->currentTextBlock->size()) : 0;
+    if (self->currentTextBlock) {
+      self->currentTextBlock->ensureRubyCapacity();
+    }
+    self->rubyTextBuffer.clear();
+    self->depth += 1;
+    return;
+  }
+  if (strcmp(name, "rt") == 0) {
+    self->flushPartWordBuffer();
+    self->collectingRubyText = true;
+    self->depth += 1;
+    return;
+  }
+
   if (matches(name, SKIP_TAGS, std::size(SKIP_TAGS))) {
     // start skip
     self->skipCurrentElement();
@@ -2369,6 +2416,12 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
     return;
   }
 
+  // Collect ruby text instead of normal word processing
+  if (self->collectingRubyText) {
+    self->rubyTextBuffer.append(s, len);
+    return;
+  }
+
   // Collect footnote link display text (for the number label)
   // Skip whitespace and brackets to normalize noterefs like "[1]" → "1"
   if (self->insideFootnoteLink) {
@@ -2563,6 +2616,41 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
     return;
   }
 
+  // Ruby text: </rt> distributes ruby to base words, </ruby> resets ruby state
+  if (strcmp(name, "rt") == 0) {
+    self->collectingRubyText = false;
+    if (self->inRuby && self->currentTextBlock) {
+      const int currentWordCount = static_cast<int>(self->currentTextBlock->size());
+      const int baseWordCount = currentWordCount - self->rubyStartWordIndex;
+      std::string cleanRuby = trimAndNormalize(self->rubyTextBuffer);
+      if (!cleanRuby.empty()) {
+        if (baseWordCount > 0) {
+          self->currentTextBlock->setRubyGroupAt(self->rubyStartWordIndex, baseWordCount, cleanRuby);
+          self->rubyStartWordIndex = currentWordCount;
+        } else if (self->rubyStartWordIndex > 0) {
+          int leaderIdx = self->rubyStartWordIndex - 1;
+          while (leaderIdx >= 0 &&
+                 (self->currentTextBlock->getWordStyleAt(leaderIdx) & EpdFontFamily::RUBY_CONTINUE) != 0) {
+            leaderIdx--;
+          }
+          if (leaderIdx >= 0) {
+            std::string prevRuby = self->currentTextBlock->getRubyTextAt(leaderIdx);
+            self->currentTextBlock->setRubyForWordAt(leaderIdx, prevRuby + cleanRuby);
+          }
+        }
+      }
+    }
+    self->rubyTextBuffer.clear();
+    self->depth -= 1;
+    return;
+  }
+  if (strcmp(name, "ruby") == 0 && self->inRuby) {
+    self->inRuby = false;
+    self->rubyStartWordIndex = -1;
+    self->rubyTextBuffer.clear();
+    self->depth -= 1;
+    return;
+  }
   // Check if any style state will change after we decrement depth
   // If so, we MUST flush the partWordBuffer with the CURRENT style first
   // Note: depth hasn't been decremented yet, so we check against (depth - 1)
@@ -3084,7 +3172,7 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
     return;
   }
 
-  const int lineHeight = effectiveLineHeight();
+  const int lineHeight = effectiveLineHeight() + line->getRubyShift(renderer.getFontAscenderSize(fontId));
 
   if (!currentPage) {
     if (!startNewPage("line layout")) {

@@ -23,6 +23,7 @@ class ParsedText {
   std::vector<uint8_t> wordBionicBoundary;  // UTF-8 byte offset where the regular suffix starts; 0 = no split
   std::vector<bool> wordGuideDotBefore;     // true = virtual guide dot belongs between previous token and this one
   std::vector<uint8_t> wordBackgroundBlack;
+  std::vector<std::string> rubyTexts;
   bool extraParagraphSpacing;
   bool forceParagraphIndents;
   bool hyphenationEnabled;
@@ -90,6 +91,13 @@ class ParsedText {
 
   void addWord(std::string word, EpdFontFamily::Style fontStyle, bool underline = false, bool attachToPrevious = false,
                bool backgroundBlack = false);
+  void setRubyForWordAt(size_t index, const std::string& ruby);
+  void setRubyGroupAt(size_t startIndex, size_t count, const std::string& ruby);
+  EpdFontFamily::Style getWordStyleAt(size_t index) const {
+    return index < wordStyles.size() ? wordStyles[index] : EpdFontFamily::REGULAR;
+  }
+  std::string getRubyTextAt(size_t index) const { return index < rubyTexts.size() ? rubyTexts[index] : std::string(); }
+  void ensureRubyCapacity();
   void setBlockStyle(const BlockStyle& blockStyle) { this->blockStyle = blockStyle; }
   BlockStyle& getBlockStyle() { return blockStyle; }
   size_t size() const { return words.size(); }
