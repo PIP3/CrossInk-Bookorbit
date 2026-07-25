@@ -55,6 +55,9 @@ const StrId SettingsActivity::categoryNames[categoryCount] = {StrId::STR_CAT_DIS
 namespace {
 constexpr int systemVersionFooterSideMargin = 20;
 constexpr int systemVersionFooterBottomInset = 15;
+// Leave a clear line between the right-aligned battery group and date, then
+// reserve the same space before the tab band.
+constexpr int roundedRaffHeaderDateYOffset = 23;
 constexpr size_t controlsParentBaseCount = 3;
 constexpr size_t controlsPowerMinCount = 2;
 constexpr size_t controlsPowerMaxCount = 3;
@@ -62,6 +65,14 @@ constexpr size_t controlsFrontButtonCount = 6;
 constexpr size_t controlsSideButtonCount = 3;
 constexpr int touchSettingsRowHeightScale = 2;
 constexpr int touchSettingsTabBarHeightScale = 2;
+
+int settingsHeaderDateOffset(const ThemeMetrics& metrics) {
+  if (SETTINGS.uiTheme != CrossPointSettings::UI_THEME::ROUNDEDRAFF) return 0;
+
+  // Keep the date on the same shifted status baseline as RoundedRaff's Home
+  // battery group.
+  return roundedRaffHeaderDateYOffset + std::max(0, (metrics.homeTopPadding - metrics.headerHeight) / 2);
+}
 
 int settingsTabBarTop(const ThemeMetrics& metrics) { return CompactHeader::headerBottomY(metrics); }
 
@@ -1074,8 +1085,9 @@ void SettingsActivity::settingsScreen(UiApp::ScreenType& screen, void* user) {
 void SettingsActivity::buildSettingsScreen(UiApp::ScreenType& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   // Content below the GUI.drawHeader band, above the button hints.
-  screen.setContentMargin(fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight), 0,
-                                      static_cast<int16_t>(metrics.buttonHintsHeight), 0});
+  screen.setContentMargin(
+      fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight + settingsHeaderDateOffset(metrics)),
+                  0, static_cast<int16_t>(metrics.buttonHintsHeight), 0});
 
   // Category tabs. The selected pill dims to a dither when the selection is
   // down in the list (the legacy focused/unfocused tab distinction).
@@ -1105,9 +1117,21 @@ void SettingsActivity::buildSettingsScreen(UiApp::ScreenType& screen) {
   // with an underline. The 1px rule under the band is always there.
   const bool tabsFocused = selectedSettingIndex == 0;
   const bool borderedTabs = metrics.tabBarAppearance == ThemeTabBarAppearance::BorderedText;
+  const bool roundedRaffTabs = SETTINGS.uiTheme == CrossPointSettings::UI_THEME::ROUNDEDRAFF;
   tabProps.divider = true;
   fui::StyleSet tabStyles;
-  if (!borderedTabs) {
+  if (roundedRaffTabs) {
+    // RoundedRaff's tabs have always sat on white, with the selected pill
+    // turning dark gray after focus moves into the settings list.
+    tabStyles.explicitlySet = true;
+    tabStyles.normal.foreground = fui::Paint::solid(fui::Color::Black);
+    tabStyles.selected.background = fui::Paint::solid(tabsFocused ? fui::Color::Black : fui::Color::DarkGray);
+    tabStyles.selected.foreground = fui::Paint::solid(fui::Color::White);
+    tabStyles.selected.radius = 18;
+    tabStyles.focused = tabStyles.selected;
+    tabStyles.active = tabStyles.selected;
+    tabProps.tabStyles = tabStyles;
+  } else if (!borderedTabs) {
     tabStyles.explicitlySet = true;
     tabStyles.normal.foreground = fui::Paint::solid(fui::Color::Black);
     if (tabsFocused) {
@@ -1126,7 +1150,7 @@ void SettingsActivity::buildSettingsScreen(UiApp::ScreenType& screen) {
     tabProps.tabStyles = tabStyles;
   }
   const fui::Rect tabRect = screen.takeTop(tabBand);
-  if (!borderedTabs && tabsFocused) {
+  if (!roundedRaffTabs && !borderedTabs && tabsFocused) {
     screen.target().fill(tabRect, fui::Paint::dither(fui::Color::LightGray));
   }
   drawUiTabBar(screen, tabProps, tabRect, metrics.tabBarAppearance);
@@ -1152,10 +1176,12 @@ void SettingsActivity::buildSettingsScreen(UiApp::ScreenType& screen) {
   items.reserve(settings.size());
   for (size_t i = 0; i < settings.size(); i++) {
     values[i] = settingValueText(settings[i]);
+    const bool isSectionHeader = settings[i].type == SettingType::SECTION_HEADER;
     fui::ListItem item;
-    item.label = I18N.get(settings[i].nameId);
-    if (!values[i].empty()) item.value = values[i].c_str();
-    if (settings[i].type == SettingType::SECTION_HEADER) item.state = fui::StateDisabled;
+    item.label = isSectionHeader ? uiListSectionHeaderLabel(values[i], I18N.get(settings[i].nameId))
+                                 : I18N.get(settings[i].nameId);
+    if (!isSectionHeader && !values[i].empty()) item.value = values[i].c_str();
+    item.isHeader = isSectionHeader;
     item.actionValue = static_cast<int16_t>(i);
     items.push_back(item);
   }
@@ -1171,6 +1197,7 @@ void SettingsActivity::buildSettingsScreen(UiApp::ScreenType& screen) {
   // File Browser, reader menus, and the other list-style screens.
   props.labelText = screen.theme().bodyText;
   props.labelText.maxLines = 2;
+  configureUiListSectionHeaders(props, screen.theme());
   const auto rows = configureUiList(props, screen.theme(), screen.body());
   visibleRows = rows > 0 ? rows : 1;
   topIndex = scrollListBy(topIndex, 0, visibleRows, settingsCount);  // clamp to range
@@ -1189,7 +1216,8 @@ void SettingsActivity::render(RenderLock&&) {
   // Header via GUI.drawHeader (already FreeInkUI-themed) for the battery
   // indicator; the rest of the screen renders through the app.
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_SETTINGS_TITLE));
-  drawHeaderDate(renderer, pageWidth, metrics);
+  drawHeaderDateAtLineBottom(renderer, pageWidth,
+                             headerDateLineBottomY(renderer, metrics) + settingsHeaderDateOffset(metrics));
 
   uiReady = false;
   app.render();

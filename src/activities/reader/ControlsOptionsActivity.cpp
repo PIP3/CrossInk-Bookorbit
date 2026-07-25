@@ -316,10 +316,12 @@ void ControlsOptionsActivity::buildOptionsScreen(UiApp::ScreenType& screen) {
       values[i] = std::to_string(SETTINGS.*(setting.valuePtr));
     }
 
+    const bool isSectionHeader = setting.type == SettingType::SECTION_HEADER;
     fui::ListItem item;
-    item.label = I18N.get(setting.nameId);
-    if (!values[i].empty()) item.value = values[i].c_str();
-    if (setting.type == SettingType::SECTION_HEADER) item.state = fui::StateDisabled;
+    item.label =
+        isSectionHeader ? uiListSectionHeaderLabel(values[i], I18N.get(setting.nameId)) : I18N.get(setting.nameId);
+    if (!isSectionHeader && !values[i].empty()) item.value = values[i].c_str();
+    item.isHeader = isSectionHeader;
     item.actionValue = static_cast<int16_t>(i);
     items.push_back(item);
   }
@@ -333,6 +335,7 @@ void ControlsOptionsActivity::buildOptionsScreen(UiApp::ScreenType& screen) {
   props.valueInset = 8;
   props.labelText = screen.theme().bodyText;
   props.labelText.maxLines = 2;
+  configureUiListSectionHeaders(props, screen.theme());
   const auto rows = configureUiList(props, screen.theme(), screen.body());
   visibleRows = rows > 0 ? rows : 1;
   topIndex = scrollListBy(topIndex, 0, visibleRows, settingsCount);

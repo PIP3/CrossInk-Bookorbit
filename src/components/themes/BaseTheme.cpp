@@ -14,6 +14,7 @@
 #include <cstdio>
 #include <string>
 
+#include "CrossPointSettings.h"
 #include "I18n.h"
 #include "RecentBooksStore.h"
 #include "activities/reader/BookReadingStats.h"
@@ -27,6 +28,7 @@
 namespace {
 constexpr int homeMenuMargin = 20;
 constexpr int homeMarginTop = 30;
+constexpr int roundedRaffHeaderClockYOffset = 3;
 
 }  // namespace
 
@@ -447,6 +449,9 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
   props.sidePadding = tokens.headerSidePadding;
   const bool batteryLeft = metrics.headerBatterySide == 1;
   const bool batteryDetached = metrics.headerBatteryDetached;
+  const bool roundedRaffCompactHeader = !readerContext &&
+                                        SETTINGS.uiTheme == CrossPointSettings::UI_THEME::ROUNDEDRAFF &&
+                                        rect.height != metrics.homeTopPadding;
   if (batteryDetached) {
     const int titleLineHeight = ui.target.lineHeight(fui::GfxRendererTarget::FONT_TITLE);
     const int titleTop = static_cast<int>(band.height) - tokens.headerUnderline - tokens.spaceMd - titleLineHeight;
@@ -468,7 +473,10 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
   fui::BatteryIndicatorProps battery;
   battery.percent = static_cast<uint8_t>(percentage > 100 ? 100 : percentage);
   battery.charging = gpio.isUsbConnected();
-  battery.label = showBatteryPercentage ? percentText : nullptr;
+  // Lyra's icon needs a small optical nudge below its percentage. Keep that
+  // app-specific adjustment here instead of extending the shared SDK API.
+  const bool drawDetachedBatteryLabel = batteryDetached && showBatteryPercentage;
+  battery.label = drawDetachedBatteryLabel ? nullptr : (showBatteryPercentage ? percentText : nullptr);
   battery.text = tokens.smallText;
   battery.glyphWidth = static_cast<int16_t>(metrics.batteryWidth);
   battery.glyphHeight = static_cast<int16_t>(metrics.batteryHeight);
@@ -476,11 +484,29 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
   const int16_t batteryEdgeInset = batteryDetached ? 12 : tokens.headerSidePadding;
   const int16_t batteryX = batteryLeft ? static_cast<int16_t>(band.x + batteryEdgeInset)
                                        : static_cast<int16_t>(band.right() - batteryEdgeInset - batteryReserve);
-  const int16_t batteryH = batteryDetached ? static_cast<int16_t>(metrics.batteryBarHeight) : band.height;
-  fui::batteryIndicator(ui.frame, fui::Rect{batteryX, band.y, batteryReserve, batteryH}, battery);
+  // RoundedRaff's Home header is taller than ordinary headers. Shift compact
+  // headers to its battery baseline; Home already has that extra height.
+  const int16_t batteryY = static_cast<int16_t>(
+      band.y + (roundedRaffCompactHeader ? std::max(0, (metrics.homeTopPadding - metrics.headerHeight) / 2) : 0));
+  // Detached Lyra-family indicators share the Home clock's top inset instead
+  // of being vertically centered in the much taller title/status lane.
+  const int16_t batteryH =
+      batteryDetached ? static_cast<int16_t>(metrics.batteryHeight + 2 * homeHeaderTopInset) : band.height;
+  const int16_t batteryIconY = static_cast<int16_t>(batteryY + (drawDetachedBatteryLabel ? 2 : 0));
+  fui::batteryIndicator(ui.frame, fui::Rect{batteryX, batteryIconY, batteryReserve, batteryH}, battery);
+  if (drawDetachedBatteryLabel) {
+    const int iconLeft = batteryX + batteryReserve - metrics.batteryWidth - batteryNubWidth;
+    const int textX = iconLeft - batteryPercentSpacing - renderer.getTextWidth(SMALL_FONT_ID, percentText);
+    const int textY = batteryY + std::max(0, (batteryH - renderer.getLineHeight(SMALL_FONT_ID)) / 2);
+    renderer.drawText(SMALL_FONT_ID, textX, textY, percentText);
+  }
 
-  drawTopStatusBarClock(renderer, rect.y, nullptr, readerContext,
-                        title == nullptr && !readerContext ? homeHeaderClockTextYOffset(renderer) : 0);
+  const int clockYOffset = title == nullptr && !readerContext
+                               ? homeHeaderClockTextYOffset(renderer)
+                               : (!readerContext && SETTINGS.uiTheme == CrossPointSettings::UI_THEME::ROUNDEDRAFF
+                                      ? roundedRaffHeaderClockYOffset
+                                      : 0);
+  drawTopStatusBarClock(renderer, rect.y, nullptr, readerContext, clockYOffset);
 }
 
 void BaseTheme::drawSubHeader(const GfxRenderer& renderer, Rect rect, const char* label, const char* rightLabel) const {
@@ -722,7 +748,10 @@ void BaseTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
                                const std::function<UIIcon(int index)>& rowIcon) const {
   (void)rowIcon;
   constexpr int maxVisibleItems = 7;
-  const int pageItems = maxVisibleItems;
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const int rowStep = metrics.menuRowHeight + metrics.menuSpacing;
+  const int availableHeight = std::max(0, rect.height - metrics.verticalSpacing);
+  const int pageItems = std::clamp((availableHeight + metrics.menuSpacing) / rowStep, 1, maxVisibleItems);
   const int totalPages = (buttonCount + pageItems - 1) / pageItems;
 
   const int pageStartIndex = (selectedIndex / pageItems) * pageItems;
@@ -733,9 +762,8 @@ void BaseTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
     constexpr int margin = 15;  // Offset from right edge
 
     const int centerX = rect.x + rect.width - indicatorWidth / 2 - margin;
-    const int menuHeight = maxVisibleItems * (BaseMetrics::values.menuRowHeight + BaseMetrics::values.menuSpacing) -
-                           BaseMetrics::values.menuSpacing;
-    const int indicatorTop = rect.y + BaseMetrics::values.verticalSpacing;
+    const int menuHeight = pageItems * rowStep - metrics.menuSpacing;
+    const int indicatorTop = rect.y + metrics.verticalSpacing;
     const int indicatorBottom = indicatorTop + menuHeight - arrowSize;
 
     // Draw up arrow (^) only when there are items above the current page
@@ -760,36 +788,29 @@ void BaseTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
 
   for (int i = pageStartIndex; i < buttonCount && i < pageStartIndex + pageItems; ++i) {
     const int displayIndex = i - pageStartIndex;
-    const int tileY =
-        BaseMetrics::values.verticalSpacing + rect.y +
-        static_cast<int>(displayIndex) * (BaseMetrics::values.menuRowHeight + BaseMetrics::values.menuSpacing);
+    const int tileY = metrics.verticalSpacing + rect.y + static_cast<int>(displayIndex) * rowStep;
 
     const bool selected = selectedIndex == i;
-    int tileWidth = rect.width - BaseMetrics::values.contentSidePadding * 2;
-    if (totalPages > 1) {
-      tileWidth -= 30;  // some margin for scroll arrows
-    }
-    const Rect tileRect{rect.x + BaseMetrics::values.contentSidePadding, tileY, tileWidth,
-                        BaseMetrics::values.menuRowHeight};
-    TouchRegistry::getInstance().add(
-        buttonMenuTouchTarget(tileRect, rect, i == buttonCount - 1, BaseMetrics::values.menuSpacing), i,
-        TouchRegistry::Item);
+    constexpr int paginationGutter = 30;
+    const int tileSidePadding = metrics.contentSidePadding + (totalPages > 1 ? paginationGutter / 2 : 0);
+    const int tileWidth = rect.width - tileSidePadding * 2;
+    const Rect tileRect{rect.x + tileSidePadding, tileY, tileWidth, metrics.menuRowHeight};
+    TouchRegistry::getInstance().add(buttonMenuTouchTarget(tileRect, rect, i == buttonCount - 1, metrics.menuSpacing),
+                                     i, TouchRegistry::Item);
 
     if (selected) {
-      renderer.fillRect(rect.x + BaseMetrics::values.contentSidePadding, tileY, tileWidth,
-                        BaseMetrics::values.menuRowHeight);
+      renderer.fillRect(rect.x + tileSidePadding, tileY, tileWidth, metrics.menuRowHeight);
     } else {
-      renderer.drawRect(rect.x + BaseMetrics::values.contentSidePadding, tileY, tileWidth,
-                        BaseMetrics::values.menuRowHeight);
+      renderer.drawRect(rect.x + tileSidePadding, tileY, tileWidth, metrics.menuRowHeight);
     }
 
     const char* label = buttonLabel != nullptr ? buttonLabel(i) : "";
     if (!label) label = "";
     const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, label);
-    const int textX = rect.x + BaseMetrics::values.contentSidePadding + (tileWidth - textWidth) / 2;
+    const int textX = rect.x + tileSidePadding + (tileWidth - textWidth) / 2;
     const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
     const int textY =
-        tileY + (BaseMetrics::values.menuRowHeight - lineHeight) / 2;  // vertically centered assuming y is top of text
+        tileY + (metrics.menuRowHeight - lineHeight) / 2;  // vertically centered assuming y is top of text
     // Invert text when the tile is selected, to contrast with the filled background
     renderer.drawText(UI_10_FONT_ID, textX, textY, label, selectedIndex != i);
   }

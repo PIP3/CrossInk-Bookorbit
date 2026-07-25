@@ -39,6 +39,7 @@ constexpr int selectedTabBoxWidth = 50;
 constexpr int selectedTabBoxHeight = 34;
 constexpr int selectedTabBoxRadius = 2;
 constexpr int headerActionHitSize = 44;
+constexpr int headerActionTouchSize = 60;
 constexpr int headerActionGap = 10;
 constexpr int headerActionRightPadding = 10;
 constexpr int inlineBatteryReserve = 72;
@@ -178,6 +179,15 @@ Rect readerMenuHeaderActionRect(const Rect& header, const ThemeMetrics& metrics)
   const int rightInset = (metrics.headerBatteryDetached ? 0 : inlineBatteryReserve) + headerActionRightPadding;
   return Rect{header.x + header.width - rightInset - headerActionHitSize, header.y + header.height - actionHeight,
               headerActionHitSize, actionHeight};
+}
+
+Rect readerMenuHeaderActionTouchRect(const Rect& header, const Rect& actionRect) {
+  const int touchWidth = std::min(headerActionTouchSize, header.width);
+  const int touchHeight = std::min(headerActionTouchSize, header.height);
+  // Keep the expanded target clear of the right-side battery reserve. The
+  // visual icon stays centered in actionRect; only the tappable area grows.
+  return Rect{actionRect.x + actionRect.width - touchWidth, actionRect.y + actionRect.height - touchHeight, touchWidth,
+              touchHeight};
 }
 
 void drawSdkIcon(fui::GfxRendererTarget& target, const freeink::Icon& icon, const int x, const int y) {
@@ -606,6 +616,7 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
   // indicator; the rest of the screen renders through the app.
   const Rect headerRect{screen.x, screen.y + metrics.topPadding, screen.width, metrics.headerHeight};
   const Rect homeRect = readerMenuHeaderActionRect(headerRect, metrics);
+  const Rect homeTouchRect = readerMenuHeaderActionTouchRect(headerRect, homeRect);
   // BaseTheme left-aligns reader titles while the clock is visible. Reserve
   // the Home slot from that real title edge, rather than applying the
   // narrower centered-header calculation.
@@ -622,7 +633,7 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
   const std::string headerTitle =
       renderer.truncatedText(uiScaleSpec().titleFontId, title.c_str(), titleMaxWidth, EpdFontFamily::BOLD);
   GUI.drawHeader(renderer, headerRect, headerTitle.c_str(), nullptr, true);
-  TouchRegistry::getInstance().add(homeRect, static_cast<int>(TOUCH_HOME_ICON_INDEX), TouchRegistry::Tab);
+  TouchRegistry::getInstance().add(homeTouchRect, static_cast<int>(TOUCH_HOME_ICON_INDEX), TouchRegistry::Tab);
   drawSdkIcon(uiTarget, icon_home_24, homeRect.x + (homeRect.width - tabIconSize) / 2,
               homeRect.y + (homeRect.height - tabIconSize) / 2);
 

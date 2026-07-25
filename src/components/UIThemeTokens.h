@@ -1,8 +1,11 @@
 #pragma once
 #include <FreeInkUIGfxRenderer.h>
 #include <HalGPIO.h>
+#include <HalTiltSensor.h>
 
 #include <algorithm>
+#include <cctype>
+#include <string>
 
 #include "CrossPointSettings.h"
 #include "UITheme.h"
@@ -52,6 +55,23 @@ inline uint16_t configureUiList(freeink::ui::ListProps& props, const freeink::ui
   if (props.labelText.maxLines > 1) props.rowHeight = std::max(props.rowHeight, tokens.rowHeight);
   if (props.rowGap < 0) props.rowGap = tokens.listRowGap;
   return freeink::ui::listVisibleRows(rect, props.rowHeight, props.rowGap);
+}
+
+inline void configureUiListSectionHeaders(freeink::ui::ListProps& props, const freeink::ui::ThemeTokens& tokens) {
+  if (SETTINGS.uiTheme != CrossPointSettings::UI_THEME::ROUNDEDRAFF) return;
+
+  props.headerText = tokens.titleText;
+  props.headerText.bold = true;
+  props.sectionGap = halTiltSensor.isAvailable() ? 10 : 20;
+}
+
+inline const char* uiListSectionHeaderLabel(std::string& storage, const char* label) {
+  if (SETTINGS.uiTheme != CrossPointSettings::UI_THEME::ROUNDEDRAFF) return label;
+
+  storage = label != nullptr ? label : "";
+  std::transform(storage.begin(), storage.end(), storage.begin(),
+                 [](const unsigned char c) { return static_cast<char>(std::toupper(c)); });
+  return storage.c_str();
 }
 
 // Merges the active UITheme's shape with uiScale-derived sizes. Touch builds
