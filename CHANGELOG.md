@@ -27,7 +27,6 @@
 - The web file manager can now delete non-empty folders recursively and, when hidden files are shown, remove hidden or system-managed SD card items after confirmation.
 - SD-font, OPDS catalogs, and other unneeded settings now stay out of memory while reading unless their settings are open.
 - EPUB books can now keep more saved clippings without loading every clipping's text into memory while reading.
-- Touch devices now default to the Small UI scale instead of Large.
 
 ### Removed
 
@@ -35,6 +34,7 @@
 
 ### Fixed
 
+- Improved reliability when re-indexing EPUB chapters after changing reader font settings.
 - The web EPUB optimizer now removes decorative empty chapter stubs and keeps their table-of-contents links pointing at the readable chapter.
 - Reader popups and KOReader Sync's WiFi connection labels now stay correctly oriented when reading upside down.
 - EPUB clipping now batches SD-card font preparation and releases temporary font caches on return, reducing memory fragmentation during repeated selections.

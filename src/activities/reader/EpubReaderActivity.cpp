@@ -3308,6 +3308,11 @@ void EpubReaderActivity::reindexCurrentSection() {
       cacheCurrentSectionPosition();
     }
     section.reset();
+    // The newly selected SD font can still hold glyph and advance-table caches from
+    // the previous page. Release them before the relayout so the parser gets a
+    // contiguous allocation window instead of reporting a memory failure as an
+    // invalid book. The renderer reloads the active font lazily while parsing.
+    releaseReaderSdFontCachesForLowMemory(renderer, "ERS", "reader setting reindex");
   }
   requestUpdate();
 }
