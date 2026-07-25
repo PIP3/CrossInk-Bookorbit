@@ -119,6 +119,7 @@ class NearbyBookTransferActivity final : public Activity {
   bool sendComplete();
   bool finishReceivedFile(uint64_t expectedBytes, uint32_t expectedCrc);
   void cancelTransfer();
+  void rejectOffer();
   void setState(State state);
   void setError(const char* message);
   void exitAfterRadio();

@@ -33,6 +33,19 @@ constexpr uint8_t RESULT_OK = 0;
 constexpr uint8_t RESULT_FAILED = 1;
 constexpr uint8_t REJECT_USER = 1;
 constexpr uint8_t REJECT_STORAGE = 2;
+constexpr int TOUCH_ACTION_BUTTON_WIDTH = 120;
+constexpr int TOUCH_ACTION_BUTTON_HEIGHT = 48;
+
+Rect touchActionButtonRect(const Rect& screen, const bool accept) {
+  constexpr int SIDE_MARGIN = 46;
+  return Rect{accept ? screen.x + screen.width - SIDE_MARGIN - TOUCH_ACTION_BUTTON_WIDTH : screen.x + SIDE_MARGIN,
+              screen.y + screen.height - TOUCH_ACTION_BUTTON_HEIGHT - 28, TOUCH_ACTION_BUTTON_WIDTH,
+              TOUCH_ACTION_BUTTON_HEIGHT};
+}
+
+bool contains(const Rect& rect, const int x, const int y) {
+  return x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height;
+}
 
 bool sameMac(const std::array<uint8_t, nearby::MAC_BYTES>& lhs, const uint8_t* rhs) {
   return rhs && memcmp(lhs.data(), rhs, nearby::MAC_BYTES) == 0;
@@ -494,6 +507,12 @@ void NearbyBookTransferActivity::cancelTransfer() {
   if (!tempPath_.empty() && Storage.exists(tempPath_.c_str())) Storage.remove(tempPath_.c_str());
 }
 
+void NearbyBookTransferActivity::rejectOffer() {
+  const uint8_t reason = REJECT_USER;
+  sendPacket(nearby::PacketType::Reject, peerMac_.data(), 0, &reason, 1);
+  startListening();
+}
+
 void NearbyBookTransferActivity::setState(const State state) {
   state_ = state;
   selectedIndex_ = 0;
@@ -627,9 +646,7 @@ void NearbyBookTransferActivity::activateSelected() {
       } else if (selectedIndex_ == 1) {
         acceptOffer(true);
       } else {
-        const uint8_t reason = REJECT_USER;
-        sendPacket(nearby::PacketType::Reject, peerMac_.data(), 0, &reason, 1);
-        startListening();
+        rejectOffer();
       }
       break;
     case State::Success:
@@ -708,6 +725,20 @@ void NearbyBookTransferActivity::loop() {
   processPackets();
   updateTimers();
 
+  int tx = 0;
+  int ty = 0;
+  if (mappedInput.hasTouch() && state_ == State::OfferPrompt && mappedInput.wasScreenTouchDown(tx, ty)) {
+    const Rect safeArea = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+    if (contains(touchActionButtonRect(safeArea, false), tx, ty)) {
+      rejectOffer();
+      return;
+    }
+    if (contains(touchActionButtonRect(safeArea, true), tx, ty)) {
+      activateSelected();
+      return;
+    }
+  }
+
   if (isMenuState() && uiReady_) {
     const fui::InputSnapshot snap = touchSnapshotFrom(mappedInput);
     if (snap.touchPressed || snap.touchReleased) {
@@ -778,6 +809,20 @@ void NearbyBookTransferActivity::render(RenderLock&&) {
     char sizeText[48];
     snprintf(sizeText, sizeof(sizeText), tr(STR_NEARBY_TRANSFER_SIZE), static_cast<unsigned long>(offeredFileSize_));
     centered(sizeText, 70, SMALL_FONT_ID);
+    if (mappedInput.hasTouch()) {
+      const Rect safeArea = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+      const Rect cancelRect = touchActionButtonRect(safeArea, false);
+      const Rect acceptRect = touchActionButtonRect(safeArea, true);
+      auto drawButton = [this](const Rect& rect, const char* label) {
+        renderer.fillRectDither(rect.x, rect.y, rect.width, rect.height, Color::White);
+        renderer.drawRect(rect.x, rect.y, rect.width, rect.height, true);
+        const int x = rect.x + (rect.width - renderer.getTextWidth(UI_10_FONT_ID, label)) / 2;
+        const int y = rect.y + (rect.height - renderer.getLineHeight(UI_10_FONT_ID)) / 2;
+        renderer.drawText(UI_10_FONT_ID, x, y, label);
+      };
+      drawButton(cancelRect, tr(STR_CANCEL));
+      drawButton(acceptRect, tr(STR_ACCEPT));
+    }
   } else if (state_ == State::Sending || state_ == State::Receiving) {
     centeredWrapped(state_ == State::Sending ? tr(STR_NEARBY_TRANSFER_SENDING) : tr(STR_NEARBY_TRANSFER_RECEIVING), -45,
                     2);
@@ -807,8 +852,10 @@ void NearbyBookTransferActivity::render(RenderLock&&) {
   else if (state_ == State::Success || state_ == State::Error)
     confirm = tr(STR_OK);
   const bool showNavigation = !mappedInput.hasTouch() && menuItemCount() > 1;
-  const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), confirm, showNavigation ? tr(STR_DIR_UP) : "",
-                                            showNavigation ? tr(STR_DIR_DOWN) : "");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  if (!(mappedInput.hasTouch() && state_ == State::OfferPrompt)) {
+    const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), confirm, showNavigation ? tr(STR_DIR_UP) : "",
+                                              showNavigation ? tr(STR_DIR_DOWN) : "");
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  }
   renderer.displayBuffer();
 }
