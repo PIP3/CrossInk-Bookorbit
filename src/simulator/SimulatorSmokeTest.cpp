@@ -17,6 +17,7 @@
 #include "activities/reader/EpubReaderMenuActivity.h"
 #include "activities/reader/ReaderOptionsActivity.h"
 #include "components/UITheme.h"
+#include "simulator/SimulatorHomeKeyInput.h"
 
 extern ActivityManager activityManager;
 extern GfxRenderer renderer;
@@ -53,7 +54,20 @@ class SimulatorSmokeTest {
   }
 
  private:
-  enum class ScriptActionType : uint8_t { Press, Release, TouchDown, TouchMove, TouchRelease, AssertActivity, Render };
+  enum class ScriptActionType : uint8_t {
+    Press,
+    Release,
+    HomeTap,
+    HomeLongPress,
+    OpenSmokeBook,
+    DisableReaderTouch,
+    EnableReaderTouch,
+    TouchDown,
+    TouchMove,
+    TouchRelease,
+    AssertActivity,
+    Render
+  };
 
   struct ScriptAction {
     ScriptActionType type;
@@ -142,6 +156,9 @@ class SimulatorSmokeTest {
         if (!CrossPointSettings::verifySleepScreenMigrationContract()) {
           fail("Sleep screen migration contract failed");
         }
+        if (!SimulatorHomeKeyInput::verifyTimingContract()) {
+          fail("Simulator Home key timing contract failed");
+        }
         applyRequestedTheme();
         activityManager.goHome();
         queueStep("Home", SmokeStep::Home);
@@ -217,6 +234,26 @@ class SimulatorSmokeTest {
     return {ScriptActionType::Release, button, nullptr, 0, 0, 0};
   }
 
+  static ScriptAction homeTap() {
+    return {ScriptActionType::HomeTap, MappedInputManager::Button::Back, nullptr, 0, 0, 0};
+  }
+
+  static ScriptAction homeLongPress() {
+    return {ScriptActionType::HomeLongPress, MappedInputManager::Button::Back, nullptr, 0, 0, 0};
+  }
+
+  static ScriptAction openSmokeBook() {
+    return {ScriptActionType::OpenSmokeBook, MappedInputManager::Button::Back, nullptr, 0, 0, 0};
+  }
+
+  static ScriptAction disableReaderTouch() {
+    return {ScriptActionType::DisableReaderTouch, MappedInputManager::Button::Back, nullptr, 0, 0, 0};
+  }
+
+  static ScriptAction enableReaderTouch() {
+    return {ScriptActionType::EnableReaderTouch, MappedInputManager::Button::Back, nullptr, 0, 0, 0};
+  }
+
   static ScriptAction render(const char* label, int framesToSettle = 3) {
     return {ScriptActionType::Render, MappedInputManager::Button::Back, label, framesToSettle, 0, 0};
   }
@@ -268,6 +305,20 @@ class SimulatorSmokeTest {
         inputScript.push_back(touchDown(width / 2, height * 3 / 4));
         inputScript.push_back(touchRelease(width / 2, height * 3 / 4));
         inputScript.push_back(render("Reader restored after dismissing Frontlight Panel", 4));
+        inputScript.push_back(assertActivity("EpubReader"));
+        inputScript.push_back(homeLongPress());
+        inputScript.push_back(render("Reader Menu opened from simulated Home key hold", 4));
+        inputScript.push_back(assertActivity("EpubReaderMenu"));
+        inputScript.push_back(homeLongPress());
+        inputScript.push_back(render("Reader restored after simulated Home key hold", 4));
+        inputScript.push_back(assertActivity("EpubReader"));
+        inputScript.push_back(disableReaderTouch());
+        inputScript.push_back(homeTap());
+        inputScript.push_back(render("Home opened from simulated Home key tap", 4));
+        inputScript.push_back(assertActivity("Home"));
+        inputScript.push_back(enableReaderTouch());
+        inputScript.push_back(openSmokeBook());
+        inputScript.push_back(render("Reader reopened after simulated Home key tap", 8));
         inputScript.push_back(assertActivity("EpubReader"));
         inputScript.push_back(touchDown(width / 2, height - 8));
         inputScript.push_back(touchMove(width / 2, height * 3 / 4));
@@ -358,6 +409,24 @@ class SimulatorSmokeTest {
       case ScriptActionType::Release:
         mappedInputManager.simulatorInjectRelease(action.button);
         break;
+      case ScriptActionType::HomeTap:
+        simulatorHomeKeyInput.injectTap();
+        break;
+      case ScriptActionType::HomeLongPress:
+        simulatorHomeKeyInput.injectLongPress();
+        break;
+      case ScriptActionType::OpenSmokeBook: {
+        const char* bookPath = std::getenv("CROSSINK_SIMULATOR_SMOKE_BOOK");
+        if (bookPath == nullptr || bookPath[0] == '\0') fail("Smoke test book path is missing");
+        activityManager.goToReader(bookPath, true);
+        break;
+      }
+      case ScriptActionType::DisableReaderTouch:
+        SETTINGS.disableReaderTouchscreen = true;
+        break;
+      case ScriptActionType::EnableReaderTouch:
+        SETTINGS.disableReaderTouchscreen = false;
+        break;
       case ScriptActionType::TouchDown:
 #if CROSSINK_APP_CAP_TOUCH
         mappedInputManager.simulatorInjectTouchDown(action.x, action.y);
@@ -374,7 +443,7 @@ class SimulatorSmokeTest {
 #endif
         break;
       case ScriptActionType::AssertActivity:
-        if (!activityManager.hasActivityNamed(action.label)) fail("Expected activity: %s", action.label);
+        if (!activityManager.isCurrentActivityNamed(action.label)) fail("Expected current activity: %s", action.label);
         break;
       case ScriptActionType::Render:
         queueStep(action.label, SmokeStep::ReaderInput, action.settleFrames);

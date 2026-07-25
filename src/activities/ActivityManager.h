@@ -125,6 +125,9 @@ class ActivityManager {
   bool isReaderActivity() const;
   bool readerPowerButtonOpensSettings() const;
   bool hasActivityNamed(const char* activityName) const;
+#ifdef SIMULATOR
+  bool isCurrentActivityNamed(const char* activityName) const;
+#endif
   bool canSnapshotForSleepOverlay() const;
   bool requestManualReaderRefresh();
   bool skipLoopDelay() const;

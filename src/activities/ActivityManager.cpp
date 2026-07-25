@@ -200,7 +200,7 @@ void ActivityManager::loop() {
 
 bool ActivityManager::handleGlobalHomeGesture() {
   if (!currentActivity || pendingAction != PendingAction::None || currentActivity->isHomeActivity() ||
-      !currentActivity->allowGlobalHomeGesture() || !mappedInput.hasTouch()) {
+      !currentActivity->allowGlobalHomeGesture() || (!mappedInput.hasTouch() && !mappedInput.hasHomeKey())) {
     return false;
   }
 
@@ -467,6 +467,12 @@ bool ActivityManager::hasActivityNamed(const char* activityName) const {
 
   return std::any_of(stackActivities.begin(), stackActivities.end(), matches);
 }
+
+#ifdef SIMULATOR
+bool ActivityManager::isCurrentActivityNamed(const char* activityName) const {
+  return currentActivity && currentActivity->name == activityName;
+}
+#endif
 
 bool ActivityManager::canSnapshotForSleepOverlay() const {
   return currentActivity && currentActivity->canSnapshotForSleepOverlay();

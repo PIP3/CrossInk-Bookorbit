@@ -91,6 +91,7 @@ inline esp_sleep_wakeup_cause_t esp_sleep_get_wakeup_cause() { return ESP_SLEEP_
 #ifdef SIMULATOR
 #include <SimulatorLifecycle.h>
 
+#include "simulator/SimulatorHomeKeyInput.h"
 #include "simulator/SimulatorSmokeTest.h"
 #endif
 #include "images/LoadingIcon.h"
@@ -996,6 +997,9 @@ void loop() {
   static unsigned long lastMemPrint = 0;
 
   gpio.update();
+#ifdef SIMULATOR
+  simulatorHomeKeyInput.update();
+#endif
   halTiltSensor.update(SETTINGS.tiltPageTurn, SETTINGS.tiltPageTurnDirection, SETTINGS.orientation,
                        activityManager.isReaderActivity());
 

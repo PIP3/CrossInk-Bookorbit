@@ -12,6 +12,9 @@
 #include "components/TouchRegistry.h"
 #endif
 #include "components/UITheme.h"
+#ifdef SIMULATOR
+#include "simulator/SimulatorHomeKeyInput.h"
+#endif
 
 namespace {
 using ButtonIndex = uint8_t;
@@ -565,7 +568,7 @@ bool MappedInputManager::wasMenuGesture() const {
 bool MappedInputManager::wasHomeGesture() const {
   if (!hasHomeKeyHardware()) return wasBottomEdgeUpSwipe();
 #ifdef SIMULATOR
-  return false;
+  return simulatorHomeKeyInput.wasTapped();
 #else
   return gpio.wasHomeKeyTapped();
 #endif
@@ -574,7 +577,7 @@ bool MappedInputManager::wasHomeGesture() const {
 bool MappedInputManager::wasReaderMenuHold() const {
   if (!hasHomeKeyHardware()) return false;
 #ifdef SIMULATOR
-  return false;
+  return simulatorHomeKeyInput.wasLongPressed();
 #else
   return gpio.wasHomeKeyLongPressed();
 #endif
