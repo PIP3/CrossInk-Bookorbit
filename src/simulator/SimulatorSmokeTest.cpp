@@ -334,7 +334,7 @@ class SimulatorSmokeTest {
       // The menu itself registers its tab and list hit areas through the active
       // theme. Exercise both before activating Reader Options from list row 1.
       const auto& metrics = UITheme::getInstance().getMetrics();
-      const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+      const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, !mappedInputManager.hasTouch(), false);
       const int tabHeight = metrics.tabBarHeight * 2;
       const bool tabsAtBottom = mappedInputManager.hasHomeKey();
       const int tabTop = tabsAtBottom ? safe.y + safe.height - tabHeight

@@ -426,9 +426,11 @@ void EpubReaderMenuActivity::onRowEvent(const fui::ActionEvent& event, void* use
   self->activateSelectedItem();
 }
 
-void EpubReaderMenuActivity::drawIconTabBar(const Rect rect) {
+void EpubReaderMenuActivity::drawIconTabBar(const Rect rect, const bool drawBottomBorder) {
   renderer.drawLine(rect.x, rect.y, rect.x + rect.width - 1, rect.y, true);
-  renderer.drawLine(rect.x, rect.y + rect.height - 1, rect.x + rect.width - 1, rect.y + rect.height - 1, true);
+  if (drawBottomBorder) {
+    renderer.drawLine(rect.x, rect.y + rect.height - 1, rect.x + rect.width - 1, rect.y + rect.height - 1, true);
+  }
 
 #if CROSSINK_APP_CAP_TOUCH
   const size_t iconCount = mappedInput.hasTouchHardware() ? TOUCH_ICON_COUNT : MENU_TAB_COUNT;
@@ -576,7 +578,7 @@ void EpubReaderMenuActivity::menuScreen(UiApp::ScreenType& screen, void* user) {
 
 void EpubReaderMenuActivity::buildMenuScreen(UiApp::ScreenType& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+  const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, !mappedInput.hasTouch(), false);
   const int tabBarHeight = readerMenuTabBarHeight(metrics.tabBarHeight, mappedInput.hasTouch());
   const bool tabsAtBottom = readerMenuTabsAtBottom(mappedInput);
   const int contentTop = safe.y + metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight +
@@ -629,8 +631,8 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   auto metrics = UITheme::getInstance().getMetrics();
-  Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
   const bool hasTouch = mappedInput.hasTouch();
+  Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, !hasTouch, false);
   const int tabBarHeight = readerMenuTabBarHeight(metrics.tabBarHeight, hasTouch);
   const bool tabsAtBottom = readerMenuTabsAtBottom(mappedInput);
 
@@ -674,7 +676,7 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
   const int tabBarY = tabsAtBottom ? screen.y + screen.height - tabBarHeight
                                    : screen.y + metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight;
   const Rect tabRect{screen.x, tabBarY, screen.width, tabBarHeight};
-  drawIconTabBar(tabRect);
+  drawIconTabBar(tabRect, !tabsAtBottom);
 
   uiReady = false;
   app.render();

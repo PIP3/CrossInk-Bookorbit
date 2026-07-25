@@ -98,7 +98,7 @@ class EpubReaderMenuActivity final : public Activity {
   void finishCancelled();
   bool activateSelectedItem();
   bool handleTouchInput();
-  void drawIconTabBar(Rect rect);
+  void drawIconTabBar(Rect rect, bool drawBottomBorder);
 
   // FreeInkApp hosts the menu list (themed rows, touch routing); the header
   // stays on GUI.drawHeader for the battery indicator, and OptionPopup keeps
