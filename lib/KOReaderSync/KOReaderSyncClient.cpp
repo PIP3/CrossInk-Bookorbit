@@ -119,7 +119,7 @@ KOReaderSyncClient::Error validateAuthResponse(const char* body) {
 // SecureHttpClient. The handshake still needs working heap; gate on it. wolfSSL's
 // footprint is smaller than mbedTLS's old ~48KB peak, but keep conservative
 // floors for total free heap and the largest contiguous block.
-constexpr uint32_t MIN_FREE_HEAP_FOR_TLS = 50000;
+constexpr uint32_t MIN_FREE_HEAP_FOR_TLS = 35000;
 constexpr uint32_t MIN_MAX_ALLOC_HEAP_FOR_TLS = 20000;
 
 #ifdef SIMULATOR
