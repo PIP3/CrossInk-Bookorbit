@@ -1,26 +1,22 @@
 #pragma once
+#include <ArduinoJson.h>
+#include <Epub/ReaderRenderSpec.h>
 #include <HalStorage.h>
+#include <PersistableStore.h>
 
 #include <cstddef>
 #include <cstdint>
 #include <iosfwd>
 #include <mutex>
 
-class CrossPointSettings {
+class CrossPointSettings : public PersistableStore<CrossPointSettings> {
  private:
   mutable std::mutex _mutex;
 
-  // Private constructor for singleton
   CrossPointSettings() = default;
-
-  // Static instance
-  static CrossPointSettings instance;
+  friend class PersistableStore<CrossPointSettings>;
 
  public:
-  // Delete copy constructor and assignment
-  CrossPointSettings(const CrossPointSettings&) = delete;
-  CrossPointSettings& operator=(const CrossPointSettings&) = delete;
-
   // Access the settings mutex for protecting multi-field reads/writes from other cores.
   // Callers must not re-enter SETTINGS methods that lock _mutex while holding it.
   std::mutex& getMutex() const { return _mutex; }
@@ -480,9 +476,6 @@ class CrossPointSettings {
 
   ~CrossPointSettings() = default;
 
-  // Get singleton instance
-  static CrossPointSettings& getInstance() { return instance; }
-
   static constexpr uint16_t POWER_BUTTON_WAKE_SHORT_MS = 10;
   static constexpr uint16_t POWER_BUTTON_WAKE_LONG_MS = 200;
   static constexpr uint16_t POWER_BUTTON_LONG_PRESS_MS = 400;
@@ -549,6 +542,34 @@ class CrossPointSettings {
 
   bool saveToFile() const;
   bool loadFromFile();
+  static const char* getFilePath() { return "/.crosspoint/crossink-settings.json"; }
+  void toJson(JsonDocument& doc) const;
+  bool fromJson(JsonVariantConst doc);
+
+  struct StatusBarSpec {
+    bool showChapterPageCount = false;
+    bool showBookProgressPercent = false;
+    bool showStablePageNumbers = false;
+    uint8_t titleMode = HIDE_TITLE;
+    uint8_t timeLeftMode = TIME_LEFT_HIDE;
+    bool showBattery = false;
+    bool showBatteryPercent = false;
+    bool showClock = false;
+    uint8_t progressBarMode = HIDE_PROGRESS;
+    uint8_t progressBarHeightPx = 0;
+    uint8_t xtcMode = XTC_STATUS_BAR_HIDE;
+
+    bool textLaneVisible(bool clockAvailable) const {
+      return showChapterPageCount || showBookProgressPercent || showStablePageNumbers || titleMode != HIDE_TITLE ||
+             timeLeftMode != TIME_LEFT_HIDE || showBattery || (showClock && clockAvailable);
+    }
+    bool showsProgressBar() const { return progressBarMode != HIDE_PROGRESS; }
+    bool showsTitle() const { return titleMode != HIDE_TITLE; }
+  };
+
+  StatusBarSpec statusBarSpec() const;
+  ReaderRenderSpec readerRenderSpec(uint16_t viewportWidth, uint16_t viewportHeight,
+                                    EpubRenderMode renderMode = EpubRenderMode::CrossInkDefault) const;
 
   static void validateFrontButtonMapping(CrossPointSettings& settings);
   static void validateReaderFrontButtonMapping(CrossPointSettings& settings);

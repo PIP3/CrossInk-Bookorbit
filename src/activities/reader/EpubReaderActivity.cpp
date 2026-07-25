@@ -254,6 +254,16 @@ SectionBuildProfile safeModeBuildProfile() {
   return SectionBuildProfile{EpubRenderMode::Light, false, false, false, "safe", true};
 }
 
+ReaderRenderSpec readerRenderSpecForProfile(const int fontId, const uint16_t viewportWidth,
+                                            const uint16_t viewportHeight, const SectionBuildProfile& profile) {
+  ReaderRenderSpec spec = SETTINGS.readerRenderSpec(viewportWidth, viewportHeight, profile.renderMode);
+  spec.fontId = fontId;
+  spec.embeddedStyle = profile.embeddedStyle;
+  spec.bionicReadingEnabled = profile.bionicReadingEnabled;
+  spec.guideReadingEnabled = profile.guideReadingEnabled;
+  return spec;
+}
+
 void ensureReaderSdFontLoaded(GfxRenderer& renderer) {
   sdFontSystem.ensureLoaded(renderer);
   // Layout only needs the active font. Release the settings-only family metadata
@@ -2167,11 +2177,8 @@ void EpubReaderActivity::loop() {
     if (section && !section->isBuilding() && section->isPartial()) {
       const int renderFontId = activeSectionFontId != 0 ? activeSectionFontId : SETTINGS.getReaderFontId();
       const SectionBuildProfile profile = buildProfileForRenderMode(normalizeRenderMode(SETTINGS.epubRenderMode));
-      if (!section->startBuild(renderFontId, SETTINGS.getReaderLineCompression(), SETTINGS.extraParagraphSpacing,
-                               SETTINGS.forceParagraphIndents, SETTINGS.paragraphAlignment, buildViewportWidth,
-                               buildViewportHeight, SETTINGS.hyphenationEnabled, profile.embeddedStyle,
-                               SETTINGS.imageRendering, profile.bionicReadingEnabled, profile.guideReadingEnabled,
-                               SETTINGS.wordSpacing, profile.renderMode)) {
+      if (!section->startBuild(
+              readerRenderSpecForProfile(renderFontId, buildViewportWidth, buildViewportHeight, profile))) {
         partialRebuildStartFailed = true;
         LOG_ERR("ERS", "Failed to start deferred partial extension build");
       } else {
@@ -4349,11 +4356,8 @@ void EpubReaderActivity::render(RenderLock&& lock) {
                 fontId, ESP.getFreeHeap(), ESP.getMaxAllocHeap());
         return false;
       }
-      if (!section->loadSectionFile(fontId, SETTINGS.getReaderLineCompression(), SETTINGS.extraParagraphSpacing,
-                                    SETTINGS.forceParagraphIndents, SETTINGS.paragraphAlignment, viewportWidth,
-                                    viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
-                                    SETTINGS.imageRendering, SETTINGS.bionicReadingEnabled,
-                                    SETTINGS.guideReadingEnabled, SETTINGS.wordSpacing, renderMode)) {
+      if (!section->loadSectionFile(readerRenderSpecForProfile(fontId, viewportWidth, viewportHeight,
+                                                               buildProfileForRenderMode(renderMode)))) {
         section.reset();
         return false;
       }
@@ -4425,11 +4429,8 @@ void EpubReaderActivity::render(RenderLock&& lock) {
           {
             GfxRenderer::FrameBufferLoan loan(renderer);
             buildSucceeded = section->createSectionFile(
-                fontId, SETTINGS.getReaderLineCompression(), SETTINGS.extraParagraphSpacing,
-                SETTINGS.forceParagraphIndents, SETTINGS.paragraphAlignment, viewportWidth, viewportHeight,
-                SETTINGS.hyphenationEnabled, profile.embeddedStyle, SETTINGS.imageRendering,
-                profile.bionicReadingEnabled, profile.guideReadingEnabled, SETTINGS.wordSpacing, popupFn,
-                &attemptImagesWereSuppressed, &attemptLayoutAbortedForLowMemory, profile.renderMode, buildOptions);
+                readerRenderSpecForProfile(fontId, viewportWidth, viewportHeight, profile), popupFn,
+                &attemptImagesWereSuppressed, &attemptLayoutAbortedForLowMemory, buildOptions);
           }
         } else {
           const int target = pendingPageJump.has_value() ? *pendingPageJump : (nextPageNumber < 0 ? 0 : nextPageNumber);
@@ -4467,11 +4468,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
             bool started;
             {
               GfxRenderer::FrameBufferLoan loan(renderer);
-              started = section->startBuild(fontId, SETTINGS.getReaderLineCompression(), SETTINGS.extraParagraphSpacing,
-                                            SETTINGS.forceParagraphIndents, SETTINGS.paragraphAlignment, viewportWidth,
-                                            viewportHeight, SETTINGS.hyphenationEnabled, profile.embeddedStyle,
-                                            SETTINGS.imageRendering, profile.bionicReadingEnabled,
-                                            profile.guideReadingEnabled, SETTINGS.wordSpacing, profile.renderMode,
+              started = section->startBuild(readerRenderSpecForProfile(fontId, viewportWidth, viewportHeight, profile),
                                             buildOptions, [this] { showBuildPopup(); });
             }
             if (started) {
@@ -4804,11 +4801,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       if (!section->isBuilding()) {
         const int renderFontId = activeSectionFontId != 0 ? activeSectionFontId : SETTINGS.getReaderFontId();
         const SectionBuildProfile profile = buildProfileForRenderMode(normalizeRenderMode(SETTINGS.epubRenderMode));
-        if (!section->startBuild(renderFontId, SETTINGS.getReaderLineCompression(), SETTINGS.extraParagraphSpacing,
-                                 SETTINGS.forceParagraphIndents, SETTINGS.paragraphAlignment, viewportWidth,
-                                 viewportHeight, SETTINGS.hyphenationEnabled, profile.embeddedStyle,
-                                 SETTINGS.imageRendering, profile.bionicReadingEnabled, profile.guideReadingEnabled,
-                                 SETTINGS.wordSpacing, profile.renderMode)) {
+        if (!section->startBuild(readerRenderSpecForProfile(renderFontId, viewportWidth, viewportHeight, profile))) {
           LOG_ERR("ERS", "Failed to start partial extension build");
           catchUpFailed = true;
           return;
@@ -4998,11 +4991,8 @@ void EpubReaderActivity::silentIndexNextChapterIfNeeded(const uint16_t viewportW
     return;
   }
 
-  if (nextSection->loadSectionFile(readerFontId, SETTINGS.getReaderLineCompression(), SETTINGS.extraParagraphSpacing,
-                                   SETTINGS.forceParagraphIndents, SETTINGS.paragraphAlignment, viewportWidth,
-                                   viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
-                                   SETTINGS.imageRendering, SETTINGS.bionicReadingEnabled, SETTINGS.guideReadingEnabled,
-                                   SETTINGS.wordSpacing, selectedRenderMode) &&
+  if (nextSection->loadSectionFile(readerRenderSpecForProfile(readerFontId, viewportWidth, viewportHeight,
+                                                              buildProfileForRenderMode(selectedRenderMode))) &&
       !nextSection->isPartial()) {
     return;
   }
@@ -5039,11 +5029,8 @@ void EpubReaderActivity::silentIndexNextChapterIfNeeded(const uint16_t viewportW
 
     bool attemptAbortedForLowMemory = false;
     const bool succeeded = attemptSection->createSectionFile(
-        readerFontId, SETTINGS.getReaderLineCompression(), SETTINGS.extraParagraphSpacing,
-        SETTINGS.forceParagraphIndents, SETTINGS.paragraphAlignment, viewportWidth, viewportHeight,
-        SETTINGS.hyphenationEnabled, profile.embeddedStyle, SETTINGS.imageRendering, profile.bionicReadingEnabled,
-        profile.guideReadingEnabled, SETTINGS.wordSpacing, nullptr, nullptr, &attemptAbortedForLowMemory,
-        profile.renderMode);
+        readerRenderSpecForProfile(readerFontId, viewportWidth, viewportHeight, profile), nullptr, nullptr,
+        &attemptAbortedForLowMemory);
     layoutAbortedForLowMemory = attemptAbortedForLowMemory;
     if (succeeded) {
       usedRenderMode = profile.renderMode;
@@ -5629,10 +5616,7 @@ void EpubReaderActivity::refreshChapterGroupEstimate(const uint16_t viewportWidt
 
     Section sibling(epub, spineIndex, renderer, sectionCacheSuffixForRenderMode(renderMode));
     const bool loaded = sibling.loadSectionFile(
-        readerFontId, SETTINGS.getReaderLineCompression(), SETTINGS.extraParagraphSpacing,
-        SETTINGS.forceParagraphIndents, SETTINGS.paragraphAlignment, viewportWidth, viewportHeight,
-        SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle, SETTINGS.imageRendering, SETTINGS.bionicReadingEnabled,
-        SETTINGS.guideReadingEnabled, SETTINGS.wordSpacing, renderMode);
+        readerRenderSpecForProfile(readerFontId, viewportWidth, viewportHeight, buildProfileForRenderMode(renderMode)));
     const uint32_t siblingPages = loaded ? sibling.estimatedTotalPages() : 0;
     if (siblingPages > 0 && spineBytes > 0) {
       refreshed.knownSiblingPages += siblingPages;
@@ -5824,11 +5808,8 @@ bool EpubReaderActivity::drawCurrentPageToBuffer(const std::string& filePath, Gf
     LOG_ERR("SLP", "EPUB: failed to allocate section for spine %d", spineIndex);
     return false;
   }
-  bool loadedSection = section->loadSectionFile(
-      readerFontId, SETTINGS.getReaderLineCompression(), SETTINGS.extraParagraphSpacing, SETTINGS.forceParagraphIndents,
-      SETTINGS.paragraphAlignment, viewportWidth, viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
-      SETTINGS.imageRendering, SETTINGS.bionicReadingEnabled, SETTINGS.guideReadingEnabled, SETTINGS.wordSpacing,
-      selectedRenderMode);
+  bool loadedSection = section->loadSectionFile(readerRenderSpecForProfile(
+      readerFontId, viewportWidth, viewportHeight, buildProfileForRenderMode(selectedRenderMode)));
 
   if (!loadedSection) {
     if (!MemoryBudget::hasHeapForOptionalEpubRebuild("SLP", "EPUB sleep-page cache rebuild", spineIndex)) {
@@ -5862,11 +5843,8 @@ bool EpubReaderActivity::drawCurrentPageToBuffer(const std::string& filePath, Gf
         return false;
       }
       buildSucceeded = section->createSectionFile(
-          readerFontId, SETTINGS.getReaderLineCompression(), SETTINGS.extraParagraphSpacing,
-          SETTINGS.forceParagraphIndents, SETTINGS.paragraphAlignment, viewportWidth, viewportHeight,
-          SETTINGS.hyphenationEnabled, profile.embeddedStyle, SETTINGS.imageRendering, profile.bionicReadingEnabled,
-          profile.guideReadingEnabled, SETTINGS.wordSpacing, []() {}, nullptr, &layoutAbortedForLowMemory,
-          profile.renderMode);
+          readerRenderSpecForProfile(readerFontId, viewportWidth, viewportHeight, profile), []() {}, nullptr,
+          &layoutAbortedForLowMemory);
       if (buildSucceeded) {
         usedRenderMode = profile.renderMode;
       }
@@ -5883,11 +5861,8 @@ bool EpubReaderActivity::drawCurrentPageToBuffer(const std::string& filePath, Gf
         return false;
       }
       buildSucceeded = section->createSectionFile(
-          readerFontId, SETTINGS.getReaderLineCompression(), SETTINGS.extraParagraphSpacing,
-          SETTINGS.forceParagraphIndents, SETTINGS.paragraphAlignment, viewportWidth, viewportHeight,
-          SETTINGS.hyphenationEnabled, profile.embeddedStyle, SETTINGS.imageRendering, profile.bionicReadingEnabled,
-          profile.guideReadingEnabled, SETTINGS.wordSpacing, []() {}, nullptr, &layoutAbortedForLowMemory,
-          profile.renderMode);
+          readerRenderSpecForProfile(readerFontId, viewportWidth, viewportHeight, profile), []() {}, nullptr,
+          &layoutAbortedForLowMemory);
       if (buildSucceeded) {
         safeModeBuildSucceeded = true;
         usedRenderMode = profile.renderMode;
@@ -5916,11 +5891,8 @@ bool EpubReaderActivity::drawCurrentPageToBuffer(const std::string& filePath, Gf
     if (!MemoryBudget::hasHeapForOptionalEpubRebuild("SLP", "EPUB sleep-page partial catch-up", spineIndex)) {
       return false;
     }
-    const bool started = section->startBuild(
-        readerFontId, SETTINGS.getReaderLineCompression(), SETTINGS.extraParagraphSpacing,
-        SETTINGS.forceParagraphIndents, SETTINGS.paragraphAlignment, viewportWidth, viewportHeight,
-        SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle, SETTINGS.imageRendering, SETTINGS.bionicReadingEnabled,
-        SETTINGS.guideReadingEnabled, SETTINGS.wordSpacing, selectedRenderMode);
+    const bool started = section->startBuild(readerRenderSpecForProfile(readerFontId, viewportWidth, viewportHeight,
+                                                                        buildProfileForRenderMode(selectedRenderMode)));
     if (!started) {
       return false;
     }

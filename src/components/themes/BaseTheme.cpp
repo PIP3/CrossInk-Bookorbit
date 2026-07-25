@@ -882,32 +882,33 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
   renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
                                    &orientedMarginLeft);
+  const auto statusBar = SETTINGS.statusBarSpec();
+  const bool showStatusBarTextLane = statusBar.textLaneVisible(halClock.isAvailable());
 
   // Draw Progress Text
   const auto screenHeight = renderer.getScreenHeight();
   auto textY = screenHeight - UITheme::getInstance().getStatusBarHeight() - orientedMarginBottom - paddingBottom - 4;
   int progressTextWidth = 0;
 
-  const bool showStablePageNumbers = SETTINGS.stablePageNumbers && stableCurrentPage > 0 && stablePageCount > 0;
-  if (showProgress &&
-      (SETTINGS.statusBarBookProgressPercentage || SETTINGS.statusBarChapterPageCount || showStablePageNumbers)) {
+  const bool showStablePageNumbers = statusBar.showStablePageNumbers && stableCurrentPage > 0 && stablePageCount > 0;
+  if (showProgress && (statusBar.showBookProgressPercent || statusBar.showChapterPageCount || showStablePageNumbers)) {
     // Right aligned text for progress counter
     char progressStr[48];
     // Prefix the section page count with "~" while a still-building spine only yields an estimated total.
     const char* estimatePrefix = pageCountEstimated ? "~" : "";
 
-    if (SETTINGS.statusBarChapterPageCount && showStablePageNumbers && SETTINGS.statusBarBookProgressPercentage) {
+    if (statusBar.showChapterPageCount && showStablePageNumbers && statusBar.showBookProgressPercent) {
       snprintf(progressStr, sizeof(progressStr), "%s%d/%d  %d/%d  %.0f%%", estimatePrefix, currentPage, pageCount,
                stableCurrentPage, stablePageCount, bookProgress);
-    } else if (SETTINGS.statusBarChapterPageCount && showStablePageNumbers) {
+    } else if (statusBar.showChapterPageCount && showStablePageNumbers) {
       snprintf(progressStr, sizeof(progressStr), "%s%d/%d  %d/%d", estimatePrefix, currentPage, pageCount,
                stableCurrentPage, stablePageCount);
-    } else if (SETTINGS.statusBarChapterPageCount && SETTINGS.statusBarBookProgressPercentage) {
+    } else if (statusBar.showChapterPageCount && statusBar.showBookProgressPercent) {
       snprintf(progressStr, sizeof(progressStr), "%s%d/%d  %.0f%%", estimatePrefix, currentPage, pageCount,
                bookProgress);
-    } else if (showStablePageNumbers && SETTINGS.statusBarBookProgressPercentage) {
+    } else if (showStablePageNumbers && statusBar.showBookProgressPercent) {
       snprintf(progressStr, sizeof(progressStr), "%d/%d  %.0f%%", stableCurrentPage, stablePageCount, bookProgress);
-    } else if (SETTINGS.statusBarBookProgressPercentage) {
+    } else if (statusBar.showBookProgressPercent) {
       snprintf(progressStr, sizeof(progressStr), "%.0f%%", bookProgress);
     } else if (showStablePageNumbers) {
       snprintf(progressStr, sizeof(progressStr), "%d/%d", stableCurrentPage, stablePageCount);
@@ -923,12 +924,12 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
   }
 
   // Draw Progress Bar
-  if (showProgress && SETTINGS.statusBarProgressBar != CrossPointSettings::STATUS_BAR_PROGRESS_BAR::HIDE_PROGRESS) {
+  if (showProgress && statusBar.showsProgressBar()) {
     const int progressBarMaxWidth = renderer.getScreenWidth() - orientedMarginLeft - orientedMarginRight;
-    const int progressBarY = renderer.getScreenHeight() - orientedMarginBottom -
-                             ((SETTINGS.statusBarProgressBarThickness + 1) * 2) - paddingBottom;
+    const int progressBarY =
+        renderer.getScreenHeight() - orientedMarginBottom - statusBar.progressBarHeightPx - paddingBottom;
     size_t progress;
-    if (SETTINGS.statusBarProgressBar == CrossPointSettings::STATUS_BAR_PROGRESS_BAR::BOOK_PROGRESS) {
+    if (statusBar.progressBarMode == CrossPointSettings::STATUS_BAR_PROGRESS_BAR::BOOK_PROGRESS) {
       progress = static_cast<size_t>(bookProgress);
     } else if (chapterProgressPercent >= 0.0f) {
       progress = static_cast<size_t>(std::clamp(chapterProgressPercent, 0.0f, 100.0f));
@@ -937,8 +938,7 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
       progress = (pageCount > 0) ? (static_cast<float>(currentPage) / pageCount) * 100 : 0;
     }
     const int barWidth = progressBarMaxWidth * progress / 100;
-    renderer.fillRect(orientedMarginLeft, progressBarY, barWidth, ((SETTINGS.statusBarProgressBarThickness + 1) * 2),
-                      foregroundBlack);
+    renderer.fillRect(orientedMarginLeft, progressBarY, barWidth, statusBar.progressBarHeightPx, foregroundBlack);
   }
 
   // Bookmark icon: drawn at the far left of the status bar when the current page is bookmarked.
@@ -949,9 +949,10 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
   static constexpr int bmNotchDepth = 5;
   static constexpr int statusItemGap = 8;
   const int leftClusterX = metrics.statusBarHorizontalMargin + orientedMarginLeft + 1;
-  const int bmTotalWidth = isPageBookmarked ? (bmIconW + bmIconGap) : 0;
+  const bool showBookmark = showStatusBarTextLane && isPageBookmarked;
+  const int bmTotalWidth = showBookmark ? (bmIconW + bmIconGap) : 0;
 
-  if (isPageBookmarked) {
+  if (showBookmark) {
     const int bmX = leftClusterX;
     // +5 compensates for the battery nub drawn above the rect origin by drawBatteryLeft,
     // which shifts the battery body's visual center below the mathematical rect center.
@@ -963,10 +964,9 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
   }
 
   // Draw Battery
-  const bool showBatteryPercentage =
-      SETTINGS.hideBatteryPercentage == CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_NEVER;
+  const bool showBatteryPercentage = statusBar.showBatteryPercent;
   int leftClusterWidth = bmTotalWidth;
-  if (SETTINGS.statusBarBattery) {
+  if (statusBar.showBattery) {
     GUI.drawBatteryLeft(renderer, Rect{leftClusterX + bmTotalWidth, textY, metrics.batteryWidth, metrics.batteryHeight},
                         showBatteryPercentage, foregroundBlack);
     int batteryWidth = metrics.batteryWidth;

@@ -5,8 +5,9 @@
 #include <HalGPIO.h>
 #include <HalStorage.h>
 #include <I18n.h>
-#include <JsonSettingsIO.h>
 #include <Logging.h>
+#include <ObfuscationUtils.h>
+#include <PersistableStore.h>
 #include <Serialization.h>
 
 #include <algorithm>
@@ -16,10 +17,8 @@
 #include <string>
 
 #include "I18nKeys.h"
+#include "SettingsList.h"
 #include "fontIds.h"
-
-// Initialize the static instance
-CrossPointSettings CrossPointSettings::instance;
 
 void readAndValidate(FsFile& file, uint8_t& member, const uint8_t maxValue) {
   uint8_t tempValue;
@@ -38,6 +37,7 @@ constexpr char SETTINGS_FILE_BAK[] = "/.crosspoint/settings.bin.bak";
 constexpr char LANG_FILE_BIN[] = "/.crosspoint/language.bin";
 constexpr char LANG_FILE_BAK[] = "/.crosspoint/language.bin.bak";
 constexpr uint8_t INVALID_READER_FONT_SIZE = 0xFF;
+constexpr uint8_t TILT_DIRECTION_SCHEMA_CURRENT = 2;
 // X3 hardware predates this migration by less than a year. Reject the RTC's
 // factory/default year while preserving dates written by released firmware.
 constexpr uint16_t MIN_TRUSTED_MIGRATED_RTC_YEAR = 2025;
@@ -160,6 +160,72 @@ void applyLegacyFrontButtonLayout(CrossPointSettings& settings) {
       settings.frontButtonRight = CrossPointSettings::FRONT_HW_RIGHT;
       break;
   }
+}
+
+void applyLegacyStatusBarSettings(CrossPointSettings& settings) {
+  switch (static_cast<CrossPointSettings::STATUS_BAR_MODE>(settings.statusBar)) {
+    case CrossPointSettings::NONE:
+      settings.statusBarChapterPageCount = 0;
+      settings.statusBarBookProgressPercentage = 0;
+      settings.statusBarProgressBar = CrossPointSettings::HIDE_PROGRESS;
+      settings.statusBarTitle = CrossPointSettings::HIDE_TITLE;
+      settings.statusBarBattery = 0;
+      break;
+    case CrossPointSettings::NO_PROGRESS:
+      settings.statusBarChapterPageCount = 0;
+      settings.statusBarBookProgressPercentage = 0;
+      settings.statusBarProgressBar = CrossPointSettings::HIDE_PROGRESS;
+      settings.statusBarTitle = CrossPointSettings::CHAPTER_TITLE;
+      settings.statusBarBattery = 1;
+      break;
+    case CrossPointSettings::BOOK_PROGRESS_BAR:
+      settings.statusBarChapterPageCount = 1;
+      settings.statusBarBookProgressPercentage = 0;
+      settings.statusBarProgressBar = CrossPointSettings::BOOK_PROGRESS;
+      settings.statusBarTitle = CrossPointSettings::CHAPTER_TITLE;
+      settings.statusBarBattery = 1;
+      break;
+    case CrossPointSettings::ONLY_BOOK_PROGRESS_BAR:
+      settings.statusBarChapterPageCount = 1;
+      settings.statusBarBookProgressPercentage = 0;
+      settings.statusBarProgressBar = CrossPointSettings::BOOK_PROGRESS;
+      settings.statusBarTitle = CrossPointSettings::HIDE_TITLE;
+      settings.statusBarBattery = 0;
+      break;
+    case CrossPointSettings::CHAPTER_PROGRESS_BAR:
+      settings.statusBarChapterPageCount = 0;
+      settings.statusBarBookProgressPercentage = 1;
+      settings.statusBarProgressBar = CrossPointSettings::CHAPTER_PROGRESS;
+      settings.statusBarTitle = CrossPointSettings::CHAPTER_TITLE;
+      settings.statusBarBattery = 1;
+      break;
+    case CrossPointSettings::FULL:
+    default:
+      settings.statusBarChapterPageCount = 1;
+      settings.statusBarBookProgressPercentage = 1;
+      settings.statusBarProgressBar = CrossPointSettings::HIDE_PROGRESS;
+      settings.statusBarTitle = CrossPointSettings::CHAPTER_TITLE;
+      settings.statusBarBattery = 1;
+      break;
+  }
+}
+
+bool isEnumRawValueAllowed(const SettingInfo& info, const uint8_t value) {
+  if (info.enumRawValues.empty()) return value < settingEnumOptionCount(info);
+  return std::find(info.enumRawValues.begin(), info.enumRawValues.end(), value) != info.enumRawValues.end();
+}
+
+uint8_t defaultEnumRawValue(const SettingInfo& info, const uint8_t fieldDefault) {
+  if (isEnumRawValueAllowed(info, fieldDefault)) return fieldDefault;
+  return info.enumRawValues.empty() ? 0 : info.enumRawValues.front();
+}
+
+bool isSleepScreenSetting(const SettingInfo& info) { return info.key && strcmp(info.key, "sleepScreen") == 0; }
+
+uint8_t migrateTiltDirectionValue(const uint8_t direction) {
+  if (direction == CrossPointSettings::TILT_LEFT_RIGHT) return CrossPointSettings::TILT_LEFT_RIGHT_INVERTED;
+  if (direction == CrossPointSettings::TILT_LEFT_RIGHT_INVERTED) return CrossPointSettings::TILT_LEFT_RIGHT;
+  return direction;
 }
 
 }  // namespace
@@ -303,10 +369,206 @@ uint16_t CrossPointSettings::getReadingIdleTimeThresholdSeconds() const {
   return readingIdleTimeThresholdSecondsForUnits(readingIdleTimeThresholdUnits);
 }
 
-bool CrossPointSettings::saveToFile() const {
+void CrossPointSettings::toJson(JsonDocument& doc) const {
   std::lock_guard<std::mutex> lock(_mutex);
-  Storage.mkdir("/.crosspoint");
-  return JsonSettingsIO::saveSettings(*this, SETTINGS_FILE_JSON);
+  for (const auto& info : getSettingsList()) {
+    if (!info.key || (!info.valuePtr && !info.stringOffset)) continue;
+    if (info.stringOffset) {
+      const char* value = reinterpret_cast<const char*>(this) + info.stringOffset;
+      if (info.obfuscated) {
+        char key[64];
+        snprintf(key, sizeof(key), "%s_obf", info.key);
+        doc[key] = obfuscation::obfuscateToBase64(value);
+      } else {
+        doc[info.key] = value;
+      }
+    } else {
+      uint8_t value = this->*(info.valuePtr);
+      if (isSleepScreenSetting(info)) value = sleepScreenModeToStorage(value);
+      doc[info.key] = value;
+    }
+  }
+
+  doc["frontButtonBack"] = frontButtonBack;
+  doc["frontButtonConfirm"] = frontButtonConfirm;
+  doc["frontButtonLeft"] = frontButtonLeft;
+  doc["frontButtonRight"] = frontButtonRight;
+  doc["readerFrontButtonsEnabled"] = readerFrontButtonsEnabled;
+  doc["readerFrontButtonBack"] = readerFrontButtonBack;
+  doc["readerFrontButtonConfirm"] = readerFrontButtonConfirm;
+  doc["readerFrontButtonLeft"] = readerFrontButtonLeft;
+  doc["readerFrontButtonRight"] = readerFrontButtonRight;
+  doc["fontFamily"] = fontFamily;
+  if (sdFontFamilyName[0] != '\0') doc["sdFontFamilyName"] = sdFontFamilyName;
+  doc["language"] = (language < getLanguageCount()) ? LANGUAGE_CODES[language] : "EN";
+  doc["tiltPageTurnDirectionSchema"] = TILT_DIRECTION_SCHEMA_CURRENT;
+  doc["clockDateHasBeenSynced"] = clockDateHasBeenSynced;
+}
+
+bool CrossPointSettings::fromJson(JsonVariantConst doc) {
+  std::lock_guard<std::mutex> lock(_mutex);
+  bool needsResave = false;
+  auto clamp = [](const uint8_t value, const uint8_t maxValue, const uint8_t fallback) {
+    return value < maxValue ? value : fallback;
+  };
+  const bool migrateLegacyTiltMode = !doc["tiltPageTurn"].isNull() && doc["tiltPageTurnDirection"].isNull();
+  const uint8_t legacyTiltMode = doc["tiltPageTurn"] | static_cast<uint8_t>(TILT_OFF);
+  const bool migrateTiltDirectionSchema =
+      !doc["tiltPageTurnDirection"].isNull() &&
+      ((doc["tiltPageTurnDirectionSchema"] | static_cast<uint8_t>(1)) < TILT_DIRECTION_SCHEMA_CURRENT);
+
+  if (doc["statusBarChapterPageCount"].isNull()) applyLegacyStatusBarSettings(*this);
+
+  for (const auto& info : getSettingsList()) {
+    if (!info.key || (!info.valuePtr && !info.stringOffset)) continue;
+    if (info.stringOffset) {
+      char* destination = reinterpret_cast<char*>(this) + info.stringOffset;
+      if (info.stringMaxLen == 0) {
+        LOG_ERR("CPS", "Misconfigured SettingInfo: stringMaxLen is 0 for key '%s'", info.key);
+        destination[0] = '\0';
+        needsResave = true;
+        continue;
+      }
+      const std::string fieldDefault = destination;
+      std::string value;
+      if (info.obfuscated) {
+        char key[64];
+        snprintf(key, sizeof(key), "%s_obf", info.key);
+        obfuscation::DecodeStatus status = obfuscation::DecodeStatus::INVALID;
+        value = obfuscation::deobfuscateFromBase64(doc[key] | "", &status);
+        if (status == obfuscation::DecodeStatus::LEGACY && !value.empty()) needsResave = true;
+        if (status == obfuscation::DecodeStatus::INVALID || status == obfuscation::DecodeStatus::EMPTY ||
+            value.empty()) {
+          value = doc[info.key] | fieldDefault;
+          if (value != fieldDefault) needsResave = true;
+        }
+      } else {
+        value = doc[info.key] | fieldDefault;
+      }
+      strncpy(destination, value.c_str(), info.stringMaxLen - 1);
+      destination[info.stringMaxLen - 1] = '\0';
+      if (strcmp(info.key, "deviceName") == 0 && strlen(destination) < MIN_DEVICE_NAME_LENGTH) {
+        destination[0] = '\0';
+        needsResave = true;
+      }
+      continue;
+    }
+
+    const uint8_t fieldDefault = this->*(info.valuePtr);
+    uint8_t value = doc[info.key] | fieldDefault;
+    if (strcmp(info.key, "sdFontSizeRange") == 0 && value == SD_FONT_RANGE_NO_EMOJI_LEGACY) {
+      value = SD_FONT_RANGE_ALL;
+      needsResave = true;
+    }
+    if (isSleepScreenSetting(info)) {
+      const uint8_t storedDefault = sleepScreenModeToStorage(fieldDefault);
+      const uint8_t storedValue = doc[info.key] | storedDefault;
+      value = sleepScreenStorageToMode(storedValue);
+      if (sleepScreenModeToStorage(value) != storedValue) needsResave = true;
+      this->*(info.valuePtr) = value;
+      continue;
+    }
+    if (info.type == SettingType::ENUM) {
+      const bool isSdFontSize = strcmp(info.key, "fontSize") == 0 && doc["sdFontFamilyName"].is<const char*>() &&
+                                doc["sdFontFamilyName"].as<const char*>()[0] != '\0';
+      if (!(isSdFontSize && value < SD_FONT_MAX_SIZE_STEPS) && !isEnumRawValueAllowed(info, value)) {
+        value = defaultEnumRawValue(info, fieldDefault);
+        needsResave = true;
+      }
+    } else if (info.type == SettingType::TOGGLE) {
+      value = clamp(value, 2, fieldDefault);
+    } else if (info.type == SettingType::VALUE) {
+      value = std::clamp(value, info.valueRange.min, info.valueRange.max);
+    }
+    this->*(info.valuePtr) = value;
+  }
+
+  if (doc["fileBrowserDisplay"].isNull()) {
+    if (!doc["fileBrowserPreview"].isNull()) {
+      fileBrowserDisplay = clamp(doc["fileBrowserPreview"] | static_cast<uint8_t>(FILE_BROWSER_DISPLAY_1_LINE),
+                                 FILE_BROWSER_DISPLAY_COUNT, FILE_BROWSER_DISPLAY_1_LINE);
+      needsResave = true;
+    } else if (uiTheme == MINIMAL) {
+      fileBrowserDisplay = FILE_BROWSER_DISPLAY_2_LINES;
+      needsResave = true;
+    }
+  }
+
+  if (migrateLegacyTiltMode) {
+    if (legacyTiltMode == 1 || legacyTiltMode == 2) {
+      tiltPageTurn = TILT_ON;
+      tiltPageTurnDirection = legacyTiltMode == 2 ? TILT_LEFT_RIGHT : TILT_LEFT_RIGHT_INVERTED;
+      needsResave = true;
+    } else {
+      tiltPageTurn = TILT_OFF;
+    }
+  } else if (migrateTiltDirectionSchema) {
+    tiltPageTurnDirection = migrateTiltDirectionValue(tiltPageTurnDirection);
+    needsResave = true;
+  }
+  if (!doc["tiltPageTurnDirection"].isNull() && doc["tiltPageTurnDirectionSchema"].isNull()) needsResave = true;
+
+  if (doc["hideClock"].isNull() && !doc["statusBarClock"].isNull()) {
+    constexpr uint8_t LEGACY_SHOW_CLOCK_NEVER = 0;
+    const uint8_t legacyShowClock =
+        clamp(doc["statusBarClock"] | LEGACY_SHOW_CLOCK_NEVER, HIDE_CLOCK_MODE_COUNT, LEGACY_SHOW_CLOCK_NEVER);
+    hideClock = legacyShowClock == LEGACY_SHOW_CLOCK_NEVER ? HIDE_CLOCK_ALWAYS : HIDE_CLOCK_NEVER;
+    needsResave = true;
+  }
+  if (doc["sleepTimeoutMinutes"].isNull() && !doc["sleepTimeout"].isNull()) {
+    const uint8_t legacyValue =
+        clamp(doc["sleepTimeout"] | static_cast<uint8_t>(SLEEP_10_MIN), SLEEP_TIMEOUT_COUNT, SLEEP_10_MIN);
+    sleepTimeoutMinutes = sleepTimeoutEnumToMinutes(legacyValue);
+    needsResave = true;
+  }
+
+  frontButtonBack =
+      clamp(doc["frontButtonBack"] | static_cast<uint8_t>(FRONT_HW_BACK), FRONT_BUTTON_HARDWARE_COUNT, FRONT_HW_BACK);
+  frontButtonConfirm = clamp(doc["frontButtonConfirm"] | static_cast<uint8_t>(FRONT_HW_CONFIRM),
+                             FRONT_BUTTON_HARDWARE_COUNT, FRONT_HW_CONFIRM);
+  frontButtonLeft =
+      clamp(doc["frontButtonLeft"] | static_cast<uint8_t>(FRONT_HW_LEFT), FRONT_BUTTON_HARDWARE_COUNT, FRONT_HW_LEFT);
+  frontButtonRight = clamp(doc["frontButtonRight"] | static_cast<uint8_t>(FRONT_HW_RIGHT), FRONT_BUTTON_HARDWARE_COUNT,
+                           FRONT_HW_RIGHT);
+  validateFrontButtonMapping(*this);
+  readerFrontButtonsEnabled = clamp(doc["readerFrontButtonsEnabled"] | static_cast<uint8_t>(0), 2, 0);
+  readerFrontButtonBack = clamp(doc["readerFrontButtonBack"] | static_cast<uint8_t>(FRONT_HW_BACK),
+                                FRONT_BUTTON_HARDWARE_COUNT, FRONT_HW_BACK);
+  readerFrontButtonConfirm = clamp(doc["readerFrontButtonConfirm"] | static_cast<uint8_t>(FRONT_HW_CONFIRM),
+                                   FRONT_BUTTON_HARDWARE_COUNT, FRONT_HW_CONFIRM);
+  readerFrontButtonLeft = clamp(doc["readerFrontButtonLeft"] | static_cast<uint8_t>(FRONT_HW_LEFT),
+                                FRONT_BUTTON_HARDWARE_COUNT, FRONT_HW_LEFT);
+  readerFrontButtonRight = clamp(doc["readerFrontButtonRight"] | static_cast<uint8_t>(FRONT_HW_RIGHT),
+                                 FRONT_BUTTON_HARDWARE_COUNT, FRONT_HW_RIGHT);
+  validateReaderFrontButtonMapping(*this);
+
+  const uint8_t storedFontFamily = doc["fontFamily"] | static_cast<uint8_t>(0);
+  fontFamily = clamp(storedFontFamily, BUILTIN_FONT_COUNT, 0);
+  const char* sdFamily = doc["sdFontFamilyName"] | "";
+  strncpy(sdFontFamilyName, sdFamily, sizeof(sdFontFamilyName) - 1);
+  sdFontFamilyName[sizeof(sdFontFamilyName) - 1] = '\0';
+  if (storedFontFamily >= BUILTIN_FONT_COUNT) needsResave = true;
+  if (doc["lineHeightPercent"].isNull() && !doc["lineSpacing"].isNull()) {
+    const uint8_t legacySpacing =
+        clamp(doc["lineSpacing"] | static_cast<uint8_t>(NORMAL), LINE_COMPRESSION_COUNT, static_cast<uint8_t>(NORMAL));
+    lineHeightPercent = legacyLineSpacingToPercent(legacySpacing, fontFamily, sdFontFamilyName[0] != '\0');
+    needsResave = true;
+  }
+  if (doc["language"].is<const char*>()) {
+    language = static_cast<uint8_t>(I18n::languageFromCode(doc["language"].as<const char*>()));
+  }
+  clockDateHasBeenSynced = clamp(doc["clockDateHasBeenSynced"] | static_cast<uint8_t>(0), 2, 0);
+
+  if (needsResave) requestResave();
+  LOG_DBG("CPS", "Settings loaded from file");
+  return true;
+}
+
+bool CrossPointSettings::saveToFile() const {
+  std::lock_guard<std::mutex> lock(storeMutex);
+  JsonDocument doc;
+  toJson(doc);
+  return PersistableStoreBase::writeDocToFile(SETTINGS_FILE_JSON, doc);
 }
 
 bool CrossPointSettings::loadFromFile() {
@@ -315,16 +577,20 @@ bool CrossPointSettings::loadFromFile() {
   auto loadJsonSettings = [this](const char* path, bool migrateToCurrentPath) -> JsonLoadStatus {
     if (!Storage.exists(path)) return JsonLoadStatus::MissingOrEmpty;
 
-    String json = Storage.readFile(path);
-    if (!json.isEmpty()) {
+    JsonDocument doc;
+    if (PersistableStoreBase::readDocFromFile(path, doc)) {
+      bool result = false;
       bool resave = false;
-      bool result;
       {
-        std::lock_guard<std::mutex> lock(_mutex);
-        result = JsonSettingsIO::loadSettings(*this, json.c_str(), &resave);
-        if (result && restoreLegacyRtcDateSyncState(*this)) {
-          resave = true;
-        }
+        std::lock_guard<std::mutex> storeLock(storeMutex);
+        resaveRequested = false;
+        result = fromJson(doc.as<JsonVariantConst>());
+        resave = resaveRequested;
+        resaveRequested = false;
+      }
+      if (result) {
+        std::lock_guard<std::mutex> settingsLock(_mutex);
+        if (restoreLegacyRtcDateSyncState(*this)) resave = true;
       }
       if (result && (resave || migrateToCurrentPath)) {
         if (saveToFile()) {
@@ -496,6 +762,43 @@ bool CrossPointSettings::loadFromBinaryFile() {
   lineHeightPercent = legacyLineSpacingToPercent(lineSpacing, fontFamily, sdFontFamilyName[0] != '\0');
 
   return true;
+}
+
+CrossPointSettings::StatusBarSpec CrossPointSettings::statusBarSpec() const {
+  StatusBarSpec spec;
+  spec.showChapterPageCount = statusBarChapterPageCount != 0;
+  spec.showBookProgressPercent = statusBarBookProgressPercentage != 0;
+  spec.showStablePageNumbers = stablePageNumbers != 0;
+  spec.titleMode = statusBarTitle;
+  spec.timeLeftMode = statusBarTimeLeft;
+  spec.showBattery = statusBarBattery != 0;
+  spec.showBatteryPercent = hideBatteryPercentage == HIDE_NEVER;
+  spec.showClock = hideClock == HIDE_CLOCK_NEVER;
+  spec.progressBarMode = statusBarProgressBar;
+  spec.progressBarHeightPx =
+      statusBarProgressBar != HIDE_PROGRESS ? static_cast<uint8_t>((statusBarProgressBarThickness + 1) * 2) : 0;
+  spec.xtcMode = xtcStatusBarMode;
+  return spec;
+}
+
+ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWidth, const uint16_t viewportHeight,
+                                                      const EpubRenderMode renderMode) const {
+  ReaderRenderSpec spec;
+  spec.fontId = getReaderFontId();
+  spec.lineCompression = getReaderLineCompression();
+  spec.extraParagraphSpacing = extraParagraphSpacing != 0;
+  spec.forceParagraphIndents = forceParagraphIndents != 0;
+  spec.paragraphAlignment = paragraphAlignment;
+  spec.viewportWidth = viewportWidth;
+  spec.viewportHeight = viewportHeight;
+  spec.hyphenationEnabled = hyphenationEnabled != 0;
+  spec.embeddedStyle = embeddedStyle != 0;
+  spec.imageRendering = imageRendering;
+  spec.bionicReadingEnabled = bionicReadingEnabled != 0;
+  spec.guideReadingEnabled = guideReadingEnabled != 0;
+  spec.wordSpacing = wordSpacing;
+  spec.renderMode = renderMode;
+  return spec;
 }
 
 float CrossPointSettings::getReaderLineCompression() const {
