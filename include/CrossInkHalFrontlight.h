@@ -18,8 +18,20 @@ class HalFrontlight {
     lastWarmth = warmth > 100 ? 100 : warmth;
     lit = on;
   }
-  constexpr bool present() const { return false; }
-  constexpr bool hasColorTemperature() const { return false; }
+  constexpr bool present() const {
+#ifdef SIMULATOR_DEVICE_X4PRO
+    return true;
+#else
+    return false;
+#endif
+  }
+  constexpr bool hasColorTemperature() const {
+#ifdef SIMULATOR_DEVICE_X4PRO
+    return true;
+#else
+    return false;
+#endif
+  }
   void setBrightness(const uint8_t percent) { lastBrightness = percent > 100 ? 100 : percent; }
   void setWarmth(const uint8_t percent) { lastWarmth = percent > 100 ? 100 : percent; }
   void setOn(const bool on) { lit = on; }

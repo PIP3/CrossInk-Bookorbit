@@ -516,7 +516,11 @@ bool MappedInputManager::wasLeftEdgeGesture() const { return wasBackGesture(); }
 
 bool MappedInputManager::hasHomeKeyHardware() const {
 #ifdef SIMULATOR
+#ifdef SIMULATOR_DEVICE_X4PRO
+  return true;
+#else
   return false;
+#endif
 #else
   return gpio.hasHomeKey();
 #endif

@@ -257,9 +257,26 @@ class SimulatorSmokeTest {
         inputScript.push_back(touchRelease(width * 5 / 6, height / 2));
         inputScript.push_back(render("Reader after touch page forward", 4));
       }
-      inputScript.push_back(touchDown(width / 2, 8));
-      inputScript.push_back(touchMove(width / 2, height / 4));
-      inputScript.push_back(touchRelease(width / 2, height / 4));
+      if (mappedInputManager.hasHomeKey()) {
+        // X4 Pro reserves the top-edge swipe for its frontlight overlay and
+        // moves the reader menu to the bottom edge.
+        inputScript.push_back(touchDown(width / 2, 8));
+        inputScript.push_back(touchMove(width / 2, height / 4));
+        inputScript.push_back(touchRelease(width / 2, height / 4));
+        inputScript.push_back(render("Frontlight Panel opened from touch gesture", 4));
+        inputScript.push_back(assertActivity("FrontlightPanel"));
+        inputScript.push_back(touchDown(width / 2, height * 3 / 4));
+        inputScript.push_back(touchRelease(width / 2, height * 3 / 4));
+        inputScript.push_back(render("Reader restored after dismissing Frontlight Panel", 4));
+        inputScript.push_back(assertActivity("EpubReader"));
+        inputScript.push_back(touchDown(width / 2, height - 8));
+        inputScript.push_back(touchMove(width / 2, height * 3 / 4));
+        inputScript.push_back(touchRelease(width / 2, height * 3 / 4));
+      } else {
+        inputScript.push_back(touchDown(width / 2, 8));
+        inputScript.push_back(touchMove(width / 2, height / 4));
+        inputScript.push_back(touchRelease(width / 2, height / 4));
+      }
       inputScript.push_back(render("Reader Menu opened from touch gesture", 4));
       inputScript.push_back(assertActivity("EpubReaderMenu"));
 
