@@ -8,6 +8,7 @@
 #include <cstring>
 
 #include "ClippingStore.h"
+#include "CrossInkHalFrontlight.h"
 #include "CrossPointSettings.h"
 #include "EpubReaderClippingListActivity.h"
 #include "MappedInputManager.h"
@@ -54,13 +55,10 @@ int readerMenuTabBarHeight(const int baseTabBarHeight, const bool hasTouch) {
   return baseTabBarHeight * (hasTouch ? touchReaderMenuTabBarHeightScale : 1);
 }
 
-Rect readerMenuListRect(const GfxRenderer& renderer, const bool hasTouch) {
-  auto metrics = UITheme::getInstance().getMetrics();
-  Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
-  const int tabBarHeight = readerMenuTabBarHeight(metrics.tabBarHeight, hasTouch);
-  const int contentTop = screen.y + metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + tabBarHeight +
-                         metrics.verticalSpacing;
-  return Rect{screen.x, contentTop, screen.width, screen.height - contentTop - metrics.verticalSpacing};
+bool readerMenuTabsAtBottom(const MappedInputManager& mappedInput) {
+  // Frontlight boards reserve the top-edge down-swipe for the quick panel, so
+  // the reader menu opens from the bottom and its tabs should stay thumb-close.
+  return mappedInput.hasTouch() && Frontlight.present();
 }
 
 bool rectContains(const Rect& rect, const int x, const int y) {
@@ -580,13 +578,16 @@ void EpubReaderMenuActivity::buildMenuScreen(UiApp::ScreenType& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
   const int tabBarHeight = readerMenuTabBarHeight(metrics.tabBarHeight, mappedInput.hasTouch());
+  const bool tabsAtBottom = readerMenuTabsAtBottom(mappedInput);
+  const int contentTop = safe.y + metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight +
+                         (tabsAtBottom ? 0 : tabBarHeight) + metrics.verticalSpacing;
+  const int contentBottom =
+      renderer.getScreenHeight() - (safe.y + safe.height) + (tabsAtBottom ? tabBarHeight + metrics.verticalSpacing : 0);
   // The legacy header, progress band, and icon tabs remain outside the app;
-  // FreeInkUI owns the scalable list below them.
-  screen.setContentMargin(fui::Insets{
-      static_cast<int16_t>(safe.y + metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + tabBarHeight +
-                           metrics.verticalSpacing),
-      static_cast<int16_t>(renderer.getScreenWidth() - (safe.x + safe.width)),
-      static_cast<int16_t>(renderer.getScreenHeight() - (safe.y + safe.height)), static_cast<int16_t>(safe.x)});
+  // FreeInkUI owns the scalable list between them.
+  screen.setContentMargin(fui::Insets{static_cast<int16_t>(contentTop),
+                                      static_cast<int16_t>(renderer.getScreenWidth() - (safe.x + safe.width)),
+                                      static_cast<int16_t>(contentBottom), static_cast<int16_t>(safe.x)});
 
   const auto& activeItems = activeMenuItems();
   std::vector<std::string> values(activeItems.size());
@@ -631,6 +632,7 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
   Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
   const bool hasTouch = mappedInput.hasTouch();
   const int tabBarHeight = readerMenuTabBarHeight(metrics.tabBarHeight, hasTouch);
+  const bool tabsAtBottom = readerMenuTabsAtBottom(mappedInput);
 
   // Header via GUI.drawHeader (already FreeInkUI-themed) for the battery
   // indicator; the rest of the screen renders through the app.
@@ -669,8 +671,9 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
       Rect{screen.x, screen.y + metrics.topPadding + metrics.headerHeight, screen.width, metrics.tabBarHeight},
       progressLine.c_str());
 
-  const Rect tabRect{screen.x, screen.y + metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight,
-                     screen.width, tabBarHeight};
+  const int tabBarY = tabsAtBottom ? screen.y + screen.height - tabBarHeight
+                                   : screen.y + metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight;
+  const Rect tabRect{screen.x, tabBarY, screen.width, tabBarHeight};
   drawIconTabBar(tabRect);
 
   uiReady = false;

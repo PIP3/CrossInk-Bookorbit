@@ -335,9 +335,12 @@ class SimulatorSmokeTest {
       // theme. Exercise both before activating Reader Options from list row 1.
       const auto& metrics = UITheme::getInstance().getMetrics();
       const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
-      const int tabTop = safe.y + metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight;
       const int tabHeight = metrics.tabBarHeight * 2;
-      const int listTop = tabTop + tabHeight + metrics.verticalSpacing;
+      const bool tabsAtBottom = mappedInputManager.hasHomeKey();
+      const int tabTop = tabsAtBottom ? safe.y + safe.height - tabHeight
+                                      : safe.y + metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight;
+      const int listTop = safe.y + metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight +
+                          (tabsAtBottom ? 0 : tabHeight) + metrics.verticalSpacing;
       const int rowHeight = UITheme::getInstance().getTheme().getListRowStep(false, 2);
       if (rowHeight <= 0) fail("Touch smoke test has invalid list row height");
 

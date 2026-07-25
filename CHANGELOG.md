@@ -15,6 +15,7 @@
 
 ### Changed
 
+- Touch devices with an adjustable frontlight now place the EPUB reader menu tabs at the bottom of the screen.
 - Firmware releases now identify the supported device type: X3/X4 or Seeed Sticky.
 - Image-heavy EPUB chapters now index by reading image headers first and extract each full image only when its page is shown.
 - EPUB books with repeated byte-identical stylesheets now parse each unique stylesheet only once when building caches.
