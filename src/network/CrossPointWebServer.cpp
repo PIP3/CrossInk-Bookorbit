@@ -123,8 +123,8 @@ class FontListJsonWriter {
           break;
         default:
           if (*p < 0x20) {
-            static constexpr char HEX[] = "0123456789ABCDEF";
-            const char escaped[] = {'\\', 'u', '0', '0', HEX[*p >> 4], HEX[*p & 0x0F]};
+            static constexpr char kHexDigits[] = "0123456789ABCDEF";
+            const char escaped[] = {'\\', 'u', '0', '0', kHexDigits[*p >> 4], kHexDigits[*p & 0x0F]};
             append(escaped, sizeof(escaped));
           } else {
             append(reinterpret_cast<const char*>(p), 1);
