@@ -34,6 +34,7 @@ class ContentOpfParser final : public Print {
   std::string coverItemId;
   Arena itemIndexArena;
   bool parseFailed = false;
+  bool hasExplicitStartReference = false;
 
   // Index for compact idref->href lookup. The temp manifest rows store only
   // hash/length plus href, not a second full copy of every manifest ID.

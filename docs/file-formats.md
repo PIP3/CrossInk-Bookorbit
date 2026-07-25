@@ -7,12 +7,13 @@ fixed-size char buffer.
 
 ## `book.bin`
 
-### Version 8
+### Version 10
 
 `book.bin` stores EPUB metadata plus lookup tables for spine and TOC entries.
 The current firmware writes this version from `BookMetadataCache`.
-Version 8 stores book and TOC title strings NFC-composed so decomposed
-diacritics render correctly with device fonts.
+Version 10 stores book and TOC title strings NFC-composed so decomposed
+diacritics render correctly with device fonts. It also rebuilds metadata after
+the EPUB guide start-reference handling changed.
 
 ImHex pattern:
 
@@ -21,7 +22,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 8
+#define EXPECTED_VERSION 10
 #define MAX_STRING_LENGTH 65535
 
 struct String {
