@@ -211,7 +211,12 @@ void TextSettingsActivity::loop() {
   if (optionPopup_.handleInput(mappedInput, [this] { requestUpdate(); })) return;  // picker owns input while open
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    finish();
+    if (selectedIndex() != 0) {
+      selectedIndex() = 0;
+      requestUpdate();
+      return;
+    }
+    finishAfterBackPress();
     return;
   }
 

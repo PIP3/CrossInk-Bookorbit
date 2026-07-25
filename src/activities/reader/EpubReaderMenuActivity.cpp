@@ -639,27 +639,31 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
   // Header via GUI.drawHeader (already FreeInkUI-themed) for the battery
   // indicator; the rest of the screen renders through the app.
   const Rect headerRect{screen.x, screen.y + metrics.topPadding, screen.width, metrics.headerHeight};
-  const Rect homeRect = readerMenuHeaderActionRect(headerRect, metrics);
-  const Rect homeTouchRect = readerMenuHeaderActionTouchRect(headerRect, homeRect);
-  // BaseTheme left-aligns reader titles while the clock is visible. Reserve
-  // the Home slot from that real title edge, rather than applying the
-  // narrower centered-header calculation.
-  int titleMaxWidth = homeRect.x - headerRect.x - metrics.headerSidePadding - headerActionGap;
-  const bool headerTitleIsCentered = !ReaderUtils::shouldShowTopClockStatusBar() &&
-                                     metrics.headerTitleAlign == static_cast<int>(fui::TextAlign::Center);
-  if (headerTitleIsCentered) {
-    // Centered headers expand equally around the middle, so cap the title at
-    // twice the space between that middle and Home's reserved action slot.
-    const int headerCenterX = headerRect.x + headerRect.width / 2;
-    titleMaxWidth = std::min(titleMaxWidth, 2 * (homeRect.x - headerActionGap - headerCenterX));
+  if (mappedInput.hasTouchHardware()) {
+    const Rect homeRect = readerMenuHeaderActionRect(headerRect, metrics);
+    const Rect homeTouchRect = readerMenuHeaderActionTouchRect(headerRect, homeRect);
+    // BaseTheme left-aligns reader titles while the clock is visible. Reserve
+    // the Home slot from that real title edge, rather than applying the
+    // narrower centered-header calculation.
+    int titleMaxWidth = homeRect.x - headerRect.x - metrics.headerSidePadding - headerActionGap;
+    const bool headerTitleIsCentered = !ReaderUtils::shouldShowTopClockStatusBar() &&
+                                       metrics.headerTitleAlign == static_cast<int>(fui::TextAlign::Center);
+    if (headerTitleIsCentered) {
+      // Centered headers expand equally around the middle, so cap the title at
+      // twice the space between that middle and Home's reserved action slot.
+      const int headerCenterX = headerRect.x + headerRect.width / 2;
+      titleMaxWidth = std::min(titleMaxWidth, 2 * (homeRect.x - headerActionGap - headerCenterX));
+    }
+    titleMaxWidth = std::max(0, titleMaxWidth);
+    const std::string headerTitle =
+        renderer.truncatedText(uiScaleSpec().titleFontId, title.c_str(), titleMaxWidth, EpdFontFamily::BOLD);
+    GUI.drawHeader(renderer, headerRect, headerTitle.c_str(), nullptr, true);
+    TouchRegistry::getInstance().add(homeTouchRect, static_cast<int>(TOUCH_HOME_ICON_INDEX), TouchRegistry::Tab);
+    drawSdkIcon(uiTarget, icon_home_24, homeRect.x + (homeRect.width - tabIconSize) / 2,
+                homeRect.y + (homeRect.height - tabIconSize) / 2);
+  } else {
+    GUI.drawHeader(renderer, headerRect, title.c_str(), nullptr, true);
   }
-  titleMaxWidth = std::max(0, titleMaxWidth);
-  const std::string headerTitle =
-      renderer.truncatedText(uiScaleSpec().titleFontId, title.c_str(), titleMaxWidth, EpdFontFamily::BOLD);
-  GUI.drawHeader(renderer, headerRect, headerTitle.c_str(), nullptr, true);
-  TouchRegistry::getInstance().add(homeTouchRect, static_cast<int>(TOUCH_HOME_ICON_INDEX), TouchRegistry::Tab);
-  drawSdkIcon(uiTarget, icon_home_24, homeRect.x + (homeRect.width - tabIconSize) / 2,
-              homeRect.y + (homeRect.height - tabIconSize) / 2);
 
   // Progress summary
   std::string progressLine;
