@@ -666,3 +666,4 @@ STR_NEARBY_POSITION_NO_READER: "لم يتم العثور على قارئ قري�
 STR_NEARBY_LABEL: "قريب:"
 STR_APPLY_NEARBY_POSITION: "تطبيق موقف قريب"
 STR_NEARBY_POSITION_SIMULATOR_UNAVAILABLE: "مزامنة الموقع القريب غير متوفرة في جهاز المحاكاة"
+STR_NEARBY_TRANSFER_VALIDATING: "جارٍ التحقق..."

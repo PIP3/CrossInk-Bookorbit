@@ -38,6 +38,7 @@ class NearbyBookTransferActivity final : public Activity {
     WaitingForApproval,
     OfferPrompt,
     CollisionPrompt,
+    Validating,
     Sending,
     Receiving,
     Success,
@@ -99,6 +100,8 @@ class NearbyBookTransferActivity final : public Activity {
   freeink::ui::GfxRendererTarget uiTarget_;  // Must precede app_: app_ holds a reference to it.
   UiApp app_;
   std::atomic<bool> uiReady_{false};
+  std::atomic<bool> receivingScreenDrawn_{false};
+  bool acceptPending_ = false;
 
   bool startRadio();
   void stopRadio();
@@ -113,6 +116,7 @@ class NearbyBookTransferActivity final : public Activity {
   bool sendAdvertisement(const uint8_t* destination);
   bool sendOffer();
   bool acceptOffer(bool keepBoth);
+  void sendPendingAccept();
   bool sendNextChunk();
   bool resendPending();
   bool sendAck();

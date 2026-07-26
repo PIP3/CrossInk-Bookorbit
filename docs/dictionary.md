@@ -1,5 +1,7 @@
 # Dictionary
 
+For the best experience, prepare your dictionary using CrossInk's [dictionary preparation tool](https://inky.crossink.dev/#dictionary-tools), which creates `.oft` and `.oft.cspt` accelerator files. An unprepared dictionary with uncompressed `.dict` and `.idx` files also works: on its first lookup, CrossInk creates a smaller on-device `.qidx` quick index automatically.
+
 ## Supported Format
 
 The reader supports **StarDict** dictionaries. When searching for dictionaries online, look for "StarDict format" or files with `.dict`, `.idx`, and `.ifo` extensions.
@@ -27,11 +29,13 @@ To deselect the current dictionary, select **None** from the list.
 
 ### Preparing Compressed or Large Dictionaries
 
-CrossInk does not decompress dictionaries on the device. If a download contains `.dict.dz` or `.syn.dz`, run the bundled preparation tool on a computer before copying the folder to the SD card (see [Offline Dictionary Tools](#offline-dictionary-tools)).
+CrossInk does not decompress dictionaries on the device. If a download contains `.dict.dz` or `.syn.dz`, run the bundled preparation tool on a computer before copying the folder to the SD card (see [Dictionary Tools](#dictionary-tools)).
 
-An uncompressed dictionary with only `.dict` and `.idx` files is usable without desktop preparation. On the first lookup, CrossInk generates a small `.qidx` sidecar next to `.idx`; later lookups use it to jump close to the requested word. The sidecar is a disposable cache and can be deleted safely. CrossInk rebuilds it when it is missing, invalid, or records a different `.idx` size.
+An uncompressed dictionary with only `.dict` and `.idx` files is usable without desktop preparation. During the first lookup, if neither `*.idx.oft` nor `*.idx.oft.cspt` is present, CrossInk creates `*.qidx` beside the dictionary files. It records a sample every 256 index entries, letting later direct and stemmed lookups jump near the requested word before scanning a small part of the original `.idx`.
 
-Desktop-generated `.oft` and `.cspt` files remain the fastest lookup path and take priority over `.qidx`. If CrossInk cannot write the sidecar, the dictionary remains usable through a slower full-index scan.
+`.qidx` is a disposable device cache: it is rebuilt when it is missing, invalid, or belongs to a differently sized `.idx` file, and it can be deleted safely. If the lookup is cancelled or the SD card cannot create the cache, the lookup still works by scanning the full `.idx`; CrossInk will try to create the quick index again on a later lookup.
+
+Desktop preparation remains recommended for large dictionaries. `*.idx.oft.cspt` is the preferred direct-lookup accelerator, with `*.idx.oft` as its fallback; either one prevents CrossInk from creating `.qidx`. The desktop files also speed up synonym resolution, suggestions, and ordinal lookups, whereas `.qidx` accelerates the main `.idx` word search only.
 
 ---
 
@@ -144,13 +148,31 @@ Dictionary definitions use the same font as the active reader. If you use an SD-
 
 Built-in fonts keep the glyphs they contain and approximate only unsupported pronunciation symbols. If you see a filled diamond, choose an SD-card font that includes that character.
 
+You can download CrossInk's SD card catalog of fonts with IPA glyphs built-in from [Inky](https://inky.crossink.dev/#downloads).
+
 ---
 
-## Offline Dictionary Tools
+## Dictionary Tools
+
+## Inky
+
+CrossInk's companion app, [Inky](https://inky.crossink.dev/#dictionary-tools), prepares one StarDict dictionary at a time and generates the accelerator indexes used for fast lookups. It accepts either:
+
+- an uncompressed dictionary folder; or
+- a `.zip`, `.tar.zst`, or `.rar` archive containing that folder or its dictionary files.
+
+1. Open Inky's **Dictionary Tools** page.
+2. Drag the dictionary archive or folder onto the upload area. Alternatively, click it and choose **Archive** or **Folder**.
+3. Select **Prepare Dictionary**. The input must include matching `.ifo`, `.idx`, and `.dict` or `.dict.dz` files. `.syn` and `.syn.dz` are optional.
+4. Download the prepared ZIP when the job finishes, then unzip it into `/.dictionaries/` or `/dictionaries/` on the SD card. Keep the resulting dictionary folder intact.
+
+Inky decompresses `.dict.dz` and `.syn.dz` when needed, creates `.idx.oft`, `.idx.oft.cspt`, `.syn.oft`, and `.syn.oft.cspt`, and packages the prepared dictionary for you. The prepared download is available for 10 minutes.
+
+### Command Line
 
 A command-line tool is included for working with StarDict dictionaries on your computer, without the device. It requires Python 3 and has no external dependencies.
 
-### Pre-processing
+#### Pre-processing
 
 Decompress dictionary data and generate accelerator indexes on your computer:
 
@@ -160,7 +182,7 @@ python3 scripts/dictionary_tools.py prep /path/to/dictionary-folder
 
 Run this before copying compressed dictionaries to the SD card. It is also recommended for large uncompressed dictionaries because it makes lookups much faster.
 
-The command produces, when applicable, `.dict`, `.syn`, `.idx.oft`, `.syn.oft`, `.idx.oft.cspt`, and `.syn.oft.cspt`. Copy these alongside the original `.idx` and optional `.ifo`. CrossInk uses the `.cspt` index first, falls back to `.oft`, and finally scans the original index if neither accelerator exists.
+The command produces, when applicable, `.dict`, `.syn`, `.idx.oft`, `.syn.oft`, `.idx.oft.cspt`, and `.syn.oft.cspt`. Copy these alongside the original `.idx` and optional `.ifo`. CrossInk uses `.idx.oft.cspt` first, then `.idx.oft`; when neither exists, it creates and uses `.qidx` on the device. If a quick index cannot be created, CrossInk scans the original index instead.
 
 ### Looking Up a Word
 
