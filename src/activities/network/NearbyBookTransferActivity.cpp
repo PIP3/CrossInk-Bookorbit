@@ -749,9 +749,15 @@ void NearbyBookTransferActivity::loop() {
 
   int tx = 0;
   int ty = 0;
-  if (mappedInput.hasTouch() && state_ == State::OfferPrompt && mappedInput.wasScreenTouchDown(tx, ty)) {
+  if (mappedInput.hasTouch() && (state_ == State::OfferPrompt || state_ == State::Success) &&
+      mappedInput.wasScreenTouchDown(tx, ty)) {
     const Rect safeArea = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
-    if (contains(touchActionButtonRect(safeArea, false), tx, ty)) {
+    if ((state_ == State::OfferPrompt || mode_ == Mode::Receive) &&
+        contains(touchActionButtonRect(safeArea, false), tx, ty)) {
+      if (state_ == State::Success) {
+        exitAfterRadio();
+        return;
+      }
       rejectOffer();
       return;
     }
@@ -812,6 +818,13 @@ void NearbyBookTransferActivity::render(RenderLock&&) {
       y += lineHeight;
     }
   };
+  auto drawTouchButton = [this](const Rect& rect, const char* label) {
+    renderer.fillRectDither(rect.x, rect.y, rect.width, rect.height, Color::White);
+    renderer.drawRect(rect.x, rect.y, rect.width, rect.height, true);
+    const int x = rect.x + (rect.width - renderer.getTextWidth(UI_10_FONT_ID, label)) / 2;
+    const int y = rect.y + (rect.height - renderer.getLineHeight(UI_10_FONT_ID)) / 2;
+    renderer.drawText(UI_10_FONT_ID, x, y, label);
+  };
 
   uiReady_ = false;
   if (isMenuState()) {
@@ -834,20 +847,6 @@ void NearbyBookTransferActivity::render(RenderLock&&) {
     char sizeText[48];
     snprintf(sizeText, sizeof(sizeText), tr(STR_NEARBY_TRANSFER_SIZE), static_cast<unsigned long>(offeredFileSize_));
     centered(sizeText, 70, SMALL_FONT_ID);
-    if (mappedInput.hasTouch()) {
-      const Rect safeArea = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
-      const Rect cancelRect = touchActionButtonRect(safeArea, false);
-      const Rect acceptRect = touchActionButtonRect(safeArea, true);
-      auto drawButton = [this](const Rect& rect, const char* label) {
-        renderer.fillRectDither(rect.x, rect.y, rect.width, rect.height, Color::White);
-        renderer.drawRect(rect.x, rect.y, rect.width, rect.height, true);
-        const int x = rect.x + (rect.width - renderer.getTextWidth(UI_10_FONT_ID, label)) / 2;
-        const int y = rect.y + (rect.height - renderer.getLineHeight(UI_10_FONT_ID)) / 2;
-        renderer.drawText(UI_10_FONT_ID, x, y, label);
-      };
-      drawButton(cancelRect, tr(STR_CANCEL));
-      drawButton(acceptRect, tr(STR_ACCEPT));
-    }
   } else if (state_ == State::Sending || state_ == State::Receiving) {
     centeredWrapped(state_ == State::Sending ? tr(STR_NEARBY_TRANSFER_SENDING) : tr(STR_NEARBY_TRANSFER_RECEIVING), -45,
                     2);
@@ -883,7 +882,13 @@ void NearbyBookTransferActivity::render(RenderLock&&) {
   } else if (state_ == State::Error)
     confirm = tr(STR_OK);
   const bool showNavigation = !mappedInput.hasTouch() && menuItemCount() > 1;
-  if (!(mappedInput.hasTouch() && state_ == State::OfferPrompt)) {
+  const bool showTouchActions = mappedInput.hasTouch() && (state_ == State::OfferPrompt || state_ == State::Success);
+  if (showTouchActions) {
+    const Rect safeArea = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+    if (state_ == State::OfferPrompt || mode_ == Mode::Receive)
+      drawTouchButton(touchActionButtonRect(safeArea, false), back);
+    drawTouchButton(touchActionButtonRect(safeArea, true), confirm);
+  } else {
     const auto labels = mappedInput.mapLabels(back, confirm, showNavigation ? tr(STR_DIR_UP) : "",
                                               showNavigation ? tr(STR_DIR_DOWN) : "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
