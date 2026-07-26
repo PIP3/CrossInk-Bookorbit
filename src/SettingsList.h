@@ -36,7 +36,6 @@ inline SettingInfo buildBuiltinFontSizeSetting() {
   s.valuePtr = &CrossPointSettings::fontSize;
   s.key = "fontSize";
   s.category = StrId::STR_CAT_READER;
-  s.inTextSettings = true;
   s.enumStringValues.reserve(CrossPointSettings::FONT_SIZE_COUNT);
   s.enumRawValues.reserve(CrossPointSettings::FONT_SIZE_COUNT);
 
@@ -55,7 +54,6 @@ inline SettingInfo buildSdFontSizeSetting(const SdCardFontFamilyInfo& family) {
   s.valuePtr = &CrossPointSettings::fontSize;
   s.key = "fontSize";
   s.category = StrId::STR_CAT_READER;
-  s.inTextSettings = true;
 
   const std::vector<uint8_t> sizes = family.availableSizes();
   s.enumStringValues.reserve(sizes.size());
@@ -179,7 +177,6 @@ inline SettingInfo buildFontFamilySetting(const SdCardFontRegistry* registry) {
   s.enumStringValues = std::move(allStringValues);
   s.key = "fontFamily";
   s.category = StrId::STR_CAT_READER;
-  s.inTextSettings = true;
 
   // Capture registry families by copy for the lambdas
   std::vector<std::string> sdFamilyNames;
@@ -365,8 +362,7 @@ inline const std::vector<SettingInfo>& getBaseSettingsList() {
     // Built-in font-family entry. Replaced per-call with a registry-aware
     // version when SD fonts are installed.
     add(SettingInfo::Enum(StrId::STR_FONT_FAMILY, &CrossPointSettings::fontFamily,
-                          {StrId::STR_LEXEND_DECA, StrId::STR_BITTER}, "fontFamily", StrId::STR_CAT_READER)
-            .withTextSettings());
+                          {StrId::STR_LEXEND_DECA, StrId::STR_BITTER}, "fontFamily", StrId::STR_CAT_READER));
     add(buildBuiltinFontSizeSetting());
     add(SettingInfo::Enum(StrId::STR_SD_FONT_SIZE_RANGE, &CrossPointSettings::sdFontSizeRange,
                           {StrId::STR_FONT_RANGE_TEENSY, StrId::STR_FONT_RANGE_TINY, StrId::STR_FONT_RANGE_XLARGE,
@@ -377,40 +373,31 @@ inline const std::vector<SettingInfo>& getBaseSettingsList() {
     add(SettingInfo::Value(StrId::STR_LINE_SPACING, &CrossPointSettings::lineHeightPercent,
                            {CrossPointSettings::MIN_LINE_HEIGHT_PERCENT, CrossPointSettings::MAX_LINE_HEIGHT_PERCENT,
                             CrossPointSettings::LINE_HEIGHT_PERCENT_STEP},
-                           "lineHeightPercent", StrId::STR_CAT_READER)
-            .withTextSettings());
+                           "lineHeightPercent", StrId::STR_CAT_READER));
     add(SettingInfo::Enum(
-            StrId::STR_WORD_SPACING, &CrossPointSettings::wordSpacing,
-            {StrId::STR_NORMAL, StrId::STR_LEVEL_1, StrId::STR_LEVEL_2, StrId::STR_LEVEL_3, StrId::STR_LEVEL_4},
-            "wordSpacing", StrId::STR_CAT_READER)
-            .withTextSettings());
+        StrId::STR_WORD_SPACING, &CrossPointSettings::wordSpacing,
+        {StrId::STR_NORMAL, StrId::STR_LEVEL_1, StrId::STR_LEVEL_2, StrId::STR_LEVEL_3, StrId::STR_LEVEL_4},
+        "wordSpacing", StrId::STR_CAT_READER));
     add(SettingInfo::Enum(
             StrId::STR_ORIENTATION, &CrossPointSettings::orientation,
             {StrId::STR_PORTRAIT, StrId::STR_LANDSCAPE_CW, StrId::STR_LANDSCAPE_CCW, StrId::STR_ORIENTATION_INVERTED},
             "orientation", StrId::STR_CAT_READER)
             .withEnumRawValues({CrossPointSettings::PORTRAIT, CrossPointSettings::LANDSCAPE_CW,
                                 CrossPointSettings::LANDSCAPE_CCW, CrossPointSettings::INVERTED}));
-    add(SettingInfo::Value(StrId::STR_SCREEN_MARGIN, &CrossPointSettings::screenMargin,
-                           {CrossPointSettings::SCREEN_MARGIN_MIN, CrossPointSettings::SCREEN_MARGIN_MAX,
-                            CrossPointSettings::SCREEN_MARGIN_STEP},
-                           "screenMargin", StrId::STR_CAT_READER)
-            .withTextSettings());
+    add(SettingInfo::Value(StrId::STR_SCREEN_MARGIN, &CrossPointSettings::screenMargin, {5, 40, 5}, "screenMargin",
+                           StrId::STR_CAT_READER));
     add(SettingInfo::Toggle(StrId::STR_PUBLISHER_PAGE_NUMBERS, &CrossPointSettings::publisherPageNumbers,
                             "publisherPageNumbers", StrId::STR_CAT_READER));
-    add(SettingInfo::Enum(StrId::STR_PARA_ALIGNMENT, &CrossPointSettings::paragraphAlignment,
-                          {StrId::STR_JUSTIFY, StrId::STR_ALIGN_LEFT, StrId::STR_CENTER, StrId::STR_ALIGN_RIGHT,
-                           StrId::STR_BOOK_S_STYLE},
-                          "paragraphAlignment", StrId::STR_CAT_READER)
-            .withTextSettings());
+    add(SettingInfo::Enum(
+        StrId::STR_PARA_ALIGNMENT, &CrossPointSettings::paragraphAlignment,
+        {StrId::STR_JUSTIFY, StrId::STR_ALIGN_LEFT, StrId::STR_CENTER, StrId::STR_ALIGN_RIGHT, StrId::STR_BOOK_S_STYLE},
+        "paragraphAlignment", StrId::STR_CAT_READER));
     add(SettingInfo::Toggle(StrId::STR_EMBEDDED_STYLE, &CrossPointSettings::embeddedStyle, "embeddedStyle",
-                            StrId::STR_CAT_READER)
-            .withTextSettings());
+                            StrId::STR_CAT_READER));
     add(SettingInfo::Toggle(StrId::STR_HYPHENATION, &CrossPointSettings::hyphenationEnabled, "hyphenationEnabled",
-                            StrId::STR_CAT_READER)
-            .withTextSettings());
+                            StrId::STR_CAT_READER));
     add(SettingInfo::Toggle(StrId::STR_TEXT_AA, &CrossPointSettings::textAntiAliasing, "textAntiAliasing",
-                            StrId::STR_CAT_READER)
-            .withTextSettings());
+                            StrId::STR_CAT_READER));
     add(SettingInfo::Toggle(StrId::STR_READER_DARK_MODE, &CrossPointSettings::readerDarkMode, "readerDarkMode",
                             StrId::STR_CAT_READER));
     add(SettingInfo::Enum(StrId::STR_IMAGES, &CrossPointSettings::imageRendering,
@@ -421,17 +408,13 @@ inline const std::vector<SettingInfo>& getBaseSettingsList() {
     add(SettingInfo::Toggle(StrId::STR_DISABLE_TOUCHSCREEN, &CrossPointSettings::disableReaderTouchscreen,
                             "disableReaderTouchscreen", StrId::STR_CAT_READER));
     add(SettingInfo::Toggle(StrId::STR_EXTRA_SPACING, &CrossPointSettings::extraParagraphSpacing,
-                            "extraParagraphSpacing", StrId::STR_CAT_READER)
-            .withTextSettings());
+                            "extraParagraphSpacing", StrId::STR_CAT_READER));
     add(SettingInfo::Toggle(StrId::STR_FORCE_PARAGRAPH_INDENTS, &CrossPointSettings::forceParagraphIndents,
-                            "forceParagraphIndents", StrId::STR_CAT_READER)
-            .withTextSettings());
+                            "forceParagraphIndents", StrId::STR_CAT_READER));
     add(SettingInfo::Toggle(StrId::STR_BIONIC_READING, &CrossPointSettings::bionicReadingEnabled,
-                            "bionicReadingEnabled", StrId::STR_CAT_READER)
-            .withTextSettings());
+                            "bionicReadingEnabled", StrId::STR_CAT_READER));
     add(SettingInfo::Toggle(StrId::STR_GUIDE_READING, &CrossPointSettings::guideReadingEnabled, "guideReadingEnabled",
-                            StrId::STR_CAT_READER)
-            .withTextSettings());
+                            StrId::STR_CAT_READER));
     add(SettingInfo::Enum(StrId::STR_INDEXING_METHOD, &CrossPointSettings::indexingMethod,
                           {StrId::STR_INDEXING_INCREMENTAL, StrId::STR_INDEXING_FULL_SECTION}, "indexingMethod",
                           StrId::STR_CAT_READER));
@@ -928,16 +911,17 @@ inline void addSettingByName(std::vector<SettingInfo>& target, const std::vector
 
 inline std::vector<SettingInfo> buildReaderSettingsParentList(const std::vector<SettingInfo>& allSettings) {
   std::vector<SettingInfo> readerSettings;
-  readerSettings.reserve(14);
-  readerSettings.push_back(SettingInfo::Action(StrId::STR_TEXT_SETTINGS, SettingAction::TextSettings));
-  readerSettings.push_back(SettingInfo::Action(StrId::STR_MANAGE_FONTS, SettingAction::DownloadFonts));
-  addSettingByName(readerSettings, allSettings, StrId::STR_SD_FONT_SIZE_RANGE);
+  readerSettings.reserve(12);
+  readerSettings.push_back(SettingInfo::Submenu(StrId::STR_READER_FONT_OPTIONS, SettingAction::ReaderFontOptions));
+  readerSettings.push_back(SettingInfo::Submenu(StrId::STR_READER_PAGE_LAYOUT, SettingAction::ReaderPageLayout));
   readerSettings.push_back(SettingInfo::Action(StrId::STR_CUSTOMISE_STATUS_BAR, SettingAction::CustomiseStatusBar));
-  addSettingByName(readerSettings, allSettings, StrId::STR_ORIENTATION);
   addSettingByName(readerSettings, allSettings, StrId::STR_PUBLISHER_PAGE_NUMBERS);
   addSettingByName(readerSettings, allSettings, StrId::STR_READER_DARK_MODE);
   addSettingByName(readerSettings, allSettings, StrId::STR_DISABLE_TOUCHSCREEN);
+  addSettingByName(readerSettings, allSettings, StrId::STR_EMBEDDED_STYLE);
   addSettingByName(readerSettings, allSettings, StrId::STR_IMAGES);
+  addSettingByName(readerSettings, allSettings, StrId::STR_BIONIC_READING);
+  addSettingByName(readerSettings, allSettings, StrId::STR_GUIDE_READING);
   addSettingByName(readerSettings, allSettings, StrId::STR_DICTIONARY);
   addSettingByName(readerSettings, allSettings, StrId::STR_INDEXING_METHOD);
   return readerSettings;
@@ -945,13 +929,10 @@ inline std::vector<SettingInfo> buildReaderSettingsParentList(const std::vector<
 
 inline std::vector<SettingInfo> buildBookReaderSettingsParentList(const std::vector<SettingInfo>& allSettings) {
   auto settings = buildReaderSettingsParentList(allSettings);
-  settings.erase(std::remove_if(settings.begin(), settings.end(),
-                                [](const SettingInfo& setting) {
-                                  return setting.nameId == StrId::STR_DISABLE_TOUCHSCREEN ||
-                                         setting.nameId == StrId::STR_MANAGE_FONTS ||
-                                         setting.nameId == StrId::STR_SD_FONT_SIZE_RANGE;
-                                }),
-                 settings.end());
+  settings.erase(
+      std::remove_if(settings.begin(), settings.end(),
+                     [](const SettingInfo& setting) { return setting.nameId == StrId::STR_DISABLE_TOUCHSCREEN; }),
+      settings.end());
   return settings;
 }
 

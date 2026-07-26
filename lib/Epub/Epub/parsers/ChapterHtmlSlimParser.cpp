@@ -780,7 +780,7 @@ void ChapterHtmlSlimParser::emitHorizontalRule(const BlockStyle& blockStyle) {
     }
   }
 
-  const int16_t lineHeight = static_cast<int16_t>(renderer.getLineHeight(fontId, lineCompression));
+  const int16_t lineHeight = static_cast<int16_t>(renderer.getLineHeight(fontId) * lineCompression + 0.5f);
   const int16_t defaultVerticalSpacing = static_cast<int16_t>(lineHeight / 2);
   const int16_t topSpacing =
       static_cast<int16_t>((blockStyle.marginTop > 0 ? blockStyle.marginTop : defaultVerticalSpacing) +
@@ -875,7 +875,7 @@ void ChapterHtmlSlimParser::emitBufferedTableAsParagraphs(BufferedTable& table) 
     currentPageNextY += table.blockStyle.paddingBottom;
   }
 
-  const int lineHeight = renderer.getLineHeight(fontId, lineCompression);
+  const int lineHeight = renderer.getLineHeight(fontId) * lineCompression;
   if (extraParagraphSpacing) {
     currentPageNextY += lineHeight / 2;
   }
@@ -901,7 +901,7 @@ void ChapterHtmlSlimParser::emitBufferedTableAsFragments(BufferedTable& table) {
   const int horizontalInset = table.blockStyle.totalHorizontalInset();
   const uint16_t tableWidth =
       (horizontalInset < viewportWidth) ? static_cast<uint16_t>(viewportWidth - horizontalInset) : viewportWidth;
-  const uint16_t lineHeight = renderer.getLineHeight(fontId, lineCompression);
+  const uint16_t lineHeight = renderer.getLineHeight(fontId) * lineCompression;
   std::vector<PreparedSegment> preparedSegments;
   preparedSegments.reserve(table.rows.size());
 
@@ -3216,7 +3216,7 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
 }
 
 int ChapterHtmlSlimParser::effectiveLineHeight() const {
-  return std::max(1, static_cast<int>(renderer.getLineHeight(fontId, lineCompression)));
+  return std::max(1, static_cast<int>(renderer.getLineHeight(fontId) * lineCompression + 0.5f));
 }
 
 void ChapterHtmlSlimParser::makePages() {
