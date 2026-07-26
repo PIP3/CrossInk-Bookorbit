@@ -341,6 +341,7 @@ void NearbyBookTransferActivity::handlePacket(const nearby::EspNowTransport::Eve
   }
   if (packet.sessionId != sessionId_ || !sameMac(peerMac_, event.sourceMac.data())) return;
   if (packet.type == nearby::PacketType::Offer && state_ == State::Receiving) {
+    if (acceptPending_) return;
     uint8_t payload[2];
     nearby::writeU16(payload, negotiatedChunkBytes_);
     sendPacket(nearby::PacketType::Accept, peerMac_.data(), 0, payload, sizeof(payload));
@@ -386,6 +387,14 @@ void NearbyBookTransferActivity::handlePacket(const nearby::EspNowTransport::Eve
 }
 
 bool NearbyBookTransferActivity::acceptOffer(const bool keepBoth) {
+  receivingScreenDrawn_.store(false, std::memory_order_release);
+  acceptPending_ = false;
+  setState(State::Validating);
+  if (requestUpdateAndWait() != RequestUpdateResult::Rendered) {
+    LOG_ERR(LOG_TAG, "Validation screen could not be rendered synchronously");
+    requestUpdate(true);
+  }
+
   if (keepBoth) {
     finalPath_ = keepBothPath(finalPath_);
     if (finalPath_.empty()) {
@@ -416,16 +425,26 @@ bool NearbyBookTransferActivity::acceptOffer(const bool keepBoth) {
   session_.begin(nearby::ReliableTransferSession::Role::Receiver, sessionId_, offeredFileSize_, negotiatedChunkBytes_);
   retryCount_ = 0;
   lastActionMs_ = millis();
+  acceptPending_ = true;
   setState(State::Receiving);
-  requestUpdateAndWait();
+  if (requestUpdateAndWait() != RequestUpdateResult::Rendered) {
+    LOG_ERR(LOG_TAG, "Receiving screen could not be rendered synchronously");
+    requestUpdate(true);
+  }
 
+  return true;
+}
+
+void NearbyBookTransferActivity::sendPendingAccept() {
+  if (!acceptPending_ || !receivingScreenDrawn_.load(std::memory_order_acquire)) return;
+  acceptPending_ = false;
   uint8_t payload[2];
   nearby::writeU16(payload, negotiatedChunkBytes_);
   if (!sendPacket(nearby::PacketType::Accept, peerMac_.data(), 0, payload, sizeof(payload))) {
     setError(tr(STR_NEARBY_TRANSFER_RADIO_FAILED));
-    return false;
+    return;
   }
-  return true;
+  lastActionMs_ = millis();
 }
 
 bool NearbyBookTransferActivity::sendNextChunk() {
@@ -499,6 +518,8 @@ bool NearbyBookTransferActivity::finishReceivedFile(const uint64_t expectedBytes
 }
 
 void NearbyBookTransferActivity::cancelTransfer() {
+  acceptPending_ = false;
+  receivingScreenDrawn_.store(false, std::memory_order_release);
   if (transport_.started() && peerMac_ != std::array<uint8_t, nearby::MAC_BYTES>{}) {
     sendPacket(nearby::PacketType::Cancel, peerMac_.data());
   }
@@ -722,6 +743,7 @@ void NearbyBookTransferActivity::updateNavigation() {
 }
 
 void NearbyBookTransferActivity::loop() {
+  sendPendingAccept();
   processPackets();
   updateTimers();
 
@@ -768,6 +790,7 @@ void NearbyBookTransferActivity::loop() {
 
 void NearbyBookTransferActivity::render(RenderLock&&) {
   renderer.clearScreen();
+  bool drewReceivingScreen = false;
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int width = renderer.getScreenWidth();
   const int height = renderer.getScreenHeight();
@@ -802,6 +825,8 @@ void NearbyBookTransferActivity::render(RenderLock&&) {
   } else if (state_ == State::WaitingForApproval) {
     centeredWrapped(tr(STR_NEARBY_TRANSFER_WAITING_APPROVAL), -10, 2);
     centeredWrapped(peers_[selectedIndex_].name.data(), renderer.getLineHeight(UI_10_FONT_ID) + 18, 2, SMALL_FONT_ID);
+  } else if (state_ == State::Validating) {
+    centered(tr(STR_NEARBY_TRANSFER_VALIDATING));
   } else if (state_ == State::OfferPrompt) {
     centeredWrapped(tr(STR_NEARBY_TRANSFER_INCOMING), -65, 2);
     centeredWrapped(senderName_.c_str(), -25, 2, SMALL_FONT_ID);
@@ -826,6 +851,7 @@ void NearbyBookTransferActivity::render(RenderLock&&) {
   } else if (state_ == State::Sending || state_ == State::Receiving) {
     centeredWrapped(state_ == State::Sending ? tr(STR_NEARBY_TRANSFER_SENDING) : tr(STR_NEARBY_TRANSFER_RECEIVING), -45,
                     2);
+    drewReceivingScreen = state_ == State::Receiving;
     const uint64_t scale = std::max<uint64_t>(1, session_.totalBytes() / 10000 + 1);
     GUI.drawProgressBar(renderer,
                         Rect{metrics.contentSidePadding, height / 2 + 10, width - metrics.contentSidePadding * 2,
@@ -841,21 +867,27 @@ void NearbyBookTransferActivity::render(RenderLock&&) {
     centeredWrapped(errorMessage_.c_str(), renderer.getLineHeight(UI_10_FONT_ID) + 10, 3, SMALL_FONT_ID);
   }
 
+  const char* back = tr(STR_CANCEL);
   const char* confirm = "";
   if (state_ == State::ChooseReceiveAction || state_ == State::DeviceList || state_ == State::CollisionPrompt)
     confirm = tr(STR_SELECT);
   else if (state_ == State::OfferPrompt)
     confirm = tr(STR_ACCEPT);
-  else if (state_ == State::Success && mode_ == Mode::Receive)
+  else if (state_ == State::Success && mode_ == Mode::Receive) {
+    back = tr(STR_BACK);
     confirm =
         FsHelpers::hasPngExtension(finalPath_) || FsHelpers::hasBmpExtension(finalPath_) ? tr(STR_OPEN) : tr(STR_READ);
-  else if (state_ == State::Success || state_ == State::Error)
+  } else if (state_ == State::Success) {
+    back = "";
+    confirm = tr(STR_OK);
+  } else if (state_ == State::Error)
     confirm = tr(STR_OK);
   const bool showNavigation = !mappedInput.hasTouch() && menuItemCount() > 1;
   if (!(mappedInput.hasTouch() && state_ == State::OfferPrompt)) {
-    const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), confirm, showNavigation ? tr(STR_DIR_UP) : "",
+    const auto labels = mappedInput.mapLabels(back, confirm, showNavigation ? tr(STR_DIR_UP) : "",
                                               showNavigation ? tr(STR_DIR_DOWN) : "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   }
   renderer.displayBuffer();
+  if (drewReceivingScreen) receivingScreenDrawn_.store(true, std::memory_order_release);
 }

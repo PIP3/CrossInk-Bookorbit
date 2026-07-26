@@ -29,9 +29,10 @@ Examples:
     python gen_i18n.py --strip-unused --src-dirs src lib/EpdFont
 """
 
-import sys
+import hashlib
 import os
 import re
+import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 
@@ -999,5 +1000,11 @@ else:
     try:
         Import("env")
         main(strip_unused=True)
+        keys_path = Path("lib/I18n/I18nKeys.h")
+        layout_hash = hashlib.sha256(keys_path.read_bytes()).hexdigest()[:16]
+        # StrId values are compiled into every tr(...) call. Include the
+        # generated layout in the command signature so PlatformIO rebuilds
+        # consumers when IDs move, not only the generated string table.
+        env.Append(CPPDEFINES=[f"I18N_LAYOUT_{layout_hash}"])
     except NameError:
         pass
