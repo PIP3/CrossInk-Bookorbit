@@ -102,15 +102,12 @@ inline TouchPageTurn detectTouchPageTurn(const GfxRenderer& renderer, const Mapp
     return result;
   }
 
-  MappedInputManager::SwipeDir swipe = MappedInputManager::SwipeDir::None;
-  int swipeStartX = 0;
-  int swipeStartY = 0;
-  int swipeEndX = 0;
-  int swipeEndY = 0;
-  if (input.wasSwipeWithPoints(swipe, swipeStartX, swipeStartY, swipeEndX, swipeEndY)) {
-    const int sideZoneWidth = width / 3;
-    result.prev = swipe == MappedInputManager::SwipeDir::Right && swipeStartX < sideZoneWidth;
-    result.next = swipe == MappedInputManager::SwipeDir::Left && swipeStartX >= width - sideZoneWidth;
+  const auto swipe = input.wasSwipe();
+  if (swipe != MappedInputManager::SwipeDir::None) {
+    // A horizontal reader swipe turns pages wherever it starts. Edge-only
+    // navigation remains handled by the activities that explicitly use it.
+    result.prev = swipe == MappedInputManager::SwipeDir::Right;
+    result.next = swipe == MappedInputManager::SwipeDir::Left;
     return result;
   }
 
