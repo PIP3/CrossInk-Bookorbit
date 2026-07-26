@@ -35,6 +35,7 @@
 
 ### Fixed
 
+- Short physical button presses now register reliably after the device enters low-power mode.
 - Improved reliability when re-indexing EPUB chapters after changing reader font settings.
 - The web EPUB optimizer now removes decorative empty chapter stubs and keeps their table-of-contents links pointing at the readable chapter.
 - Reader popups and KOReader Sync's WiFi connection labels now stay correctly oriented when reading upside down.

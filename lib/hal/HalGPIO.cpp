@@ -18,6 +18,8 @@
 HalGPIO gpio;
 
 namespace {
+constexpr unsigned long BUTTON_DEBOUNCE_REPOLL_MS = 6;
+
 #ifdef STICKY_SIDE_BUTTON_DIAGNOSTICS
 constexpr uint8_t SIDE_BUTTON_DIAGNOSTIC_QUEUE_SIZE = 32;
 
@@ -271,6 +273,13 @@ void HalGPIO::begin() {
 
 void HalGPIO::update() {
   inputMgr.update();
+  if (inputMgr.isDebouncePending()) {
+    // The SDK commits a state change after it remains stable for more than
+    // 5 ms. Re-poll before the low-power loop's next ~100 ms sample so short
+    // physical button presses are not discarded.
+    delay(BUTTON_DEBOUNCE_REPOLL_MS);
+    inputMgr.update();
+  }
 #ifdef STICKY_SIDE_BUTTON_DIAGNOSTICS
   logStickySideButtonDiagnostics(inputMgr);
 #endif
