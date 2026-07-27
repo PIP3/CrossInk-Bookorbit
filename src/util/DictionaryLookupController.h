@@ -22,7 +22,14 @@ class DictionaryLookupController {
 
  public:
   enum class LookupState { Idle, LookingUp, AltFormPrompt, NotFound };
-  enum class LookupEvent { None, FoundDefinition, NotFoundDismissedBack, NotFoundDismissedDone, Cancelled };
+  enum class LookupEvent {
+    None,
+    FoundDefinition,
+    NotFoundDismissedBack,
+    NotFoundDismissedDone,
+    SwitchDictionary,
+    Cancelled
+  };
 
   // How the word was ultimately resolved when FoundDefinition fires.
   enum class FoundStatus { Direct, Stem, AltForm, Suggestion };

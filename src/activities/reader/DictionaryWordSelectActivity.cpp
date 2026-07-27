@@ -12,9 +12,11 @@
 #include <algorithm>
 #include <cstring>
 
+#include "../settings/DictionarySelectActivity.h"
 #include "CrossPointSettings.h"
 #include "DictionaryDefinitionActivity.h"
 #include "MappedInputManager.h"
+#include "Memory.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/Dictionary.h"
@@ -394,6 +396,23 @@ void DictionaryWordSelectActivity::mergeHyphenatedWords(std::vector<WordSelectNa
   }
 }
 
+void DictionaryWordSelectActivity::openDictionarySwitch() {
+  auto picker = makeUniqueNoThrow<DictionarySelectActivity>(renderer, mappedInput, cachePath, true);
+  if (!picker) {
+    LOG_ERR("DICT", "OOM: DictionarySelectActivity");
+    return;
+  }
+
+  startActivityForResult(std::move(picker), [this](const ActivityResult& result) {
+    forceFullRepaintOnNextRender();
+    if (result.isCancelled) {
+      requestUpdate();
+      return;
+    }
+    controller.startLookup(controller.getLookupWord(), false);
+  });
+}
+
 void DictionaryWordSelectActivity::loop() {
   if (ignoreInitialBackRelease_) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
@@ -429,6 +448,9 @@ void DictionaryWordSelectActivity::loop() {
       case DictionaryLookupController::LookupEvent::NotFoundDismissedDone:
         setResult(ActivityResult{});
         finish();
+        break;
+      case DictionaryLookupController::LookupEvent::SwitchDictionary:
+        openDictionarySwitch();
         break;
       case DictionaryLookupController::LookupEvent::Cancelled:
         forceFullRepaintOnNextRender();

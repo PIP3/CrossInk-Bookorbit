@@ -34,6 +34,7 @@
 ### Fixed
 
 - Lyra Home headers now keep the battery icon and percentage aligned with safer clearance below the top bezel.
+- Dictionary lookups that miss can now switch dictionaries without returning to the reader.
 - Reading Stats button hints now follow customized front-button assignments.
 - Short physical button presses now register reliably after the device enters low-power mode.
 - Improved reliability when re-indexing EPUB chapters after changing reader font settings.

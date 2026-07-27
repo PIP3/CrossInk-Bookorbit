@@ -24,6 +24,13 @@ DictionaryLookupController::DictionaryLookupController(GfxRenderer& renderer, Ma
 DictionaryLookupController::~DictionaryLookupController() { onExit(); }
 
 namespace {
+constexpr int kDictionarySwitchTouchHeight = 56;
+
+Rect dictionarySwitchTouchRect(const GfxRenderer& renderer) {
+  const int buttonHintsHeight = UITheme::getInstance().getMetrics().buttonHintsHeight;
+  return Rect{0, renderer.getScreenHeight() - buttonHintsHeight - kDictionarySwitchTouchHeight,
+              renderer.getScreenWidth(), kDictionarySwitchTouchHeight};
+}
 
 void logDictionaryLookupTaskEnd() {
   MemoryBudget::logHeapShape("dict.lookup_done");
@@ -150,6 +157,21 @@ DictionaryLookupController::LookupEvent DictionaryLookupController::handleInput(
   }
 
   if (state == LookupState::NotFound) {
+#if CROSSINK_APP_CAP_TOUCH
+    int touchX = 0;
+    int touchY = 0;
+    const Rect switchRect = dictionarySwitchTouchRect(renderer);
+    if (mappedInput.hasTouch() && mappedInput.wasScreenTapped(touchX, touchY) && touchX >= switchRect.x &&
+        touchX < switchRect.x + switchRect.width && touchY >= switchRect.y &&
+        touchY < switchRect.y + switchRect.height) {
+      state = LookupState::Idle;
+      return LookupEvent::SwitchDictionary;
+    }
+#endif
+    if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
+      state = LookupState::Idle;
+      return LookupEvent::SwitchDictionary;
+    }
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
       state = LookupState::Idle;
       return LookupEvent::NotFoundDismissedDone;
@@ -189,7 +211,18 @@ bool DictionaryLookupController::render() {
 
   if (state == LookupState::NotFound) {
     GUI.drawPopup(renderer, tr(STR_DICT_NOT_FOUND));
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_DONE), "", "");
+#if CROSSINK_APP_CAP_TOUCH
+    if (mappedInput.hasTouch()) {
+      const Rect switchRect = dictionarySwitchTouchRect(renderer);
+      renderer.drawLine(switchRect.x, switchRect.y, switchRect.x + switchRect.width, switchRect.y, true);
+      const char* label = tr(STR_SWITCH_DICTIONARY);
+      const int labelX =
+          switchRect.x + (switchRect.width - renderer.getTextWidth(UI_12_FONT_ID, label, EpdFontFamily::BOLD)) / 2;
+      const int labelY = switchRect.y + (switchRect.height - renderer.getLineHeight(UI_12_FONT_ID)) / 2;
+      renderer.drawText(UI_12_FONT_ID, labelX, labelY, label, true, EpdFontFamily::BOLD);
+    }
+#endif
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_DONE), tr(STR_DICT_SWITCH), "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer(HalDisplay::FAST_REFRESH);
     return true;

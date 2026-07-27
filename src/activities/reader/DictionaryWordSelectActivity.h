@@ -106,6 +106,7 @@ class DictionaryWordSelectActivity final : public Activity {
   void prebuildAdvanceTable();
 
   void clearFrontButtonHintArea();
+  void openDictionarySwitch();
   void renderDefinitionBackground();
   static void renderDefinitionBackgroundCallback(void* context);
 

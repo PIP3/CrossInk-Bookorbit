@@ -1039,6 +1039,9 @@ void DictionaryDefinitionActivity::loop() {
         setResult(ActivityResult{});
         finish();
         break;
+      case DictionaryLookupController::LookupEvent::SwitchDictionary:
+        openDictionarySwitch();
+        break;
       case DictionaryLookupController::LookupEvent::Cancelled:
         dictionarySwitchLookupInProgress = false;
         isWordSelectMode = false;
