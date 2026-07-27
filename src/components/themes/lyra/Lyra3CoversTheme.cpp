@@ -10,7 +10,7 @@
 #include "RecentBooksStore.h"
 #include "components/TouchRegistry.h"
 #include "components/UITheme.h"
-#include "components/icons/cover.h"
+#include "components/UiAppHelpers.h"
 #include "fontIds.h"
 
 // Internal constants
@@ -76,7 +76,7 @@ void Lyra3CoversTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
                             tileY + hPaddingInSelection + (Lyra3CoversMetrics::values.homeCoverHeight / 3),
                             tileWidth - 2 * hPaddingInSelection, 2 * Lyra3CoversMetrics::values.homeCoverHeight / 3,
                             true);
-          renderer.drawIcon(CoverIcon, tileX + hPaddingInSelection + 24, tileY + hPaddingInSelection + 24, 32);
+          drawLucideIcon(renderer, icon_image_32, tileX + hPaddingInSelection + 24, tileY + hPaddingInSelection + 24);
         }
       }
 

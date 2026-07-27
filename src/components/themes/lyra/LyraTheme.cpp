@@ -18,21 +18,8 @@
 #include "activities/reader/BookReadingStats.h"
 #include "components/TouchRegistry.h"
 #include "components/UITheme.h"
-#include "components/icons/book.h"
-#include "components/icons/book24.h"
+#include "components/UiAppHelpers.h"
 #include "components/icons/chart.h"
-#include "components/icons/cover.h"
-#include "components/icons/file24.h"
-#include "components/icons/folder.h"
-#include "components/icons/folder24.h"
-#include "components/icons/hotspot.h"
-#include "components/icons/image24.h"
-#include "components/icons/library.h"
-#include "components/icons/recent.h"
-#include "components/icons/settings2.h"
-#include "components/icons/text24.h"
-#include "components/icons/transfer.h"
-#include "components/icons/wifi.h"
 #include "fontIds.h"
 
 // Internal constants
@@ -71,42 +58,40 @@ int mainMenuIconYOffset(const UIIcon icon) {
 
 }  // namespace
 
-const uint8_t* LyraTheme::iconForName(UIIcon icon, uint32_t size) {
+const freeink::Icon* LyraTheme::iconForName(UIIcon icon, uint32_t size) {
   if (size == 24) {
     switch (icon) {
       case UIIcon::Folder:
-        return Folder24Icon;
+        return &icon_folder_24;
       case UIIcon::Text:
-        return Text24Icon;
+        return &icon_file_text_24;
       case UIIcon::Image:
-        return Image24Icon;
+        return &icon_image_24;
       case UIIcon::Book:
-        return Book24Icon;
+        return &icon_book_marked_24;
       case UIIcon::File:
-        return File24Icon;
+        return &icon_file_24;
       default:
         return nullptr;
     }
   } else if (size == 32) {
     switch (icon) {
       case UIIcon::Folder:
-        return FolderIcon;
+        return &icon_folder_32;
       case UIIcon::Book:
-        return BookIcon;
-      case UIIcon::Chart:
-        return ChartIcon;
+        return &icon_book_marked_32;
       case UIIcon::Recent:
-        return RecentIcon;
+        return &icon_history_32;
       case UIIcon::Settings:
-        return Settings2Icon;
+        return &icon_lyra_settings_32;
       case UIIcon::Transfer:
-        return TransferIcon;
+        return &icon_lyra_transfer_32;
       case UIIcon::Library:
-        return LibraryIcon;
+        return &icon_lyra_library_32;
       case UIIcon::Wifi:
-        return WifiIcon;
+        return &icon_wifi_32;
       case UIIcon::Hotspot:
-        return HotspotIcon;
+        return &icon_radio_tower_32;
       default:
         return nullptr;
     }
@@ -358,15 +343,15 @@ void LyraTheme::drawListWithMetrics(const GfxRenderer& renderer, Rect rect, int 
 
     if (rowIcon != nullptr) {
       UIIcon icon = rowIcon(i);
-      const uint8_t* iconBitmap = iconForName(icon, iconSize);
+      const freeink::Icon* iconBitmap = iconForName(icon, iconSize);
       if (iconBitmap != nullptr) {
         const int iconX = rect.x + metrics.contentSidePadding + hPaddingInSelection;
         const int iconY =
             rowSubtitle != nullptr ? itemY + 16 : centeredRowY(itemY, currentRowHeight, static_cast<int>(iconSize));
         if (invertSelectedRows && selectedRow) {
-          renderer.drawIconInverted(iconBitmap, iconX, iconY, iconSize, iconSize);
+          drawLucideIcon(renderer, *iconBitmap, iconX, iconY, false);
         } else {
-          renderer.drawIcon(iconBitmap, iconX, iconY, iconSize, iconSize);
+          drawLucideIcon(renderer, *iconBitmap, iconX, iconY);
         }
       }
     }
@@ -555,7 +540,7 @@ void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
         renderer.fillRect(tileX + hPaddingInSelection,
                           tileY + hPaddingInSelection + (LyraMetrics::values.homeCoverHeight / 3), coverWidth,
                           2 * LyraMetrics::values.homeCoverHeight / 3, true);
-        renderer.drawIcon(CoverIcon, tileX + hPaddingInSelection + 24, tileY + hPaddingInSelection + 24, 32);
+        drawLucideIcon(renderer, icon_image_32, tileX + hPaddingInSelection + 24, tileY + hPaddingInSelection + 24);
       }
 
       coverBufferStored = storeCoverBuffer();
@@ -710,11 +695,13 @@ void LyraTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
                               iconY + ribbonHeight};
         renderer.fillPolygon(polyX, polyY, 5, true);
         textX += mainMenuIconSize + hPaddingInSelection + 2;
+      } else if (icon == UIIcon::Chart) {
+        renderer.drawIcon(ChartIcon, textX, textY + 3 + mainMenuIconYOffset(icon), mainMenuIconSize, mainMenuIconSize);
+        textX += mainMenuIconSize + hPaddingInSelection + 2;
       } else {
-        const uint8_t* iconBitmap = iconForName(icon, mainMenuIconSize);
+        const freeink::Icon* iconBitmap = iconForName(icon, mainMenuIconSize);
         if (iconBitmap != nullptr) {
-          renderer.drawIcon(iconBitmap, textX, textY + 3 + mainMenuIconYOffset(icon), mainMenuIconSize,
-                            mainMenuIconSize);
+          drawLucideIcon(renderer, *iconBitmap, textX, textY + 3 + mainMenuIconYOffset(icon));
           textX += mainMenuIconSize + hPaddingInSelection + 2;
         }
       }

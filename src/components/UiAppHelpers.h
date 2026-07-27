@@ -80,6 +80,17 @@ inline freeink::ui::BitmapRef listIconFor(const UIIcon icon, const int size = 24
   }
 }
 
+// Legacy GfxRenderer icon arrays are pre-rotated. Render SDK Lucide assets through
+// its adapter instead so the same bitmap remains correct in every orientation.
+inline void drawLucideIcon(const GfxRenderer& renderer, const freeink::Icon& icon, const int x, const int y,
+                           const bool foregroundBlack = true) {
+  freeink::ui::GfxRendererTarget target(renderer);
+  target.bitmap(freeink::ui::Rect{static_cast<int16_t>(x), static_cast<int16_t>(y),
+                                  static_cast<int16_t>(icon.w), static_cast<int16_t>(icon.h)},
+                freeink::ui::bitmapFromIcon(icon), freeink::ui::BitmapMode::Center,
+                freeink::ui::Paint::solid(foregroundBlack ? freeink::ui::Color::Black : freeink::ui::Color::White));
+}
+
 // Scroll semantics shared by every FreeInkUI list screen: swipes move the
 // viewport (topIndex) without touching the selection; button navigation moves
 // the selection and pulls the viewport along just enough to keep it visible.

@@ -17,9 +17,6 @@
 #include "components/UITheme.h"
 #include "components/UIThemeTokens.h"
 #include "components/UiAppHelpers.h"
-#include "components/icons/home24.h"
-#include "components/icons/reader_menu_icons.h"
-#include "components/icons/settings2.h"
 #include "fontIds.h"
 
 namespace fui = freeink::ui;
@@ -27,13 +24,6 @@ namespace fui = freeink::ui;
 namespace {
 
 constexpr fui::ActionId ACTION_ROW = 1;
-
-constexpr uint8_t MenuIcon24[] = {
-    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xf3, 0xe7, 0xcf, 0xf3, 0xe7, 0xcf, 0xf3, 0xe7, 0xcf,
-    0xf3, 0xe7, 0xcf, 0xf3, 0xe7, 0xcf, 0xf3, 0xe7, 0xcf, 0xf3, 0xe7, 0xcf, 0xf3, 0xe7, 0xcf, 0xf3, 0xe7, 0xcf,
-    0xf3, 0xe7, 0xcf, 0xf3, 0xe7, 0xcf, 0xf3, 0xe7, 0xcf, 0xf3, 0xe7, 0xcf, 0xf3, 0xe7, 0xcf, 0xf3, 0xe7, 0xcf,
-    0xf3, 0xe7, 0xcf, 0xf3, 0xe7, 0xcf, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
-static_assert(sizeof(MenuIcon24) == 24 * ((24 + 7) / 8), "MenuIcon24 must contain 24 rows of 1-bit icon data");
 
 constexpr int tabIconSize = 24;
 constexpr int selectedTabBoxWidth = 50;
@@ -46,9 +36,6 @@ constexpr int headerActionRightPadding = 10;
 constexpr int inlineBatteryReserve = 72;
 constexpr int touchReaderMenuRowHeightScale = 2;
 constexpr int touchReaderMenuTabBarHeightScale = 2;
-static_assert(sizeof(icon_home_24_bits) == tabIconSize * ((tabIconSize + 7) / 8),
-              "Home icon must contain 24 rows of 1-bit icon data");
-
 int readerMenuRowHeightScale(const bool hasTouch) { return hasTouch ? touchReaderMenuRowHeightScale : 1; }
 
 int readerMenuTabBarHeight(const int baseTabBarHeight, const bool hasTouch) {
@@ -146,29 +133,6 @@ void drawBookmarkTabIcon(const GfxRenderer& renderer, int x, int y, const bool f
   renderer.fillPolygon(polyX, polyY, 5, foregroundBlack);
 }
 
-void drawReaderMenuBitmapIcon(const GfxRenderer& renderer, const uint8_t bitmap[], const int x, const int y,
-                              const int width, const int height, const bool foregroundBlack = true) {
-  if (bitmap == nullptr || width <= 0 || height <= 0) {
-    return;
-  }
-
-  const int stride = (width + 7) / 8;
-  for (int row = 0; row < height; ++row) {
-    const int srcOffset = row * stride;
-    for (int col = 0; col < width; ++col) {
-      const uint8_t mask = static_cast<uint8_t>(0x80 >> (col & 7));
-      if ((bitmap[srcOffset + (col >> 3)] & mask) != 0) {
-        continue;
-      }
-
-      // Icon assets are authored for the legacy portrait blitter. Keep that
-      // source rotation, but route placement through logical coordinates so
-      // landscape and inverted reader menus keep the tabs centered.
-      renderer.drawPixel(x + width - 1 - row, y + col, foregroundBlack);
-    }
-  }
-}
-
 Rect readerMenuHeaderActionRect(const Rect& header, const ThemeMetrics& metrics) {
   const int actionHeight = std::min(header.height, headerActionHitSize);
   // Compact headers keep the battery inline at the right edge, so leave its
@@ -188,12 +152,14 @@ Rect readerMenuHeaderActionTouchRect(const Rect& header, const Rect& actionRect)
               touchHeight};
 }
 
-void drawSdkIcon(fui::GfxRendererTarget& target, const freeink::Icon& icon, const int x, const int y) {
+void drawSdkIcon(fui::GfxRendererTarget& target, const freeink::Icon& icon, const int x, const int y,
+                 const bool foregroundBlack = true) {
   // FreeInkUI's target maps logical pixels through the renderer, keeping the
   // non-pre-rotated SDK assets upright in every reader orientation.
   target.bitmap(fui::Rect{static_cast<int16_t>(x), static_cast<int16_t>(y), static_cast<int16_t>(icon.w),
                           static_cast<int16_t>(icon.h)},
-                fui::bitmapFromIcon(icon), fui::BitmapMode::Center);
+                fui::bitmapFromIcon(icon), fui::BitmapMode::Center,
+                fui::Paint::solid(foregroundBlack ? fui::Color::Black : fui::Color::White));
 }
 
 }  // namespace
@@ -459,11 +425,11 @@ void EpubReaderMenuActivity::drawIconTabBar(const Rect rect, const bool drawBott
     }
 
     if (i == static_cast<size_t>(MenuTab::Main)) {
-      drawReaderMenuBitmapIcon(renderer, MenuIcon24, iconX, iconY, tabIconSize, tabIconSize, !tabFocused);
+      drawSdkIcon(uiTarget, icon_menu_24, iconX, iconY, !tabFocused);
     } else if (i == static_cast<size_t>(MenuTab::Bookmarks)) {
       drawBookmarkTabIcon(renderer, iconX, iconY, !tabFocused);
     } else if (i == static_cast<size_t>(MenuTab::Settings)) {
-      drawReaderMenuBitmapIcon(renderer, Settings2Icon24, iconX, iconY, tabIconSize, tabIconSize, !tabFocused);
+      drawSdkIcon(uiTarget, icon_cog_24, iconX, iconY, !tabFocused);
     }
 #if CROSSINK_APP_CAP_TOUCH
     else {

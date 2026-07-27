@@ -13,7 +13,7 @@
 #include "components/CompactHeader.h"
 #include "components/TouchRegistry.h"
 #include "components/UITheme.h"
-#include "components/icons/reading_stats_chevrons.h"
+#include "components/icons/listIcons.h"
 #include "fontIds.h"
 
 namespace {

@@ -11,7 +11,7 @@
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
-#include "components/icons/reading_stats_chevrons.h"
+#include "components/icons/listIcons.h"
 #include "fontIds.h"
 
 namespace {

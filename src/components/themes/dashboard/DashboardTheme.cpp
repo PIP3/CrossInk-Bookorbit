@@ -22,13 +22,7 @@
 #include "activities/reader/ReadingStatsUtils.h"
 #include "components/TouchRegistry.h"
 #include "components/UITheme.h"
-#include "components/icons/afternoon.h"
-#include "components/icons/book24.h"
-#include "components/icons/cover.h"
-#include "components/icons/evening.h"
-#include "components/icons/morning.h"
-#include "components/icons/night.h"
-#include "components/icons/streak.h"
+#include "components/UiAppHelpers.h"
 #include "fontIds.h"
 
 namespace {
@@ -97,7 +91,7 @@ void drawMissingBookCover(const GfxRenderer& renderer, const Rect& coverRect, co
   renderer.drawRoundedRect(coverRect.x, coverRect.y, coverRect.width, coverRect.height, 1, kCoverCornerRadius, true);
 
   constexpr int iconSize = 32;
-  renderer.drawIcon(CoverIcon, coverRect.x + (coverRect.width - iconSize) / 2, coverRect.y + 36, iconSize, iconSize);
+  drawLucideIcon(renderer, icon_image_32, coverRect.x + (coverRect.width - iconSize) / 2, coverRect.y + 36);
 
   constexpr int textPadding = 14;
   const int textW = coverRect.width - textPadding * 2;
@@ -378,26 +372,26 @@ const char* readerTypeLabel(const GlobalReadingStats* globalStats) {
   }
 }
 
-const uint8_t* readerTypeIcon(const GlobalReadingStats* globalStats) {
+const freeink::Icon* readerTypeIcon(const GlobalReadingStats* globalStats) {
   if (globalStats == nullptr) {
-    return Book24Icon;
+    return &icon_book_marked_24;
   }
 
   ReadingTimeBucket bucket = ReadingTimeBucket::Night;
   if (!dominantReaderTypeBucket(*globalStats, bucket)) {
-    return Book24Icon;
+    return &icon_book_marked_24;
   }
 
   switch (bucket) {
     case ReadingTimeBucket::Morning:
-      return MorningReaderIcon;
+      return &icon_sunrise_24;
     case ReadingTimeBucket::Afternoon:
-      return AfternoonReaderIcon;
+      return &icon_sun_24;
     case ReadingTimeBucket::Evening:
-      return EveningReaderIcon;
+      return &icon_sunset_24;
     case ReadingTimeBucket::Night:
     default:
-      return NightReaderIcon;
+      return &icon_moon_24;
   }
 }
 
@@ -420,20 +414,20 @@ void formatStreakStat(const GlobalReadingStats* globalStats, char* buf, const si
   snprintf(buf, len, tr(STR_STATS_DAY_STREAK_FORMAT), static_cast<unsigned>(streak));
 }
 
-void drawIconLabel(const GfxRenderer& renderer, const uint8_t* icon, const int iconX, const int centerY,
+void drawIconLabel(const GfxRenderer& renderer, const freeink::Icon* icon, const int iconX, const int centerY,
                    const char* label, const int maxTextW, const bool inverted = false) {
   const std::string visibleLabel = renderer.truncatedText(UI_10_FONT_ID, label, maxTextW);
   const int lineH = renderer.getLineHeight(UI_10_FONT_ID);
   if (inverted) {
-    renderer.drawIconInverted(icon, iconX, centerY - kFooterIconSize / 2, kFooterIconSize, kFooterIconSize);
+    drawLucideIcon(renderer, *icon, iconX, centerY - kFooterIconSize / 2, false);
   } else {
-    renderer.drawIcon(icon, iconX, centerY - kFooterIconSize / 2, kFooterIconSize, kFooterIconSize);
+    drawLucideIcon(renderer, *icon, iconX, centerY - kFooterIconSize / 2);
   }
   renderer.drawText(UI_10_FONT_ID, iconX + kFooterIconSize + kFooterIconTextGap, centerY - lineH / 2,
                     visibleLabel.c_str(), !inverted);
 }
 
-void drawRightAlignedIconLabel(const GfxRenderer& renderer, const uint8_t* icon, const int rightX, const int centerY,
+void drawRightAlignedIconLabel(const GfxRenderer& renderer, const freeink::Icon* icon, const int rightX, const int centerY,
                                const char* label, const int maxTextW, const bool inverted = false) {
   const std::string visibleLabel = renderer.truncatedText(UI_10_FONT_ID, label, maxTextW);
   const int labelW = renderer.getTextWidth(UI_10_FONT_ID, visibleLabel.c_str());
@@ -441,9 +435,9 @@ void drawRightAlignedIconLabel(const GfxRenderer& renderer, const uint8_t* icon,
   const int textX = rightX - labelW;
   const int iconX = textX - kFooterIconTextGap - kFooterIconSize;
   if (inverted) {
-    renderer.drawIconInverted(icon, iconX, centerY - kFooterIconSize / 2, kFooterIconSize, kFooterIconSize);
+    drawLucideIcon(renderer, *icon, iconX, centerY - kFooterIconSize / 2, false);
   } else {
-    renderer.drawIcon(icon, iconX, centerY - kFooterIconSize / 2, kFooterIconSize, kFooterIconSize);
+    drawLucideIcon(renderer, *icon, iconX, centerY - kFooterIconSize / 2);
   }
   renderer.drawText(UI_10_FONT_ID, textX, centerY - lineH / 2, visibleLabel.c_str(), !inverted);
 }
@@ -504,7 +498,7 @@ void drawFooterStats(const GfxRenderer& renderer, const Rect& coverRect, const G
   formatStreakStat(globalStats, streakBuf, sizeof(streakBuf));
 
   const int leftTextW = renderer.getScreenWidth() / 2 - inset - kFooterIconSize - kFooterIconTextGap;
-  drawIconLabel(renderer, StreakIcon, coverRect.x, centerY, streakBuf, leftTextW, inverted);
+  drawIconLabel(renderer, &icon_flame_24, coverRect.x, centerY, streakBuf, leftTextW, inverted);
 
   const char* readerLabel = readerTypeLabel(globalStats);
   const int rightX = renderer.getScreenWidth() - inset - (gpio.deviceIsX3() ? kPairInwardShiftX3 : 0);

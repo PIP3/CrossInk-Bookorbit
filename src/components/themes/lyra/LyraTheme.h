@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Icon.h>
+
 #include <cstdint>
 
 #include "components/themes/BaseTheme.h"
@@ -133,5 +135,5 @@ class LyraTheme : public BaseTheme {
                            bool invertSelectedRows, int rowHeightScale = 1, bool showSelection = true) const;
 
   // Returns nullptr when the icon or requested bitmap size is not available.
-  static const uint8_t* iconForName(UIIcon icon, uint32_t size);
+  static const freeink::Icon* iconForName(UIIcon icon, uint32_t size);
 };

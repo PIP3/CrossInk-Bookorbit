@@ -25,7 +25,7 @@
 #include "activities/util/OptionSelectionActivity.h"
 #include "components/CompactHeader.h"
 #include "components/UITheme.h"
-#include "components/icons/book.h"
+#include "components/UiAppHelpers.h"
 #include "fontIds.h"
 
 namespace {
@@ -721,7 +721,7 @@ void RecentBooksGridActivity::render(RenderLock&&) {
       if (!drawn) {
         renderer.fillRoundedRect(bx, by, bw, bh, kCoverCornerRadius, Color::White);
         renderer.drawRoundedRect(bx, by, bw, bh, 2, kCoverCornerRadius, true);
-        renderer.drawIcon(BookIcon, bx + (bw - 32) / 2, by + (bh - 32) / 2, 32, 32);
+        drawLucideIcon(renderer, icon_book_marked_32, bx + (bw - 32) / 2, by + (bh - 32) / 2);
       }
       if (bookIdx == static_cast<int>(selectorIndex)) {
         renderer.drawRoundedRect(bx - kSelectionPadding, by - kSelectionPadding, bw + kSelectionPadding * 2,

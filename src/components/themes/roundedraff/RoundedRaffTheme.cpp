@@ -14,7 +14,7 @@
 #include "RecentBooksStore.h"
 #include "components/TouchRegistry.h"
 #include "components/UITheme.h"
-#include "components/icons/cover.h"
+#include "components/UiAppHelpers.h"
 #include "fontIds.h"
 
 namespace {
@@ -173,7 +173,7 @@ void RoundedRaffTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
         // Render empty cover
         renderer.fillRect(tileX + (tileWidth - coverWidth) / 2, imgY + (RoundedRaffMetrics::values.homeCoverHeight / 3),
                           coverWidth, 2 * RoundedRaffMetrics::values.homeCoverHeight / 3, true);
-        renderer.drawIcon(CoverIcon, tileX + (tileWidth - coverWidth) / 2 + 24, imgY + 24, 32);
+        drawLucideIcon(renderer, icon_image_32, tileX + (tileWidth - coverWidth) / 2 + 24, imgY + 24);
         renderer.maskRoundedRectOutsideCorners(tileX + (tileWidth - coverWidth) / 2, imgY, coverWidth,
                                                RoundedRaffMetrics::values.homeCoverHeight, kCoverRadius,
                                                Color::LightGray);

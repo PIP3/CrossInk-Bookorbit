@@ -18,6 +18,8 @@
 #include "activities/reader/BookReadingStats.h"
 #include "components/TouchRegistry.h"
 #include "components/UITheme.h"
+#include "components/UiAppHelpers.h"
+#include "components/icons/chart.h"
 #include "components/icons/cover.h"
 #include "fontIds.h"
 
@@ -593,13 +595,18 @@ void LyraCarouselTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int but
       const UIIcon icon = rowIcon(i);
       if (icon == UIIcon::BookmarkIcon) {
         drawMenuBookmarkIcon(renderer, iconX, iconY, selected);
+      } else if (icon == UIIcon::Chart) {
+        if (selected)
+          renderer.drawIconInverted(ChartIcon, iconX, iconY, kMenuIconSize, kMenuIconSize);
+        else
+          renderer.drawIcon(ChartIcon, iconX, iconY, kMenuIconSize, kMenuIconSize);
       } else {
-        const uint8_t* bmp = iconForName(icon, kMenuIconSize);
+        const freeink::Icon* bmp = iconForName(icon, kMenuIconSize);
         if (bmp != nullptr) {
           if (selected)
-            renderer.drawIconInverted(bmp, iconX, iconY, kMenuIconSize, kMenuIconSize);
+            drawLucideIcon(renderer, *bmp, iconX, iconY, false);
           else
-            renderer.drawIcon(bmp, iconX, iconY, kMenuIconSize, kMenuIconSize);
+            drawLucideIcon(renderer, *bmp, iconX, iconY);
         }
       }
     }
@@ -647,10 +654,12 @@ void LyraCarouselTheme::drawButtonMenuSelectionOverlay(const GfxRenderer& render
     const UIIcon icon = rowIcon(selectedIndex);
     if (icon == UIIcon::BookmarkIcon) {
       drawMenuBookmarkIcon(renderer, iconX, iconY, true);
+    } else if (icon == UIIcon::Chart) {
+      renderer.drawIconInverted(ChartIcon, iconX, iconY, kMenuIconSize, kMenuIconSize);
     } else {
-      const uint8_t* bmp = iconForName(icon, kMenuIconSize);
+      const freeink::Icon* bmp = iconForName(icon, kMenuIconSize);
       if (bmp != nullptr) {
-        renderer.drawIconInverted(bmp, iconX, iconY, kMenuIconSize, kMenuIconSize);
+        drawLucideIcon(renderer, *bmp, iconX, iconY, false);
       }
     }
   }
