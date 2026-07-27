@@ -35,12 +35,27 @@ constexpr uint8_t REJECT_USER = 1;
 constexpr uint8_t REJECT_STORAGE = 2;
 constexpr int TOUCH_ACTION_BUTTON_WIDTH = 120;
 constexpr int TOUCH_ACTION_BUTTON_HEIGHT = 48;
+constexpr int TOUCH_COLLISION_BUTTON_WIDTH = 280;
+constexpr int TOUCH_COLLISION_BUTTON_HEIGHT = 52;
+constexpr int TOUCH_COLLISION_BUTTON_GAP = 16;
 
 Rect touchActionButtonRect(const Rect& screen, const bool accept) {
   constexpr int SIDE_MARGIN = 46;
   return Rect{accept ? screen.x + screen.width - SIDE_MARGIN - TOUCH_ACTION_BUTTON_WIDTH : screen.x + SIDE_MARGIN,
               screen.y + screen.height - TOUCH_ACTION_BUTTON_HEIGHT - 28, TOUCH_ACTION_BUTTON_WIDTH,
               TOUCH_ACTION_BUTTON_HEIGHT};
+}
+
+Rect touchCollisionButtonRect(const Rect& screen, const int index) {
+  constexpr int SIDE_MARGIN = 32;
+  constexpr int BUTTON_COUNT = 3;
+  const int width = std::min(TOUCH_COLLISION_BUTTON_WIDTH, screen.width - SIDE_MARGIN * 2);
+  const int totalHeight =
+      TOUCH_COLLISION_BUTTON_HEIGHT * BUTTON_COUNT + TOUCH_COLLISION_BUTTON_GAP * (BUTTON_COUNT - 1);
+  return Rect{screen.x + (screen.width - width) / 2,
+              screen.y + (screen.height - totalHeight) / 2 + TOUCH_ACTION_BUTTON_HEIGHT +
+                  index * (TOUCH_COLLISION_BUTTON_HEIGHT + TOUCH_COLLISION_BUTTON_GAP),
+              width, TOUCH_COLLISION_BUTTON_HEIGHT};
 }
 
 bool contains(const Rect& rect, const int x, const int y) {
@@ -634,7 +649,8 @@ void NearbyBookTransferActivity::maybeRefreshProgress() {
 }
 
 bool NearbyBookTransferActivity::isMenuState() const {
-  return state_ == State::ChooseReceiveAction || state_ == State::DeviceList || state_ == State::CollisionPrompt;
+  return state_ == State::ChooseReceiveAction || state_ == State::DeviceList ||
+         (state_ == State::CollisionPrompt && !mappedInput.hasTouch());
 }
 
 int NearbyBookTransferActivity::menuItemCount() const {
@@ -749,9 +765,18 @@ void NearbyBookTransferActivity::loop() {
 
   int tx = 0;
   int ty = 0;
-  if (mappedInput.hasTouch() && (state_ == State::OfferPrompt || state_ == State::Success) &&
+  if (mappedInput.hasTouch() &&
+      (state_ == State::OfferPrompt || state_ == State::CollisionPrompt || state_ == State::Success) &&
       mappedInput.wasScreenTouchDown(tx, ty)) {
     const Rect safeArea = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+    if (state_ == State::CollisionPrompt) {
+      for (int index = 0; index < 3; ++index) {
+        if (!contains(touchCollisionButtonRect(safeArea, index), tx, ty)) continue;
+        selectedIndex_ = index;
+        activateSelected();
+        return;
+      }
+    }
     if ((state_ == State::OfferPrompt || mode_ == Mode::Receive) &&
         contains(touchActionButtonRect(safeArea, false), tx, ty)) {
       if (state_ == State::Success) {
@@ -847,6 +872,8 @@ void NearbyBookTransferActivity::render(RenderLock&&) {
     char sizeText[48];
     snprintf(sizeText, sizeof(sizeText), tr(STR_NEARBY_TRANSFER_SIZE), static_cast<unsigned long>(offeredFileSize_));
     centered(sizeText, 70, SMALL_FONT_ID);
+  } else if (state_ == State::CollisionPrompt) {
+    centeredWrapped(offeredFileName_.c_str(), -150, 2, SMALL_FONT_ID);
   } else if (state_ == State::Sending || state_ == State::Receiving) {
     centeredWrapped(state_ == State::Sending ? tr(STR_NEARBY_TRANSFER_SENDING) : tr(STR_NEARBY_TRANSFER_RECEIVING), -45,
                     2);
@@ -882,8 +909,14 @@ void NearbyBookTransferActivity::render(RenderLock&&) {
   } else if (state_ == State::Error)
     confirm = tr(STR_OK);
   const bool showNavigation = !mappedInput.hasTouch() && menuItemCount() > 1;
+  const bool showTouchCollisionActions = mappedInput.hasTouch() && state_ == State::CollisionPrompt;
   const bool showTouchActions = mappedInput.hasTouch() && (state_ == State::OfferPrompt || state_ == State::Success);
-  if (showTouchActions) {
+  if (showTouchCollisionActions) {
+    const Rect safeArea = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+    drawTouchButton(touchCollisionButtonRect(safeArea, 0), tr(STR_REPLACE));
+    drawTouchButton(touchCollisionButtonRect(safeArea, 1), tr(STR_KEEP_BOTH));
+    drawTouchButton(touchCollisionButtonRect(safeArea, 2), tr(STR_CANCEL));
+  } else if (showTouchActions) {
     const Rect safeArea = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
     if (state_ == State::OfferPrompt || mode_ == Mode::Receive)
       drawTouchButton(touchActionButtonRect(safeArea, false), back);
