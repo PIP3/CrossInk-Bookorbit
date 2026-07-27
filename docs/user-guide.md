@@ -227,7 +227,10 @@ device model and build.
 
 - **Reader Line Spacing**: Adjust the line height as a percentage.
 
-- **Word Spacing**: Add one of four wider spacing levels between words.
+- **Word Spacing**: In EPUB books, choose **Normal** or one of four wider
+  spacing levels between words. Open the reader menu, then select **Reader
+  Options > Font Options > Word Spacing**. Changing it reflows the current
+  book, so page positions may change; it is not available for TXT books.
 
 - **Reader Screen Margin**: Controls the screen margins in Reading Mode between 5 and 40 pixels in 5-pixel increments.
 

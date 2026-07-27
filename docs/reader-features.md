@@ -18,6 +18,7 @@ Open the reader menu and select **Reader Options** to adjust settings such as:
 - Font family
 - Font size
 - Line spacing
+- Word spacing (EPUB)
 - Margins
 - Alignment
 - Image rendering
@@ -52,6 +53,17 @@ Dark Reader Mode can also be assigned to shortcut actions, so it can be switched
 CrossInk supports adjustable reader line spacing from compact to wide spacing.
 
 Use this when a book feels visually cramped, or when larger fonts need more vertical room to stay comfortable.
+
+## Word Spacing
+
+EPUB readers can choose from five word-spacing levels: **Normal** and levels
+**1** through **4**. Higher levels add more space between words, which can make
+text easier to scan without changing the font size or line height.
+
+Open the reader menu, then select **Reader Options > Font Options > Word
+Spacing**. The current EPUB is laid out again when you change this setting, so
+the number and positions of pages may change. Word Spacing is not available for
+TXT books.
 
 ## Guide Dots
 
