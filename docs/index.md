@@ -19,6 +19,7 @@ Welcome to CrossInk, a personal fork of CrossPoint Reader.
 - [Controls](./controls.md)
 - [Bionic Reading](./bionic-reading.md)
 - [Reading Stats Sync](./reading-stats-sync.md)
+- [Nearby File Transfer](./nearby-file-transfer.md)
 - [Nearby Position Sync](./nearby-position-sync.md)
 - [EPUB Render Modes](./epub-render-modes.md)
 - [Simulator](./simulator.md)

@@ -120,7 +120,9 @@ The Recent Books screen lists the most recently opened books in a chronological 
 
 ### 3.5 File Transfer Screen
 
-The File Transfer screen allows you to upload and manage files on the device. When you enter the screen, choose **Join a Network**, **Calibre Wireless**, or **Create Hotspot**. The reader then starts the web server for the selected mode.
+The File Transfer screen allows you to upload and manage files on the device.
+Choose **Join a Network**, **Calibre Wireless**, or **Create Hotspot** to start
+the web server for the selected mode.
 
 See the [File Transfer guide](./webserver.md) for connection and upload details.
 
@@ -131,6 +133,11 @@ The web interface also supports **WebDAV**, allowing you to mount the device as 
 Download links for files already on the device are available in the web interface, so you can retrieve books or screenshots over Wi-Fi without connecting a cable.
 
 A **Wi-Fi signal strength indicator** (dBm) is displayed on-screen during joined-network web server sessions.
+
+The same screen also has **Receive Nearby File**, which receives a supported
+book or image directly from another nearby CrossInk reader without joining a
+Wi-Fi network. See [Nearby File Transfer](./nearby-file-transfer.md) for the
+complete sender and receiver workflow.
 
 > [!TIP]
 > Advanced users can manage files programmatically with the same HTTP endpoints
