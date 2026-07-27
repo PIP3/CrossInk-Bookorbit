@@ -30,6 +30,7 @@ namespace {
 constexpr int homeMenuMargin = 20;
 constexpr int homeMarginTop = 30;
 constexpr int roundedRaffHeaderClockYOffset = 3;
+constexpr int detachedHeaderBatteryTopInset = 3;
 
 }  // namespace
 
@@ -475,8 +476,8 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
   fui::BatteryIndicatorProps battery;
   battery.percent = static_cast<uint8_t>(percentage > 100 ? 100 : percentage);
   battery.charging = gpio.isUsbConnected();
-  // Lyra's icon needs a small optical nudge below its percentage. Keep that
-  // app-specific adjustment here instead of extending the shared SDK API.
+  // Lyra-family headers keep the battery group below the top bezel. Draw the
+  // label separately so it shares the icon's vertical centerline.
   const bool drawDetachedBatteryLabel = batteryDetached && showBatteryPercentage;
   battery.label = drawDetachedBatteryLabel ? nullptr : (showBatteryPercentage ? percentText : nullptr);
   battery.text = tokens.smallText;
@@ -489,13 +490,14 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
   // RoundedRaff's Home header is taller than ordinary headers. Shift compact
   // headers to its battery baseline; Home already has that extra height.
   const int16_t batteryY = static_cast<int16_t>(
-      band.y + (roundedRaffCompactHeader ? std::max(0, (metrics.homeTopPadding - metrics.headerHeight) / 2) : 0));
-  // Detached Lyra-family indicators share the Home clock's top inset instead
-  // of being vertically centered in the much taller title/status lane.
+      band.y +
+      (batteryDetached
+           ? detachedHeaderBatteryTopInset
+           : (roundedRaffCompactHeader ? std::max(0, (metrics.homeTopPadding - metrics.headerHeight) / 2) : 0)));
   const int16_t batteryH =
-      batteryDetached ? static_cast<int16_t>(metrics.batteryHeight + 2 * homeHeaderTopInset) : band.height;
-  const int16_t batteryIconY = static_cast<int16_t>(batteryY + (drawDetachedBatteryLabel ? 2 : 0));
-  fui::batteryIndicator(ui.frame, fui::Rect{batteryX, batteryIconY, batteryReserve, batteryH}, battery);
+      batteryDetached ? static_cast<int16_t>(std::max(metrics.batteryHeight, renderer.getLineHeight(SMALL_FONT_ID)))
+                      : band.height;
+  fui::batteryIndicator(ui.frame, fui::Rect{batteryX, batteryY, batteryReserve, batteryH}, battery);
   if (drawDetachedBatteryLabel) {
     const int iconLeft = batteryX + batteryReserve - metrics.batteryWidth - batteryNubWidth;
     const int textX = iconLeft - batteryPercentSpacing - renderer.getTextWidth(SMALL_FONT_ID, percentText);
