@@ -225,13 +225,7 @@ void BookStatsActivity::onExit() {
   Activity::onExit();
 }
 
-void BookStatsActivity::exitStatsActivity(const bool viaBack) {
-  if (viaBack) {
-    mappedInput.suppressNextBackRelease();
-  } else {
-    mappedInput.suppressNextConfirmRelease();
-  }
-
+void BookStatsActivity::exitStatsActivity() {
   if (returnToHomeOnExit) {
     onGoHome();
     return;
@@ -289,11 +283,13 @@ bool BookStatsActivity::selectEditFieldFromTouchTarget(const int touchTarget) {
 void BookStatsActivity::loop() {
   if (usesNoRtcSingleScreenLayout()) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-      exitStatsActivity(true);
+      mappedInput.suppressNextBackRelease();
+      exitStatsActivity();
       return;
     }
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      exitStatsActivity(false);
+      mappedInput.suppressNextConfirmRelease();
+      exitStatsActivity();
       return;
     }
     return;
@@ -348,20 +344,14 @@ void BookStatsActivity::loop() {
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    if (page == Page::PerBook) {
-      exitStatsActivity(true);
-    } else if (page == Page::ThisDevice) {
-      page = Page::PerBook;
-      requestUpdate();
-    } else if (page == Page::AllDevices) {
-      page = Page::ThisDevice;
-      requestUpdate();
-    }
+    mappedInput.suppressNextBackRelease();
+    exitStatsActivity();
     return;
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    exitStatsActivity(false);
+    mappedInput.suppressNextConfirmRelease();
+    exitStatsActivity();
     return;
   }
 

@@ -36,7 +36,7 @@ class BookStatsActivity final : public Activity {
   void clearEditedDate(bool finishedField);
   bool shouldClearDateOnAdjust(const ReadingStatsDate& date, bool finishedField, int fieldIndex, int delta) const;
   void normalizeEditedDates(const bool editedFinishedField);
-  void exitStatsActivity(bool viaBack);
+  void exitStatsActivity();
   bool showPreviousStatsPage();
   bool showNextStatsPage();
   bool selectEditFieldFromTouchTarget(int touchTarget);

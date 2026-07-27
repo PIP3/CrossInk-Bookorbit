@@ -511,7 +511,7 @@ void renderPerBookStatsPage(GfxRenderer& renderer, const MappedInputManager* map
   }
 
   if (showButtonHints && mappedInput) {
-    const auto labels = mappedInput->mapLabels(tr(STR_BACK), "", showEditButton ? tr(STR_EDIT) : "",
+    const auto labels = mappedInput->mapLabels(tr(STR_BACK), showEditButton ? tr(STR_EDIT) : "", "",
                                                showMoreButton ? tr(STR_MORE) : "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4, true);
   }
@@ -567,7 +567,7 @@ void renderGlobalStatsPage(GfxRenderer& renderer, const MappedInputManager* mapp
   }
 
   if (showButtonHints && mappedInput) {
-    const auto labels = mappedInput->mapLabels(tr(STR_BACK), tr(STR_HOME), "", showMoreButton ? tr(STR_MORE) : "");
+    const auto labels = mappedInput->mapLabels(tr(STR_EXIT), "", tr(STR_BACK), showMoreButton ? tr(STR_MORE) : "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4, true);
   }
 }
