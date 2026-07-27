@@ -63,6 +63,7 @@ void DictionaryLookupController::startLookup(const std::string& word, bool recor
   lookupDone = false;
   lookupCancelled = false;
   lookupCancelRequested = false;
+  lookupReadError = false;
   recordHistory_ = recordHistory;
   state = LookupState::LookingUp;
   // CLEANUP: on Auto-only commit, delete only this line (gate below stays — it's the Auto check)
@@ -111,6 +112,11 @@ DictionaryLookupController::LookupEvent DictionaryLookupController::handleInput(
         return LookupEvent::FoundDefinition;
       }
 
+      if (lookupReadError) {
+        showReadError();
+        return LookupEvent::None;
+      }
+
       // Try stem variants (locate only — no definition loaded into RAM)
       auto stems = Dictionary::getStemVariants(lookupWord);
       for (const auto& stem : stems) {
@@ -121,6 +127,10 @@ DictionaryLookupController::LookupEvent DictionaryLookupController::handleInput(
           foundStatus = nextIsSuggestion ? FoundStatus::Suggestion : FoundStatus::Stem;
           nextIsSuggestion = false;
           return LookupEvent::FoundDefinition;
+        }
+        if (loc.readError) {
+          showReadError();
+          return LookupEvent::None;
         }
       }
 
@@ -191,7 +201,7 @@ DictionaryLookupController::LookupEvent DictionaryLookupController::handleInput(
     return LookupEvent::None;
   }
 
-  if (state == LookupState::NotFound) {
+  if (state == LookupState::NotFound || state == LookupState::ReadError) {
 #if CROSSINK_APP_CAP_TOUCH
     int touchX = 0;
     int touchY = 0;
@@ -278,8 +288,9 @@ bool DictionaryLookupController::render() {
     return true;
   }
 
-  if (state == LookupState::NotFound) {
-    GUI.drawPopup(renderer, tr(STR_DICT_NOT_FOUND));
+  if (state == LookupState::NotFound || state == LookupState::ReadError) {
+    const char* message = state == LookupState::ReadError ? tr(STR_DICT_READ_FAILED) : tr(STR_DICT_NOT_FOUND);
+    GUI.drawPopup(renderer, message);
 #if CROSSINK_APP_CAP_TOUCH
     if (mappedInput.hasTouch()) {
       const Rect switchRect = dictionarySwitchTouchRect(renderer);
@@ -383,6 +394,12 @@ void DictionaryLookupController::handleLookupFailed() {
   LookupHistory::addWordIf(cachePath, lookupWord, LookupHistory::Status::NotFound, recordHistory_);
 }
 
+void DictionaryLookupController::showReadError() {
+  nextIsSuggestion = false;
+  state = LookupState::ReadError;
+  owner.requestUpdate();
+}
+
 void DictionaryLookupController::progressCallback(void* ctx, int percent) {
   auto* self = static_cast<DictionaryLookupController*>(ctx);
   self->lookupProgress = percent;
@@ -408,6 +425,7 @@ void DictionaryLookupController::runLookup() {
     return;
   }
   foundLocation = Dictionary::locate(lookupWord, cbs, cachePath.c_str());
+  lookupReadError = foundLocation.readError;
   lookupCancelled = lookupCancelRequested.load();
   lookupDone = true;
   logDictionaryLookupTaskEnd();

@@ -55,6 +55,9 @@ struct DictLocation {
   uint32_t offset = 0;     // byte offset in .dict file
   uint32_t size = 0;       // byte length in .dict file
   bool found = false;
+  // The index could not be opened, sought, or read to a complete entry. This
+  // is not a genuine dictionary miss and must not be presented as one.
+  bool readError = false;
 };
 
 struct DictDefinitionSlice {

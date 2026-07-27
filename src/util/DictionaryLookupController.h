@@ -26,7 +26,7 @@ class DictionaryLookupController {
   friend class DictionaryLookupWorker;
 
  public:
-  enum class LookupState { Idle, LookingUp, AltFormPrompt, NotFound };
+  enum class LookupState { Idle, LookingUp, AltFormPrompt, NotFound, ReadError };
   enum class LookupEvent {
     None,
     FoundDefinition,
@@ -75,7 +75,7 @@ class DictionaryLookupController {
   // running shared-worker request before this controller is destroyed.
   void onExit();
 
-  // True when the controller owns input/render (LookingUp, AltFormPrompt, NotFound).
+  // True when the controller owns input/render (LookingUp, AltFormPrompt, NotFound, ReadError).
   bool isActive() const { return state != LookupState::Idle; }
 
   // Process input for the current state.  Returns an event the activity must handle.
@@ -152,9 +152,11 @@ class DictionaryLookupController {
   std::atomic<bool> lookupDone = false;
   std::atomic<bool> lookupCancelled = false;
   std::atomic<bool> lookupCancelRequested = false;
+  std::atomic<bool> lookupReadError = false;
 
   void runLookup();
   void handleLookupFailed();
+  void showReadError();
   void showMemoryErrorAndReset();
   static void progressCallback(void* ctx, int percent);
   static bool cancelCallback(void* ctx);
