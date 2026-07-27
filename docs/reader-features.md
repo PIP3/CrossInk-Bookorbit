@@ -28,7 +28,8 @@ Open the reader menu and select **Reader Options** to adjust settings such as:
 Changes take effect immediately.
 
 For books that are slow to index or fail because of complex publisher styling,
-see [EPUB Render Modes](./epub-render-modes.md).
+see [EPUB Indexing Methods](./epub-indexing.md) and
+[EPUB Render Modes](./epub-render-modes.md).
 
 ## Font Sizes And Downloadable Font Ranges
 
