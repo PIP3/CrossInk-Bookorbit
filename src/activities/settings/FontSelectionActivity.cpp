@@ -101,7 +101,7 @@ void FontSelectionActivity::onEnter() {
 
   // Get metrics and calculate layout dimensions
   metrics_ = UITheme::getInstance().getMetrics();
-  afterHeader = metrics_.topPadding + metrics_.headerHeight + metrics_.verticalSpacing;
+  afterHeader = metrics_.topPadding + TouchHeaderBackButton::height(metrics_, mappedInput) + metrics_.verticalSpacing;
   bottomReserved = metrics_.buttonHintsHeight + metrics_.verticalSpacing;
   usableHeight = renderer.getScreenHeight() - afterHeader - bottomReserved;
   previewHeight = usableHeight * metrics_.previewHeightPercent / 100;
@@ -328,7 +328,7 @@ void FontSelectionActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();
-  const Rect header = TouchHeaderBackButton::standardHeaderRect(renderer);
+  const Rect header = TouchHeaderBackButton::headerRect(renderer, mappedInput);
   if (mappedInput.hasTouchHardware()) {
     TouchHeaderBackButton::draw(renderer, uiTarget_, header, tr(STR_FONT_FAMILY), false);
   } else {

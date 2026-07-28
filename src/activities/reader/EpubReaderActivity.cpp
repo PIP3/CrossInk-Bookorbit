@@ -891,7 +891,7 @@ ReaderViewportLayout computeReaderViewportLayout(GfxRenderer& renderer, const bo
 
 #if CROSSINK_APP_CAP_TOUCH
   if (showFootnoteHeader) {
-    const Rect header = TouchHeaderBackButton::standardHeaderRect(renderer);
+    const Rect header = TouchHeaderBackButton::compactHeaderRect(renderer);
     layout.marginTop = std::max(layout.marginTop, header.y + header.height + static_cast<int>(SETTINGS.screenMargin));
   }
 #else
@@ -2773,7 +2773,8 @@ void EpubReaderActivity::handleClippingJump(const ClippingJumpResult& clipping) 
 }
 
 bool EpubReaderActivity::handleTouchDictionaryLookup() {
-  if (!SETTINGS.touchReaderControls || !mappedInput.hasTouch() || RenderLock::peek() || activeFootnotePreview || !epub) {
+  if (!SETTINGS.touchReaderControls || !mappedInput.hasTouch() || RenderLock::peek() || activeFootnotePreview ||
+      !epub) {
     return false;
   }
 
@@ -5301,7 +5302,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int fo
     drawPublisherPageMarkers(renderer, *page, orientedMarginTop, contentBottom, foregroundBlack);
 #if CROSSINK_APP_CAP_TOUCH
     if (activeFootnotePreview) {
-      TouchHeaderBackButton::draw(renderer, TouchHeaderBackButton::standardHeaderRect(renderer), tr(STR_FOOTNOTES),
+      TouchHeaderBackButton::draw(renderer, TouchHeaderBackButton::headerRect(renderer, mappedInput), tr(STR_FOOTNOTES),
                                   /*readerContext=*/true);
     }
 #endif

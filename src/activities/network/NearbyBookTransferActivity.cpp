@@ -16,6 +16,7 @@
 #include "MappedInputManager.h"
 #include "SilentRestart.h"
 #include "activities/home/FileBrowserActivity.h"
+#include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -715,8 +716,9 @@ void NearbyBookTransferActivity::onRowEvent(const fui::ActionEvent& event, void*
 void NearbyBookTransferActivity::buildMenuScreen(UiApp::ScreenType& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   screen.setContentMargin(
-      fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing), 0,
-                  static_cast<int16_t>(metrics.buttonHintsHeight + metrics.verticalSpacing), 0});
+      fui::Insets{static_cast<int16_t>(metrics.topPadding + TouchHeaderBackButton::height(metrics, mappedInput) +
+                                       metrics.verticalSpacing),
+                  0, static_cast<int16_t>(metrics.buttonHintsHeight + metrics.verticalSpacing), 0});
 
   std::array<fui::ListItem, MAX_PEERS> items{};
   const int count = menuItemCount();
@@ -763,6 +765,18 @@ void NearbyBookTransferActivity::loop() {
   processPackets();
   updateTimers();
 
+  if (TouchHeaderBackButton::wasTapped(mappedInput, renderer) ||
+      mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    if (state_ == State::OfferPrompt || state_ == State::CollisionPrompt) {
+      const uint8_t reason = REJECT_USER;
+      sendPacket(nearby::PacketType::Reject, peerMac_.data(), 0, &reason, 1);
+      startListening();
+    } else {
+      exitAfterRadio();
+    }
+    return;
+  }
+
   int tx = 0;
   int ty = 0;
   if (mappedInput.hasTouch() &&
@@ -801,17 +815,6 @@ void NearbyBookTransferActivity::loop() {
     }
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    if (state_ == State::OfferPrompt || state_ == State::CollisionPrompt) {
-      const uint8_t reason = REJECT_USER;
-      sendPacket(nearby::PacketType::Reject, peerMac_.data(), 0, &reason, 1);
-      startListening();
-    } else {
-      exitAfterRadio();
-    }
-    return;
-  }
-
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     activateSelected();
     return;
@@ -825,7 +828,12 @@ void NearbyBookTransferActivity::render(RenderLock&&) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int width = renderer.getScreenWidth();
   const int height = renderer.getScreenHeight();
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, width, metrics.headerHeight}, tr(STR_NEARBY_BOOK_TRANSFER));
+  const Rect header{0, metrics.topPadding, width, TouchHeaderBackButton::height(metrics, mappedInput)};
+  if (mappedInput.hasTouchHardware()) {
+    TouchHeaderBackButton::draw(renderer, uiTarget_, header, tr(STR_NEARBY_BOOK_TRANSFER), false);
+  } else {
+    GUI.drawHeader(renderer, header, tr(STR_NEARBY_BOOK_TRANSFER));
+  }
 
   const int textWidth = width - metrics.contentSidePadding * 2;
   auto centered = [this, height](const char* text, const int offset = 0, const int font = UI_10_FONT_ID) {

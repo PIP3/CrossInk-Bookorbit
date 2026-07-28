@@ -446,7 +446,8 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
   props.rightLabel = subtitle;
   props.borderEdges = fui::EdgeBottom;
   props.titleText = tokens.titleText;
-  props.titleText.align = showHeaderClock && title != nullptr ? fui::TextAlign::Left : tokens.headerTitleAlign;
+  const bool hasVisibleTitle = title != nullptr && title[0] != '\0';
+  props.titleText.align = showHeaderClock && hasVisibleTitle ? fui::TextAlign::Left : tokens.headerTitleAlign;
   props.subtitleText = tokens.smallText;
   props.styles = tokens.popup;
   props.sidePadding = tokens.headerSidePadding;
@@ -505,7 +506,7 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
     renderer.drawText(SMALL_FONT_ID, textX, textY, percentText);
   }
 
-  const int clockYOffset = title == nullptr && !readerContext
+  const int clockYOffset = !hasVisibleTitle && !readerContext
                                ? homeHeaderClockTextYOffset(renderer)
                                : (!readerContext && SETTINGS.uiTheme == CrossPointSettings::UI_THEME::ROUNDEDRAFF
                                       ? roundedRaffHeaderClockYOffset

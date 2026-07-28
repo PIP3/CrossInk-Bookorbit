@@ -9,6 +9,7 @@
 
 #include "DeviceCapabilities.h"
 #include "MappedInputManager.h"
+#include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -63,7 +64,8 @@ void EpubReaderPercentSelectionActivity::loop() {
   auto& theme = UITheme::getInstance();
   auto metrics = theme.getMetrics();
   Rect screen = theme.getScreenSafeArea(renderer, true, false);
-  const int contentTop = screen.y + metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing * 4;
+  const int contentTop =
+      screen.y + metrics.topPadding + TouchHeaderBackButton::height(metrics, mappedInput) + metrics.verticalSpacing * 4;
   constexpr int barWidth = 360;
   constexpr int barHeight = 16;
   const int barX = screen.x + (screen.width - barWidth) / 2;
@@ -89,6 +91,16 @@ void EpubReaderPercentSelectionActivity::loop() {
   } else if (draggingBar) {
     // Release frame of a drag: swallow the tap/swipe events it produced.
     draggingBar = false;
+    return;
+  }
+
+  const Rect header{screen.x, screen.y + metrics.topPadding, screen.width,
+                    TouchHeaderBackButton::height(metrics, mappedInput)};
+  if (TouchHeaderBackButton::wasTapped(mappedInput, header)) {
+    ActivityResult result;
+    result.isCancelled = true;
+    setResult(std::move(result));
+    finish();
     return;
   }
 
@@ -170,10 +182,16 @@ void EpubReaderPercentSelectionActivity::render(RenderLock&&) {
   auto metrics = theme.getMetrics();
   Rect screen = theme.getScreenSafeArea(renderer, true, false);
 
-  GUI.drawHeader(renderer, Rect{screen.x, screen.y + metrics.topPadding, screen.width, metrics.headerHeight},
-                 tr(STR_GO_TO_PERCENT), nullptr, true);
+  const Rect header{screen.x, screen.y + metrics.topPadding, screen.width,
+                    TouchHeaderBackButton::height(metrics, mappedInput)};
+  if (mappedInput.hasTouchHardware()) {
+    TouchHeaderBackButton::draw(renderer, header, tr(STR_GO_TO_PERCENT), true);
+  } else {
+    GUI.drawHeader(renderer, header, tr(STR_GO_TO_PERCENT), nullptr, true);
+  }
 
-  const int contentTop = screen.y + metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing * 4;
+  const int contentTop =
+      screen.y + metrics.topPadding + TouchHeaderBackButton::height(metrics, mappedInput) + metrics.verticalSpacing * 4;
 
   const std::string percentText = std::to_string(percent) + "%";
   UITheme::drawCenteredText(renderer, screen, UI_12_FONT_ID, contentTop, percentText.c_str(), true,

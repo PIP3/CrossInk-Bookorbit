@@ -16,14 +16,15 @@ namespace fui = freeink::ui;
 namespace {
 constexpr fui::ActionId ACTION_ROW = 1;
 
-Rect optionListRect(const GfxRenderer& renderer, const bool readerMode) {
+Rect optionListRect(const GfxRenderer& renderer, const MappedInputManager& mappedInput, const bool readerMode) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto orientation = renderer.getOrientation();
   const bool isLandscape = readerMode && (orientation == GfxRenderer::Orientation::LandscapeClockwise ||
                                           orientation == GfxRenderer::Orientation::LandscapeCounterClockwise);
   const int hintGutterWidth = isLandscape ? metrics.buttonHintsHeight : 0;
   const int contentX = orientation == GfxRenderer::Orientation::LandscapeClockwise ? hintGutterWidth : 0;
-  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+  const int contentTop =
+      metrics.topPadding + TouchHeaderBackButton::height(metrics, mappedInput) + metrics.verticalSpacing;
   return Rect{contentX, contentTop, renderer.getScreenWidth() - hintGutterWidth,
               renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing};
 }
@@ -133,7 +134,7 @@ void OptionSelectionActivity::optionsScreen(UiApp::ScreenType& screen, void* use
 }
 
 void OptionSelectionActivity::buildOptionsScreen(UiApp::ScreenType& screen) {
-  const Rect bounds = optionListRect(renderer, readerMode_);
+  const Rect bounds = optionListRect(renderer, mappedInput, readerMode_);
   screen.setContentMargin(fui::Insets{
       static_cast<int16_t>(bounds.y), static_cast<int16_t>(renderer.getScreenWidth() - bounds.x - bounds.width),
       static_cast<int16_t>(renderer.getScreenHeight() - bounds.y - bounds.height), static_cast<int16_t>(bounds.x)});
@@ -172,7 +173,8 @@ void OptionSelectionActivity::render(RenderLock&&) {
                                          orientation == GfxRenderer::Orientation::LandscapeCounterClockwise);
   const int gutter = landscape ? metrics.buttonHintsHeight : 0;
   const int contentX = orientation == GfxRenderer::Orientation::LandscapeClockwise ? gutter : 0;
-  const Rect header{contentX, metrics.topPadding, renderer.getScreenWidth() - gutter, metrics.headerHeight};
+  const Rect header{contentX, metrics.topPadding, renderer.getScreenWidth() - gutter,
+                    TouchHeaderBackButton::height(metrics, mappedInput)};
   if (showTouchHeaderBackButton_ && mappedInput.hasTouchHardware()) {
     TouchHeaderBackButton::draw(renderer, uiTarget_, header, I18N.get(titleId_), readerMode_);
   } else {

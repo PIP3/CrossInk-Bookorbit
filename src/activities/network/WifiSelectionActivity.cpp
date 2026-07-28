@@ -16,6 +16,7 @@
 #include "SdCardFontSystem.h"
 #include "WifiCredentialStore.h"
 #include "activities/util/KeyboardEntryActivity.h"
+#include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
 #include "components/UIThemeTokens.h"
 #include "components/UiAppHelpers.h"
@@ -731,6 +732,48 @@ void WifiSelectionActivity::checkConnectionStatus() {
 }
 
 void WifiSelectionActivity::loop() {
+  if (TouchHeaderBackButton::wasTapped(mappedInput, renderer)) {
+    switch (state) {
+      case WifiSelectionState::SCANNING:
+#ifndef SIMULATOR
+        sConnectionAttemptLoggingActive = false;
+#endif
+        WiFi.scanDelete();
+        onComplete(false);
+        return;
+      case WifiSelectionState::CONNECTING:
+      case WifiSelectionState::AUTO_CONNECTING:
+#ifndef SIMULATOR
+        sConnectionAttemptLoggingActive = false;
+#endif
+        WiFi.disconnect();
+        onComplete(false);
+        return;
+      case WifiSelectionState::SAVE_PROMPT:
+      case WifiSelectionState::CONNECTED:
+        onComplete(true);
+        return;
+      case WifiSelectionState::FORGET_PROMPT:
+        startWifiScan();
+        return;
+      case WifiSelectionState::CONNECTION_FAILED:
+        if (autoConnecting || usedSavedPassword) {
+          autoConnecting = false;
+          state = WifiSelectionState::FORGET_PROMPT;
+          forgetPromptSelection = 0;
+        } else {
+          state = WifiSelectionState::NETWORK_LIST;
+        }
+        requestUpdate();
+        return;
+      case WifiSelectionState::NETWORK_LIST:
+        onComplete(false);
+        return;
+      default:
+        break;
+    }
+  }
+
   if ((state == WifiSelectionState::SCANNING || state == WifiSelectionState::CONNECTING ||
        state == WifiSelectionState::AUTO_CONNECTING) &&
       mappedInput.wasPressed(MappedInputManager::Button::Back)) {
@@ -1055,12 +1098,17 @@ void WifiSelectionActivity::render(RenderLock&&) {
   // Draw header
   char countStr[32];
   snprintf(countStr, sizeof(countStr), tr(STR_NETWORKS_FOUND), realNetworkCount);
-  GUI.drawHeader(renderer, Rect{screen.x, screen.y + metrics.topPadding, screen.width, metrics.headerHeight},
-                 tr(STR_WIFI_NETWORKS), countStr);
-  GUI.drawSubHeader(
-      renderer,
-      Rect{screen.x, screen.y + metrics.topPadding + metrics.headerHeight, screen.width, metrics.tabBarHeight},
-      cachedMacAddress.c_str());
+  const Rect header{screen.x, screen.y + metrics.topPadding, screen.width,
+                    TouchHeaderBackButton::height(metrics, mappedInput)};
+  if (mappedInput.hasTouchHardware()) {
+    TouchHeaderBackButton::draw(renderer, uiTarget, header, tr(STR_WIFI_NETWORKS), false, 150, countStr);
+  } else {
+    GUI.drawHeader(renderer, header, tr(STR_WIFI_NETWORKS), countStr);
+  }
+  GUI.drawSubHeader(renderer,
+                    Rect{screen.x, screen.y + metrics.topPadding + TouchHeaderBackButton::height(metrics, mappedInput),
+                         screen.width, metrics.tabBarHeight},
+                    cachedMacAddress.c_str());
 
   switch (state) {
     case WifiSelectionState::AUTO_CONNECTING:
@@ -1106,8 +1154,8 @@ void WifiSelectionActivity::buildListScreen(UiApp::ScreenType& screen) {
   const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
   // Content below the header + MAC sub-band, above the legend line.
   screen.setContentMargin(fui::Insets{
-      static_cast<int16_t>(safe.y + metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight +
-                           metrics.verticalSpacing),
+      static_cast<int16_t>(safe.y + metrics.topPadding + TouchHeaderBackButton::height(metrics, mappedInput) +
+                           metrics.tabBarHeight + metrics.verticalSpacing),
       static_cast<int16_t>(renderer.getScreenWidth() - (safe.x + safe.width)),
       static_cast<int16_t>(renderer.getScreenHeight() - (safe.y + safe.height) + metrics.verticalSpacing * 2),
       static_cast<int16_t>(safe.x)});

@@ -52,7 +52,8 @@ bool readerMenuTabsAtBottom(const MappedInputManager& mappedInput) {
 Rect readerMenuHeaderRect(const GfxRenderer& renderer, const MappedInputManager& mappedInput) {
   const Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, !mappedInput.hasTouch(), false);
   const auto& metrics = UITheme::getInstance().getMetrics();
-  return Rect{screen.x, screen.y + metrics.topPadding, screen.width, metrics.headerHeight};
+  return Rect{screen.x, screen.y + metrics.topPadding, screen.width,
+              TouchHeaderBackButton::height(metrics, mappedInput)};
 }
 
 bool rectContains(const Rect& rect, const int x, const int y) {
@@ -554,8 +555,8 @@ void EpubReaderMenuActivity::buildMenuScreen(UiApp::ScreenType& screen) {
   const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, !mappedInput.hasTouch(), false);
   const int tabBarHeight = readerMenuTabBarHeight(metrics.tabBarHeight, mappedInput.hasTouch());
   const bool tabsAtBottom = readerMenuTabsAtBottom(mappedInput);
-  const int contentTop = safe.y + metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight +
-                         (tabsAtBottom ? 0 : tabBarHeight) + metrics.verticalSpacing;
+  const int contentTop = safe.y + metrics.topPadding + TouchHeaderBackButton::height(metrics, mappedInput) +
+                         metrics.tabBarHeight + (tabsAtBottom ? 0 : tabBarHeight) + metrics.verticalSpacing;
   const int contentBottom =
       renderer.getScreenHeight() - (safe.y + safe.height) + (tabsAtBottom ? tabBarHeight + metrics.verticalSpacing : 0);
   // The legacy header, progress band, and icon tabs remain outside the app;
@@ -631,13 +632,14 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
                    std::to_string(totalPages) + std::string(tr(STR_PAGES_SEPARATOR));
   }
   progressLine += std::string(tr(STR_BOOK_PREFIX)) + std::to_string(bookProgressPercent) + "%";
-  GUI.drawSubHeader(
-      renderer,
-      Rect{screen.x, screen.y + metrics.topPadding + metrics.headerHeight, screen.width, metrics.tabBarHeight},
-      progressLine.c_str());
+  GUI.drawSubHeader(renderer,
+                    Rect{screen.x, screen.y + metrics.topPadding + TouchHeaderBackButton::height(metrics, mappedInput),
+                         screen.width, metrics.tabBarHeight},
+                    progressLine.c_str());
 
   const int tabBarY = tabsAtBottom ? screen.y + screen.height - tabBarHeight
-                                   : screen.y + metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight;
+                                   : screen.y + metrics.topPadding +
+                                         TouchHeaderBackButton::height(metrics, mappedInput) + metrics.tabBarHeight;
   const Rect tabRect{screen.x, tabBarY, screen.width, tabBarHeight};
   drawIconTabBar(tabRect, !tabsAtBottom);
 

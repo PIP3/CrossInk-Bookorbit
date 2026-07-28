@@ -150,8 +150,9 @@ void BookmarksHomeActivity::listScreen(UiApp::ScreenType& screen, void* user) {
 
 void BookmarksHomeActivity::buildListScreen(UiApp::ScreenType& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  screen.setContentMargin(fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight), 0,
-                                      static_cast<int16_t>(metrics.buttonHintsHeight), 0});
+  screen.setContentMargin(
+      fui::Insets{static_cast<int16_t>(metrics.topPadding + TouchHeaderBackButton::height(metrics, mappedInput)), 0,
+                  static_cast<int16_t>(metrics.buttonHintsHeight), 0});
   screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
   if (books.empty()) {
     screen.centeredText(tr(STR_NO_BOOKMARKS), screen.theme().bodyText);
@@ -190,7 +191,7 @@ void BookmarksHomeActivity::render(RenderLock&&) {
   const auto pageWidth = renderer.getScreenWidth();
   const auto& metrics = UITheme::getInstance().getMetrics();
 
-  const Rect header = TouchHeaderBackButton::standardHeaderRect(renderer);
+  const Rect header = TouchHeaderBackButton::headerRect(renderer, mappedInput);
   if (mappedInput.hasTouchHardware()) {
     TouchHeaderBackButton::draw(renderer, uiTarget, header, tr(STR_BOOKMARKS), false);
   } else {

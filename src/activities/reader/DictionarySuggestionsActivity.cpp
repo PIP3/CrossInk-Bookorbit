@@ -4,6 +4,7 @@
 #include <I18n.h>
 
 #include "MappedInputManager.h"
+#include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
 #include "components/UIThemeTokens.h"
 #include "components/UiAppHelpers.h"
@@ -54,8 +55,9 @@ void DictionarySuggestionsActivity::suggestionsScreen(UiApp::ScreenType& screen,
 void DictionarySuggestionsActivity::buildSuggestionsScreen(UiApp::ScreenType& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   screen.setContentMargin(
-      fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing), 0,
-                  static_cast<int16_t>(metrics.buttonHintsHeight + metrics.verticalSpacing), 0});
+      fui::Insets{static_cast<int16_t>(metrics.topPadding + TouchHeaderBackButton::height(metrics, mappedInput) +
+                                       metrics.verticalSpacing),
+                  0, static_cast<int16_t>(metrics.buttonHintsHeight + metrics.verticalSpacing), 0});
 
   fui::ListProps props;
   props.items = uiItems.data();
@@ -74,6 +76,11 @@ void DictionarySuggestionsActivity::buildSuggestionsScreen(UiApp::ScreenType& sc
 }
 
 void DictionarySuggestionsActivity::loop() {
+  if (TouchHeaderBackButton::wasTapped(mappedInput, renderer)) {
+    DictUtils::cancelAndFinish(*this);
+    return;
+  }
+
   if (uiReady) {
     const fui::InputSnapshot snap = touchSnapshotFrom(mappedInput);
     if (snap.touchPressed || snap.touchReleased) {
@@ -121,9 +128,12 @@ void DictionarySuggestionsActivity::loop() {
 
 void DictionarySuggestionsActivity::render(RenderLock&&) {
   renderer.clearScreen();
-  const int pageWidth = renderer.getScreenWidth();
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_DICT_DID_YOU_MEAN));
+  const Rect header = TouchHeaderBackButton::headerRect(renderer, mappedInput);
+  if (mappedInput.hasTouchHardware()) {
+    TouchHeaderBackButton::draw(renderer, uiTarget, header, tr(STR_DICT_DID_YOU_MEAN), true);
+  } else {
+    GUI.drawHeader(renderer, header, tr(STR_DICT_DID_YOU_MEAN));
+  }
   uiReady = false;
   app.render();
   uiReady = true;

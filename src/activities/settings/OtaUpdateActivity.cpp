@@ -9,6 +9,7 @@
 #include "SdCardFontSystem.h"
 #include "SilentRestart.h"
 #include "activities/network/WifiSelectionActivity.h"
+#include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "network/OtaUpdater.h"
@@ -124,7 +125,13 @@ void OtaUpdateActivity::render(RenderLock&&) {
 
   renderer.clearScreen();
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_UPDATE));
+  const Rect header{0, metrics.topPadding, pageWidth, TouchHeaderBackButton::height(metrics, mappedInput)};
+  const bool canGoBack = state == WAITING_CONFIRMATION || state == FAILED || state == NO_UPDATE;
+  if (canGoBack && mappedInput.hasTouchHardware()) {
+    TouchHeaderBackButton::draw(renderer, header, tr(STR_UPDATE), false);
+  } else {
+    GUI.drawHeader(renderer, header, tr(STR_UPDATE));
+  }
   const auto height = renderer.getLineHeight(UI_10_FONT_ID);
   const auto top = (pageHeight - height) / 2;
 
@@ -242,6 +249,12 @@ void OtaUpdateActivity::runUpdateInstall() {
 }
 
 void OtaUpdateActivity::loop() {
+  if ((state == WAITING_CONFIRMATION || state == FAILED || state == NO_UPDATE) &&
+      TouchHeaderBackButton::wasTapped(mappedInput, renderer)) {
+    finish();
+    return;
+  }
+
   if (state == WAITING_CONFIRMATION) {
     int x = 0;
     int y = 0;

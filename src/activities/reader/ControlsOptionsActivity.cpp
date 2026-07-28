@@ -293,8 +293,9 @@ void ControlsOptionsActivity::onRowEvent(const fui::ActionEvent& event, void* us
 
 void ControlsOptionsActivity::buildOptionsScreen(UiApp::ScreenType& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  screen.setContentMargin(fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight), 0,
-                                      static_cast<int16_t>(metrics.buttonHintsHeight), 0});
+  screen.setContentMargin(
+      fui::Insets{static_cast<int16_t>(metrics.topPadding + TouchHeaderBackButton::height(metrics, mappedInput)), 0,
+                  static_cast<int16_t>(metrics.buttonHintsHeight), 0});
   screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
 
   const StrId submenuTitleId = activeSubmenuTitleId();
@@ -360,7 +361,7 @@ void ControlsOptionsActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const Rect header = TouchHeaderBackButton::standardHeaderRect(renderer);
+  const Rect header = TouchHeaderBackButton::headerRect(renderer, mappedInput);
   if (mappedInput.hasTouchHardware()) {
     TouchHeaderBackButton::draw(renderer, uiTarget, header, tr(STR_CAT_CONTROLS), true);
   } else {

@@ -880,8 +880,9 @@ void FontDownloadActivity::listScreen(UiApp::ScreenType& screen, void* user) {
 void FontDownloadActivity::buildListScreen(UiApp::ScreenType& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   // Content below the GUI.drawHeader band, above the button hints.
-  screen.setContentMargin(fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight), 0,
-                                      static_cast<int16_t>(metrics.buttonHintsHeight), 0});
+  screen.setContentMargin(
+      fui::Insets{static_cast<int16_t>(metrics.topPadding + TouchHeaderBackButton::height(metrics, mappedInput)), 0,
+                  static_cast<int16_t>(metrics.buttonHintsHeight), 0});
   screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
 
   if (families_.empty()) {
@@ -1078,8 +1079,8 @@ std::string FontDownloadActivity::formatSize(size_t bytes) {
 
 int FontDownloadActivity::fontListPageItems() const {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const int reservedHeight = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing +
-                             metrics.buttonHintsHeight + metrics.verticalSpacing;
+  const int reservedHeight = metrics.topPadding + TouchHeaderBackButton::height(metrics, mappedInput) +
+                             metrics.verticalSpacing + metrics.buttonHintsHeight + metrics.verticalSpacing;
   const int availableHeight = renderer.getScreenHeight() - reservedHeight;
   return std::max(1, availableHeight / fontListRowHeight(renderer, metrics));
 }
@@ -1194,7 +1195,7 @@ void FontDownloadActivity::render(RenderLock&&) {
 
   renderer.clearScreen();
 
-  const Rect header = TouchHeaderBackButton::standardHeaderRect(renderer);
+  const Rect header = TouchHeaderBackButton::headerRect(renderer, mappedInput);
   if (mappedInput.hasTouchHardware()) {
     TouchHeaderBackButton::draw(renderer, uiTarget_, header, tr(STR_FONT_BROWSER), false);
   } else {
@@ -1202,7 +1203,8 @@ void FontDownloadActivity::render(RenderLock&&) {
   }
 
   const auto lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
-  const auto contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+  const auto contentTop =
+      metrics.topPadding + TouchHeaderBackButton::height(metrics, mappedInput) + metrics.verticalSpacing;
   const auto centerY = (pageHeight - lineHeight) / 2;
 
   if (state_ == LOADING_MANIFEST) {

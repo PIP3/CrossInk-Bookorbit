@@ -8,6 +8,7 @@
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
+#include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -64,7 +65,8 @@ void XtcReaderMenuActivity::finishCancelled() {
 }
 
 void XtcReaderMenuActivity::loop() {
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+  if (TouchHeaderBackButton::wasTapped(mappedInput, renderer) ||
+      mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     finishCancelled();
     return;
   }
@@ -117,7 +119,9 @@ void XtcReaderMenuActivity::render(RenderLock&&) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
-  const int titleX = metrics.contentSidePadding;
+  const Rect standardHeader{0, metrics.topPadding, pageWidth, metrics.headerHeight};
+  const int titleX = mappedInput.hasTouchHardware() ? TouchHeaderBackButton::layout(standardHeader).titleX
+                                                    : metrics.contentSidePadding;
   const int titleMaxWidth = std::max(0, pageWidth - titleX - metrics.contentSidePadding - kBatteryTextReserveWidth);
   const auto titleLines =
       renderer.wrappedText(kTitleFontId, title.c_str(), titleMaxWidth, kTitleMaxLines, EpdFontFamily::BOLD);
@@ -125,7 +129,12 @@ void XtcReaderMenuActivity::render(RenderLock&&) {
   const int titleBlockHeight = static_cast<int>(titleLines.size()) * titleLineHeight +
                                std::max(0, static_cast<int>(titleLines.size()) - 1) * kTitleLineGap;
   const int headerHeight = std::max(metrics.headerHeight, metrics.batteryBarHeight + titleBlockHeight + 16);
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, headerHeight}, "");
+  const Rect header{0, metrics.topPadding, pageWidth, headerHeight};
+  if (mappedInput.hasTouchHardware()) {
+    TouchHeaderBackButton::draw(renderer, header, "", true, 0, nullptr, 0);
+  } else {
+    GUI.drawHeader(renderer, header, "");
+  }
 
   const int titleY = metrics.topPadding + metrics.batteryBarHeight + 3;
   for (int i = 0; i < static_cast<int>(titleLines.size()); ++i) {

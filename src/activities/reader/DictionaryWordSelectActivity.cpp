@@ -79,8 +79,6 @@ constexpr uint8_t styleToBitMask(EpdFontFamily::Style style) {
   return static_cast<uint8_t>(1u << (static_cast<uint8_t>(style) & 0x03));
 }
 
-constexpr unsigned long TOUCH_LOOKUP_HOLD_MS = 1000;
-
 }  // namespace
 
 void DictionaryWordSelectActivity::onEnter() {
@@ -489,28 +487,17 @@ void DictionaryWordSelectActivity::loop() {
     return;
   }
 
-  int heldTouchX = 0;
-  int heldTouchY = 0;
-  if (mappedInput.isScreenTouchLongPress(heldTouchX, heldTouchY, TOUCH_LOOKUP_HOLD_MS)) {
-    bool touchedWord = false;
-    navigator.selectWordAtPoint(heldTouchX, heldTouchY, renderer.getLineHeight(SETTINGS.getReaderFontId()),
-                                &touchedWord);
-    if (touchedWord && navigator.beginTouchMultiSelect()) {
-      touchDragLookup_ = true;
-      requestUpdate();
-    }
-    return;
-  }
-
   int touchX = 0;
   int touchY = 0;
-  bool touchedWord = false;
-  if (mappedInput.wasScreenTapped(touchX, touchY)) {
+  if (mappedInput.wasScreenTouchDown(touchX, touchY)) {
+    bool touchedWord = false;
     navigator.selectWordAtPoint(touchX, touchY, renderer.getLineHeight(SETTINGS.getReaderFontId()), &touchedWord);
-  }
-  if (touchedWord) {
-    const auto* selected = navigator.getSelected();
-    if (selected) controller.lookupOrPopup(navigator.getLookup(*selected));
+    if (touchedWord && navigator.beginTouchMultiSelect()) {
+      touchDragLookup_ = true;
+      // Finish this fast refresh before lookup can replace the screen, so the
+      // touched word always provides visible press feedback on e-ink.
+      requestUpdateAndWait();
+    }
     return;
   }
 #endif

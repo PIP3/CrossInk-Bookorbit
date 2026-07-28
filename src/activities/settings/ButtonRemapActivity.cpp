@@ -124,16 +124,19 @@ void ButtonRemapActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   const char* header = readerMode ? tr(STR_REMAP_FRONT_BUTTONS_READER) : tr(STR_REMAP_FRONT_BUTTONS);
-  const Rect headerRect = TouchHeaderBackButton::standardHeaderRect(renderer);
+  const Rect headerRect = TouchHeaderBackButton::headerRect(renderer, mappedInput);
   if (mappedInput.hasTouchHardware()) {
     TouchHeaderBackButton::draw(renderer, headerRect, header, headerReaderContext);
   } else {
     GUI.drawHeader(renderer, headerRect, header, nullptr, headerReaderContext);
   }
-  GUI.drawSubHeader(renderer, Rect{0, metrics.topPadding + metrics.headerHeight, pageWidth, metrics.tabBarHeight},
+  GUI.drawSubHeader(renderer,
+                    Rect{0, metrics.topPadding + TouchHeaderBackButton::height(metrics, mappedInput), pageWidth,
+                         metrics.tabBarHeight},
                     tr(STR_REMAP_PROMPT));
 
-  int topOffset = metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing;
+  int topOffset = metrics.topPadding + TouchHeaderBackButton::height(metrics, mappedInput) + metrics.tabBarHeight +
+                  metrics.verticalSpacing;
   int contentHeight = pageHeight - topOffset - metrics.buttonHintsHeight - metrics.verticalSpacing;
   GUI.drawList(
       renderer, Rect{0, topOffset, pageWidth, contentHeight}, kRoleCount, currentStep,

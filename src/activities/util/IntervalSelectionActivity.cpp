@@ -218,7 +218,7 @@ void IntervalSelectionActivity::render(RenderLock&&) {
   const int screenWidth = renderer.getScreenWidth();
   const Rect touchScreen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
 
-  const Rect header = TouchHeaderBackButton::standardHeaderRect(renderer);
+  const Rect header = TouchHeaderBackButton::headerRect(renderer, mappedInput);
   if (showTouchHeaderBackButton && mappedInput.hasTouchHardware()) {
     TouchHeaderBackButton::draw(renderer, header, I18N.get(titleId), readerActivity);
   } else {

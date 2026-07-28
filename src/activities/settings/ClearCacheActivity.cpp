@@ -27,7 +27,7 @@ void ClearCacheActivity::render(RenderLock&&) {
 
   renderer.clearScreen();
 
-  const Rect header = TouchHeaderBackButton::standardHeaderRect(renderer);
+  const Rect header = TouchHeaderBackButton::headerRect(renderer, mappedInput);
   if (mappedInput.hasTouchHardware()) {
     TouchHeaderBackButton::draw(renderer, header, tr(STR_CLEAR_READING_CACHE), false);
   } else {

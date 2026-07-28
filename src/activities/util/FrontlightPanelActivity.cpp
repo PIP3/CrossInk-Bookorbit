@@ -9,9 +9,11 @@
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
+#include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
 #include "components/UIThemeTokens.h"
 #include "components/UiAppHelpers.h"
+#include "components/icons/frontlightHeaderIcons.h"
 
 namespace fui = freeink::ui;
 
@@ -20,10 +22,11 @@ constexpr fui::ActionId ACTION_BRIGHTNESS = 1;
 constexpr fui::ActionId ACTION_WARMTH = 2;
 constexpr fui::ActionId ACTION_TOGGLE = 3;
 constexpr int BRIGHTNESS_STEP = 5;
-constexpr int SETTINGS_ICON_SIZE = 32;
+constexpr int SETTINGS_ICON_SIZE = 28;
 constexpr int SETTINGS_BUTTON_WIDTH = 64;
 constexpr int SETTINGS_BUTTON_HEIGHT = 56;
 constexpr int SETTINGS_BUTTON_RIGHT_INSET = 8;
+constexpr int SETTINGS_BUTTON_DOWN_OFFSET = 5;
 
 uint8_t percentFromPermille(const int16_t permille) {
   int value = (static_cast<int>(permille) * 100 + 500) / 1000;
@@ -131,6 +134,11 @@ void FrontlightPanelActivity::loop() {
     requestUpdate();
   }
 
+  if (TouchHeaderBackButton::wasTapped(mappedInput, renderer)) {
+    close();
+    return;
+  }
+
   const Rect settingsButton = settingsButtonRect();
   if (mappedInput.wasTapInRect(settingsButton.x, settingsButton.y, settingsButton.width, settingsButton.height)) {
     openSettings();
@@ -180,9 +188,11 @@ void FrontlightPanelActivity::loop() {
 
 Rect FrontlightPanelActivity::settingsButtonRect() const {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const int buttonHeight = std::min(SETTINGS_BUTTON_HEIGHT, metrics.headerHeight);
+  const int buttonHeight = std::min(SETTINGS_BUTTON_HEIGHT, TouchHeaderBackButton::height(metrics, mappedInput));
   return Rect{renderer.getScreenWidth() - SETTINGS_BUTTON_RIGHT_INSET - SETTINGS_BUTTON_WIDTH,
-              metrics.topPadding + metrics.headerHeight - buttonHeight, SETTINGS_BUTTON_WIDTH, buttonHeight};
+              metrics.topPadding + TouchHeaderBackButton::height(metrics, mappedInput) - buttonHeight +
+                  SETTINGS_BUTTON_DOWN_OFFSET,
+              SETTINGS_BUTTON_WIDTH, buttonHeight};
 }
 
 int FrontlightPanelActivity::computePanelBottom() const {
@@ -191,7 +201,7 @@ int FrontlightPanelActivity::computePanelBottom() const {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto tokens = uiThemeTokens(uiTarget);
   const int16_t lh = uiTarget.lineHeight(tokens.bodyText.font);
-  int y = metrics.topPadding + metrics.headerHeight;
+  int y = metrics.topPadding + TouchHeaderBackButton::height(metrics, mappedInput);
   y += tokens.spaceLg;                     // leading spacer
   y += tokens.rowHeight + tokens.spaceSm;  // brightness label + sun toggle row
   y += tokens.rowHeight + tokens.spaceLg;  // brightness slider
@@ -213,7 +223,8 @@ void FrontlightPanelActivity::buildPanelScreen(UiApp::ScreenType& screen) {
   // the app never lays out over the preserved content underneath.
   const int16_t bottomInset = static_cast<int16_t>(renderer.getScreenHeight() - panelBottom);
   screen.setContentMargin(
-      fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight), 0, bottomInset, 0});
+      fui::Insets{static_cast<int16_t>(metrics.topPadding + TouchHeaderBackButton::height(metrics, mappedInput)), 0,
+                  bottomInset, 0});
 
   const int16_t lh = screen.target().lineHeight(theme.bodyText.font);
   const int16_t rowH = theme.rowHeight;
@@ -274,12 +285,17 @@ void FrontlightPanelActivity::render(RenderLock&&) {
   renderer.fillRect(0, 0, pageWidth, panelBottom, false);  // white the panel area only
 
   const auto& metrics = UITheme::getInstance().getMetrics();
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_FRONTLIGHT));
+  const Rect header{0, metrics.topPadding, pageWidth, TouchHeaderBackButton::height(metrics, mappedInput)};
+  if (mappedInput.hasTouchHardware()) {
+    TouchHeaderBackButton::draw(renderer, uiTarget, header, tr(STR_FRONTLIGHT), false, SETTINGS_ICON_SIZE + 24);
+  } else {
+    GUI.drawHeader(renderer, header, tr(STR_FRONTLIGHT));
+  }
   const Rect settingsButton = settingsButtonRect();
   uiTarget.bitmap(fui::Rect{static_cast<int16_t>(settingsButton.x + (settingsButton.width - SETTINGS_ICON_SIZE) / 2),
                             static_cast<int16_t>(settingsButton.y + (settingsButton.height - SETTINGS_ICON_SIZE) / 2),
                             SETTINGS_ICON_SIZE, SETTINGS_ICON_SIZE},
-                  fui::bitmapFromIcon(icon_sliders_horizontal_32), fui::BitmapMode::Center);
+                  fui::bitmapFromIcon(icon_sliders_horizontal_28), fui::BitmapMode::Center);
 
   uiReady = false;
   app.render();

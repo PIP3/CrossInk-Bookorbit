@@ -8,6 +8,7 @@
 
 #include "DeviceCapabilities.h"
 #include "MappedInputManager.h"
+#include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -401,8 +402,8 @@ KeyboardEntryActivity::InputFieldTouchTarget KeyboardEntryActivity::inputFieldTo
   const auto& metrics = UITheme::getInstance().getMetrics();
 
   const int lineHeight = renderer.getLineHeight(UI_12_FONT_ID);
-  const int inputStartY = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing +
-                          metrics.verticalSpacing * 4 + metrics.keyboardVerticalOffset;
+  const int inputStartY = metrics.topPadding + TouchHeaderBackButton::height(metrics, mappedInput) +
+                          metrics.verticalSpacing + metrics.verticalSpacing * 4 + metrics.keyboardVerticalOffset;
 
   int availableWidth = pageWidth;
   // Clear the side-button hint gutters, which only render on edge-button boards without touch.
@@ -503,6 +504,11 @@ fui::Rect KeyboardEntryActivity::keyboardRect() const {
 
 void KeyboardEntryActivity::loop() {
 #if CROSSINK_APP_CAP_TOUCH
+  if (TouchHeaderBackButton::wasTapped(mappedInput, renderer)) {
+    onCancel();
+    return;
+  }
+
   int tx = 0;
   int ty = 0;
 
@@ -717,11 +723,16 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   const auto pageWidth = renderer.getScreenWidth();
   const auto& metrics = UITheme::getInstance().getMetrics();
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, title.c_str());
+  const Rect header{0, metrics.topPadding, pageWidth, TouchHeaderBackButton::height(metrics, mappedInput)};
+  if (mappedInput.hasTouchHardware()) {
+    TouchHeaderBackButton::draw(renderer, header, title.c_str(), false);
+  } else {
+    GUI.drawHeader(renderer, header, title.c_str());
+  }
 
   const int lineHeight = renderer.getLineHeight(UI_12_FONT_ID);
-  const int inputStartY = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing +
-                          metrics.verticalSpacing * 4 + metrics.keyboardVerticalOffset;
+  const int inputStartY = metrics.topPadding + TouchHeaderBackButton::height(metrics, mappedInput) +
+                          metrics.verticalSpacing + metrics.verticalSpacing * 4 + metrics.keyboardVerticalOffset;
   int inputHeight = 0;
 
   std::string displayText = displayTextForCurrentState();

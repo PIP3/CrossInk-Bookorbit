@@ -11,6 +11,7 @@
 #include "SdCardFontSystem.h"
 #include "SilentRestart.h"
 #include "activities/network/WifiSelectionActivity.h"
+#include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "network/WifiUtils.h"
@@ -93,8 +94,13 @@ void KOReaderAuthActivity::render(RenderLock&&) {
   const auto pageHeight = renderer.getScreenHeight();
   const Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight},
-                 mode == Mode::SIGN_UP ? tr(STR_SIGN_UP) : tr(STR_KOREADER_AUTH));
+  const Rect header{0, metrics.topPadding, pageWidth, TouchHeaderBackButton::height(metrics, mappedInput)};
+  const char* title = mode == Mode::SIGN_UP ? tr(STR_SIGN_UP) : tr(STR_KOREADER_AUTH);
+  if ((state == SUCCESS || state == FAILED) && mappedInput.hasTouchHardware()) {
+    TouchHeaderBackButton::draw(renderer, header, title, false);
+  } else {
+    GUI.drawHeader(renderer, header, title);
+  }
   const auto height = renderer.getLineHeight(UI_10_FONT_ID);
   const auto top = (pageHeight - height) / 2;
 
@@ -124,7 +130,9 @@ void KOReaderAuthActivity::render(RenderLock&&) {
 
 void KOReaderAuthActivity::loop() {
   if (state == SUCCESS || state == FAILED) {
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+    const Rect header = TouchHeaderBackButton::headerRect(renderer, mappedInput);
+    if (TouchHeaderBackButton::wasTapped(mappedInput, header) ||
+        mappedInput.wasPressed(MappedInputManager::Button::Back)) {
       finishAfterBackPress();
       return;
     }

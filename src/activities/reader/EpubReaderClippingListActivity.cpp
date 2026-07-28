@@ -301,7 +301,8 @@ void EpubReaderClippingListActivity::showClippingActionMenu(const bool ignoreIni
 void EpubReaderClippingListActivity::loop() {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
-  const Rect header{safe.x, safe.y + metrics.topPadding, safe.width, metrics.headerHeight};
+  const Rect header{safe.x, safe.y + metrics.topPadding, safe.width,
+                    TouchHeaderBackButton::height(metrics, mappedInput)};
   if (!detailMode && TouchHeaderBackButton::wasTapped(mappedInput, header)) {
     ActivityResult result;
     result.isCancelled = true;
@@ -466,10 +467,10 @@ void EpubReaderClippingListActivity::listScreen(UiApp::ScreenType& screen, void*
 void EpubReaderClippingListActivity::buildListScreen(UiApp::ScreenType& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
-  screen.setContentMargin(fui::Insets{static_cast<int16_t>(safe.y + metrics.topPadding + metrics.headerHeight),
-                                      static_cast<int16_t>(renderer.getScreenWidth() - safe.x - safe.width),
-                                      static_cast<int16_t>(renderer.getScreenHeight() - safe.y - safe.height),
-                                      static_cast<int16_t>(safe.x)});
+  screen.setContentMargin(fui::Insets{
+      static_cast<int16_t>(safe.y + metrics.topPadding + TouchHeaderBackButton::height(metrics, mappedInput)),
+      static_cast<int16_t>(renderer.getScreenWidth() - safe.x - safe.width),
+      static_cast<int16_t>(renderer.getScreenHeight() - safe.y - safe.height), static_cast<int16_t>(safe.x)});
   screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
   const size_t count = CLIPPINGS.clippingCount();
   if (count == 0) {
@@ -566,7 +567,8 @@ void EpubReaderClippingListActivity::render(RenderLock&&) {
 
   const auto& metrics = UITheme::getInstance().getMetrics();
   const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
-  const Rect header{safe.x, safe.y + metrics.topPadding, safe.width, metrics.headerHeight};
+  const Rect header{safe.x, safe.y + metrics.topPadding, safe.width,
+                    TouchHeaderBackButton::height(metrics, mappedInput)};
   if (mappedInput.hasTouchHardware()) {
     TouchHeaderBackButton::draw(renderer, uiTarget, header, tr(STR_CLIPPINGS), true);
   } else {

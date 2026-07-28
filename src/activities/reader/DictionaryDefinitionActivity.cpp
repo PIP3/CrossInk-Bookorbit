@@ -1061,10 +1061,32 @@ void DictionaryDefinitionActivity::loop() {
     }
 
 #if CROSSINK_APP_CAP_TOUCH
+    if (touchDragLookup_) {
+      int dragX = 0;
+      int dragY = 0;
+      if (mappedInput.isScreenTouchHeld(dragX, dragY)) {
+        if (navigator.selectWordAtPoint(dragX, dragY, getLineHeight())) {
+          requestUpdate();
+        }
+        return;
+      }
+
+      touchDragLookup_ = false;
+      controller.lookupOrPopup(navigator.finishTouchMultiSelect());
+      return;
+    }
+
     int touchX = 0;
     int touchY = 0;
-    if (mappedInput.wasScreenTapped(touchX, touchY) && navigator.selectWordAtPoint(touchX, touchY, getLineHeight())) {
-      requestUpdate();
+    if (mappedInput.wasScreenTouchDown(touchX, touchY)) {
+      bool touchedWord = false;
+      navigator.selectWordAtPoint(touchX, touchY, getLineHeight(), &touchedWord);
+      if (touchedWord && navigator.beginTouchMultiSelect()) {
+        touchDragLookup_ = true;
+        // Finish this fast refresh before lookup can replace the definition,
+        // so the touched word always provides visible press feedback on e-ink.
+        requestUpdateAndWait();
+      }
       return;
     }
 #endif

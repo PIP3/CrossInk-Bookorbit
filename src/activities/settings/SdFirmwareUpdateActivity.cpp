@@ -10,6 +10,7 @@
 #include "MappedInputManager.h"
 #include "activities/home/FileBrowserActivity.h"
 #include "activities/util/ConfirmationActivity.h"
+#include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "network/FirmwareFlasher.h"
@@ -188,7 +189,8 @@ void SdFirmwareUpdateActivity::loop() {
   if (state == State::FAILED) {
     int x = 0;
     int y = 0;
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back) ||
+    if (TouchHeaderBackButton::wasTapped(mappedInput, renderer) ||
+        mappedInput.wasPressed(MappedInputManager::Button::Back) ||
         mappedInput.wasPressed(MappedInputManager::Button::Confirm) || mappedInput.wasScreenTapped(x, y)) {
       if (recoveryMode) {
         // Go back to picker so user can try a different .bin
@@ -209,7 +211,12 @@ void SdFirmwareUpdateActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   const char* headerText = recoveryMode ? tr(STR_RECOVERY_MODE) : tr(STR_SD_FIRMWARE_UPDATE);
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, headerText);
+  const Rect header{0, metrics.topPadding, pageWidth, TouchHeaderBackButton::height(metrics, mappedInput)};
+  if (state == State::FAILED && mappedInput.hasTouchHardware()) {
+    TouchHeaderBackButton::draw(renderer, header, headerText, false);
+  } else {
+    GUI.drawHeader(renderer, header, headerText);
+  }
 
   const auto lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
   const auto top = (pageHeight - lineHeight) / 2;

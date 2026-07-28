@@ -371,7 +371,8 @@ void StatusBarSettingsActivity::buildSettingsScreen(UiApp::ScreenType& screen) {
   const int hintGutterWidth = (isLandscapeCw || isLandscapeCcw) ? metrics.buttonHintsHeight : 0;
   const int contentX = isLandscapeCw ? hintGutterWidth : 0;
   const int contentWidth = pageWidth - hintGutterWidth;
-  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+  const int contentTop =
+      metrics.topPadding + TouchHeaderBackButton::height(metrics, mappedInput) + metrics.verticalSpacing;
   const int previewLabelLineHeight = renderer.getLineHeight(UI_10_FONT_ID);
   constexpr int previewLabelGap = 18;
   const int previewSectionHeight = previewLabelLineHeight + previewLabelGap + UITheme::getStatusBarHeight();
@@ -428,7 +429,8 @@ void StatusBarSettingsActivity::render(RenderLock&&) {
   const int contentX = isLandscapeCw ? hintGutterWidth : 0;
   const int contentWidth = pageWidth - hintGutterWidth;
 
-  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+  const int contentTop =
+      metrics.topPadding + TouchHeaderBackButton::height(metrics, mappedInput) + metrics.verticalSpacing;
   const int previewLabelLineHeight = renderer.getLineHeight(UI_10_FONT_ID);
   constexpr int previewLabelGap = 18;
   const int previewStatusBarHeight = UITheme::getStatusBarHeight();
@@ -441,12 +443,13 @@ void StatusBarSettingsActivity::render(RenderLock&&) {
 
   int bottomPreviewPadding = metrics.buttonHintsHeight + metrics.verticalSpacing;
 
-  const Rect header = TouchHeaderBackButton::standardHeaderRect(renderer);
+  const Rect header = TouchHeaderBackButton::headerRect(renderer, mappedInput);
   if (mappedInput.hasTouchHardware()) {
     TouchHeaderBackButton::draw(renderer, uiTarget, header, tr(STR_CUSTOMISE_STATUS_BAR), readerContext);
   } else {
-    GUI.drawHeader(renderer, Rect{contentX, metrics.topPadding, contentWidth, metrics.headerHeight},
-                   tr(STR_CUSTOMISE_STATUS_BAR), nullptr, readerContext);
+    GUI.drawHeader(
+        renderer, Rect{contentX, metrics.topPadding, contentWidth, TouchHeaderBackButton::height(metrics, mappedInput)},
+        tr(STR_CUSTOMISE_STATUS_BAR), nullptr, readerContext);
   }
 
   uiReady = false;

@@ -95,7 +95,7 @@ Rect settingsListRect(const ThemeMetrics& metrics, const int pageWidth, const in
 }
 
 Rect settingsHeaderRect(const ThemeMetrics& metrics, const int pageWidth) {
-  return Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight};
+  return Rect{0, metrics.topPadding, pageWidth, CompactHeader::headerBottomY(metrics) - metrics.topPadding};
 }
 
 Rect settingsRowsRect(const GfxRenderer& renderer, const ThemeMetrics& metrics, const int pageWidth,
@@ -1118,10 +1118,9 @@ void SettingsActivity::settingsScreen(UiApp::ScreenType& screen, void* user) {
 
 void SettingsActivity::buildSettingsScreen(UiApp::ScreenType& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  // Content below the GUI.drawHeader band, above the button hints.
-  screen.setContentMargin(
-      fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight + settingsHeaderDateOffset(metrics)),
-                  0, static_cast<int16_t>(metrics.buttonHintsHeight), 0});
+  // Content starts directly below the compact header divider.
+  screen.setContentMargin(fui::Insets{static_cast<int16_t>(settingsTabBarTop(metrics)), 0,
+                                      static_cast<int16_t>(metrics.buttonHintsHeight), 0});
 
   // Category tabs. The selected pill dims to a dither when the selection is
   // down in the list (the legacy focused/unfocused tab distinction).
@@ -1252,13 +1251,12 @@ void SettingsActivity::render(RenderLock&&) {
 
   const Rect header = settingsHeaderRect(metrics, pageWidth);
   if (mappedInput.hasTouchHardware()) {
-    const int dateReserve = headerDateReservedWidth(renderer) + metrics.batteryWidth + 2 * metrics.headerSidePadding;
-    TouchHeaderBackButton::draw(renderer, uiTarget, header, tr(STR_SETTINGS_TITLE), false, dateReserve);
+    TouchHeaderBackButton::drawCompact(renderer, tr(STR_SETTINGS_TITLE), false, true);
   } else {
     GUI.drawHeader(renderer, header, tr(STR_SETTINGS_TITLE));
+    drawHeaderDateAtLineBottom(renderer, pageWidth,
+                               headerDateLineBottomY(renderer, metrics) + settingsHeaderDateOffset(metrics));
   }
-  drawHeaderDateAtLineBottom(renderer, pageWidth,
-                             headerDateLineBottomY(renderer, metrics) + settingsHeaderDateOffset(metrics));
 
   uiReady = false;
   app.render();

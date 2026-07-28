@@ -13,6 +13,7 @@
 #include "MappedInputManager.h"
 #include "Memory.h"
 #include "MemoryBudget.h"
+#include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
 #include "components/UIThemeTokens.h"
 #include "components/UiAppHelpers.h"
@@ -151,6 +152,7 @@ DictionaryLookupController::LookupEvent DictionaryLookupController::handleInput(
   if (state == LookupState::AltFormPrompt) {
 #if CROSSINK_APP_CAP_TOUCH
     freeink::ui::ActionId touchAction = freeink::ui::NO_ACTION;
+    const bool headerTapped = TouchHeaderBackButton::wasTapped(mappedInput, renderer);
     if (altFormUiReady && mappedInput.hasTouch()) {
       const auto event = altFormUiApp.route(touchSnapshotFrom(mappedInput));
       if (altFormUiApp.invalidated()) owner.requestUpdate();
@@ -179,7 +181,7 @@ DictionaryLookupController::LookupEvent DictionaryLookupController::handleInput(
     }
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)
 #if CROSSINK_APP_CAP_TOUCH
-        || touchAction == ACTION_ALT_FORM_NO
+        || headerTapped || touchAction == ACTION_ALT_FORM_NO
 #endif
     ) {
       state = LookupState::Idle;
@@ -249,10 +251,17 @@ bool DictionaryLookupController::render() {
 
   if (state == LookupState::AltFormPrompt) {
     const int pageWidth = renderer.getScreenWidth();
-    GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight},
-                   tr(STR_DICT_SEARCH_ALT_FORMS));
-    const int y =
-        metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing + renderer.getLineHeight(UI_10_FONT_ID);
+    const Rect header{0, metrics.topPadding, pageWidth, TouchHeaderBackButton::height(metrics, mappedInput)};
+#if CROSSINK_APP_CAP_TOUCH
+    if (mappedInput.hasTouchHardware()) {
+      TouchHeaderBackButton::draw(renderer, altFormUiTarget, header, tr(STR_DICT_SEARCH_ALT_FORMS), true);
+    } else
+#endif
+    {
+      GUI.drawHeader(renderer, header, tr(STR_DICT_SEARCH_ALT_FORMS));
+    }
+    const int y = metrics.topPadding + TouchHeaderBackButton::height(metrics, mappedInput) + metrics.verticalSpacing +
+                  renderer.getLineHeight(UI_10_FONT_ID);
     renderer.drawCenteredText(UI_10_FONT_ID, y, altFormWord.c_str());
 #if CROSSINK_APP_CAP_TOUCH
     if (mappedInput.hasTouch()) {

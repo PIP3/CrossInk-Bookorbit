@@ -115,7 +115,7 @@ void ClockSyncActivity::render(RenderLock&&) {
 
   renderer.clearScreen();
 
-  const Rect header = TouchHeaderBackButton::standardHeaderRect(renderer);
+  const Rect header = TouchHeaderBackButton::headerRect(renderer, mappedInput);
   if (mappedInput.hasTouchHardware()) {
     TouchHeaderBackButton::draw(renderer, header, tr(STR_CLOCK_SYNC), false);
   } else {

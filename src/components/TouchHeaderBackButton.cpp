@@ -21,6 +21,12 @@ constexpr int actionSize = 52;
 constexpr int touchSize = 68;
 constexpr int titleGap = 8;
 constexpr int defaultRightReserve = 52;
+
+int effectiveVerticalOffset(const Layout& layout, const Rect& header, const int requestedOffset) {
+  const int iconBottom = layout.iconRect.y + (layout.iconRect.height + ICON_SIZE) / 2;
+  const int availableOffset = std::max(0, header.y + header.height - iconBottom);
+  return std::clamp(requestedOffset, 0, availableOffset);
+}
 }  // namespace
 
 Layout layout(const Rect& header) {
@@ -46,6 +52,15 @@ Rect standardHeaderRect(const GfxRenderer& renderer) {
   return Rect{0, metrics.topPadding, renderer.getScreenWidth(), metrics.headerHeight};
 }
 
+int height(const ThemeMetrics& metrics, const MappedInputManager& input) {
+  return input.hasTouchHardware() ? CompactHeader::height(metrics) : metrics.headerHeight;
+}
+
+Rect headerRect(const GfxRenderer& renderer, const MappedInputManager& input) {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  return Rect{0, metrics.topPadding, renderer.getScreenWidth(), height(metrics, input)};
+}
+
 Rect compactHeaderRect(const GfxRenderer& renderer) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   return Rect{0, metrics.topPadding, renderer.getScreenWidth(),
@@ -59,20 +74,23 @@ bool wasTapped(const MappedInputManager& input, const Rect& header) {
 }
 
 bool wasTapped(const MappedInputManager& input, const GfxRenderer& renderer) {
-  return wasTapped(input, standardHeaderRect(renderer));
+  return wasTapped(input, headerRect(renderer, input));
 }
 
 void draw(GfxRenderer& renderer, const Rect& header, const char* title, const bool readerContext,
-          const int rightReserve) {
+          const int rightReserve, const char* subtitle, const int verticalOffset) {
   auto target = makeUiTarget(renderer);
-  draw(renderer, target, header, title, readerContext, rightReserve);
+  draw(renderer, target, header, title, readerContext, rightReserve, subtitle, verticalOffset);
 }
 
 void draw(GfxRenderer& renderer, fui::GfxRendererTarget& target, const Rect& header, const char* title,
-          const bool readerContext, const int rightReserve) {
-  const Layout back = layout(header);
-  const Rect visualHeader{header.x, header.y, header.width, back.iconRect.y + back.iconRect.height - header.y};
-  GUI.drawHeader(renderer, visualHeader, "", nullptr, readerContext);
+          const bool readerContext, const int rightReserve, const char* subtitle, const int verticalOffset) {
+  Layout back = layout(header);
+  const int offset = effectiveVerticalOffset(back, header, verticalOffset);
+  back.iconRect.y += offset;
+  // Keep the status row on the same baseline as Home. The optional offset only
+  // adds breathing room below it for the navigation icon and title.
+  GUI.drawHeader(renderer, header, "", subtitle, readerContext);
 
   fui::TextStyle titleStyle = uiThemeTokens(target).titleText;
   titleStyle.align = fui::TextAlign::Left;
@@ -89,17 +107,19 @@ void draw(GfxRenderer& renderer, fui::GfxRendererTarget& target, const Rect& hea
                 fui::bitmapFromIcon(icon_back_32), fui::BitmapMode::Center);
 }
 
-void drawCompact(GfxRenderer& renderer, const char* title, const bool readerContext, const bool showDate) {
+void drawCompact(GfxRenderer& renderer, const char* title, const bool readerContext, const bool showDate,
+                 const int verticalOffset) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const Rect header = compactHeaderRect(renderer);
   const int rightReserve =
       metrics.batteryWidth + 2 * metrics.headerSidePadding + (showDate ? headerDateReservedWidth(renderer) : 0);
-  draw(renderer, header, title, readerContext, rightReserve);
+  draw(renderer, header, title, readerContext, rightReserve, nullptr, verticalOffset);
   if (showDate) {
     const Layout back = layout(header);
-    const int titleBaselineY =
-        back.iconRect.y + std::max(0, (back.iconRect.height - renderer.getLineHeight(UI_12_FONT_ID)) / 2) +
-        renderer.getFontAscenderSize(UI_12_FONT_ID);
+    const int offset = effectiveVerticalOffset(back, header, verticalOffset);
+    const int titleBaselineY = back.iconRect.y + offset +
+                               std::max(0, (back.iconRect.height - renderer.getLineHeight(UI_12_FONT_ID)) / 2) +
+                               renderer.getFontAscenderSize(UI_12_FONT_ID);
     drawHeaderDateAtBaseline(renderer, renderer.getScreenWidth(), titleBaselineY);
   }
 }

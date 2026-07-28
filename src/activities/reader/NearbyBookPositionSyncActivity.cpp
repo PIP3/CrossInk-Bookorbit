@@ -5,6 +5,7 @@
 
 #include <algorithm>
 
+#include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -114,6 +115,15 @@ void NearbyBookPositionSyncActivity::onEnter() {
 void NearbyBookPositionSyncActivity::onExit() { Activity::onExit(); }
 
 void NearbyBookPositionSyncActivity::loop() {
+  const auto& headerMetrics = UITheme::getInstance().getMetrics();
+  const Rect headerScreen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+  const Rect header{headerScreen.x, headerScreen.y + headerMetrics.topPadding, headerScreen.width,
+                    TouchHeaderBackButton::height(headerMetrics, mappedInput)};
+  if (TouchHeaderBackButton::wasTapped(mappedInput, header)) {
+    returnToReader(true);
+    return;
+  }
+
   const bool canShare = state_ == State::READY || state_ == State::SYNCED || state_ == State::ERROR;
   const bool canApplyReceivedPosition = state_ == State::SHOWING_RESULT && !sourceMode_;
   if (mappedInput.hasTouch() && (canShare || canApplyReceivedPosition)) {
@@ -161,8 +171,13 @@ void NearbyBookPositionSyncActivity::render(RenderLock&&) {
   Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
 
   renderer.clearScreen();
-  GUI.drawHeader(renderer, Rect{screen.x, screen.y + metrics.topPadding, screen.width, metrics.headerHeight},
-                 tr(STR_NEARBY_POSITION_SYNC));
+  const Rect header{screen.x, screen.y + metrics.topPadding, screen.width,
+                    TouchHeaderBackButton::height(metrics, mappedInput)};
+  if (mappedInput.hasTouchHardware()) {
+    TouchHeaderBackButton::draw(renderer, header, tr(STR_NEARBY_POSITION_SYNC), true);
+  } else {
+    GUI.drawHeader(renderer, header, tr(STR_NEARBY_POSITION_SYNC));
+  }
 
   if (state_ == State::SHOWING_RESULT) {
     renderComparison();
@@ -341,7 +356,7 @@ void NearbyBookPositionSyncActivity::renderReady(const std::string& primary, con
                                                  const std::string& detailSecondary) const {
   const auto& metrics = UITheme::getInstance().getMetrics();
   Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
-  int y = screen.y + metrics.topPadding + metrics.headerHeight + 70;
+  int y = screen.y + metrics.topPadding + TouchHeaderBackButton::height(metrics, mappedInput) + 70;
 
   UITheme::drawCenteredText(renderer, screen, UI_10_FONT_ID, y, primary.c_str(), true, EpdFontFamily::BOLD);
   y += renderer.getLineHeight(UI_10_FONT_ID) + metrics.verticalSpacing;
@@ -360,7 +375,8 @@ void NearbyBookPositionSyncActivity::renderReady(const std::string& primary, con
 void NearbyBookPositionSyncActivity::renderComparison() const {
   const auto& metrics = UITheme::getInstance().getMetrics();
   Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
-  int top = screen.y + metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+  int top =
+      screen.y + metrics.topPadding + TouchHeaderBackButton::height(metrics, mappedInput) + metrics.verticalSpacing;
 
   renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_NEARBY_POSITION_FOUND), true, EpdFontFamily::BOLD);
 
@@ -736,6 +752,15 @@ void NearbyBookPositionSyncActivity::onExit() {
 
 void NearbyBookPositionSyncActivity::loop() {
   processEvents();
+
+  const auto& headerMetrics = UITheme::getInstance().getMetrics();
+  const Rect headerScreen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+  const Rect header{headerScreen.x, headerScreen.y + headerMetrics.topPadding, headerScreen.width,
+                    TouchHeaderBackButton::height(headerMetrics, mappedInput)};
+  if (TouchHeaderBackButton::wasTapped(mappedInput, header)) {
+    returnToReader(true);
+    return;
+  }
 
   const bool canShare = state_ == State::READY || state_ == State::SYNCED || state_ == State::ERROR;
   const bool canApplyReceivedPosition = state_ == State::SHOWING_RESULT && !sourceMode_;
@@ -1208,8 +1233,13 @@ void NearbyBookPositionSyncActivity::render(RenderLock&&) {
 
   const auto& metrics = UITheme::getInstance().getMetrics();
   Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
-  GUI.drawHeader(renderer, Rect{screen.x, screen.y + metrics.topPadding, screen.width, metrics.headerHeight},
-                 tr(STR_NEARBY_POSITION_SYNC));
+  const Rect header{screen.x, screen.y + metrics.topPadding, screen.width,
+                    TouchHeaderBackButton::height(metrics, mappedInput)};
+  if (mappedInput.hasTouchHardware()) {
+    TouchHeaderBackButton::draw(renderer, header, tr(STR_NEARBY_POSITION_SYNC), true);
+  } else {
+    GUI.drawHeader(renderer, header, tr(STR_NEARBY_POSITION_SYNC));
+  }
 
   if (state_ == State::SHOWING_RESULT) {
     renderComparison();
@@ -1278,7 +1308,7 @@ void NearbyBookPositionSyncActivity::renderReady(const std::string& primary, con
                                                  const std::string& detailSecondary) const {
   const auto& metrics = UITheme::getInstance().getMetrics();
   Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
-  int y = screen.y + metrics.topPadding + metrics.headerHeight + 70;
+  int y = screen.y + metrics.topPadding + TouchHeaderBackButton::height(metrics, mappedInput) + 70;
 
   UITheme::drawCenteredText(renderer, screen, UI_10_FONT_ID, y, primary.c_str(), true, EpdFontFamily::BOLD);
   y += renderer.getLineHeight(UI_10_FONT_ID) + metrics.verticalSpacing;
@@ -1298,7 +1328,8 @@ void NearbyBookPositionSyncActivity::renderReady(const std::string& primary, con
 void NearbyBookPositionSyncActivity::renderComparison() const {
   const auto& metrics = UITheme::getInstance().getMetrics();
   Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
-  int top = screen.y + metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+  int top =
+      screen.y + metrics.topPadding + TouchHeaderBackButton::height(metrics, mappedInput) + metrics.verticalSpacing;
 
   renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_NEARBY_POSITION_FOUND), true, EpdFontFamily::BOLD);
 

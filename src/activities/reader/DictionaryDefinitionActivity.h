@@ -151,6 +151,9 @@ class DictionaryDefinitionActivity final : public Activity {
   bool isWordSelectMode = false;
   WordSelectNavigator navigator;
   DictionaryLookupController controller;
+#if CROSSINK_APP_CAP_TOUCH
+  bool touchDragLookup_ = false;
+#endif
 
   // Differential repaint state for in-definition word-select mode. Only consulted
   // when isWordSelectMode is true; reset on every view-mode render.

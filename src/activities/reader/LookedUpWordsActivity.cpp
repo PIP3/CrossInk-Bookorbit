@@ -89,8 +89,9 @@ void LookedUpWordsActivity::historyScreen(UiApp::ScreenType& screen, void* user)
 void LookedUpWordsActivity::buildHistoryScreen(UiApp::ScreenType& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   screen.setContentMargin(
-      fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing), 0,
-                  static_cast<int16_t>(metrics.buttonHintsHeight + metrics.verticalSpacing), 0});
+      fui::Insets{static_cast<int16_t>(metrics.topPadding + TouchHeaderBackButton::height(metrics, mappedInput) +
+                                       metrics.verticalSpacing),
+                  0, static_cast<int16_t>(metrics.buttonHintsHeight + metrics.verticalSpacing), 0});
 
   fui::ListProps props;
   props.items = uiItems.data();
@@ -214,7 +215,8 @@ void LookedUpWordsActivity::loop() {
   int touchX = 0;
   int touchY = 0;
   if (mappedInput.isScreenTouchLongPress(touchX, touchY, Dictionary::LONG_PRESS_MS)) {
-    const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+    const int contentTop =
+        metrics.topPadding + TouchHeaderBackButton::height(metrics, mappedInput) + metrics.verticalSpacing;
     const int rowHeight = uiListRowHeight(app.theme(), UiListRowType::SingleLine);
     const int rowStep = rowHeight + app.theme().listRowGap;
     const int row = rowStep > 0 ? (touchY - contentTop) / rowStep : -1;
@@ -271,14 +273,15 @@ void LookedUpWordsActivity::render(RenderLock&&) {
   const int pageHeight = renderer.getScreenHeight();
   const auto& metrics = UITheme::getInstance().getMetrics();
 
-  const Rect header{0, metrics.topPadding, pageWidth, metrics.headerHeight};
+  const Rect header{0, metrics.topPadding, pageWidth, TouchHeaderBackButton::height(metrics, mappedInput)};
   if (mappedInput.hasTouchHardware()) {
     TouchHeaderBackButton::draw(renderer, uiTarget, header, tr(STR_LOOKUP_HISTORY), true);
   } else {
     GUI.drawHeader(renderer, header, tr(STR_LOOKUP_HISTORY));
   }
 
-  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+  const int contentTop =
+      metrics.topPadding + TouchHeaderBackButton::height(metrics, mappedInput) + metrics.verticalSpacing;
 
   if (entries.empty()) {
     const int midY = contentTop + (pageHeight - contentTop - metrics.buttonHintsHeight) / 2;

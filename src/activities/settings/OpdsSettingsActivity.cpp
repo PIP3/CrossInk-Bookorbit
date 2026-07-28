@@ -225,8 +225,9 @@ void OpdsSettingsActivity::listScreen(UiApp::ScreenType& screen, void* user) {
 void OpdsSettingsActivity::buildListScreen(UiApp::ScreenType& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   // Content below the GUI.drawHeader band, above the button hints.
-  screen.setContentMargin(fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight), 0,
-                                      static_cast<int16_t>(metrics.buttonHintsHeight), 0});
+  screen.setContentMargin(
+      fui::Insets{static_cast<int16_t>(metrics.topPadding + TouchHeaderBackButton::height(metrics, mappedInput)), 0,
+                  static_cast<int16_t>(metrics.buttonHintsHeight), 0});
 
   // URL hint where the old sub-header band sat.
   const fui::Rect band = screen.takeTop(static_cast<int16_t>(metrics.tabBarHeight));
@@ -279,7 +280,7 @@ void OpdsSettingsActivity::render(RenderLock&&) {
   const char* header = isNewServer ? tr(STR_ADD_SERVER) : tr(STR_OPDS_BROWSER);
   // Header via GUI.drawHeader (already FreeInkUI-themed) for the battery
   // indicator; the rest of the screen renders through the app.
-  const Rect headerRect = TouchHeaderBackButton::standardHeaderRect(renderer);
+  const Rect headerRect = TouchHeaderBackButton::headerRect(renderer, mappedInput);
   if (mappedInput.hasTouchHardware()) {
     TouchHeaderBackButton::draw(renderer, uiTarget, headerRect, header, false);
   } else {

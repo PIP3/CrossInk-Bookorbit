@@ -4,6 +4,7 @@
 #include <I18n.h>
 
 #include "MappedInputManager.h"
+#include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
 #include "components/UIThemeTokens.h"
 #include "components/UiAppHelpers.h"
@@ -73,7 +74,12 @@ void XtcReaderChapterSelectionActivity::onRowEvent(const fui::ActionEvent& event
 
 void XtcReaderChapterSelectionActivity::loop() {
   const int totalItems = static_cast<int>(xtc->getChapters().size());
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+  const Rect header{safe.x, safe.y + metrics.topPadding, safe.width,
+                    TouchHeaderBackButton::height(metrics, mappedInput)};
+  if (TouchHeaderBackButton::wasTapped(mappedInput, header) ||
+      mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     ActivityResult result;
     result.isCancelled = true;
     setResult(std::move(result));
@@ -123,10 +129,10 @@ void XtcReaderChapterSelectionActivity::chapterScreen(UiApp::ScreenType& screen,
 void XtcReaderChapterSelectionActivity::buildChapterScreen(UiApp::ScreenType& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
-  screen.setContentMargin(fui::Insets{static_cast<int16_t>(safe.y + metrics.topPadding + metrics.headerHeight),
-                                      static_cast<int16_t>(renderer.getScreenWidth() - safe.x - safe.width),
-                                      static_cast<int16_t>(renderer.getScreenHeight() - safe.y - safe.height),
-                                      static_cast<int16_t>(safe.x)});
+  screen.setContentMargin(fui::Insets{
+      static_cast<int16_t>(safe.y + metrics.topPadding + TouchHeaderBackButton::height(metrics, mappedInput)),
+      static_cast<int16_t>(renderer.getScreenWidth() - safe.x - safe.width),
+      static_cast<int16_t>(renderer.getScreenHeight() - safe.y - safe.height), static_cast<int16_t>(safe.x)});
   screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
   const auto& chapters = xtc->getChapters();
   if (chapters.empty()) {
@@ -162,8 +168,13 @@ void XtcReaderChapterSelectionActivity::render(RenderLock&&) {
   renderer.clearScreen();
   const auto& metrics = UITheme::getInstance().getMetrics();
   const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
-  GUI.drawHeader(renderer, Rect{safe.x, safe.y + metrics.topPadding, safe.width, metrics.headerHeight},
-                 tr(STR_SELECT_CHAPTER), nullptr, true);
+  const Rect header{safe.x, safe.y + metrics.topPadding, safe.width,
+                    TouchHeaderBackButton::height(metrics, mappedInput)};
+  if (mappedInput.hasTouchHardware()) {
+    TouchHeaderBackButton::draw(renderer, uiTarget, header, tr(STR_SELECT_CHAPTER), true);
+  } else {
+    GUI.drawHeader(renderer, header, tr(STR_SELECT_CHAPTER), nullptr, true);
+  }
   uiReady = false;
   app.render();
   uiReady = true;
