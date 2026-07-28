@@ -103,6 +103,13 @@ TextBlock::TextBlock(const std::vector<std::string>& words, const std::vector<in
                      const std::vector<uint8_t>& wordFlags, const BlockStyle& blockStyle,
                      std::vector<std::string> rubyTexts)
     : blockStyle(blockStyle), rubyTexts(std::move(rubyTexts)) {
+  // A ruby-less line needs no per-word ruby vector. ParsedText passes one for
+  // every extracted line once a book contains any ruby, so free all-empty
+  // vectors before they stay resident with the page.
+  if (!hasRuby()) {
+    this->rubyTexts = std::vector<std::string>{};
+  }
+
   const bool hasBionic = !bionicBoundary.empty();
   const bool hasGuideDots = !guideDotXOffset.empty();
   const bool hasWordFlags = !wordFlags.empty();
