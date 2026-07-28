@@ -258,6 +258,13 @@ void HalGPIO::begin() {
                             : x3IsUc8279  ? BoardConfig::Board::XteinkX3Uc8279
                                           : BoardConfig::Board::XteinkX3);
 
+  // CrossInk's X3 override/cache remains authoritative. X4 has no equivalent
+  // local override, so use the SDK's factory-aware controller selection before
+  // SPI claims the display pins.
+  if (deviceIsX4()) {
+    freeink::applyXteinkDisplayController();
+  }
+
   SPI.begin(EPD_SCLK, SPI_MISO, EPD_MOSI, EPD_CS);
 
   if (deviceIsX4()) {
@@ -342,6 +349,7 @@ void HalGPIO::setSharedConfirmPowerShortPressEmitsPower(const bool enabled) {
 
 bool HalGPIO::isXteinkDevice() const {
   return BoardConfig::ACTIVE.board == BoardConfig::Board::XteinkX3 ||
+         BoardConfig::ACTIVE.board == BoardConfig::Board::XteinkX3Uc8279 ||
          BoardConfig::ACTIVE.board == BoardConfig::Board::XteinkX4;
 }
 
@@ -412,7 +420,8 @@ HalGPIO::WakeupReason HalGPIO::getWakeupReason() const {
 
   const bool usbConnected = isUsbConnected();
 
-  if (wakeupCause == ESP_SLEEP_WAKEUP_GPIO && resetReason == ESP_RST_DEEPSLEEP) {
+  if (resetReason == ESP_RST_DEEPSLEEP &&
+      (wakeupCause == ESP_SLEEP_WAKEUP_GPIO || wakeupCause == ESP_SLEEP_WAKEUP_EXT1)) {
     return WakeupReason::PowerButton;
   }
   if (wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED && resetReason == ESP_RST_POWERON && !usbConnected) {
