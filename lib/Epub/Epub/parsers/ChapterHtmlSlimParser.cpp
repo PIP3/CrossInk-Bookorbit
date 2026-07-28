@@ -596,7 +596,8 @@ void ChapterHtmlSlimParser::flushPartWordBuffer() {
   // flush the buffer
   partWordBuffer[partWordBufferIndex] = '\0';
   currentTextBlock->addWord(partWordBuffer, fontStyle, false, nextWordContinues,
-                            honorsPublisherDecorations() && effectiveBackgroundBlack);
+                            honorsPublisherDecorations() && effectiveBackgroundBlack,
+                            insideFootnoteLink ? currentFootnote.linkId : 0);
   currentTextRunBytes = static_cast<uint16_t>(
       std::min<size_t>(currentTextRunBytes + static_cast<size_t>(partWordBufferIndex), UINT16_MAX));
   partWordBufferIndex = 0;
@@ -1069,7 +1070,7 @@ void ChapterHtmlSlimParser::emitBufferedTableAsFragments(BufferedTable& table) {
       currentPage->elements.push_back(std::move(fragment));
       markCurrentPageFromCurrentElement();
       for (const auto& footnote : fragmentFootnotes) {
-        currentPage->addFootnote(footnote.number, footnote.href);
+        currentPage->addFootnote(footnote.number, footnote.href, footnote.linkId);
       }
       currentPageNextY += fragmentHeight;
 
@@ -2021,6 +2022,8 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       strncpy(self->currentFootnote.href, href, sizeof(self->currentFootnote.href) - 1);
       self->currentFootnote.href[sizeof(self->currentFootnote.href) - 1] = '\0';
       self->currentFootnote.number[0] = '\0';
+      self->currentFootnote.linkId = self->nextFootnoteLinkId;
+      self->nextFootnoteLinkId = static_cast<uint8_t>((self->nextFootnoteLinkId % 63) + 1);
       self->currentFootnoteLinkTextLen = 0;
 
       // Apply underline style to visually indicate the link
@@ -2709,6 +2712,7 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
       entry.number[sizeof(entry.number) - 1] = '\0';
       strncpy(entry.href, self->currentFootnote.href, sizeof(entry.href) - 1);
       entry.href[sizeof(entry.href) - 1] = '\0';
+      entry.linkId = self->currentFootnote.linkId;
       int wordIndex =
           self->wordsExtractedInBlock + (self->currentTextBlock ? static_cast<int>(self->currentTextBlock->size()) : 0);
       self->pendingFootnotes.push_back({wordIndex, entry});
@@ -3192,11 +3196,23 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
     }
   }
 
-  // Track cumulative words to assign footnotes to the page containing their anchor
+  // Keep a link available on every page where its text is visible. Usually this
+  // adds one compact entry; a long wrapped link can span lines or pages.
+  for (uint16_t wordIndex = 0; wordIndex < line->wordCount(); ++wordIndex) {
+    const uint8_t linkId = line->wordLinkId(wordIndex);
+    if (linkId == 0) continue;
+    const auto entry = std::find_if(pendingFootnotes.begin(), pendingFootnotes.end(),
+                                    [linkId](const auto& pending) { return pending.second.linkId == linkId; });
+    if (entry != pendingFootnotes.end()) {
+      currentPage->addFootnote(entry->second.number, entry->second.href, entry->second.linkId);
+    }
+  }
+
+  // Track cumulative words to retire links after laying out their final word.
   wordsExtractedInBlock += line->wordCount();
   auto footnoteIt = pendingFootnotes.begin();
   while (footnoteIt != pendingFootnotes.end() && footnoteIt->first <= wordsExtractedInBlock) {
-    currentPage->addFootnote(footnoteIt->second.number, footnoteIt->second.href);
+    currentPage->addFootnote(footnoteIt->second.number, footnoteIt->second.href, footnoteIt->second.linkId);
     ++footnoteIt;
   }
   pendingFootnotes.erase(pendingFootnotes.begin(), footnoteIt);
@@ -3270,7 +3286,7 @@ void ChapterHtmlSlimParser::makePages() {
   // edge cases where a footnote's word index equals the exact block size.
   if (!pendingFootnotes.empty() && currentPage) {
     for (const auto& [idx, fn] : pendingFootnotes) {
-      currentPage->addFootnote(fn.number, fn.href);
+      currentPage->addFootnote(fn.number, fn.href, fn.linkId);
     }
     pendingFootnotes.clear();
   }

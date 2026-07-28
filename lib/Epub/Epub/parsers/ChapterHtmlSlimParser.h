@@ -197,6 +197,7 @@ class ChapterHtmlSlimParser {
   bool insideFootnoteLink = false;
   int footnoteLinkDepth = -1;
   FootnoteEntry currentFootnote = {};
+  uint8_t nextFootnoteLinkId = 1;
   int currentFootnoteLinkTextLen = 0;
   std::vector<std::pair<int, FootnoteEntry>> pendingFootnotes;  // <wordIndex, entry>
   int wordsExtractedInBlock = 0;

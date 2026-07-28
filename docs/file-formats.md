@@ -234,16 +234,20 @@ Binary layout:
 
 ## `section.bin`
 
-### Version 54
+### Version 55
 
 Each file in `sections/*.bin` stores one laid-out spine section. The header is
 also the cache-busting key: if any layout-affecting setting differs from the
 current reader settings, the section is discarded and rebuilt.
 
-Version 54 adds compact ruby-text annotations to serialized text blocks. Only
-words that begin a ruby group store annotation text; continuation words use a
-dedicated style bit. This keeps books without ruby markup unchanged apart from
-the cache version while avoiding an empty string allocation for every word.
+Version 55 assigns compact IDs to internal EPUB links. The ID is stored in the
+existing per-word flags byte and in each page's footnote entry so touch devices
+can map tapped text to the existing fragment-navigation path without retaining
+another per-word data structure. Version 54 adds compact ruby-text annotations
+to serialized text blocks. Only words that begin a ruby group store annotation
+text; continuation words use a dedicated style bit. This keeps books without
+ruby markup unchanged apart from the cache version while avoiding an empty
+string allocation for every word.
 Version 53 stores each image's EPUB-internal source path so section indexing can
 read only its header and defer full extraction until the page is shown. Version
 52 keeps Guide Dots centered when extra word spacing is enabled. Version 51
@@ -269,7 +273,8 @@ anchor behavior introduced in version 45. It includes:
 - paragraph and list-item LUTs used by KOReader sync page refinement
 - optional per-word Bionic Reading split metadata
 - optional per-word Guide Dot x-offset metadata
-- optional per-word text flags for CSS backgrounds and layout-inserted hyphens
+- optional per-word text flags for CSS backgrounds, layout-inserted hyphens,
+  and internal-link IDs
 - reading-aid layout that stores Bionic Reading and Guide Dots as per-word metadata instead of temporary layout words
 - publisher CSS page-break handling and adjusted justification spacing baked into page layout
 - table fragments
@@ -289,7 +294,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 54
+#define EXPECTED_VERSION 55
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
 #define FOOTNOTE_HREF_LEN 96
@@ -446,6 +451,7 @@ struct PageElement {
 struct FootnoteEntry {
     char number[FOOTNOTE_NUMBER_LEN];
     char href[FOOTNOTE_HREF_LEN];
+    u8 linkId;
 };
 
 struct PublisherPageMarker {

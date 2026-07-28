@@ -83,6 +83,9 @@ struct PageTurnResult {
 struct TouchPageTurn {
   bool prev;
   bool next;
+  bool tapped;
+  int x;
+  int y;
   unsigned long heldMs;
 };
 
@@ -90,9 +93,9 @@ inline TouchPageTurn detectTouchPageTurn(const GfxRenderer& renderer, const Mapp
 #if !CROSSINK_APP_CAP_TOUCH
   (void)renderer;
   (void)input;
-  return {false, false, 0};
+  return {false, false, false, 0, 0, 0};
 #else
-  TouchPageTurn result{false, false, 0};
+  TouchPageTurn result{false, false, false, 0, 0, 0};
   if (!SETTINGS.touchReaderControls || !input.hasTouch()) {
     return result;
   }
@@ -116,6 +119,9 @@ inline TouchPageTurn detectTouchPageTurn(const GfxRenderer& renderer, const Mapp
   if (!input.wasScreenTapped(x, y)) {
     return result;
   }
+  result.tapped = true;
+  result.x = x;
+  result.y = y;
   // Reserve the top/bottom gesture bands for vertical edge swipes. If the touch
   // controller loses part of a short edge swipe, do not reinterpret it as a page tap.
   if (input.isInVerticalEdgeGestureZone(y)) {

@@ -26,11 +26,11 @@ constexpr int defaultRightReserve = 52;
 Layout layout(const Rect& header) {
   const int actionWidth = std::min(actionSize, header.width);
   const int actionHeight = std::min(actionSize, header.height);
-  // Reader Home actions sit flush with the horizontal edge and bottom-align
-  // to the title lane. Mirror that geometry so the two header controls share
-  // an optical baseline.
+  // Center the action lane vertically so taller theme headers split their
+  // spare space above and below the back button/title instead of placing all
+  // of it above the title.
   const int actionX = header.x;
-  const int actionY = header.y + header.height - actionHeight;
+  const int actionY = header.y + (header.height - actionHeight) / 2;
   const int touchWidth = std::min(touchSize, header.width);
   const int touchHeight = touchSize;
   const int touchX = std::max(header.x, actionX + (actionWidth - touchWidth) / 2);
@@ -71,7 +71,8 @@ void draw(GfxRenderer& renderer, const Rect& header, const char* title, const bo
 void draw(GfxRenderer& renderer, fui::GfxRendererTarget& target, const Rect& header, const char* title,
           const bool readerContext, const int rightReserve) {
   const Layout back = layout(header);
-  GUI.drawHeader(renderer, header, "", nullptr, readerContext);
+  const Rect visualHeader{header.x, header.y, header.width, back.iconRect.y + back.iconRect.height - header.y};
+  GUI.drawHeader(renderer, visualHeader, "", nullptr, readerContext);
 
   fui::TextStyle titleStyle = uiThemeTokens(target).titleText;
   titleStyle.align = fui::TextAlign::Left;

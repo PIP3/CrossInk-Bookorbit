@@ -5,6 +5,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
+#include <array>
 #include <atomic>
 #include <memory>
 #include <optional>
@@ -170,6 +171,15 @@ class EpubReaderActivity final : public Activity {
 
   // Footnote support
   std::vector<FootnoteEntry> currentPageFootnotes;
+#if CROSSINK_APP_CAP_TOUCH
+  struct FootnoteTouchTarget {
+    int16_t x = 0;
+    int16_t y = 0;
+    int16_t width = 0;
+    int16_t height = 0;
+  };
+  std::array<FootnoteTouchTarget, EPUB_MAX_FOOTNOTES_PER_PAGE> currentPageFootnoteTouchTargets{};
+#endif
   struct SavedPosition {
     int spineIndex;
     int pageNumber;
@@ -292,6 +302,10 @@ class EpubReaderActivity final : public Activity {
   bool quickActionUsesPowerRelease(CrossPointSettings::LONG_PRESS_MENU_ACTION action) const;
   void suppressConfirmShortcutRelease(CrossPointSettings::LONG_PRESS_MENU_ACTION action);
   void executeFootnoteQuickAction(bool suppressInitialPowerRelease = false);
+#if CROSSINK_APP_CAP_TOUCH
+  void buildFootnoteTouchTargets(const Page& page, int fontId, int orientedMarginTop, int orientedMarginLeft);
+  bool handleTouchFootnoteLink(int touchX, int touchY);
+#endif
   void suppressPowerShortcutRelease();
   bool consumeLongPowerButtonRelease();
   bool consumeLongPowerButtonHold();
@@ -321,7 +335,7 @@ class EpubReaderActivity final : public Activity {
   bool restoreRenderModeToastRegion();
 
   // Footnote navigation
-  void navigateToHref(const std::string& href, bool savePosition = false);
+  void navigateToHref(const std::string& href, bool savePosition = false, bool preferFootnotePreview = false);
   void restoreSavedPosition();
 
  public:

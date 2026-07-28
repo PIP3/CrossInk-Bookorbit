@@ -468,7 +468,7 @@ void ParsedText::reserveTokenCapacity(const size_t additionalTokens) {
 }
 
 void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle, const bool underline,
-                         const bool attachToPrevious, const bool backgroundBlack) {
+                         const bool attachToPrevious, const bool backgroundBlack, const uint8_t linkId) {
   if (word.empty()) return;
 
   // The device fonts carry no combining-mark positioning, so EPUB text stored in NFD
@@ -497,7 +497,10 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
     wordBionicBoundary.push_back(bionicBoundary);
     wordGuideDotBefore.push_back(guideDotBeforeNextToken);
     guideDotBeforeNextToken = false;
-    wordBackgroundBlack.push_back(backgroundBlack ? TextBlock::WORD_FLAG_BACKGROUND_BLACK : 0);
+    const uint8_t linkFlags =
+        static_cast<uint8_t>((linkId << TextBlock::WORD_FLAG_LINK_ID_SHIFT) & TextBlock::WORD_FLAG_LINK_ID_MASK);
+    wordBackgroundBlack.push_back(
+        static_cast<uint8_t>((backgroundBlack ? TextBlock::WORD_FLAG_BACKGROUND_BLACK : 0) | linkFlags));
     if (!rubyTexts.empty()) {
       rubyTexts.push_back("");
     }
@@ -1270,7 +1273,7 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
   // The hyphen remainder starts fresh on the next line and does not inherit a virtual guide dot.
   wordBionicBoundary.insert(wordBionicBoundary.begin() + wordIndex + 1, remainderBionic.boundary);
   wordGuideDotBefore.insert(wordGuideDotBefore.begin() + wordIndex + 1, false);
-  wordBackgroundBlack[wordIndex + 1] &= TextBlock::WORD_FLAG_BACKGROUND_BLACK;
+  wordBackgroundBlack[wordIndex + 1] &= static_cast<uint8_t>(~TextBlock::WORD_FLAG_INSERTED_HYPHEN);
   if (wordIndex + 1 <= rubyTexts.size()) {
     rubyTexts.insert(rubyTexts.begin() + wordIndex + 1, "");
   }
@@ -1361,7 +1364,7 @@ bool ParsedText::splitPathologicalTokenAtIndex(const size_t wordIndex, const int
   wordBackgroundBlack.insert(wordBackgroundBlack.begin() + wordIndex + 1, wordBackgroundBlack[wordIndex]);
   wordBionicBoundary.insert(wordBionicBoundary.begin() + wordIndex + 1, remainderBionic.boundary);
   wordGuideDotBefore.insert(wordGuideDotBefore.begin() + wordIndex + 1, false);
-  wordBackgroundBlack[wordIndex + 1] &= TextBlock::WORD_FLAG_BACKGROUND_BLACK;
+  wordBackgroundBlack[wordIndex + 1] &= static_cast<uint8_t>(~TextBlock::WORD_FLAG_INSERTED_HYPHEN);
   wordContinues.insert(wordContinues.begin() + wordIndex + 1, false);
   wordNoSpaceBefore.insert(wordNoSpaceBefore.begin() + wordIndex + 1, false);
 

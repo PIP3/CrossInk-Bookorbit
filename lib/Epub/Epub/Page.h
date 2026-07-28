@@ -134,12 +134,16 @@ class Page {
   std::vector<std::unique_ptr<PageElement>> elements;
   std::vector<FootnoteEntry> footnotes;
   std::vector<PublisherPageMarker> publisherPageMarkers;
-  static constexpr uint16_t MAX_FOOTNOTES_PER_PAGE = 16;
+  static constexpr uint16_t MAX_FOOTNOTES_PER_PAGE = EPUB_MAX_FOOTNOTES_PER_PAGE;
   static constexpr uint8_t INITIAL_FOOTNOTE_RESERVE = 2;
   static constexpr uint8_t MAX_PUBLISHER_PAGE_MARKERS_PER_PAGE = 8;
   static constexpr uint8_t INITIAL_PUBLISHER_PAGE_MARKER_RESERVE = 2;
 
-  void addFootnote(const char* number, const char* href) {
+  void addFootnote(const char* number, const char* href, const uint8_t linkId = 0) {
+    if (linkId != 0 && std::any_of(footnotes.begin(), footnotes.end(),
+                                   [linkId](const FootnoteEntry& entry) { return entry.linkId == linkId; })) {
+      return;
+    }
     if (footnotes.size() >= MAX_FOOTNOTES_PER_PAGE) return;  // Cap per-page footnotes
     if (footnotes.empty()) {
       footnotes.reserve(INITIAL_FOOTNOTE_RESERVE);
@@ -149,6 +153,7 @@ class Page {
     entry.number[sizeof(entry.number) - 1] = '\0';
     std::strncpy(entry.href, href, sizeof(entry.href) - 1);
     entry.href[sizeof(entry.href) - 1] = '\0';
+    entry.linkId = linkId;
     footnotes.push_back(entry);
   }
 
