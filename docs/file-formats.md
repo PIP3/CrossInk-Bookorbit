@@ -234,20 +234,23 @@ Binary layout:
 
 ## `section.bin`
 
-### Version 55
+### Version 56
 
 Each file in `sections/*.bin` stores one laid-out spine section. The header is
 also the cache-busting key: if any layout-affecting setting differs from the
 current reader settings, the section is discarded and rebuilt.
 
-Version 55 assigns compact IDs to internal EPUB links. The ID is stored in the
-existing per-word flags byte and in each page's footnote entry so touch devices
-can map tapped text to the existing fragment-navigation path without retaining
-another per-word data structure. Version 54 adds compact ruby-text annotations
-to serialized text blocks. Only words that begin a ruby group store annotation
-text; continuation words use a dedicated style bit. This keeps books without
-ruby markup unchanged apart from the cache version while avoiding an empty
-string allocation for every word.
+Version 56 changes `<br>` layout: a line break after text no longer reapplies
+the containing block's top or bottom spacing, while an empty `<br>` block keeps
+the existing scene-break gap. Full and suspended partial section caches rebuild
+together. Version 55 assigns compact IDs to internal EPUB links. The ID is
+stored in the existing per-word flags byte and in each page's footnote entry so
+touch devices can map tapped text to the existing fragment-navigation path
+without retaining another per-word data structure. Version 54 adds compact
+ruby-text annotations to serialized text blocks. Only words that begin a ruby
+group store annotation text; continuation words use a dedicated style bit. This
+keeps books without ruby markup unchanged apart from the cache version while
+avoiding an empty string allocation for every word.
 Version 53 stores each image's EPUB-internal source path so section indexing can
 read only its header and defer full extraction until the page is shown. Version
 52 keeps Guide Dots centered when extra word spacing is enabled. Version 51
