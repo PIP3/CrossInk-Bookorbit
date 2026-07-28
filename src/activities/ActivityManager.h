@@ -101,7 +101,7 @@ class ActivityManager {
   void goToNearbyStatsSync();
   void goToNearbyBookSend(std::string path, bool returnToReader);
   void goToNearbyBookReceive();
-  void goToSettings();
+  void goToSettings(bool dismissOnUpSwipe = false);
   void goToFileBrowser(std::string path = {});
   void goToRecentBooks();
   void goToBrowser();

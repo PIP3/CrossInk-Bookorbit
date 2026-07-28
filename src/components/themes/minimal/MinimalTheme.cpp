@@ -27,6 +27,12 @@
 #include "components/UITheme.h"
 #include "components/UIThemeTokens.h"
 #include "components/UiAppHelpers.h"
+#include "components/icons/afternoon.h"
+#include "components/icons/book24.h"
+#include "components/icons/evening.h"
+#include "components/icons/morning.h"
+#include "components/icons/night.h"
+#include "components/icons/streak.h"
 #include "fontIds.h"
 
 namespace {
@@ -110,22 +116,22 @@ const char* readerTypeLabel(const GlobalReadingStats& globalStats) {
   }
 }
 
-const freeink::Icon* readerTypeIcon(const GlobalReadingStats& globalStats) {
+const uint8_t* readerTypeIcon(const GlobalReadingStats& globalStats) {
   ReadingTimeBucket bucket = ReadingTimeBucket::Night;
   if (!dominantReaderTypeBucket(globalStats, bucket)) {
-    return &icon_book_marked_24;
+    return Book24Icon;
   }
 
   switch (bucket) {
     case ReadingTimeBucket::Morning:
-      return &icon_sunrise_24;
+      return MorningReaderIcon;
     case ReadingTimeBucket::Afternoon:
-      return &icon_sun_24;
+      return AfternoonReaderIcon;
     case ReadingTimeBucket::Evening:
-      return &icon_sunset_24;
+      return EveningReaderIcon;
     case ReadingTimeBucket::Night:
     default:
-      return &icon_moon_24;
+      return NightReaderIcon;
   }
 }
 
@@ -147,7 +153,7 @@ void formatStreakStat(const GlobalReadingStats& globalStats, char* buf, const si
 
 Rect coverImageRectForFrame(const Rect& coverRect);
 
-void drawCenteredStatsRow(const GfxRenderer& renderer, const freeink::Icon* icon, const int iconSize, const char* label,
+void drawCenteredStatsRow(const GfxRenderer& renderer, const uint8_t* icon, const int iconSize, const char* label,
                           const int regionTop, const int regionBottom, const bool inverted) {
   const int screenWidth = renderer.getScreenWidth();
   const int regionHeight = regionBottom - regionTop;
@@ -169,9 +175,9 @@ void drawCenteredStatsRow(const GfxRenderer& renderer, const freeink::Icon* icon
   const int textY = topY + (rowHeight - labelLineHeight) / 2;
 
   if (inverted) {
-    drawLucideIcon(renderer, *icon, iconX, iconY);
+    renderer.drawIcon(icon, iconX, iconY, iconSize, iconSize);
   } else {
-    drawLucideIcon(renderer, *icon, iconX, iconY, false);
+    renderer.drawIconInverted(icon, iconX, iconY, iconSize, iconSize);
   }
   renderer.drawText(UI_10_FONT_ID, textX, textY, text.c_str(), inverted);
 }
@@ -204,7 +210,7 @@ void drawStatsOverlay(const GfxRenderer& renderer, const GlobalReadingStats& glo
 
   const int streakRegionTop = progressLabelBottomY(renderer, coverRect, progressPercent);
   const int streakRegionBottom = renderer.getScreenHeight();
-  drawCenteredStatsRow(renderer, &icon_flame_24, kStatsFooterStreakIconSize, streakBuf, streakRegionTop, streakRegionBottom,
+  drawCenteredStatsRow(renderer, StreakIcon, kStatsFooterStreakIconSize, streakBuf, streakRegionTop, streakRegionBottom,
                        inverted);
 }
 

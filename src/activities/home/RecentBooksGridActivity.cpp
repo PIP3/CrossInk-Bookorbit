@@ -24,6 +24,7 @@
 #include "activities/util/ConfirmationActivity.h"
 #include "activities/util/OptionSelectionActivity.h"
 #include "components/CompactHeader.h"
+#include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
 #include "components/UiAppHelpers.h"
 #include "fontIds.h"
@@ -353,6 +354,10 @@ int RecentBooksGridActivity::bookIndexFromPoint(const int x, const int y) {
 }
 
 void RecentBooksGridActivity::loop() {
+  if (TouchHeaderBackButton::wasTapped(mappedInput, TouchHeaderBackButton::compactHeaderRect(renderer))) {
+    onGoHome();
+    return;
+  }
   if (longPressFired) {
     if (!mappedInput.isPressed(MappedInputManager::Button::Confirm)) {
       longPressFired = false;
@@ -631,7 +636,11 @@ void RecentBooksGridActivity::render(RenderLock&&) {
   const auto pageHeight = renderer.getScreenHeight();
   const auto& metrics = UITheme::getInstance().getMetrics();
 
-  CompactHeader::drawTitle(renderer, tr(STR_MENU_RECENT_BOOKS));
+  if (mappedInput.hasTouchHardware()) {
+    TouchHeaderBackButton::drawCompact(renderer, tr(STR_MENU_RECENT_BOOKS));
+  } else {
+    CompactHeader::drawTitle(renderer, tr(STR_MENU_RECENT_BOOKS));
+  }
   const int contentTop = CompactHeader::contentTop(metrics);
   const int gridSpacing = metrics.verticalSpacing;
   const int rowSpacing = gridSpacing + 4;

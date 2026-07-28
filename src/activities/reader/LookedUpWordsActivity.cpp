@@ -9,6 +9,7 @@
 #include "MappedInputManager.h"
 #include "Memory.h"
 #include "activities/util/ConfirmationActivity.h"
+#include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
 #include "components/UIThemeTokens.h"
 #include "components/UiAppHelpers.h"
@@ -170,6 +171,11 @@ void LookedUpWordsActivity::loop() {
     return;
   }
 
+  if (TouchHeaderBackButton::wasTapped(mappedInput, renderer)) {
+    DictUtils::cancelAndFinish(*this);
+    return;
+  }
+
   if (entries.empty()) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       DictUtils::cancelAndFinish(*this);
@@ -265,7 +271,12 @@ void LookedUpWordsActivity::render(RenderLock&&) {
   const int pageHeight = renderer.getScreenHeight();
   const auto& metrics = UITheme::getInstance().getMetrics();
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_LOOKUP_HISTORY));
+  const Rect header{0, metrics.topPadding, pageWidth, metrics.headerHeight};
+  if (mappedInput.hasTouchHardware()) {
+    TouchHeaderBackButton::draw(renderer, uiTarget, header, tr(STR_LOOKUP_HISTORY), true);
+  } else {
+    GUI.drawHeader(renderer, header, tr(STR_LOOKUP_HISTORY));
+  }
 
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
 

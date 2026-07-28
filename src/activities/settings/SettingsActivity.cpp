@@ -36,6 +36,7 @@
 #include "activities/util/OptionSelectionActivity.h"
 #include "components/CompactHeader.h"
 #include "components/HeaderDate.h"
+#include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
 #include "components/UIThemeTokens.h"
 #include "components/UiAppHelpers.h"
@@ -91,6 +92,10 @@ Rect settingsListRect(const ThemeMetrics& metrics, const int pageWidth, const in
   const int tabBarTop = settingsTabBarTop(metrics);
   const int listTop = tabBarTop + settingsTabBarHeight(metrics, hasTouch) + metrics.verticalSpacing;
   return Rect{0, listTop, pageWidth, pageHeight - listTop - metrics.buttonHintsHeight - metrics.verticalSpacing};
+}
+
+Rect settingsHeaderRect(const ThemeMetrics& metrics, const int pageWidth) {
+  return Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight};
 }
 
 Rect settingsRowsRect(const GfxRenderer& renderer, const ThemeMetrics& metrics, const int pageWidth,
@@ -249,8 +254,9 @@ std::string trimAsciiSpaces(const std::string& value) {
 }
 }  // namespace
 
-SettingsActivity::SettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
+SettingsActivity::SettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const bool dismissOnUpSwipe)
     : Activity("Settings", renderer, mappedInput),
+      dismissOnUpSwipe(dismissOnUpSwipe),
       uiTarget(makeUiTarget(renderer)),
       app(uiTarget, uiTarget.deviceContext()) {}
 
@@ -501,7 +507,7 @@ void SettingsActivity::openScreenMarginPicker(const SettingInfo& setting) {
   const SettingInfo selectedSetting = setting;
   startActivityForResult(
       std::make_unique<OptionSelectionActivity>(renderer, mappedInput, "SettingsValueSelect", selectedSetting.nameId,
-                                                std::move(options), currentIndex),
+                                                std::move(options), currentIndex, false, true),
       [this, selectedSetting](const ActivityResult& result) {
         if (result.isCancelled) {
           requestUpdate();
@@ -702,6 +708,18 @@ void SettingsActivity::applyUiSettingChange(uint8_t CrossPointSettings::* valueP
 void SettingsActivity::loop() {
   if (optionPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
 
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  if (TouchHeaderBackButton::wasTapped(mappedInput, settingsHeaderRect(metrics, renderer.getScreenWidth()))) {
+    if (activeSubmenu != SettingAction::None) {
+      closeSubmenu();
+      requestUpdate();
+    } else {
+      SETTINGS.saveToFile();
+      onGoHome();
+    }
+    return;
+  }
+
   bool hasChangedCategory = false;
 
   // Handle actions with early return
@@ -752,6 +770,11 @@ void SettingsActivity::loop() {
   // Swipes scroll the viewport; the selection stays put (it may scroll
   // off-screen) and button navigation pulls the view back to it.
   const auto swipe = mappedInput.wasSwipe();
+  if (dismissOnUpSwipe && swipe == MappedInputManager::SwipeDir::Up) {
+    SETTINGS.saveToFile();
+    finish();
+    return;
+  }
   if (swipe == MappedInputManager::SwipeDir::Up || swipe == MappedInputManager::SwipeDir::Down) {
     const int delta = swipe == MappedInputManager::SwipeDir::Up ? visibleRows : -visibleRows;
     const int next = scrollListBy(topIndex, delta, visibleRows, settingsCount);
@@ -1014,7 +1037,8 @@ void SettingsActivity::openSleepTimeoutPicker() {
           CrossPointSettings::MIN_SLEEP_TIMEOUT_MINUTES, CrossPointSettings::MAX_SLEEP_TIMEOUT_MINUTES, 1, 5,
           StrId::STR_SLEEP_TIMER_VALUE_FORMAT,
           /*readerActivity=*/false, /*allowPowerAsConfirm=*/false, /*ignoreInitialConfirmRelease=*/true,
-          /*showPercentValue=*/false, StrId::STR_SLEEP_NEVER),
+          /*showPercentValue=*/false, StrId::STR_SLEEP_NEVER, /*overrideDisabledReaderTouchscreen=*/false,
+          /*showTouchHeaderBackButton=*/true),
       [this](const ActivityResult& result) {
         if (!result.isCancelled) {
           SETTINGS.sleepTimeoutMinutes = static_cast<uint8_t>(std::get<IntervalResult>(result.data).value);
@@ -1030,7 +1054,8 @@ void SettingsActivity::openLineHeightPicker() {
           renderer, mappedInput, "LineHeightInterval", StrId::STR_LINE_SPACING, SETTINGS.lineHeightPercent,
           CrossPointSettings::MIN_LINE_HEIGHT_PERCENT, CrossPointSettings::MAX_LINE_HEIGHT_PERCENT, 1, 10,
           StrId::STR_NONE_OPT, /*readerActivity=*/false,
-          /*allowPowerAsConfirm=*/false, /*ignoreInitialConfirmRelease=*/false, /*showPercentValue=*/true),
+          /*allowPowerAsConfirm=*/false, /*ignoreInitialConfirmRelease=*/false, /*showPercentValue=*/true,
+          StrId::STR_NONE_OPT, /*overrideDisabledReaderTouchscreen=*/false, /*showTouchHeaderBackButton=*/true),
       [this](const ActivityResult& result) {
         if (!result.isCancelled) {
           SETTINGS.lineHeightPercent = CrossPointSettings::clampedLineHeightPercent(
@@ -1049,7 +1074,8 @@ void SettingsActivity::openIdleTimeThresholdPicker() {
           CrossPointSettings::MAX_READING_IDLE_TIME_THRESHOLD_SECONDS,
           CrossPointSettings::READING_IDLE_TIME_THRESHOLD_UNIT_SECONDS, 60, StrId::STR_SECONDS_VALUE_FORMAT,
           /*readerActivity=*/false, /*allowPowerAsConfirm=*/false, /*ignoreInitialConfirmRelease=*/false,
-          /*showPercentValue=*/false),
+          /*showPercentValue=*/false, StrId::STR_NONE_OPT, /*overrideDisabledReaderTouchscreen=*/false,
+          /*showTouchHeaderBackButton=*/true),
       [this](const ActivityResult& result) {
         if (!result.isCancelled) {
           SETTINGS.readingIdleTimeThresholdUnits = CrossPointSettings::readingIdleTimeThresholdUnitsForSeconds(
@@ -1224,9 +1250,13 @@ void SettingsActivity::render(RenderLock&&) {
   const auto pageWidth = renderer.getScreenWidth();
   const auto& metrics = UITheme::getInstance().getMetrics();
 
-  // Header via GUI.drawHeader (already FreeInkUI-themed) for the battery
-  // indicator; the rest of the screen renders through the app.
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_SETTINGS_TITLE));
+  const Rect header = settingsHeaderRect(metrics, pageWidth);
+  if (mappedInput.hasTouchHardware()) {
+    const int dateReserve = headerDateReservedWidth(renderer) + metrics.batteryWidth + 2 * metrics.headerSidePadding;
+    TouchHeaderBackButton::draw(renderer, uiTarget, header, tr(STR_SETTINGS_TITLE), false, dateReserve);
+  } else {
+    GUI.drawHeader(renderer, header, tr(STR_SETTINGS_TITLE));
+  }
   drawHeaderDateAtLineBottom(renderer, pageWidth,
                              headerDateLineBottomY(renderer, metrics) + settingsHeaderDateOffset(metrics));
 

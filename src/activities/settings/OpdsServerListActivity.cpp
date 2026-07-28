@@ -12,6 +12,7 @@
 #include "OpdsSettingsActivity.h"
 #include "activities/ActivityManager.h"
 #include "activities/util/KeyboardEntryActivity.h"
+#include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
 #include "components/UIThemeTokens.h"
 #include "components/UiAppHelpers.h"
@@ -81,7 +82,8 @@ void OpdsServerListActivity::loop() {
 
   auto activateSelected = [this] { handleSelection(); };
 
-  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+  if (TouchHeaderBackButton::wasTapped(mappedInput, renderer) ||
+      mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     if (pickerMode) {
       activityManager.goHome(HomeMenuItem::OPDS_BROWSER);
     } else {
@@ -243,9 +245,12 @@ void OpdsServerListActivity::render(RenderLock&&) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
 
-  // Header via GUI.drawHeader (already FreeInkUI-themed) for the battery
-  // indicator; the rest of the screen renders through the app.
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_OPDS_SERVERS));
+  const Rect header = TouchHeaderBackButton::standardHeaderRect(renderer);
+  if (mappedInput.hasTouchHardware()) {
+    TouchHeaderBackButton::draw(renderer, uiTarget, header, tr(STR_OPDS_SERVERS), false);
+  } else {
+    GUI.drawHeader(renderer, header, tr(STR_OPDS_SERVERS));
+  }
 
   uiReady = false;
   app.render();

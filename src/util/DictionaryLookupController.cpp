@@ -14,12 +14,24 @@
 #include "Memory.h"
 #include "MemoryBudget.h"
 #include "components/UITheme.h"
+#include "components/UIThemeTokens.h"
+#include "components/UiAppHelpers.h"
 #include "fontIds.h"
 #include "util/Dictionary.h"
 
 DictionaryLookupController::DictionaryLookupController(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                                        Activity& owner, std::string cachePath)
-    : renderer(renderer), mappedInput(mappedInput), owner(owner), cachePath(std::move(cachePath)) {}
+    : renderer(renderer),
+      mappedInput(mappedInput),
+      owner(owner),
+      cachePath(std::move(cachePath))
+#if CROSSINK_APP_CAP_TOUCH
+      ,
+      altFormUiTarget(makeUiTarget(renderer)),
+      altFormUiApp(altFormUiTarget, altFormUiTarget.deviceContext())
+#endif
+{
+}
 
 DictionaryLookupController::~DictionaryLookupController() { onExit(); }
 
@@ -115,6 +127,11 @@ DictionaryLookupController::LookupEvent DictionaryLookupController::handleInput(
       if (Dictionary::hasAltForms(cachePath.c_str())) {
         altFormWord = lookupWord;
         state = LookupState::AltFormPrompt;
+#if CROSSINK_APP_CAP_TOUCH
+        altFormUiReady = false;
+        altFormUiApp.setTheme(uiThemeTokens(altFormUiTarget));
+        altFormUiApp.setScreen(&DictionaryLookupController::altFormPromptScreen, this);
+#endif
         owner.requestUpdate();
         return LookupEvent::None;
       }
@@ -132,7 +149,19 @@ DictionaryLookupController::LookupEvent DictionaryLookupController::handleInput(
   }
 
   if (state == LookupState::AltFormPrompt) {
-    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+#if CROSSINK_APP_CAP_TOUCH
+    freeink::ui::ActionId touchAction = freeink::ui::NO_ACTION;
+    if (altFormUiReady && mappedInput.hasTouch()) {
+      const auto event = altFormUiApp.route(touchSnapshotFrom(mappedInput));
+      if (altFormUiApp.invalidated()) owner.requestUpdate();
+      touchAction = event.action;
+    }
+#endif
+    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)
+#if CROSSINK_APP_CAP_TOUCH
+        || touchAction == ACTION_ALT_FORM_YES
+#endif
+    ) {
       state = LookupState::Idle;
       std::string canonical = Dictionary::resolveAltForm(altFormWord, cachePath.c_str());
       if (!canonical.empty()) {
@@ -148,7 +177,11 @@ DictionaryLookupController::LookupEvent DictionaryLookupController::handleInput(
       handleLookupFailed();
       return LookupEvent::None;
     }
-    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back)
+#if CROSSINK_APP_CAP_TOUCH
+        || touchAction == ACTION_ALT_FORM_NO
+#endif
+    ) {
       state = LookupState::Idle;
       nextIsSuggestion = false;
       return LookupEvent::Cancelled;
@@ -186,6 +219,24 @@ DictionaryLookupController::LookupEvent DictionaryLookupController::handleInput(
   return LookupEvent::None;
 }
 
+#if CROSSINK_APP_CAP_TOUCH
+void DictionaryLookupController::altFormPromptScreen(AltFormUiApp::ScreenType& screen, void* user) {
+  static_cast<DictionaryLookupController*>(user)->buildAltFormPromptScreen(screen);
+}
+
+void DictionaryLookupController::buildAltFormPromptScreen(AltFormUiApp::ScreenType& screen) {
+  const freeink::ui::FooterAction actions[] = {
+      {tr(STR_NO), ACTION_ALT_FORM_NO},
+      {tr(STR_YES), ACTION_ALT_FORM_YES},
+  };
+  freeink::ui::FooterProps footer;
+  footer.actions = actions;
+  footer.count = 2;
+  footer.buttonBorderEdges = freeink::ui::EdgesAll;
+  screen.footer(footer);
+}
+#endif
+
 bool DictionaryLookupController::render() {
   const auto& metrics = UITheme::getInstance().getMetrics();
 
@@ -203,8 +254,17 @@ bool DictionaryLookupController::render() {
     const int y =
         metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing + renderer.getLineHeight(UI_10_FONT_ID);
     renderer.drawCenteredText(UI_10_FONT_ID, y, altFormWord.c_str());
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_CONFIRM), "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+#if CROSSINK_APP_CAP_TOUCH
+    if (mappedInput.hasTouch()) {
+      altFormUiReady = false;
+      altFormUiApp.render();
+      altFormUiReady = true;
+    } else
+#endif
+    {
+      const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_CONFIRM), "", "");
+      GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    }
     renderer.displayBuffer(HalDisplay::FAST_REFRESH);
     return true;
   }
@@ -217,9 +277,9 @@ bool DictionaryLookupController::render() {
       renderer.drawLine(switchRect.x, switchRect.y, switchRect.x + switchRect.width, switchRect.y, true);
       const char* label = tr(STR_SWITCH_DICTIONARY);
       const int labelX =
-          switchRect.x + (switchRect.width - renderer.getTextWidth(UI_12_FONT_ID, label, EpdFontFamily::BOLD)) / 2;
-      const int labelY = switchRect.y + (switchRect.height - renderer.getLineHeight(UI_12_FONT_ID)) / 2;
-      renderer.drawText(UI_12_FONT_ID, labelX, labelY, label, true, EpdFontFamily::BOLD);
+          switchRect.x + (switchRect.width - renderer.getTextWidth(UI_10_FONT_ID, label, EpdFontFamily::BOLD)) / 2;
+      const int labelY = switchRect.y + (switchRect.height - renderer.getLineHeight(UI_10_FONT_ID)) / 2;
+      renderer.drawText(UI_10_FONT_ID, labelX, labelY, label, true, EpdFontFamily::BOLD);
     }
 #endif
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_DONE), tr(STR_DICT_SWITCH), "");

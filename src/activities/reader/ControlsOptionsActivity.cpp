@@ -11,6 +11,7 @@
 #include "MappedInputManager.h"
 #include "SettingsList.h"
 #include "activities/settings/ButtonRemapActivity.h"
+#include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
 
 namespace fui = freeink::ui;
@@ -213,6 +214,16 @@ void ControlsOptionsActivity::toggleCurrentSetting() {
 
 void ControlsOptionsActivity::loop() {
   if (optionPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
+  if (TouchHeaderBackButton::wasTapped(mappedInput, renderer)) {
+    if (activeSubmenu != SettingAction::None) {
+      closeSubmenu();
+      requestUpdate();
+      return;
+    }
+    SETTINGS.saveToFile();
+    finish();
+    return;
+  }
   if (mappedInput.wasHomeGesture()) {
     finish();
     return;
@@ -349,8 +360,12 @@ void ControlsOptionsActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   const auto& metrics = UITheme::getInstance().getMetrics();
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, renderer.getScreenWidth(), metrics.headerHeight},
-                 tr(STR_CAT_CONTROLS), nullptr, true);
+  const Rect header = TouchHeaderBackButton::standardHeaderRect(renderer);
+  if (mappedInput.hasTouchHardware()) {
+    TouchHeaderBackButton::draw(renderer, uiTarget, header, tr(STR_CAT_CONTROLS), true);
+  } else {
+    GUI.drawHeader(renderer, header, tr(STR_CAT_CONTROLS), nullptr, true);
+  }
 
   uiReady = false;
   app.render();

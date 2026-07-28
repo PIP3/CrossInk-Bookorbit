@@ -16,6 +16,7 @@
 #include "activities/settings/StatusBarSettingsActivity.h"
 #include "activities/util/IntervalSelectionActivity.h"
 #include "activities/util/OptionSelectionActivity.h"
+#include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
 
 namespace fui = freeink::ui;
@@ -263,7 +264,7 @@ void ReaderOptionsActivity::openScreenMarginPicker(const SettingInfo& setting) {
   const SettingInfo selectedSetting = setting;
   startActivityForResult(
       std::make_unique<OptionSelectionActivity>(renderer, mappedInput, "ReaderOptionsValueSelect",
-                                                selectedSetting.nameId, std::move(options), currentIndex, true),
+                                                selectedSetting.nameId, std::move(options), currentIndex, true, true),
       [this, selectedSetting](const ActivityResult& result) {
         if (result.isCancelled) {
           requestUpdate();
@@ -380,7 +381,8 @@ void ReaderOptionsActivity::openLineHeightPicker() {
           renderer, mappedInput, "ReaderOptionsLineHeightInterval", StrId::STR_LINE_SPACING, SETTINGS.lineHeightPercent,
           CrossPointSettings::MIN_LINE_HEIGHT_PERCENT, CrossPointSettings::MAX_LINE_HEIGHT_PERCENT, 1, 10,
           StrId::STR_NONE_OPT, /*readerActivity=*/true,
-          /*allowPowerAsConfirm=*/true, /*ignoreInitialConfirmRelease=*/false, /*showPercentValue=*/true),
+          /*allowPowerAsConfirm=*/true, /*ignoreInitialConfirmRelease=*/false, /*showPercentValue=*/true,
+          StrId::STR_NONE_OPT, /*overrideDisabledReaderTouchscreen=*/false, /*showTouchHeaderBackButton=*/true),
       [this](const ActivityResult& result) {
         if (!result.isCancelled) {
           SETTINGS.lineHeightPercent = CrossPointSettings::clampedLineHeightPercent(
@@ -393,6 +395,19 @@ void ReaderOptionsActivity::openLineHeightPicker() {
 
 void ReaderOptionsActivity::loop() {
   if (optionPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
+  if (TouchHeaderBackButton::wasTapped(mappedInput, renderer)) {
+    if (activeSubmenu != SettingAction::None) {
+      closeSubmenu();
+      requestUpdate();
+      return;
+    }
+    if (settingsDirty) {
+      persistReaderSettings();
+      settingsDirty = false;
+    }
+    finish();
+    return;
+  }
   if (mappedInput.wasHomeGesture()) {
     if (settingsDirty) {
       persistReaderSettings();
@@ -548,8 +563,12 @@ void ReaderOptionsActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   const auto& metrics = UITheme::getInstance().getMetrics();
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, renderer.getScreenWidth(), metrics.headerHeight},
-                 tr(STR_READER_OPTIONS), nullptr, true);
+  const Rect header = TouchHeaderBackButton::standardHeaderRect(renderer);
+  if (mappedInput.hasTouchHardware()) {
+    TouchHeaderBackButton::draw(renderer, uiTarget, header, tr(STR_READER_OPTIONS), true);
+  } else {
+    GUI.drawHeader(renderer, header, tr(STR_READER_OPTIONS), nullptr, true);
+  }
 
   uiReady = false;
   app.render();

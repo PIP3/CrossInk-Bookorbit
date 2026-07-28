@@ -12,6 +12,7 @@
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
+#include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -228,6 +229,11 @@ void StatusBarSettingsActivity::onExit() { Activity::onExit(); }
 void StatusBarSettingsActivity::loop() {
   if (optionPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
 
+  if (TouchHeaderBackButton::wasTapped(mappedInput, renderer)) {
+    finishAfterBackPress();
+    return;
+  }
+
   if (uiReady) {
     const fui::InputSnapshot snap = touchSnapshotFrom(mappedInput);
     if (snap.touchPressed || snap.touchReleased) {
@@ -435,8 +441,13 @@ void StatusBarSettingsActivity::render(RenderLock&&) {
 
   int bottomPreviewPadding = metrics.buttonHintsHeight + metrics.verticalSpacing;
 
-  GUI.drawHeader(renderer, Rect{contentX, metrics.topPadding, contentWidth, metrics.headerHeight},
-                 tr(STR_CUSTOMISE_STATUS_BAR), nullptr, readerContext);
+  const Rect header = TouchHeaderBackButton::standardHeaderRect(renderer);
+  if (mappedInput.hasTouchHardware()) {
+    TouchHeaderBackButton::draw(renderer, uiTarget, header, tr(STR_CUSTOMISE_STATUS_BAR), readerContext);
+  } else {
+    GUI.drawHeader(renderer, Rect{contentX, metrics.topPadding, contentWidth, metrics.headerHeight},
+                   tr(STR_CUSTOMISE_STATUS_BAR), nullptr, readerContext);
+  }
 
   uiReady = false;
   app.render();

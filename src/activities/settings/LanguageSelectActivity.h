@@ -39,6 +39,7 @@ class LanguageSelectActivity final : public Activity {
   std::atomic<bool> uiReady{false};
   int visibleRows = 1;
   int topIndex = 0;
+  bool initialViewportPending = true;
   constexpr static uint8_t totalItems = getLanguageCount();
 
   static void languageScreen(UiApp::ScreenType& screen, void* user);

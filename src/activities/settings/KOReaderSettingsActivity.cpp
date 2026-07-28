@@ -9,6 +9,7 @@
 #include "MappedInputManager.h"
 #include "SilentRestart.h"
 #include "activities/util/KeyboardEntryActivity.h"
+#include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
 #include "components/UIThemeTokens.h"
 #include "components/UiAppHelpers.h"
@@ -57,6 +58,10 @@ void KOReaderSettingsActivity::onExit() { Activity::onExit(); }
 void KOReaderSettingsActivity::loop() {
   auto activateSelected = [this] { handleSelection(); };
 
+  if (TouchHeaderBackButton::wasTapped(mappedInput, renderer)) {
+    finishAfterBackPress();
+    return;
+  }
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     finishAfterBackPress();
     return;
@@ -242,7 +247,12 @@ void KOReaderSettingsActivity::render(RenderLock&&) {
 
   // Header via GUI.drawHeader (already FreeInkUI-themed) for the battery
   // indicator; the rest of the screen renders through the app.
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_KOREADER_SYNC));
+  const Rect header = TouchHeaderBackButton::standardHeaderRect(renderer);
+  if (mappedInput.hasTouchHardware()) {
+    TouchHeaderBackButton::draw(renderer, uiTarget, header, tr(STR_KOREADER_SYNC), false);
+  } else {
+    GUI.drawHeader(renderer, header, tr(STR_KOREADER_SYNC));
+  }
 
   uiReady = false;
   app.render();

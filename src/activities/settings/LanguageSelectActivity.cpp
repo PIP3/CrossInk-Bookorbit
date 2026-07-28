@@ -9,6 +9,7 @@
 #include "CrossPointSettings.h"
 #include "I18nKeys.h"
 #include "MappedInputManager.h"
+#include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
 #include "components/UIThemeTokens.h"
 #include "components/UiAppHelpers.h"
@@ -30,6 +31,7 @@ void LanguageSelectActivity::onEnter() {
   selectedIndex = it != std::end(SORTED_LANGUAGE_INDICES) ? std::distance(std::begin(SORTED_LANGUAGE_INDICES), it) : 0;
   topIndex = 0;
   visibleRows = 1;
+  initialViewportPending = true;
   uiReady = false;
   app.setTheme(uiThemeTokens(uiTarget));
   app.on(ACTION_ROW, &LanguageSelectActivity::onRowEvent, this);
@@ -59,6 +61,10 @@ void LanguageSelectActivity::onRowEvent(const fui::ActionEvent& event, void* use
 }
 
 void LanguageSelectActivity::loop() {
+  if (TouchHeaderBackButton::wasTapped(mappedInput, renderer)) {
+    onBack();
+    return;
+  }
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     onBack();
     return;
@@ -127,7 +133,9 @@ void LanguageSelectActivity::buildLanguageScreen(UiApp::ScreenType& screen) {
   props.labelText = screen.theme().bodyText;
   const auto rows = configureUiList(props, screen.theme(), screen.body());
   visibleRows = rows > 0 ? rows : 1;
-  topIndex = scrollListBy(topIndex, 0, visibleRows, totalItems);
+  topIndex = initialViewportPending ? followListSelection(selectedIndex, 0, visibleRows, totalItems)
+                                    : scrollListBy(topIndex, 0, visibleRows, totalItems);
+  initialViewportPending = false;
   props.topIndex = static_cast<uint16_t>(topIndex);
   screen.list(props);
 }
@@ -135,8 +143,12 @@ void LanguageSelectActivity::buildLanguageScreen(UiApp::ScreenType& screen) {
 void LanguageSelectActivity::render(RenderLock&&) {
   renderer.clearScreen();
   const auto& metrics = UITheme::getInstance().getMetrics();
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, renderer.getScreenWidth(), metrics.headerHeight},
-                 tr(STR_LANGUAGE));
+  const Rect header = TouchHeaderBackButton::standardHeaderRect(renderer);
+  if (mappedInput.hasTouchHardware()) {
+    TouchHeaderBackButton::draw(renderer, uiTarget, header, tr(STR_LANGUAGE), false);
+  } else {
+    GUI.drawHeader(renderer, header, tr(STR_LANGUAGE));
+  }
   uiReady = false;
   app.render();
   uiReady = true;

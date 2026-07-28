@@ -37,6 +37,7 @@ void EpubReaderChapterSelectionActivity::onEnter() {
   if (selectorIndex < 0) selectorIndex = 0;
   topIndex = 0;
   visibleRows = 1;
+  initialViewportPending = true;
   uiReady = false;
   app.setTheme(uiThemeTokens(uiTarget));
   app.on(ACTION_ROW, &EpubReaderChapterSelectionActivity::onRowEvent, this);
@@ -153,7 +154,9 @@ void EpubReaderChapterSelectionActivity::buildChapterScreen(UiApp::ScreenType& s
   props.labelText = screen.theme().bodyText;
   const auto rows = configureUiList(props, screen.theme(), screen.body());
   visibleRows = rows > 0 ? rows : 1;
-  topIndex = scrollListBy(topIndex, 0, visibleRows, totalItems);
+  topIndex = initialViewportPending ? followListSelection(selectorIndex, 0, visibleRows, totalItems)
+                                    : scrollListBy(topIndex, 0, visibleRows, totalItems);
+  initialViewportPending = false;
   props.topIndex = static_cast<uint16_t>(topIndex);
   screen.list(props);
 }

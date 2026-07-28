@@ -1358,9 +1358,9 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
     renderer.drawLine(buttonRect.x, buttonRect.y, buttonRect.x + buttonRect.width, buttonRect.y, true);
     const char* label = tr(STR_SWITCH_DICTIONARY);
     const int labelX =
-        buttonRect.x + (buttonRect.width - renderer.getTextWidth(UI_12_FONT_ID, label, EpdFontFamily::BOLD)) / 2;
-    const int labelY = buttonRect.y + (buttonRect.height - renderer.getLineHeight(UI_12_FONT_ID)) / 2;
-    renderer.drawText(UI_12_FONT_ID, labelX, labelY, label, true, EpdFontFamily::BOLD);
+        buttonRect.x + (buttonRect.width - renderer.getTextWidth(UI_10_FONT_ID, label, EpdFontFamily::BOLD)) / 2;
+    const int labelY = buttonRect.y + (buttonRect.height - renderer.getLineHeight(UI_10_FONT_ID)) / 2;
+    renderer.drawText(UI_10_FONT_ID, labelX, labelY, label, true, EpdFontFamily::BOLD);
   }
 #endif
 

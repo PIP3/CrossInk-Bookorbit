@@ -54,6 +54,7 @@ class FontSelectionActivity final : public Activity {
   std::atomic<bool> uiReady_{false};
   int visibleRows_ = 1;
   int topIndex_ = 0;
+  bool initialViewportPending_ = true;
 
   static void listScreen(UiApp::ScreenType& screen, void* user);
   static void onRowEvent(const freeink::ui::ActionEvent& event, void* user);

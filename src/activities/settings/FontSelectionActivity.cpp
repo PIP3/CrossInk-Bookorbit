@@ -11,6 +11,7 @@
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "SdCardFontSystem.h"
+#include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
 #include "components/UIThemeTokens.h"
 #include "components/UiAppHelpers.h"
@@ -126,6 +127,7 @@ void FontSelectionActivity::onEnter() {
   previewFontIndex_ = selectedIndex_;
   topIndex_ = 0;
   visibleRows_ = 1;
+  initialViewportPending_ = true;
   uiReady_ = false;
   app_.setTheme(uiThemeTokens(uiTarget_));
   app_.on(ACTION_ROW, &FontSelectionActivity::onRowEvent, this);
@@ -167,7 +169,8 @@ void FontSelectionActivity::onRowEvent(const fui::ActionEvent& event, void* user
 }
 
 void FontSelectionActivity::loop() {
-  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+  if (TouchHeaderBackButton::wasTapped(mappedInput, renderer) ||
+      mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     mappedInput.suppressNextBackRelease();
     SETTINGS.fontFamily = originalFontFamily_;
     strncpy(SETTINGS.sdFontFamilyName, originalSdFontFamilyName_, sizeof(SETTINGS.sdFontFamilyName) - 1);
@@ -313,7 +316,10 @@ void FontSelectionActivity::buildListScreen(UiApp::ScreenType& screen) {
   props.labelText = screen.theme().bodyText;
   const auto rows = configureUiList(props, screen.theme(), screen.body());
   visibleRows_ = rows > 0 ? rows : 1;
-  topIndex_ = scrollListBy(topIndex_, 0, visibleRows_, static_cast<int>(fonts_.size()));
+  const int fontCount = static_cast<int>(fonts_.size());
+  topIndex_ = initialViewportPending_ ? followListSelection(selectedIndex_, 0, visibleRows_, fontCount)
+                                      : scrollListBy(topIndex_, 0, visibleRows_, fontCount);
+  initialViewportPending_ = false;
   props.topIndex = static_cast<uint16_t>(topIndex_);
   screen.list(props);
 }
@@ -322,7 +328,12 @@ void FontSelectionActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();
-  GUI.drawHeader(renderer, Rect{0, metrics_.topPadding, pageWidth, metrics_.headerHeight}, tr(STR_FONT_FAMILY));
+  const Rect header = TouchHeaderBackButton::standardHeaderRect(renderer);
+  if (mappedInput.hasTouchHardware()) {
+    TouchHeaderBackButton::draw(renderer, uiTarget_, header, tr(STR_FONT_FAMILY), false);
+  } else {
+    GUI.drawHeader(renderer, header, tr(STR_FONT_FAMILY));
+  }
 
   const int previewTop = afterHeader;
   const int listTop = previewTop + previewHeight + metrics_.verticalSpacing;

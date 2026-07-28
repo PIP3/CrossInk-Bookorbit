@@ -58,6 +58,7 @@ class ClipSelectionActivity final : public Activity {
   bool needsPageSwitch = false;
   bool hasSavedBuffer = false;
   bool usingFallbackFont = false;
+  bool touchDragSelecting = false;
   std::array<uint16_t, MAX_READING_ORDER_WORDS> readingOrder{};
   size_t readingOrderSize = 0;
 
@@ -72,6 +73,8 @@ class ClipSelectionActivity final : public Activity {
   void drawHighlights();
   void applyWordStyle(const WordRef& word, const ClipWordStyle& style) const;
   void useFallbackFont(const char* reason);
+  bool selectWordAtPoint(int x, int y);
+  void confirmSelection();
   int lineEndForward(int orderIdx) const;
   int lineEndBackward(int orderIdx) const;
 };

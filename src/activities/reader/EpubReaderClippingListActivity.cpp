@@ -9,6 +9,7 @@
 #include "MappedInputManager.h"
 #include "activities/ActivityResult.h"
 #include "activities/home/FileBrowserActionActivity.h"
+#include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
 #include "components/UIThemeTokens.h"
 #include "components/UiAppHelpers.h"
@@ -298,6 +299,16 @@ void EpubReaderClippingListActivity::showClippingActionMenu(const bool ignoreIni
 }
 
 void EpubReaderClippingListActivity::loop() {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+  const Rect header{safe.x, safe.y + metrics.topPadding, safe.width, metrics.headerHeight};
+  if (!detailMode && TouchHeaderBackButton::wasTapped(mappedInput, header)) {
+    ActivityResult result;
+    result.isCancelled = true;
+    setResult(std::move(result));
+    finish();
+    return;
+  }
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     if (detailMode) {
       closeDetail();
@@ -555,8 +566,12 @@ void EpubReaderClippingListActivity::render(RenderLock&&) {
 
   const auto& metrics = UITheme::getInstance().getMetrics();
   const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
-  GUI.drawHeader(renderer, Rect{safe.x, safe.y + metrics.topPadding, safe.width, metrics.headerHeight},
-                 tr(STR_CLIPPINGS), nullptr, true);
+  const Rect header{safe.x, safe.y + metrics.topPadding, safe.width, metrics.headerHeight};
+  if (mappedInput.hasTouchHardware()) {
+    TouchHeaderBackButton::draw(renderer, uiTarget, header, tr(STR_CLIPPINGS), true);
+  } else {
+    GUI.drawHeader(renderer, header, tr(STR_CLIPPINGS), nullptr, true);
+  }
   uiReady = false;
   app.render();
   uiReady = true;

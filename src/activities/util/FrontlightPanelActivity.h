@@ -8,6 +8,8 @@
 #include "activities/Activity.h"
 #include "util/ButtonNavigator.h"
 
+struct Rect;
+
 // Frontlight quick panel (boards with a frontlight + home key, e.g. X4 Pro).
 // Opened globally by the top-edge down-swipe: a top-anchored drop-down (only the
 // upper third of the screen) with brightness and warmth sliders driving the
@@ -38,6 +40,7 @@ class FrontlightPanelActivity final : public Activity {
   static void onWarmthEvent(const freeink::ui::ActionEvent& event, void* user);
   static void onToggleEvent(const freeink::ui::ActionEvent& event, void* user);
   void buildPanelScreen(UiApp::ScreenType& screen);
+  Rect settingsButtonRect() const;
   // Height of the drop-down, derived from the content it holds (header +
   // sliders + toggle). Same layout math as buildPanelScreen so the frame,
   // content margin, and dismiss threshold all agree.
@@ -45,6 +48,7 @@ class FrontlightPanelActivity final : public Activity {
   void adjustBrightness(int delta);
   void toggleLight();
   void close();
+  void openSettings();
 
  public:
   explicit FrontlightPanelActivity(GfxRenderer& renderer, MappedInputManager& mappedInput);

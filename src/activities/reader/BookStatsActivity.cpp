@@ -4,6 +4,7 @@
 
 #include "BookStatsView.h"
 #include "MappedInputManager.h"
+#include "components/TouchHeaderBackButton.h"
 
 BookStatsActivity::BookStatsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,
                                      const std::string& bookCachePath, const BookReadingStats& stats,
@@ -281,6 +282,16 @@ bool BookStatsActivity::selectEditFieldFromTouchTarget(const int touchTarget) {
 }
 
 void BookStatsActivity::loop() {
+  if (TouchHeaderBackButton::wasTapped(mappedInput, TouchHeaderBackButton::compactHeaderRect(renderer))) {
+    if (page == Page::EditDates) {
+      saveStats();
+      page = Page::PerBook;
+      requestUpdate();
+    } else {
+      exitStatsActivity();
+    }
+    return;
+  }
   if (usesNoRtcSingleScreenLayout()) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       mappedInput.suppressNextBackRelease();
@@ -356,8 +367,13 @@ void BookStatsActivity::loop() {
   }
 
   const auto swipe = mappedInput.wasSwipe();
-  if ((swipe == MappedInputManager::SwipeDir::Left || swipe == MappedInputManager::SwipeDir::Right) &&
-      showNextStatsPage()) {
+  if (swipe == MappedInputManager::SwipeDir::Left && showNextStatsPage()) {
+    return;
+  }
+  if (swipe == MappedInputManager::SwipeDir::Right) {
+    if (!showPreviousStatsPage()) {
+      exitStatsActivity();
+    }
     return;
   }
 

@@ -16,7 +16,8 @@ class IntervalSelectionActivity final : public Activity {
                                      bool readerActivity = false, bool allowPowerAsConfirm = false,
                                      bool ignoreInitialConfirmRelease = false, bool showPercentValue = false,
                                      StrId maxBoundaryLabelId = StrId::STR_NONE_OPT,
-                                     bool overrideDisabledReaderTouchscreen = false)
+                                     bool overrideDisabledReaderTouchscreen = false,
+                                     bool showTouchHeaderBackButton = false)
       : Activity(activityName, renderer, mappedInput),
         titleId(titleId),
         valueFormatId(valueFormatId),
@@ -30,7 +31,8 @@ class IntervalSelectionActivity final : public Activity {
         allowPowerAsConfirm(allowPowerAsConfirm),
         ignoreConfirmRelease(ignoreInitialConfirmRelease),
         showPercentValue(showPercentValue),
-        overrideDisabledReaderTouchscreen(overrideDisabledReaderTouchscreen) {}
+        overrideDisabledReaderTouchscreen(overrideDisabledReaderTouchscreen),
+        showTouchHeaderBackButton(showTouchHeaderBackButton) {}
 
   void onEnter() override;
   void onExit() override;
@@ -53,6 +55,7 @@ class IntervalSelectionActivity final : public Activity {
   bool ignoreConfirmRelease;
   bool showPercentValue;
   bool overrideDisabledReaderTouchscreen;
+  bool showTouchHeaderBackButton;
   bool draggingBar = false;
   ButtonNavigator buttonNavigator;
 

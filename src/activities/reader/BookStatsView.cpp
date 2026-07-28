@@ -11,6 +11,7 @@
 
 #include "MappedInputManager.h"
 #include "components/CompactHeader.h"
+#include "components/TouchHeaderBackButton.h"
 #include "components/TouchRegistry.h"
 #include "components/UITheme.h"
 #include "components/icons/listIcons.h"
@@ -457,7 +458,11 @@ void renderPerBookStatsPage(GfxRenderer& renderer, const MappedInputManager* map
   const bool showRtcStats = shouldShowRtcBasedStats();
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto& layout = getStatsLayout(renderer, false, showButtonHints, showRtcStats);
-  CompactHeader::drawTitle(renderer, tr(STR_READING_STATS), true);
+  if (mappedInput && mappedInput->hasTouchHardware()) {
+    TouchHeaderBackButton::drawCompact(renderer, tr(STR_READING_STATS), true, true);
+  } else {
+    CompactHeader::drawTitle(renderer, tr(STR_READING_STATS), true);
+  }
   const int screenW = renderer.getScreenWidth();
   const int cardX = metrics.contentSidePadding;
   const int cardW = screenW - metrics.contentSidePadding * 2;
@@ -523,7 +528,11 @@ void renderGlobalStatsPage(GfxRenderer& renderer, const MappedInputManager* mapp
   const bool showRtcStats = shouldShowRtcBasedStats();
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto& layout = getStatsLayout(renderer, true, showButtonHints, showRtcStats);
-  CompactHeader::drawTitle(renderer, screenTitle);
+  if (mappedInput && mappedInput->hasTouchHardware()) {
+    TouchHeaderBackButton::drawCompact(renderer, screenTitle, true);
+  } else {
+    CompactHeader::drawTitle(renderer, screenTitle);
+  }
   const int screenW = renderer.getScreenWidth();
   const int cardX = metrics.contentSidePadding;
   const int cardW = screenW - metrics.contentSidePadding * 2;
@@ -580,7 +589,11 @@ void renderNoRtcCombinedStatsPage(GfxRenderer& renderer, const MappedInputManage
   renderer.clearScreen();
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto& layout = getNoRtcCombinedLayout(renderer, showButtonHints, allDevicesStats != nullptr);
-  CompactHeader::drawTitle(renderer, tr(STR_READING_STATS));
+  if (mappedInput && mappedInput->hasTouchHardware()) {
+    TouchHeaderBackButton::drawCompact(renderer, tr(STR_READING_STATS), true);
+  } else {
+    CompactHeader::drawTitle(renderer, tr(STR_READING_STATS));
+  }
   const int screenW = renderer.getScreenWidth();
   const int cardX = metrics.contentSidePadding;
   const int cardW = screenW - metrics.contentSidePadding * 2;
@@ -621,7 +634,11 @@ void renderNoRtcCombinedStatsPage(GfxRenderer& renderer, const MappedInputManage
 void renderEditBookDatesPage(GfxRenderer& renderer, const MappedInputManager* mappedInput, const std::string& bookTitle,
                              const BookReadingStats& stats, const int selectedField, const bool showButtonHints) {
   renderer.clearScreen();
-  CompactHeader::drawTitle(renderer, tr(STR_READING_STATS));
+  if (mappedInput && mappedInput->hasTouchHardware()) {
+    TouchHeaderBackButton::drawCompact(renderer, tr(STR_READING_STATS), true);
+  } else {
+    CompactHeader::drawTitle(renderer, tr(STR_READING_STATS));
+  }
 
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int pageWidth = renderer.getScreenWidth();

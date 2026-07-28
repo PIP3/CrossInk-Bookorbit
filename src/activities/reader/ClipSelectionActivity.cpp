@@ -18,6 +18,7 @@
 namespace {
 
 constexpr int CLIP_SELECTION_FALLBACK_FONT_ID = UI_12_FONT_ID;
+constexpr unsigned long TOUCH_CLIP_HOLD_MS = 500;
 
 bool hasEmSpace(const char* text) { return text[0] == '\xe2' && text[1] == '\x80' && text[2] == '\x83'; }
 
@@ -190,6 +191,31 @@ void ClipSelectionActivity::loop() {
     requestUpdate();
   };
 
+  int touchX = 0;
+  int touchY = 0;
+  if (touchDragSelecting) {
+    if (mappedInput.isScreenTouchHeld(touchX, touchY)) {
+      if (selectWordAtPoint(touchX, touchY)) requestUpdate();
+      return;
+    }
+    if (mappedInput.wasScreenTouchReleased()) {
+      touchDragSelecting = false;
+      confirmSelection();
+      return;
+    }
+  } else if (mappedInput.isScreenTouchLongPress(touchX, touchY, TOUCH_CLIP_HOLD_MS) &&
+             selectWordAtPoint(touchX, touchY)) {
+    if (startMarkIdx == -1) startMarkIdx = cursorIdx;
+    touchDragSelecting = true;
+    requestUpdate();
+    return;
+  }
+
+  if (mappedInput.wasScreenTapped(touchX, touchY) && selectWordAtPoint(touchX, touchY)) {
+    confirmSelection();
+    return;
+  }
+
   buttonNavigator.onRelease({Button::Left}, [this, &moveCursor] {
     if (cursorIdx > 0) moveCursor(cursorIdx - 1);
   });
@@ -208,20 +234,7 @@ void ClipSelectionActivity::loop() {
   buttonNavigator.onContinuous({Button::Up}, [this, &moveCursor] { moveCursor(lineEndBackward(cursorIdx)); });
 
   if (mappedInput.wasReleased(Button::Confirm)) {
-    if (startMarkIdx == -1) {
-      startMarkIdx = cursorIdx;
-      requestUpdate();
-    } else {
-      const int from = std::min(startMarkIdx, cursorIdx);
-      const int to = std::max(startMarkIdx, cursorIdx);
-      auto result = ClipTextBuilder::build(wordStore, readingOrder.data(), from, to, total, startPageInSection,
-                                           section.pageCount);
-      if (const auto paragraphIndex = section.getParagraphIndexForPage(result.sectionPage)) {
-        result.paragraphIndex = *paragraphIndex;
-      }
-      setResult(std::move(result));
-      finish();
-    }
+    confirmSelection();
     return;
   }
 
@@ -237,6 +250,41 @@ void ClipSelectionActivity::loop() {
     setResult(std::move(result));
     finish();
   }
+}
+
+bool ClipSelectionActivity::selectWordAtPoint(const int x, const int y) {
+  for (size_t orderIdx = 0; orderIdx < readingOrderSize; orderIdx++) {
+    const WordRef& word = wordStore.words[readingOrder[orderIdx]];
+    if (word.pageIdx != currentDisplayPage || x < word.x || x >= word.x + word.w || y < word.y ||
+        y >= word.y + word.h) {
+      continue;
+    }
+    if (cursorIdx != static_cast<int>(orderIdx)) {
+      cursorIdx = static_cast<int>(orderIdx);
+      requestUpdate();
+    }
+    return true;
+  }
+  return false;
+}
+
+void ClipSelectionActivity::confirmSelection() {
+  if (startMarkIdx == -1) {
+    startMarkIdx = cursorIdx;
+    requestUpdate();
+    return;
+  }
+
+  const int total = static_cast<int>(readingOrderSize);
+  const int from = std::min(startMarkIdx, cursorIdx);
+  const int to = std::max(startMarkIdx, cursorIdx);
+  auto result =
+      ClipTextBuilder::build(wordStore, readingOrder.data(), from, to, total, startPageInSection, section.pageCount);
+  if (const auto paragraphIndex = section.getParagraphIndexForPage(result.sectionPage)) {
+    result.paragraphIndex = *paragraphIndex;
+  }
+  setResult(std::move(result));
+  finish();
 }
 
 void ClipSelectionActivity::render(RenderLock&&) {

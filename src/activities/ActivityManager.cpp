@@ -101,7 +101,8 @@ void ActivityManager::loop() {
     const bool lightPanelGesture = currentActivity->usesFullScreenReaderVerticalSwipes()
                                        ? mappedInput.wasReaderLightPanelGesture()
                                        : mappedInput.wasLightPanelGesture();
-    if (Frontlight.present() && currentActivity->name != "FrontlightPanel" && lightPanelGesture) {
+    if (Frontlight.present() && currentActivity->name != "FrontlightPanel" &&
+        currentActivity->allowFrontlightPanelGesture() && lightPanelGesture) {
       pushActivity(std::make_unique<FrontlightPanelActivity>(renderer, mappedInput));
       return;
     }
@@ -333,7 +334,9 @@ void ActivityManager::goToNearbyStatsSync() {
   replaceActivity(std::make_unique<NearbyStatsSyncActivity>(renderer, mappedInput));
 }
 
-void ActivityManager::goToSettings() { replaceActivity(std::make_unique<SettingsActivity>(renderer, mappedInput)); }
+void ActivityManager::goToSettings(const bool dismissOnUpSwipe) {
+  replaceActivity(std::make_unique<SettingsActivity>(renderer, mappedInput, dismissOnUpSwipe));
+}
 
 void ActivityManager::goToFileBrowser(std::string path) {
   replaceActivity(std::make_unique<FileBrowserActivity>(renderer, mappedInput, std::move(path)));

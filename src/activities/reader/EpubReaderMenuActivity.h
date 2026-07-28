@@ -69,6 +69,7 @@ class EpubReaderMenuActivity final : public Activity {
   void loop() override;
   void render(RenderLock&&) override;
   bool isReaderActivity() const override { return true; }
+  bool allowFrontlightPanelGesture() const override { return false; }
   bool allowPowerAsConfirmInReaderMode() const override { return true; }
   bool allowGlobalHomeGesture() const override { return false; }
 

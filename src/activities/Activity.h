@@ -55,6 +55,8 @@ class Activity {
   // The open book uses its vertical swipe actions across the entire page;
   // dialogs and lists retain their normal edge or scroll gestures.
   virtual bool usesFullScreenReaderVerticalSwipes() const { return false; }
+  // Overlays can reserve the frontlight gesture for their own dismissal.
+  virtual bool allowFrontlightPanelGesture() const { return true; }
   virtual bool allowPowerAsConfirmInReaderMode() const { return false; }
   virtual bool allowGlobalHomeGesture() const { return true; }
   // Let overlays consume the global Home gesture as a dismiss action.

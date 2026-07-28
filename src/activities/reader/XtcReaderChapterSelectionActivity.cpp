@@ -41,6 +41,7 @@ void XtcReaderChapterSelectionActivity::onEnter() {
   selectorIndex = findChapterIndexForPage(currentPage);
   topIndex = 0;
   visibleRows = 1;
+  initialViewportPending = true;
   uiReady = false;
   app.setTheme(uiThemeTokens(uiTarget));
   app.on(ACTION_ROW, &XtcReaderChapterSelectionActivity::onRowEvent, this);
@@ -149,7 +150,10 @@ void XtcReaderChapterSelectionActivity::buildChapterScreen(UiApp::ScreenType& sc
   props.labelText = screen.theme().bodyText;
   const auto rows = configureUiList(props, screen.theme(), screen.body());
   visibleRows = rows > 0 ? rows : 1;
-  topIndex = scrollListBy(topIndex, 0, visibleRows, static_cast<int>(chapters.size()));
+  const int chapterCount = static_cast<int>(chapters.size());
+  topIndex = initialViewportPending ? followListSelection(selectorIndex, 0, visibleRows, chapterCount)
+                                    : scrollListBy(topIndex, 0, visibleRows, chapterCount);
+  initialViewportPending = false;
   props.topIndex = static_cast<uint16_t>(topIndex);
   screen.list(props);
 }

@@ -17,6 +17,7 @@
 #include "MappedInputManager.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "components/CompactHeader.h"
+#include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
 #include "components/UIThemeTokens.h"
 #include "components/UiAppHelpers.h"
@@ -103,6 +104,10 @@ void SavedItemsHomeActivity::onExit() {
 }
 
 void SavedItemsHomeActivity::loop() {
+  if (TouchHeaderBackButton::wasTapped(mappedInput, TouchHeaderBackButton::compactHeaderRect(renderer))) {
+    onGoHome();
+    return;
+  }
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     onGoHome();
     return;
@@ -231,7 +236,11 @@ void SavedItemsHomeActivity::buildListScreen(UiApp::ScreenType& screen) {
 void SavedItemsHomeActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
-  CompactHeader::drawTitle(renderer, tr(STR_BOOKMARKS_AND_CLIPPINGS));
+  if (mappedInput.hasTouchHardware()) {
+    TouchHeaderBackButton::drawCompact(renderer, tr(STR_BOOKMARKS_AND_CLIPPINGS));
+  } else {
+    CompactHeader::drawTitle(renderer, tr(STR_BOOKMARKS_AND_CLIPPINGS));
+  }
   uiReady = false;
   app.render();
   uiReady = true;

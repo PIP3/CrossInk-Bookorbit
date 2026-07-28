@@ -20,6 +20,7 @@
 #include "activities/util/ConfirmationActivity.h"
 #include "activities/util/OptionSelectionActivity.h"
 #include "components/CompactHeader.h"
+#include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
 #include "components/UIThemeTokens.h"
 #include "components/UiAppHelpers.h"
@@ -783,6 +784,10 @@ void FileBrowserActivity::activateSelected() {
 }
 
 void FileBrowserActivity::loop() {
+  if (TouchHeaderBackButton::wasTapped(mappedInput, renderer)) {
+    navigateBack();
+    return;
+  }
   if (pendingCompletedFeedback) {
     const bool timedOut = (millis() - completedFeedbackShowTime) >= COMPLETED_FEEDBACK_MS;
     const bool navPressed = mappedInput.wasReleased(MappedInputManager::Button::Left) ||
@@ -892,31 +897,8 @@ void FileBrowserActivity::loop() {
       longPressBackHandled = false;
       return;
     }
-    // Short press: go up one directory, or go home if at root
     if (mappedInput.getHeldTime() < GO_HOME_MS) {
-      if (basepath != "/") {
-        const std::string oldPath = basepath;
-
-        basepath.replace(basepath.find_last_of('/'), std::string::npos, "");
-        if (basepath.empty()) basepath = "/";
-        loadFiles();
-
-        const auto pos = oldPath.find_last_of('/');
-        const std::string dirName = oldPath.substr(pos + 1) + "/";
-        selectorIndex = findEntry(dirName);
-        showFileSelection = true;
-        topIndex = followListSelection(static_cast<int>(selectorIndex), 0, visibleRows, static_cast<int>(entryCount()));
-
-        requestUpdate();
-      } else if (mode != Mode::Books) {
-        // Firmware picker at root: cancel back to caller instead of going home.
-        ActivityResult res;
-        res.isCancelled = true;
-        setResult(std::move(res));
-        finish();
-      } else {
-        onGoHome();
-      }
+      navigateBack();
     }
   }
 
@@ -965,6 +947,28 @@ void FileBrowserActivity::loop() {
     buttonNavigator.onPreviousRelease(movePrevious);
     buttonNavigator.onNextContinuous(pageNext);
     buttonNavigator.onPreviousContinuous(pagePrevious);
+  }
+}
+
+void FileBrowserActivity::navigateBack() {
+  if (basepath != "/") {
+    const std::string oldPath = basepath;
+    basepath.replace(basepath.find_last_of('/'), std::string::npos, "");
+    if (basepath.empty()) basepath = "/";
+    loadFiles();
+
+    const std::string dirName = oldPath.substr(oldPath.find_last_of('/') + 1) + "/";
+    selectorIndex = findEntry(dirName);
+    showFileSelection = true;
+    topIndex = followListSelection(static_cast<int>(selectorIndex), 0, visibleRows, static_cast<int>(entryCount()));
+    requestUpdate();
+  } else if (mode != Mode::Books) {
+    ActivityResult result;
+    result.isCancelled = true;
+    setResult(std::move(result));
+    finish();
+  } else {
+    onGoHome();
   }
 }
 
@@ -1049,7 +1053,8 @@ void FileBrowserActivity::buildListScreen(UiApp::ScreenType& screen) {
   const auto rowType = twoLineRows ? UiListRowType::WithSubtitle : UiListRowType::SingleLine;
   props.labelText = screen.theme().bodyText;
   props.labelText.maxLines = twoLineRows ? 2 : 1;
-  const auto rows = configureUiList(props, screen.theme(), screen.body(), rowType);
+  const fui::Rect listRect = screen.body();
+  const auto rows = configureUiList(props, screen.theme(), listRect, rowType);
   visibleRows = rows > 0 ? rows : 1;
   topIndex = scrollListBy(topIndex, 0, visibleRows, static_cast<int>(totalEntries));
   const size_t drawCount = std::min<size_t>(visibleRows, totalEntries - static_cast<size_t>(topIndex));
@@ -1088,6 +1093,9 @@ void FileBrowserActivity::buildListScreen(UiApp::ScreenType& screen) {
   props.valueInset = 8;               // air between the extension and the row edge
   props.topIndex = 0;
   screen.list(props);
+  fui::drawListScrollIndicator(screen.target(), listRect, totalEntries, visibleRows, topIndex,
+                               screen.theme().listScrollWidth, screen.theme().listScrollSide,
+                               screen.theme().listScrollInset);
 }
 
 void FileBrowserActivity::render(RenderLock&&) {
@@ -1104,7 +1112,12 @@ void FileBrowserActivity::render(RenderLock&&) {
                  : ((basepath == "/") ? std::string(tr(STR_SD_CARD)) : basepath.substr(basepath.rfind('/') + 1)));
   // Header via GUI.drawHeader (already FreeInkUI-themed) for the battery
   // indicator; the rest of the screen renders through the app.
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, folderName.c_str());
+  const Rect header = TouchHeaderBackButton::standardHeaderRect(renderer);
+  if (mappedInput.hasTouchHardware()) {
+    TouchHeaderBackButton::draw(renderer, uiTarget, header, folderName.c_str(), false);
+  } else {
+    GUI.drawHeader(renderer, header, folderName.c_str());
+  }
 
   uiReady = false;
   app.render();

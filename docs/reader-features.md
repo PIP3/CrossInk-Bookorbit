@@ -119,6 +119,11 @@ You can:
 CrossInk supports EPUB text clippings from the reader. Use **Create Clipping**
 from the reader menu, select text on the current page, and save it.
 
+On button devices, move the cursor with the direction buttons, press **Select**
+at the first word, move to the last word, then press **Done**. On touchscreen
+devices, tap the first word and then the last word. You can also press and hold
+on the first word, drag across the text, and release to save the clipping.
+
 A saved clipping is used in three ways:
 
 - It appears as a highlight in the reader

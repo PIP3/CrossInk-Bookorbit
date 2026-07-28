@@ -137,6 +137,13 @@ inline bool isTouchMenuGesture(const MappedInputManager& input) {
          (input.wasReaderMenuGesture() || input.wasReaderMenuHold());
 }
 
+// X4 Pro opens the reader menu with an upward swipe. Its top-edge downward
+// swipe is the opposite gesture and dismisses the menu instead of opening the
+// frontlight panel. Other touch boards retain their existing menu behavior.
+inline bool isTouchMenuDismissGesture(const MappedInputManager& input) {
+  return SETTINGS.touchReaderControls && input.hasTouch() && input.hasHomeKey() && input.wasLightPanelGesture();
+}
+
 inline PageTurnResult detectPageTurn(const MappedInputManager& input) {
   // Side buttons fire on press only when long-press action is OFF (nothing to detect).
   const bool sideUsePress = SETTINGS.sideButtonLongPress == CrossPointSettings::SIDE_LONG_PRESS::SIDE_LONG_OFF;

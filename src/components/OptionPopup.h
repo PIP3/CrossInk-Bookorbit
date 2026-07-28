@@ -43,6 +43,14 @@ class OptionPopup {
     activate(currentIndex);
   }
 
+  void show(const char* titleStr, const std::vector<std::string>& options, int currentIndex,
+            std::function<void(int)> onSelect) {
+    title = titleStr;
+    ownedStrings = options;
+    onSelectCallback = std::move(onSelect);
+    activate(currentIndex);
+  }
+
   bool handleInput(MappedInputManager& input, const std::function<void()>& requestUpdate) {
     if (!active) return false;
 
@@ -54,10 +62,12 @@ class OptionPopup {
     int tx = 0;
     int ty = 0;
     if (input.wasScreenTouchDown(tx, ty)) {
+      touchDownOptionIndex = -1;
       const auto& hitLayout = getLayout(input.getRenderer());
       for (int i = 0; i < static_cast<int>(hitLayout.options.size()); i++) {
         if (contains(hitLayout.options[i], tx, ty)) {
           const int optionIndex = hitLayout.firstOptionIndex + i;
+          touchDownOptionIndex = optionIndex;
           if (selectedIndex != optionIndex) {
             selectedIndex = optionIndex;
             layoutValid = false;
@@ -70,6 +80,14 @@ class OptionPopup {
     }
 
     if (input.wasScreenTapped(tx, ty)) {
+      if (touchDownOptionIndex >= 0) {
+        selectedIndex = touchDownOptionIndex;
+        touchDownOptionIndex = -1;
+        active = false;
+        if (onSelectCallback) onSelectCallback(selectedIndex);
+        requestUpdate();
+        return true;
+      }
       const auto& hitLayout = getLayout(input.getRenderer());
       for (int i = 0; i < static_cast<int>(hitLayout.options.size()); i++) {
         if (contains(hitLayout.options[i], tx, ty)) {
@@ -213,12 +231,14 @@ class OptionPopup {
   std::string title;
   std::vector<std::string> ownedStrings;
   int selectedIndex = 0;
+  int touchDownOptionIndex = -1;
   std::function<void(int)> onSelectCallback;
   mutable Layout layout;
   mutable bool layoutValid = false;
 
   void activate(int currentIndex) {
     layoutValid = false;
+    touchDownOptionIndex = -1;
     if (ownedStrings.empty()) {
       active = false;
       onSelectCallback = nullptr;

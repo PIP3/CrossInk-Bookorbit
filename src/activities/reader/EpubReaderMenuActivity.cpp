@@ -13,6 +13,7 @@
 #include "EpubReaderClippingListActivity.h"
 #include "MappedInputManager.h"
 #include "ReaderUtils.h"
+#include "components/TouchHeaderBackButton.h"
 #include "components/TouchRegistry.h"
 #include "components/UITheme.h"
 #include "components/UIThemeTokens.h"
@@ -46,6 +47,12 @@ bool readerMenuTabsAtBottom(const MappedInputManager& mappedInput) {
   // Frontlight boards reserve the top-edge down-swipe for the quick panel, so
   // the reader menu opens from the bottom and its tabs should stay thumb-close.
   return mappedInput.hasTouch() && Frontlight.present();
+}
+
+Rect readerMenuHeaderRect(const GfxRenderer& renderer, const MappedInputManager& mappedInput) {
+  const Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, !mappedInput.hasTouch(), false);
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  return Rect{screen.x, screen.y + metrics.topPadding, screen.width, metrics.headerHeight};
 }
 
 bool rectContains(const Rect& rect, const int x, const int y) {
@@ -458,19 +465,19 @@ void EpubReaderMenuActivity::onExit() {
 
 void EpubReaderMenuActivity::loop() {
   if (optionPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
+  if (TouchHeaderBackButton::wasTapped(mappedInput, readerMenuHeaderRect(renderer, mappedInput))) {
+    finishCancelled();
+    return;
+  }
   if (handleTouchInput()) return;
   if (mappedInput.wasHomeGesture()) {
     finishCancelled();
     return;
   }
 
-  // On home-key boards (X4 Pro) the bottom-edge up-swipe is the reader-menu
-  // gesture (not exit-to-home). Swiping it again dismisses the menu, mirroring
-  // Back — checked before the generic swipe-scroll so the "handle" gesture
-  // closes rather than scrolls. Other boards reach the menu via a different
-  // edge and already dismiss via the ActivityManager home gesture, so they
-  // keep the scroll behavior here.
-  if (mappedInput.hasHomeKey() && mappedInput.wasMenuGesture()) {
+  // On X4 Pro, the top-edge down-swipe is the opposite of the reader menu's
+  // upward opening gesture. It dismisses before generic swipe scrolling.
+  if (ReaderUtils::isTouchMenuDismissGesture(mappedInput)) {
     finishCancelled();
     return;
   }
@@ -604,26 +611,12 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
 
   // Header via GUI.drawHeader (already FreeInkUI-themed) for the battery
   // indicator; the rest of the screen renders through the app.
-  const Rect headerRect{screen.x, screen.y + metrics.topPadding, screen.width, metrics.headerHeight};
+  const Rect headerRect = readerMenuHeaderRect(renderer, mappedInput);
   if (mappedInput.hasTouchHardware()) {
     const Rect homeRect = readerMenuHeaderActionRect(headerRect, metrics);
     const Rect homeTouchRect = readerMenuHeaderActionTouchRect(headerRect, homeRect);
-    // BaseTheme left-aligns reader titles while the clock is visible. Reserve
-    // the Home slot from that real title edge, rather than applying the
-    // narrower centered-header calculation.
-    int titleMaxWidth = homeRect.x - headerRect.x - metrics.headerSidePadding - headerActionGap;
-    const bool headerTitleIsCentered = !ReaderUtils::shouldShowTopClockStatusBar() &&
-                                       metrics.headerTitleAlign == static_cast<int>(fui::TextAlign::Center);
-    if (headerTitleIsCentered) {
-      // Centered headers expand equally around the middle, so cap the title at
-      // twice the space between that middle and Home's reserved action slot.
-      const int headerCenterX = headerRect.x + headerRect.width / 2;
-      titleMaxWidth = std::min(titleMaxWidth, 2 * (homeRect.x - headerActionGap - headerCenterX));
-    }
-    titleMaxWidth = std::max(0, titleMaxWidth);
-    const std::string headerTitle =
-        renderer.truncatedText(uiScaleSpec().titleFontId, title.c_str(), titleMaxWidth, EpdFontFamily::BOLD);
-    GUI.drawHeader(renderer, headerRect, headerTitle.c_str(), nullptr, true);
+    const int titleRightReserve = headerRect.x + headerRect.width - homeRect.x + headerActionGap;
+    TouchHeaderBackButton::draw(renderer, uiTarget, headerRect, title.c_str(), true, titleRightReserve);
     TouchRegistry::getInstance().add(homeTouchRect, static_cast<int>(TOUCH_HOME_ICON_INDEX), TouchRegistry::Tab);
     drawSdkIcon(uiTarget, icon_home_24, homeRect.x + (homeRect.width - tabIconSize) / 2,
                 homeRect.y + (homeRect.height - tabIconSize) / 2);

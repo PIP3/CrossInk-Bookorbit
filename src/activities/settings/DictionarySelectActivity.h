@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "../Activity.h"
+#include "components/OptionPopup.h"
 #include "util/ButtonNavigator.h"
 #include "util/Dictionary.h"
 
@@ -57,11 +58,15 @@ class DictionarySelectActivity final : public Activity {
   std::atomic<bool> uiReady{false};
   int visibleRows = 1;
   int topIndex = 0;
+  bool initialViewportPending = true;
+  OptionPopup optionPopup;
+  bool popupSelectionMade = false;
 
   static void listScreen(UiApp::ScreenType& screen, void* user);
   static void onRowEvent(const freeink::ui::ActionEvent& event, void* user);
   void buildListScreen(UiApp::ScreenType& screen);
   void finishSelection();
+  bool usesPopup() const { return !bookCachePath.empty() && !disableCurrentSelection; }
 
   // Scans the first available dictionary root directory on the SD card and populates dictFolders.
   void scanDictionaries();

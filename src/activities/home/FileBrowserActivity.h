@@ -80,6 +80,7 @@ class FileBrowserActivity final : public Activity {
   static void onRowEvent(const freeink::ui::ActionEvent& event, void* user);
   void buildListScreen(UiApp::ScreenType& screen);
   void activateSelected();
+  void navigateBack();
 
   // Data loading
   void clearIndexNameCache();

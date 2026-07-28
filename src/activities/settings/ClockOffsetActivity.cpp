@@ -10,6 +10,7 @@
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
+#include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
 #include "components/icons/listIcons.h"
 #include "fontIds.h"
@@ -196,6 +197,10 @@ void ClockOffsetActivity::getTouchControlRects(Rect& upRect, Rect& downRect) con
 }
 
 void ClockOffsetActivity::loop() {
+  if (TouchHeaderBackButton::wasTapped(mappedInput, renderer)) {
+    finish();
+    return;
+  }
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     finish();
     return;
@@ -273,7 +278,12 @@ void ClockOffsetActivity::render(RenderLock&&) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_CLOCK_UTC_OFFSET));
+  const Rect header = TouchHeaderBackButton::standardHeaderRect(renderer);
+  if (mappedInput.hasTouchHardware()) {
+    TouchHeaderBackButton::draw(renderer, header, tr(STR_CLOCK_UTC_OFFSET), false);
+  } else {
+    GUI.drawHeader(renderer, header, tr(STR_CLOCK_UTC_OFFSET));
+  }
 
   const PickerLayout layout = getPickerLayout(renderer, mappedInput.hasTouch());
   auto widthOf = [&](const char* s) { return renderer.getTextWidth(UI_12_FONT_ID, s, EpdFontFamily::BOLD); };

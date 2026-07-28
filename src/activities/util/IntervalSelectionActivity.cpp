@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "DeviceCapabilities.h"
+#include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -90,6 +91,14 @@ void IntervalSelectionActivity::loop() {
       ignoreConfirmRelease = false;
       return;
     }
+  }
+
+  if (showTouchHeaderBackButton && TouchHeaderBackButton::wasTapped(mappedInput, renderer)) {
+    ActivityResult result;
+    result.isCancelled = true;
+    setResult(std::move(result));
+    finish();
+    return;
   }
 
   int tx = 0;
@@ -209,8 +218,12 @@ void IntervalSelectionActivity::render(RenderLock&&) {
   const int screenWidth = renderer.getScreenWidth();
   const Rect touchScreen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, screenWidth, metrics.headerHeight}, I18N.get(titleId), nullptr,
-                 readerActivity);
+  const Rect header = TouchHeaderBackButton::standardHeaderRect(renderer);
+  if (showTouchHeaderBackButton && mappedInput.hasTouchHardware()) {
+    TouchHeaderBackButton::draw(renderer, header, I18N.get(titleId), readerActivity);
+  } else {
+    GUI.drawHeader(renderer, header, I18N.get(titleId), nullptr, readerActivity);
+  }
 
   char formattedValue[32];
   if (maxBoundaryLabelId != StrId::STR_NONE_OPT && value == maxValue) {

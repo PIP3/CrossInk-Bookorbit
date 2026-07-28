@@ -6,6 +6,7 @@
 #include <utility>
 
 #include "MappedInputManager.h"
+#include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
 #include "components/UIThemeTokens.h"
 #include "components/UiAppHelpers.h"
@@ -31,13 +32,14 @@ Rect optionListRect(const GfxRenderer& renderer, const bool readerMode) {
 OptionSelectionActivity::OptionSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                                  std::string activityName, const StrId titleId,
                                                  std::vector<std::string> options, const uint8_t selectedIndex,
-                                                 const bool readerMode)
+                                                 const bool readerMode, const bool showTouchHeaderBackButton)
     : Activity(std::move(activityName), renderer, mappedInput),
       titleId_(titleId),
       options_(std::move(options)),
       currentIndex_(selectedIndex),
       selectedIndex_(selectedIndex),
       readerMode_(readerMode),
+      showTouchHeaderBackButton_(showTouchHeaderBackButton),
       uiTarget_(makeUiTarget(renderer)),
       app_(uiTarget_, uiTarget_.deviceContext()) {}
 
@@ -51,6 +53,7 @@ void OptionSelectionActivity::onEnter() {
   if (selectedIndex_ < 0 || selectedIndex_ >= static_cast<int>(options_.size())) selectedIndex_ = 0;
   topIndex_ = 0;
   visibleRows_ = 1;
+  initialViewportPending_ = true;
   uiReady_ = false;
   app_.setTheme(uiThemeTokens(uiTarget_));
   app_.on(ACTION_ROW, &OptionSelectionActivity::onRowEvent, this);
@@ -59,7 +62,8 @@ void OptionSelectionActivity::onEnter() {
 }
 
 void OptionSelectionActivity::loop() {
-  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+  if ((showTouchHeaderBackButton_ && TouchHeaderBackButton::wasTapped(mappedInput, renderer)) ||
+      mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     mappedInput.suppressNextBackRelease();
     cancel();
     return;
@@ -152,7 +156,10 @@ void OptionSelectionActivity::buildOptionsScreen(UiApp::ScreenType& screen) {
   props.labelText = screen.theme().bodyText;
   const auto rows = configureUiList(props, screen.theme(), screen.body());
   visibleRows_ = rows > 0 ? rows : 1;
-  topIndex_ = scrollListBy(topIndex_, 0, visibleRows_, static_cast<int>(options_.size()));
+  const int optionCount = static_cast<int>(options_.size());
+  topIndex_ = initialViewportPending_ ? followListSelection(selectedIndex_, 0, visibleRows_, optionCount)
+                                      : scrollListBy(topIndex_, 0, visibleRows_, optionCount);
+  initialViewportPending_ = false;
   props.topIndex = static_cast<uint16_t>(topIndex_);
   screen.list(props);
 }
@@ -165,8 +172,12 @@ void OptionSelectionActivity::render(RenderLock&&) {
                                          orientation == GfxRenderer::Orientation::LandscapeCounterClockwise);
   const int gutter = landscape ? metrics.buttonHintsHeight : 0;
   const int contentX = orientation == GfxRenderer::Orientation::LandscapeClockwise ? gutter : 0;
-  GUI.drawHeader(renderer, Rect{contentX, metrics.topPadding, renderer.getScreenWidth() - gutter, metrics.headerHeight},
-                 I18N.get(titleId_), nullptr, readerMode_);
+  const Rect header{contentX, metrics.topPadding, renderer.getScreenWidth() - gutter, metrics.headerHeight};
+  if (showTouchHeaderBackButton_ && mappedInput.hasTouchHardware()) {
+    TouchHeaderBackButton::draw(renderer, uiTarget_, header, I18N.get(titleId_), readerMode_);
+  } else {
+    GUI.drawHeader(renderer, header, I18N.get(titleId_), nullptr, readerMode_);
+  }
   uiReady_ = false;
   app_.render();
   uiReady_ = true;

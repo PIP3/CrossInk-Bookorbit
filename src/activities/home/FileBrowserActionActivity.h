@@ -1,14 +1,12 @@
 #pragma once
 
-#include <FreeInkApp.h>
-#include <FreeInkUIGfxRenderer.h>
 #include <I18n.h>
 
 #include <string>
 #include <vector>
 
 #include "../Activity.h"
-#include "util/ButtonNavigator.h"
+#include "components/OptionPopup.h"
 
 enum class FileBrowserAction : int {
   Delete = 0,
@@ -44,23 +42,13 @@ class FileBrowserActionActivity final : public Activity {
   void render(RenderLock&&) override;
 
  private:
-  using UiApp = freeink::ui::FreeInkApp<20, 4>;
-  static constexpr freeink::ui::ActionId ACTION_ROW = 1;
+  void finishCancelled();
 
-  static void actionMenuScreen(UiApp::ScreenType& screen, void* user);
-  static void onRowEvent(const freeink::ui::ActionEvent& event, void* user);
-  void buildActionMenuScreen(UiApp::ScreenType& screen);
-
-  ButtonNavigator buttonNavigator;
   std::string title;
   std::vector<MenuItem> items;
-  std::vector<freeink::ui::ListItem> uiItems;
-  int selectedIndex = 0;
+  std::vector<std::string> optionLabels;
+  OptionPopup optionPopup;
   bool ignoreConfirmRelease = false;
   bool ignoreTouchRelease = false;
-  freeink::ui::GfxRendererTarget uiTarget;
-  UiApp app;
-  bool uiReady = false;
-  int contentTop = 0;
-  int contentBottom = 0;
+  bool selectionMade = false;
 };

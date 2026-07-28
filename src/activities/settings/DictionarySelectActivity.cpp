@@ -12,6 +12,7 @@
 #include "CrossPointSettings.h"
 #include "I18nKeys.h"
 #include "MappedInputManager.h"
+#include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
 #include "components/UIThemeTokens.h"
 #include "components/UiAppHelpers.h"
@@ -112,8 +113,21 @@ void DictionarySelectActivity::onEnter() {
   if (disableCurrentSelection) {
     selectedIndex = firstSelectableIndexFrom(selectedIndex);
   }
+  if (usesPopup()) {
+    std::vector<std::string> options;
+    options.reserve(totalItems);
+    for (int i = 0; i < totalItems; ++i) options.emplace_back(nameForIndex(i));
+    optionPopup.show(StrId::STR_BOOK_DICTIONARY, options, selectedIndex, [this](const int index) {
+      selectedIndex = index;
+      popupSelectionMade = true;
+      finishSelection();
+    });
+    requestUpdate();
+    return;
+  }
   topIndex = 0;
   visibleRows = 1;
+  initialViewportPending = true;
   uiReady = false;
   app.setTheme(uiThemeTokens(uiTarget));
   app.on(ACTION_ROW, &DictionarySelectActivity::onRowEvent, this);
@@ -227,6 +241,20 @@ void DictionarySelectActivity::onRowEvent(const fui::ActionEvent& event, void* u
 }
 
 void DictionarySelectActivity::loop() {
+  if (usesPopup()) {
+    optionPopup.handleInput(mappedInput, [this] { requestUpdate(); });
+    if (!optionPopup.isActive() && !popupSelectionMade) {
+      ActivityResult result;
+      result.isCancelled = true;
+      setResult(std::move(result));
+      finish();
+    }
+    return;
+  }
+  if (TouchHeaderBackButton::wasTapped(mappedInput, renderer)) {
+    finish();
+    return;
+  }
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     finish();
     return;
@@ -326,16 +354,26 @@ void DictionarySelectActivity::buildListScreen(UiApp::ScreenType& screen) {
   props.labelText = screen.theme().bodyText;
   const auto rows = configureUiList(props, screen.theme(), screen.body());
   visibleRows = rows > 0 ? rows : 1;
-  topIndex = scrollListBy(topIndex, 0, visibleRows, totalItems);
+  topIndex = initialViewportPending ? followListSelection(selectedIndex, 0, visibleRows, totalItems)
+                                    : scrollListBy(topIndex, 0, visibleRows, totalItems);
+  initialViewportPending = false;
   props.topIndex = static_cast<uint16_t>(topIndex);
   screen.list(props);
 }
 
 void DictionarySelectActivity::render(RenderLock&&) {
+  if (usesPopup()) {
+    optionPopup.processRender(renderer, mappedInput);
+    return;
+  }
   renderer.clearScreen();
   const auto& metrics = UITheme::getInstance().getMetrics();
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, renderer.getScreenWidth(), metrics.headerHeight},
-                 tr(STR_DICTIONARY));
+  const Rect header = TouchHeaderBackButton::standardHeaderRect(renderer);
+  if (mappedInput.hasTouchHardware()) {
+    TouchHeaderBackButton::draw(renderer, uiTarget, header, tr(STR_DICTIONARY), false);
+  } else {
+    GUI.drawHeader(renderer, header, tr(STR_DICTIONARY));
+  }
   uiReady = false;
   app.render();
   uiReady = true;
