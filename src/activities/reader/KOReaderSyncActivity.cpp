@@ -336,6 +336,8 @@ void KOReaderSyncActivity::performSync() {
                                                             ? PositionCoordinateSpace::SourceDocument
                                                             : PositionCoordinateSpace::CurrentDocument;
   bool usedRichPosition = false;
+  // The client only accepts rich positions from the official CrossPoint Sync server.
+  // Filename matching still needs source-document mapping because optimized books can diverge.
   if (remoteCoordinateSpace == PositionCoordinateSpace::CurrentDocument && remoteProgress.position.has_value()) {
     const auto richMapped = ProgressMapper::fromRichPosition(epub, *remoteProgress.position, renderer);
     if (richMapped.has_value()) {
@@ -477,9 +479,10 @@ void KOReaderSyncActivity::performUpload() {
   progress.percentage = localProgress.percentage;
   progress.device = SETTINGS.getEffectiveDeviceName();
 
-  // Rich CrossPoint position for crosspoint-sync servers (lossless
-  // CrossPoint<->CrossPoint sync); plain kosync servers ignore the extra field.
-  {
+  // Rich CrossPoint position for the default CrossPoint sync server (lossless
+  // CrossPoint<->CrossPoint sync). The HTTP client also enforces this boundary
+  // before serializing the extension.
+  if (KOREADER_STORE.usesCrossPointSyncServer()) {
     KOReaderRichPosition pos;
     const float pct = localProgress.percentage < 0.0f   ? 0.0f
                       : localProgress.percentage > 1.0f ? 1.0f
