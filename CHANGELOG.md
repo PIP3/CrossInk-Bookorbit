@@ -33,6 +33,7 @@
 
 ### Fixed
 
+- EPUB text now preserves explicit spaces between Hangul and other CJK words.
 - Web file uploads now use the simulator's mapped WebSocket port while preserving ports 80/81 on devices.
 - EPUBs that use `<br>` between flowing paragraphs no longer add extra vertical spacing after every line break; consecutive breaks still create a scene break.
 - Lyra Home headers now keep the battery icon and percentage aligned with safer clearance below the top bezel.
