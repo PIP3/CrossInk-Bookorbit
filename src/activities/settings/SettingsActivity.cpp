@@ -35,7 +35,6 @@
 #include "activities/util/KeyboardEntryActivity.h"
 #include "activities/util/OptionSelectionActivity.h"
 #include "components/CompactHeader.h"
-#include "components/HeaderDate.h"
 #include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
 #include "components/UIThemeTokens.h"
@@ -56,9 +55,6 @@ const StrId SettingsActivity::categoryNames[categoryCount] = {StrId::STR_CAT_DIS
 namespace {
 constexpr int systemVersionFooterSideMargin = 20;
 constexpr int systemVersionFooterBottomInset = 15;
-// Leave a clear line between the right-aligned battery group and date, then
-// reserve the same space before the tab band.
-constexpr int roundedRaffHeaderDateYOffset = 23;
 constexpr size_t controlsParentBaseCount = 3;
 constexpr size_t controlsPowerMinCount = 2;
 constexpr size_t controlsPowerMaxCount = 3;
@@ -66,14 +62,6 @@ constexpr size_t controlsFrontButtonCount = 6;
 constexpr size_t controlsSideButtonCount = 3;
 constexpr int touchSettingsRowHeightScale = 2;
 constexpr int touchSettingsTabBarHeightScale = 2;
-
-int settingsHeaderDateOffset(const ThemeMetrics& metrics) {
-  if (SETTINGS.uiTheme != CrossPointSettings::UI_THEME::ROUNDEDRAFF) return 0;
-
-  // Keep the date on the same shifted status baseline as RoundedRaff's Home
-  // battery group.
-  return roundedRaffHeaderDateYOffset + std::max(0, (metrics.homeTopPadding - metrics.headerHeight) / 2);
-}
 
 int settingsTabBarTop(const ThemeMetrics& metrics) { return CompactHeader::headerBottomY(metrics); }
 
@@ -1249,13 +1237,10 @@ void SettingsActivity::render(RenderLock&&) {
   const auto pageWidth = renderer.getScreenWidth();
   const auto& metrics = UITheme::getInstance().getMetrics();
 
-  const Rect header = settingsHeaderRect(metrics, pageWidth);
   if (mappedInput.hasTouchHardware()) {
     TouchHeaderBackButton::drawCompact(renderer, tr(STR_SETTINGS_TITLE), false, true);
   } else {
-    GUI.drawHeader(renderer, header, tr(STR_SETTINGS_TITLE));
-    drawHeaderDateAtLineBottom(renderer, pageWidth,
-                               headerDateLineBottomY(renderer, metrics) + settingsHeaderDateOffset(metrics));
+    CompactHeader::drawTitle(renderer, tr(STR_SETTINGS_TITLE), true);
   }
 
   uiReady = false;

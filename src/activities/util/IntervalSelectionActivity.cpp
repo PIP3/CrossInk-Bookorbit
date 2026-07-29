@@ -218,7 +218,11 @@ void IntervalSelectionActivity::render(RenderLock&&) {
   const int screenWidth = renderer.getScreenWidth();
   const Rect touchScreen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
 
-  const Rect header = TouchHeaderBackButton::headerRect(renderer, mappedInput);
+  // The Auto Page Turn picker has no touch back button. Keep its title in the
+  // normal-height header rather than centering it in the taller touch-navigation
+  // header, which puts the title against the divider.
+  const Rect header = showTouchHeaderBackButton ? TouchHeaderBackButton::headerRect(renderer, mappedInput)
+                                                : TouchHeaderBackButton::standardHeaderRect(renderer);
   if (showTouchHeaderBackButton && mappedInput.hasTouchHardware()) {
     TouchHeaderBackButton::draw(renderer, header, I18N.get(titleId), readerActivity);
   } else {

@@ -83,6 +83,7 @@ constexpr uint8_t styleToBitMask(EpdFontFamily::Style style) {
 
 void DictionaryWordSelectActivity::onEnter() {
   Activity::onEnter();
+  Dictionary::clearLookupDictPathOverride();
   mappedInput.setReaderTouchscreenOverride(true);
   ignoreInitialBackRelease_ = mappedInput.isPressed(MappedInputManager::Button::Back);
   std::vector<WordSelectNavigator::WordInfo> words;
@@ -123,6 +124,7 @@ void DictionaryWordSelectActivity::onEnter() {
 
 void DictionaryWordSelectActivity::onExit() {
   controller.onExit();
+  Dictionary::clearLookupDictPathOverride();
   mappedInput.setReaderTouchscreenOverride(false);
   const auto& sdFonts = renderer.getSdCardFonts();
   auto it = sdFonts.find(SETTINGS.getReaderFontId());
@@ -395,7 +397,7 @@ void DictionaryWordSelectActivity::mergeHyphenatedWords(std::vector<WordSelectNa
 }
 
 void DictionaryWordSelectActivity::openDictionarySwitch() {
-  auto picker = makeUniqueNoThrow<DictionarySelectActivity>(renderer, mappedInput, cachePath, true);
+  auto picker = makeUniqueNoThrow<DictionarySelectActivity>(renderer, mappedInput, cachePath, true, true);
   if (!picker) {
     LOG_ERR("DICT", "OOM: DictionarySelectActivity");
     return;
@@ -407,6 +409,13 @@ void DictionaryWordSelectActivity::openDictionarySwitch() {
       requestUpdate();
       return;
     }
+    const auto* selection = std::get_if<FilePathResult>(&result.data);
+    if (!selection) {
+      LOG_ERR("DICT", "Dictionary switch returned no path");
+      requestUpdate();
+      return;
+    }
+    Dictionary::setLookupDictPathOverride(selection->path.c_str());
     controller.startLookup(controller.getLookupWord(), false);
   });
 }

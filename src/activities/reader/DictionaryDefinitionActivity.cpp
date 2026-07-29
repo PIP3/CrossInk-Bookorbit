@@ -352,6 +352,7 @@ void DictionaryDefinitionActivity::onEnter() {
 
 void DictionaryDefinitionActivity::onExit() {
   controller.onExit();
+  Dictionary::clearLookupDictPathOverride();
   Activity::onExit();
 }
 
@@ -977,7 +978,7 @@ void DictionaryDefinitionActivity::extractWordsFromLayout() {
 }
 
 void DictionaryDefinitionActivity::openDictionarySwitch() {
-  auto picker = makeUniqueNoThrow<DictionarySelectActivity>(renderer, mappedInput, cachePath, true);
+  auto picker = makeUniqueNoThrow<DictionarySelectActivity>(renderer, mappedInput, cachePath, true, true);
   if (!picker) {
     LOG_ERR("DICT", "OOM: DictionarySelectActivity");
     return;
@@ -992,6 +993,13 @@ void DictionaryDefinitionActivity::openDictionarySwitch() {
       requestUpdate();
       return;
     }
+    const auto* selection = std::get_if<FilePathResult>(&result.data);
+    if (!selection) {
+      LOG_ERR("DICT", "Dictionary switch returned no path");
+      requestUpdate();
+      return;
+    }
+    Dictionary::setLookupDictPathOverride(selection->path.c_str());
     dictionarySwitchLookupInProgress = true;
     controller.startLookup(headword, false);
   });

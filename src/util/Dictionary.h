@@ -73,11 +73,19 @@ class Dictionary {
  public:
   static constexpr unsigned long LONG_PRESS_MS = 600;
 
-  // Returns the active dictionary folder base path by reading dictionary.bin from the SD card.
-  // If cachePath is non-null and non-empty, reads <cachePath>/dictionary.bin (per-book override).
-  // Otherwise reads /.crosspoint/dictionary.bin (global setting).
+  // Returns the active dictionary folder base path. A temporary lookup override
+  // takes priority; otherwise resolves the per-book/global dictionary.bin files.
   // Returns empty string if no dictionary is configured or the file cannot be read.
   static std::string readDictPath(const char* cachePath = nullptr);
+
+  // Returns the persisted per-book/global dictionary path without applying a
+  // temporary lookup override.
+  static std::string readConfiguredDictPath(const char* cachePath = nullptr);
+
+  // Temporarily overrides dictionary resolution for the active lookup flow.
+  // This is memory-only; callers must clear it when the lookup activity exits.
+  static void setLookupDictPathOverride(const char* folderPath);
+  static void clearLookupDictPathOverride();
 
   // Writes folderPath to /.crosspoint/dictionary.bin (global setting).
   // Pass empty string to clear the global dictionary.

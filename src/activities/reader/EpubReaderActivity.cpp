@@ -3625,6 +3625,8 @@ void EpubReaderActivity::startClipSelection() {
       std::move(clipSelection), [this, bookTitle = std::move(bookTitle), author = std::move(author),
                                  chapterTitle = std::move(chapterTitle)](const ActivityResult& result) {
         MemoryBudget::logHeapShape("clip.child_destroyed");
+        const char* clippingFeedback = nullptr;
+        bool saved = false;
         if (!result.isCancelled) {
           const auto& clip = std::get<ClippingResult>(result.data);
           if (!clip.text.empty()) {
@@ -3641,17 +3643,28 @@ void EpubReaderActivity::startClipSelection() {
                 LOG_ERR("CLIP", "Failed to roll back clipping after export failure");
               }
             }
-            const bool saved = addResult == ClippingStore::AddResult::Added && exported;
-            drawToast(renderer, addResult == ClippingStore::AddResult::LimitReached ? tr(STR_CLIPPING_LIMIT_REACHED)
-                                : saved                                             ? tr(STR_CLIPPING_SAVED)
-                                                                                    : tr(STR_CLIPPING_FAILED));
-            delay(1000);
+            saved = addResult == ClippingStore::AddResult::Added && exported;
+            clippingFeedback = addResult == ClippingStore::AddResult::LimitReached ? tr(STR_CLIPPING_LIMIT_REACHED)
+                               : saved                                             ? tr(STR_CLIPPING_SAVED)
+                                                                                   : tr(STR_CLIPPING_FAILED);
           }
         }
         resumeReadingPaceTimer("clip_selection_return");
         releaseReaderSdFontCachesForLowMemory(renderer, "CLIP", "clipping selection exit");
         MemoryBudget::logHeapShape("clip.after_font_release");
         pendingHeapShapeReaderRedrawStages.fetch_or(HEAP_SHAPE_REDRAW_CLIP, std::memory_order_relaxed);
+        if (clippingFeedback) {
+#if CROSSINK_APP_CAP_TOUCH
+          if (saved && mappedInput.hasTouchHardware() && requestUpdateAndWait() != RequestUpdateResult::Rendered) {
+            LOG_ERR("CLIP", "Could not render saved highlight before clipping toast");
+          }
+#endif
+          {
+            RenderLock lock(*this);
+            drawToast(renderer, clippingFeedback);
+          }
+          delay(1000);
+        }
         requestUpdate();
       });
 }

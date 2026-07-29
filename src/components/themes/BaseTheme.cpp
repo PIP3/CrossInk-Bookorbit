@@ -29,8 +29,8 @@
 namespace {
 constexpr int homeMenuMargin = 20;
 constexpr int homeMarginTop = 30;
-constexpr int roundedRaffHeaderClockYOffset = 3;
-constexpr int detachedHeaderBatteryTopInset = 3;
+constexpr int roundedRaffHeaderClockYOffset = 5;
+constexpr int detachedHeaderBatteryTopInset = 5;
 
 }  // namespace
 
@@ -506,11 +506,10 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
     renderer.drawText(SMALL_FONT_ID, textX, textY, percentText);
   }
 
-  const int clockYOffset = !hasVisibleTitle && !readerContext
-                               ? homeHeaderClockTextYOffset(renderer)
-                               : (!readerContext && SETTINGS.uiTheme == CrossPointSettings::UI_THEME::ROUNDEDRAFF
-                                      ? roundedRaffHeaderClockYOffset
-                                      : 0);
+  const bool roundedRaffHeader = !readerContext && SETTINGS.uiTheme == CrossPointSettings::UI_THEME::ROUNDEDRAFF;
+  const int clockYOffset = roundedRaffHeader
+                               ? roundedRaffHeaderClockYOffset
+                               : (!hasVisibleTitle && !readerContext ? homeHeaderClockTextYOffset(renderer) : 0);
   drawTopStatusBarClock(renderer, rect.y, nullptr, readerContext, clockYOffset);
 }
 

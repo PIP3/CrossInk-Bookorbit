@@ -22,7 +22,7 @@ Minimum requirement: one `.dict` and one `.idx` file in the same folder. Their f
 1. Copy your dictionary folder(s) to one of these directories on the SD card:
    - `/.dictionaries/` (checked first)
    - `/dictionaries/`
-2. If only one dictionary is found and no dictionary has been selected before, it is selected automatically.
+2. If no dictionary has been selected before, the first dictionary in the alphabetical device list is selected automatically.
 3. To choose between multiple dictionaries, open **Settings -> Dictionary** on the device and select one from the list.
 
 To deselect the current dictionary, select **None** from the list.
@@ -122,6 +122,8 @@ Each book can have its own dictionary, independent of the global setting.
 4. To remove the override, open **Book Dictionary** and select **Use Global**. The picker shows the current global dictionary name in parentheses next to Use Global.
 
 The global dictionary is automatically restored whenever the book is closed. Changing a book's dictionary does not affect the global setting or other books.
+
+Using **Switch Dictionary** during a word lookup is temporary. It applies only to that lookup flow; when lookup closes, the reader returns to the book's dictionary override, or the global dictionary when the book has no override.
 
 ---
 

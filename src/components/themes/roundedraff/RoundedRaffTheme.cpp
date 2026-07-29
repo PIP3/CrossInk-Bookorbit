@@ -58,7 +58,7 @@ void RoundedRaffTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const 
                                   const bool readerContext) const {
   // Home screen header is custom-rendered in drawRecentBookCover.
   if (title == nullptr) {
-    const int clockYOffset = readerContext ? 0 : homeHeaderClockTextYOffset(renderer) + kHeaderClockYOffset;
+    const int clockYOffset = readerContext ? 0 : kHeaderClockYOffset;
     drawTopStatusBarClock(renderer, rect.y, nullptr, readerContext, clockYOffset);
     return;
   }

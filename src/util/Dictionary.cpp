@@ -15,6 +15,8 @@ char Dictionary::wordBuf[256] = "";
 
 namespace {
 constexpr char DICT_BIN[] = "dictionary.bin";
+std::string lookupDictPathOverride;
+bool lookupDictPathOverrideActive = false;
 constexpr char GLOBAL_DICT_DIR[] = "/.crosspoint";
 
 bool isTextDefinitionType(char type) {
@@ -122,6 +124,11 @@ static bool readQidxOffset(HalFile& qidx, uint32_t sampleIndex, uint32_t* offset
 // ---------------------------------------------------------------------------
 
 std::string Dictionary::readDictPath(const char* cachePath) {
+  if (lookupDictPathOverrideActive) return lookupDictPathOverride;
+  return readConfiguredDictPath(cachePath);
+}
+
+std::string Dictionary::readConfiguredDictPath(const char* cachePath) {
   char binPath[128];
 
   // Try per-book dictionary.bin first when cachePath is provided.
@@ -160,6 +167,16 @@ std::string Dictionary::readDictPath(const char* cachePath) {
   if (n <= 0) return "";
   result.resize(static_cast<size_t>(n));
   return result;
+}
+
+void Dictionary::setLookupDictPathOverride(const char* folderPath) {
+  lookupDictPathOverride = folderPath ? folderPath : "";
+  lookupDictPathOverrideActive = true;
+}
+
+void Dictionary::clearLookupDictPathOverride() {
+  lookupDictPathOverrideActive = false;
+  std::string().swap(lookupDictPathOverride);
 }
 
 void Dictionary::saveGlobalDictPath(const char* folderPath) {

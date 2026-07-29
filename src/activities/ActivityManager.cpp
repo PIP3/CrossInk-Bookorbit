@@ -361,10 +361,15 @@ void ActivityManager::goToBrowser() {
 }
 
 bool ActivityManager::goToOpdsServer(const uint32_t serverIndex, const bool networkBootReady) {
+#ifndef SIMULATOR
   if (!networkBootReady) {
     silentRestartToNetwork(NetworkBootTarget::OPDS, serverIndex);
     return true;
   }
+#else
+  // The desktop build has no fragmented WiFi heap to clear; keep the preview in-process.
+  (void)networkBootReady;
+#endif
 
   OPDS_STORE.loadFromFile();
   const auto* storedServer = OPDS_STORE.getServer(serverIndex);
