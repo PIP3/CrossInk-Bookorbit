@@ -73,8 +73,7 @@ constexpr uint16_t MAX_AUTO_PAGE_TURN_INTERVAL_S = 120;
 constexpr int MAX_PAGE_LOAD_RETRIES = 3;
 constexpr uint8_t LEGACY_READER_SETTINGS_FILE_VERSION = 1;
 constexpr uint8_t PRE_WORD_SPACING_READER_SETTINGS_FILE_VERSION = 2;
-constexpr uint8_t PRE_INDEXING_METHOD_READER_SETTINGS_FILE_VERSION = 3;
-constexpr uint8_t READER_SETTINGS_FILE_VERSION = 4;
+constexpr uint8_t READER_SETTINGS_FILE_VERSION = 3;
 constexpr uint8_t READER_SETTINGS_FLAG_CUSTOM = 1 << 0;
 constexpr uint8_t READER_SETTINGS_FLAG_AUTO_PAGE_TURN = 1 << 1;
 constexpr uint8_t READER_SETTINGS_FLAG_RENDER_MODE = 1 << 2;
@@ -1140,8 +1139,7 @@ BookReaderSettingsData loadBookReaderSettingsFile(const std::string& cachePath) 
     return data;
   }
 
-  if (version != PRE_WORD_SPACING_READER_SETTINGS_FILE_VERSION &&
-      version != PRE_INDEXING_METHOD_READER_SETTINGS_FILE_VERSION && version != READER_SETTINGS_FILE_VERSION) {
+  if (version != PRE_WORD_SPACING_READER_SETTINGS_FILE_VERSION && version != READER_SETTINGS_FILE_VERSION) {
     file.close();
     LOG_DBG("ERS", "Reader settings version mismatch, using defaults");
     return data;
@@ -1151,7 +1149,7 @@ BookReaderSettingsData loadBookReaderSettingsFile(const std::string& cachePath) 
   uint16_t seconds = 0;
   uint8_t renderMode = static_cast<uint8_t>(EpubRenderMode::CrossInkDefault);
   EpubReaderActivity::ReaderSettingsSnapshot snapshot;
-  // Version 2/3 books inherit the current global indexing method instead of
+  // Version 2 books inherit the current global indexing method instead of
   // silently changing modes when their older custom settings are loaded.
   snapshot.indexingMethod = data.readerSettings.indexingMethod;
   bool ok = readU8(file, flags) && readU16(file, seconds);
@@ -1159,7 +1157,7 @@ BookReaderSettingsData loadBookReaderSettingsFile(const std::string& cachePath) 
     ok = readU8(file, renderMode);
   }
   if (ok) {
-    ok = readReaderSettingsSnapshot(file, snapshot, version >= PRE_INDEXING_METHOD_READER_SETTINGS_FILE_VERSION,
+    ok = readReaderSettingsSnapshot(file, snapshot, version >= READER_SETTINGS_FILE_VERSION,
                                     version >= READER_SETTINGS_FILE_VERSION);
   }
   file.close();

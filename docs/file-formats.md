@@ -7,11 +7,11 @@ fixed-size char buffer.
 
 ## `book.bin`
 
-### Version 10
+### Version 9
 
 `book.bin` stores EPUB metadata plus lookup tables for spine and TOC entries.
 The current firmware writes this version from `BookMetadataCache`.
-Version 10 stores book and TOC title strings NFC-composed so decomposed
+Version 9 stores book and TOC title strings NFC-composed so decomposed
 diacritics render correctly with device fonts. It also rebuilds metadata after
 the EPUB guide start-reference handling changed.
 
@@ -22,7 +22,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 10
+#define EXPECTED_VERSION 9
 #define MAX_STRING_LENGTH 65535
 
 struct String {
@@ -94,7 +94,7 @@ if (parsedSize != fileSize) {
 
 ## `reader_settings.bin`
 
-### Version 4
+### Version 3
 
 Each EPUB cache directory may contain `reader_settings.bin`. Missing files mean
 the book uses global Reader settings and the default auto-page-turn interval.
@@ -105,8 +105,8 @@ Version 1 stored only:
 - `u16 autoPageTurnSeconds`
 
 Version 2 stores flags before the full reader-settings snapshot. Version 3 adds
-the EPUB word-spacing level to that snapshot. Version 4 adds the EPUB indexing
-method (`0` = incremental, `1` = full section). This lets the
+the EPUB word-spacing level and indexing method (`0` = incremental, `1` = full
+section) to that snapshot. This lets the
 file preserve an auto-page-turn interval without forcing custom font/layout
 settings for the book. It also stores a per-book EPUB render mode override,
 which can be changed from book action menus before opening the book so a
@@ -117,7 +117,7 @@ fallback successfully opens a difficult book.
 
 ```c++
 struct ReaderSettingsBin {
-    u8 version; // 4
+    u8 version; // 3
     u8 flags;   // bit 0 = custom reader settings, bit 1 = custom auto-page-turn interval, bit 2 = render mode override
     u16 autoPageTurnSeconds;
     u8 renderMode; // 0 = CrossInk Default, 1 = Balanced, 2 = Light
@@ -246,43 +246,18 @@ Binary layout:
 
 ## `section.bin`
 
-### Version 57
+### Version 45
 
 Each file in `sections/*.bin` stores one laid-out spine section. The header is
 also the cache-busting key: if any layout-affecting setting differs from the
 current reader settings, the section is discarded and rebuilt.
 
-Version 57 is binary-identical to version 56. The version was bumped because
-word-gap suppression now applies only to tokens glued together in the source.
-Older caches could collapse explicit spaces between Hangul words, so full and
-suspended partial section caches rebuild together.
-
-Version 56 changes `<br>` layout: a line break after text no longer reapplies
-the containing block's top or bottom spacing, while an empty `<br>` block keeps
-the existing scene-break gap. Full and suspended partial section caches rebuild
-together. Version 55 assigns compact IDs to internal EPUB links. The ID is
-stored in the existing per-word flags byte and in each page's footnote entry so
-touch devices can map tapped text to the existing fragment-navigation path
-without retaining another per-word data structure. Version 54 adds compact
-ruby-text annotations to serialized text blocks. Only words that begin a ruby
-group store annotation text; continuation words use a dedicated style bit. This
-keeps books without ruby markup unchanged apart from the cache version while
-avoiding an empty string allocation for every word.
-Version 53 stores each image's EPUB-internal source path so section indexing can
-read only its header and defer full extraction until the page is shown. Version
-52 keeps Guide Dots centered when extra word spacing is enabled. Version 51
-preserves continuation state for oversized CJK word fragments. Version 50
-paginates chapter-heading image runs within the reader viewport so they do not
-overflow into the reserved status-bar area. Version 49 stores Bionic Reading
-split-run offsets in visual order so RTL word prefixes render on the right.
-Version 48 changed Arabic contextual shaping and text measurement, so cached
-word positions from version 47 no longer match what `drawText` renders.
-
-Version 48 makes the EPUB word-spacing level widen the natural inter-word gap
-(each level adds 10 pixels), which changes laid-out word positions, so
-older sections must rebuild. Version 46 added the EPUB word-spacing level to the
-cache-busting header. It retains the flat `TextBlock` arena and chapter-opener
-anchor behavior introduced in version 45. It includes:
+Version 45 consolidates the v1.5 layout and payload changes. It adds word
+spacing to the cache-busting header; stores deferred-image source paths, ruby
+annotations, and compact internal-link IDs; and updates cached layout for RTL
+Bionic Reading, Arabic shaping, Guide Dots, oversized CJK fragments, heading
+images, `<br>` spacing, and explicit Hangul word gaps. Older full and suspended
+partial section caches rebuild together. It includes:
 
 - cache-busting fields for font, line compression, extra paragraph spacing,
   forced paragraph indents, paragraph alignment, viewport size, hyphenation,
@@ -314,7 +289,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 55
+#define EXPECTED_VERSION 45
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
 #define FOOTNOTE_HREF_LEN 96

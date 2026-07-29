@@ -1,10 +1,10 @@
-## [Unreleased]
+## [v1.5.0] - 2026-07-29
 
 ### Added
 
 - Nearby File Transfer can send EPUB, TXT, XTC, XTCH, PNG, and BMP files directly between two CrossInk devices without a Wi-Fi network.
 - Recent Books and image-file long-press actions can send files directly to a nearby CrossInk device.
-- Dictionary lookup and lookup history
+- Dictionary lookup and lookup history.
 - RTC-enabled devices can now choose the date format and numeric separator shown in headers from Settings > System > Device.
 - The web EPUB optimizer now splits oversized chapters into memory-friendlier sections before sending them to the reader.
 - Reader indexing can now use `Incremental` or `Full Section` mode globally or per book; changing modes keeps the current chapter readable and applies when the next chapter needs indexing.
@@ -45,6 +45,7 @@
 - EPUBs that use `<br>` between flowing paragraphs no longer add extra vertical spacing after every line break; consecutive breaks still create a scene break.
 - Lyra Home headers now keep the battery icon and percentage aligned with safer clearance below the top bezel.
 - Dictionary lookups that miss can now switch dictionaries without returning to the reader.
+- Dictionary file read failures now show an error instead of incorrectly reporting that the word was not found.
 - Reading Stats button hints now follow customized front-button assignments.
 - Short physical button presses now register reliably after the device enters low-power mode.
 - Improved reliability when re-indexing EPUB chapters after changing reader font settings.
@@ -72,6 +73,7 @@
 - Bionic Reading now keeps Hebrew and other right-to-left EPUB text in the correct reading order.
 - EPUB clipping selection no longer replaces selected text with corrupted glyphs as the selection grows.
 - EPUB clipping selection now preserves SD-card fonts and Bionic Reading layout on memory-tight pages.
+- Custom SD-card fonts now preserve their standard ligature glyphs.
 - Popup option menus now show a scrollbar when more choices are available than can fit on screen.
 - Backing out of Manage Fonts without changing fonts now returns to Font Options instead of Home.
 - The “Entering sleep” message now follows the reader's current orientation, including book-specific orientation overrides.

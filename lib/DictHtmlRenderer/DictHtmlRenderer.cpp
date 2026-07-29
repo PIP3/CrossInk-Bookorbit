@@ -228,12 +228,11 @@ void DictHtmlRenderer::pushSpan() {
 void DictHtmlRenderer::emitText(const char* s, int len) {
   if (len <= 0) return;
   for (int i = 0; i < len; i++) {
-    if (i + 2 < len && static_cast<unsigned char>(s[i]) >= 0xE0 &&
-        static_cast<unsigned char>(s[i]) <= 0xEF && (static_cast<unsigned char>(s[i + 1]) & 0xC0) == 0x80 &&
+    if (i + 2 < len && static_cast<unsigned char>(s[i]) >= 0xE0 && static_cast<unsigned char>(s[i]) <= 0xEF &&
+        (static_cast<unsigned char>(s[i + 1]) & 0xC0) == 0x80 &&
         (static_cast<unsigned char>(s[i + 2]) & 0xC0) == 0x80) {
       const uint32_t cp = ((static_cast<uint32_t>(s[i]) & 0x0F) << 12) |
-                          ((static_cast<uint32_t>(s[i + 1]) & 0x3F) << 6) |
-                          (static_cast<uint32_t>(s[i + 2]) & 0x3F);
+                          ((static_cast<uint32_t>(s[i + 1]) & 0x3F) << 6) | (static_cast<uint32_t>(s[i + 2]) & 0x3F);
       if (isDictionaryBullet(cp)) {
         pendingText += "\xE2\x80\xA2";  // U+2022 BULLET
         i += 2;

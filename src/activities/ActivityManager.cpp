@@ -209,7 +209,7 @@ bool ActivityManager::handleGlobalHomeGesture() {
   }
 
   const bool homeGesture = currentActivity->usesFullScreenReaderVerticalSwipes() ? mappedInput.wasReaderHomeGesture()
-                                                                                   : mappedInput.wasHomeGesture();
+                                                                                 : mappedInput.wasHomeGesture();
   if (!homeGesture) {
     return false;
   }
