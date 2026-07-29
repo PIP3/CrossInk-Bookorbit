@@ -33,7 +33,7 @@ const HIDDEN_SLUGS = new Set([
 
 const visibleModules = Object.fromEntries(
   Object.entries(modules).filter(
-    ([path]) => !path.includes("/docs/contributing/") && !HIDDEN_SLUGS.has(slugFromPath(path)),
+    ([path]) => !path.includes("/docs/development/") && !HIDDEN_SLUGS.has(slugFromPath(path)),
   ),
 );
 

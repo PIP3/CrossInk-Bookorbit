@@ -128,7 +128,7 @@ See [Installation](./docs/installation.md) for step-by-step flashing and revert 
 - [Web server endpoints](./docs/webserver-endpoints.md)
 - [Common issues](./docs/troubleshooting.md)
 - [Project scope](./SCOPE.md)
-- [Contributing docs](./docs/contributing/README.md)
+- [Development docs](./docs/development/README.md)
 
 ---
 
@@ -136,7 +136,7 @@ See [Installation](./docs/installation.md) for step-by-step flashing and revert 
 
 CrossInk uses PlatformIO for building and flashing firmware.
 
-See [Getting Started](./docs/contributing/getting-started.md) for prerequisites, clone setup, hooks, and validation commands.
+See [Getting Started](./docs/development/getting-started.md) for prerequisites, clone setup, and validation commands.
 
 ### Nix/NixOS
 
@@ -166,7 +166,7 @@ pio run -e default --target upload
 
 Use `-e sticky` only when building for a Seeed Sticky device. The X3/X4 firmware uses the default environment.
 
-See [Testing and Debugging](./docs/contributing/testing-debugging.md) for serial logging, simulator checks, static analysis, and bug-report guidance.
+See [Testing and Debugging](./docs/development/testing-debugging.md) for serial logging, simulator checks, static analysis, and bug-report guidance.
 
 ---
 
@@ -176,7 +176,7 @@ See [Testing and Debugging](./docs/contributing/testing-debugging.md) for serial
 - `lib/` - supporting libraries: EPUB parsing/layout, fonts, i18n, filesystem helpers, HAL wrappers, and more
 - `freeink-sdk/` - hardware SDK submodule for display, input, storage, and battery (docs: https://freeink.org/docs)
 - `web/` - web portal sources (`templates/`, `pages/`, `assets/`); compiled by `scripts/build_web.py` into `src/network/html/*.generated.h`
-- `docs/` - user and contributor documentation, published via the `site/` Astro site
+- `docs/` - user and developer documentation, published via the `site/` Astro site
 - `site/` - Astro project that builds `docs/` into the CrossInk documentation website
 - `test/` - unit tests and EPUB test fixtures
 - `scripts/` - build, codegen, and release tooling (i18n generation, web asset building, hyphenation tries, release packaging, etc.)
@@ -184,10 +184,14 @@ See [Testing and Debugging](./docs/contributing/testing-debugging.md) for serial
 - `fs_/` - sample SD card contents (books, sleep images, themes) used by the simulator
 - `nix/` - Nix/NixOS development shell definitions
 - `managed_components/` - ESP-IDF managed component dependencies, fetched automatically during build
-- [`SCOPE.md`](./SCOPE.md), [`GOVERNANCE.md`](./GOVERNANCE.md), [`CHANGELOG.md`](./CHANGELOG.md) - project scope, community guidelines, and release history
+- [`SCOPE.md`](./SCOPE.md), [`GOVERNANCE.md`](./GOVERNANCE.md), [`CHANGELOG.md`](./CHANGELOG.md) - project scope, community principles, and release history
 
 ## Internals
 
 The ESP32-C3 has about 380 KB of usable RAM, so CrossInk stores reusable book and device data on the SD card instead of rebuilding everything in memory.
 
 See [Data Cache](./docs/data-cache.md) for the `.crosspoint` layout and [File Formats](./docs/file-formats.md) for binary cache details.
+
+## Notice on Contributions
+
+This repository does not accept pull requests. Feature requests may be opened in [discussions](https://github.com/uxjulia/CrossInk/discussions), but major features requiring ongoing support should be directed upstream to [CrossPoint](https://github.com/crosspoint-reader/crosspoint-reader).
