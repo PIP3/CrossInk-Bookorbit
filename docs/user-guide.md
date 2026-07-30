@@ -134,7 +134,7 @@ Download links for files already on the device are available in the web interfac
 
 A **Wi-Fi signal strength indicator** (dBm) is displayed on-screen during joined-network web server sessions.
 
-The same screen also has **Receive Nearby File**, which receives a supported
+The same screen also has **Receive File**, which receives a supported
 book or image directly from another nearby CrossInk reader without joining a
 Wi-Fi network. See [Nearby File Transfer](./nearby-file-transfer.md) for the
 complete sender and receiver workflow.

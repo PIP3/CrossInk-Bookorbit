@@ -147,9 +147,9 @@ void CrossPointWebServerActivity::onNetworkModeSelected(const NetworkMode mode) 
   } else if (mode == NetworkMode::CREATE_HOTSPOT) {
     modeName = "Create Hotspot";
   } else if (mode == NetworkMode::NEARBY_STATS_SYNC) {
-    modeName = "Nearby Stats Sync";
+    modeName = "Sync Stats";
   } else if (mode == NetworkMode::NEARBY_BOOK_RECEIVE) {
-    modeName = "Receive Nearby File";
+    modeName = "Receive File";
   }
   LOG_DBG("WEBACT", "Network mode selected: %s", modeName);
 
