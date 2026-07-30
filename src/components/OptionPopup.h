@@ -105,13 +105,12 @@ class OptionPopup {
       return true;
     }
 
-    if (input.wasPressed(MappedInputManager::Button::Up) || input.wasPressed(MappedInputManager::Button::Left)) {
+    if (input.wasPressed(MappedInputManager::Button::NavPrevious)) {
       selectedIndex = (selectedIndex - 1 + count) % count;
       layoutValid = false;
       requestUpdate();
       return true;
-    } else if (input.wasPressed(MappedInputManager::Button::Down) ||
-               input.wasPressed(MappedInputManager::Button::Right)) {
+    } else if (input.wasPressed(MappedInputManager::Button::NavNext)) {
       selectedIndex = (selectedIndex + 1) % count;
       layoutValid = false;
       requestUpdate();
