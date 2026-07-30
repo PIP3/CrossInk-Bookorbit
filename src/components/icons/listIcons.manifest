@@ -22,6 +22,7 @@ lyra-settings = settings-2
 cog = cog
 transfer = arrow-left-right
 lyra-transfer = send-horizontal
+chevrons-left-right-ellipsis = chevrons-left-right-ellipsis
 menu = menu
 home = house
 search = search
