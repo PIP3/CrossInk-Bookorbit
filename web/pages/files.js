@@ -1453,6 +1453,7 @@ const UPLOAD_SETTINGS_STORAGE_KEY = "crossink.files.uploadSettings.v1";
 const DEFAULT_UPLOAD_SETTINGS = Object.freeze({
   convertBeforeUpload: false,
   renameFromMetadata: false,
+  splitLongSections: true,
   quality: DEFAULT_JPEG_QUALITY,
   referenceCharacters: X_DEFAULT_REFERENCE_CHARACTERS_PER_PAGE,
   deviceTarget: "auto",
@@ -1466,6 +1467,7 @@ function getCurrentUploadSettings() {
   return {
     convertBeforeUpload: !!document.getElementById("convertBeforeUpload")?.checked,
     renameFromMetadata: !!document.getElementById("renameFromMetadataToggle")?.checked,
+    splitLongSections: !!document.getElementById("splitLongSectionsToggle")?.checked,
     quality: parseInt(document.getElementById("qualitySlider")?.value || JPEG_QUALITY, 10),
     referenceCharacters: parseInt(
       document.getElementById("referenceCharactersInput")?.value || X_DEFAULT_REFERENCE_CHARACTERS_PER_PAGE,
@@ -1484,6 +1486,7 @@ function applyUploadSettings(settings = {}) {
   try {
     document.getElementById("convertBeforeUpload").checked = !!merged.convertBeforeUpload;
     document.getElementById("renameFromMetadataToggle").checked = !!merged.renameFromMetadata;
+    document.getElementById("splitLongSectionsToggle").checked = !!merged.splitLongSections;
     document.getElementById("export-log-checkbox").checked = !!merged.exportLog;
     document.getElementById("rememberUploadSettings").checked = !!settings.rememberSettings;
     document.getElementById("referenceCharactersInput").value = normalizedReferenceCharactersPerPage(
@@ -2012,7 +2015,6 @@ const DEFENSIVE_STYLE =
   '<style type="text/css">img,svg{max-width:100%;height:auto}body{overflow-wrap:break-word}table{max-width:100%;table-layout:fixed}pre,code{white-space:pre-wrap;word-wrap:break-word}*{box-sizing:border-box}</style>';
 const X_LOCATION_MANIFEST_PATH = "META-INF/x-locations.json";
 const X_LOCATION_WORDS_PER_UNIT = 64;
-const SECTION_SPLIT_ENABLED = true;
 const SECTION_SPLIT_WORD_THRESHOLD = 8000;
 const SECTION_SPLIT_BYTE_THRESHOLD = 32768;
 const SECTION_SPLIT_HARD_BYTE_LIMIT = 49152;
@@ -2597,7 +2599,8 @@ function chunkHasReaderContent(nodes) {
     if (node.nodeType === Node.TEXT_NODE) return !hidden && !!(node.textContent || "").trim();
     if (node.nodeType !== Node.ELEMENT_NODE) return false;
     const name = localName(node);
-    const nextHidden = hidden || node.hasAttribute("data-AmznRemoved-M8") || ["script", "style", "svg", "metadata"].includes(name);
+    const nextHidden =
+      hidden || node.hasAttribute("data-AmznRemoved-M8") || ["script", "style", "svg", "metadata"].includes(name);
     if (nextHidden) return false;
     if (name === "img") return true;
     return Array.from(node.childNodes).some((child) => visit(child, nextHidden));
@@ -2661,7 +2664,9 @@ function collapseReaderEmptySpineItems(xhtmlFiles, opfContent, opfPath) {
   const doc = new DOMParser().parseFromString(opfContent, "application/xml");
   const redirects = new Map();
   if (doc.querySelector("parsererror")) return { opfContent, redirects };
-  const manifestById = new Map(Array.from(doc.getElementsByTagNameNS("*", "item")).map((item) => [item.getAttribute("id"), item]));
+  const manifestById = new Map(
+    Array.from(doc.getElementsByTagNameNS("*", "item")).map((item) => [item.getAttribute("id"), item]),
+  );
   const spine = doc.getElementsByTagNameNS("*", "spine")[0];
   if (!spine) return { opfContent, redirects };
   const refs = Array.from(spine.getElementsByTagNameNS("*", "itemref"));
@@ -2703,8 +2708,8 @@ function rewriteCollapsedSpineReferences(content, sourcePath, redirects) {
   return changed ? safeSerialize(doc, content) : content;
 }
 
-function splitLongXhtmlSections(xhtmlFiles, opfContent, opfPath) {
-  if (!SECTION_SPLIT_ENABLED) return { files: xhtmlFiles, splitSections: {}, sourceSpineMap: null };
+function splitLongXhtmlSections(xhtmlFiles, opfContent, opfPath, enabled) {
+  if (!enabled) return { files: xhtmlFiles, splitSections: {}, sourceSpineMap: null };
 
   const parser = new DOMParser();
   const serializer = new XMLSerializer();
@@ -4233,7 +4238,8 @@ async function convertEpubFile(file, progressCallback) {
     logFix("EPUB sections", `Collapsed ${collapseResult.redirects.size} empty chapter stubs`);
   }
 
-  const sectionSplitResult = splitLongXhtmlSections(processedXhtmlFiles, opfContent, opfPath);
+  const splitLongSections = !!document.getElementById("splitLongSectionsToggle")?.checked;
+  const sectionSplitResult = splitLongXhtmlSections(processedXhtmlFiles, opfContent, opfPath, splitLongSections);
   processedXhtmlFiles = sectionSplitResult.files;
   if (Object.keys(sectionSplitResult.splitSections).length > 0) {
     const splitPartCount = Object.values(sectionSplitResult.splitSections).reduce(
@@ -4256,7 +4262,9 @@ async function convertEpubFile(file, progressCallback) {
     const low = path.toLowerCase();
     if (low.endsWith(".ncx") || low.match(/\.(xml|svg)$/)) {
       extraTextFiles[path] = rewriteCollapsedSpineReferences(
-        scrubEpubTextResource(path, await safeReadText(fileObj)), path, collapseResult.redirects,
+        scrubEpubTextResource(path, await safeReadText(fileObj)),
+        path,
+        collapseResult.redirects,
       );
     }
   }
