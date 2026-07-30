@@ -33,6 +33,7 @@
 
 ### Fixed
 
+- CSS-heavy EPUBs now stop stylesheet parsing safely before low-memory rule storage can reboot X3/X4 devices.
 - KOReader Sync now sends CrossPoint-specific position data only to the official CrossPoint Sync server.
 - EPUB text now preserves explicit spaces between Hangul and other CJK words.
 - Web file uploads now use the simulator's mapped WebSocket port while preserving ports 80/81 on devices.
