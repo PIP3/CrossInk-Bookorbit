@@ -218,11 +218,14 @@ void BookStatsActivity::adjustSelectedDateField(const int delta) {
 
 void BookStatsActivity::onEnter() {
   Activity::onEnter();
+  previousOrientation = renderer.getOrientation();
+  renderer.setOrientation(GfxRenderer::Orientation::Portrait);
   requestUpdate();
 }
 
 void BookStatsActivity::onExit() {
   saveStats();
+  renderer.setOrientation(previousOrientation);
   Activity::onExit();
 }
 
