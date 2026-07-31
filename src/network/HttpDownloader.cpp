@@ -165,7 +165,7 @@ struct Sink {
 };
 
 void setRequestHeaders(esp_http_client_handle_t client, const std::string& username, const std::string& password,
-                       size_t resumeOffset, bool sendAuthorization) {
+                       size_t resumeOffset, bool sendAuthorization, const HttpDownloader::HeaderList& extraHeaders) {
   esp_http_client_set_header(client, "User-Agent", "CrossInk-ESP32-" CROSSINK_VERSION);
   esp_http_client_set_header(client, "Connection", "close");
   if (resumeOffset > 0) {
@@ -179,6 +179,16 @@ void setRequestHeaders(esp_http_client_handle_t client, const std::string& usern
     const String header = "Basic " + base64::encode(credentials.c_str());
     esp_http_client_set_header(client, "Authorization", header.c_str());
   }
+  for (const auto& header : extraHeaders) {
+    esp_http_client_set_header(client, header.first.c_str(), header.second.c_str());
+  }
+}
+
+// INF-level so release variants (LOG_LEVEL=1) capture it: heap headroom around the
+// TLS phases is the difference between a working and a failing catalog fetch on the
+// C3, and field logs are the only way to see where it goes.
+void logHeapPhase(const char* phase) {
+  LOG_INF("HTTP", "%s: heap free=%u maxAlloc=%u", phase, (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMaxAllocHeap());
 }
 
 void logTlsError(esp_http_client_handle_t client, const char* phase) {
@@ -192,13 +202,31 @@ void logTlsError(esp_http_client_handle_t client, const char* phase) {
 }
 
 HttpDownloader::DownloadError runGet(const std::string& url, const std::string& username, const std::string& password,
-                                     Sink& sink, const size_t bufferSize) {
+                                     Sink& sink, const size_t bufferSize,
+                                     const HttpDownloader::HeaderList& extraHeaders = {},
+                                     const size_t clientRxBufferSize = 0) {
+  HttpDownloader::lastHttpStatus = 0;
   std::string currentUrl = url;
+
+  // Allocate the transfer buffer before the TLS session comes up: the handshake can
+  // leave only a few KB of headroom on the ESP32-C3, and grabbing even 2KB at that
+  // point is exactly the allocation that used to fail on catalog fetches.
+  auto buffer = makeUniqueNoThrow<char[]>(bufferSize);
+  if (!buffer) {
+    LOG_ERR("HTTP", "Failed to allocate %zu byte download buffer", bufferSize);
+    logNetworkState("Download buffer allocation failure");
+    return HttpDownloader::HTTP_ERROR;
+  }
 
   ParsedUrl credentialOrigin;
   const bool hasCredentials = !username.empty() && !password.empty() && parseUrl(url, credentialOrigin);
 
   for (uint8_t hop = 0; hop < MAX_REDIRECTS; ++hop) {
+    // A cancel pressed during a previous phase (or between retry attempts) should
+    // stop before we spend seconds on another TLS handshake.
+    if (isCancelRequested(sink.cancelFlag, sink.shouldCancel)) {
+      return HttpDownloader::ABORTED;
+    }
     ParsedUrl currentOrigin;
     const bool currentParsed = parseUrl(currentUrl, currentOrigin);
     const bool sendAuthorization = hasCredentials && currentParsed && sameOrigin(currentOrigin, credentialOrigin);
@@ -206,7 +234,7 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
 
     esp_http_client_config_t config = {};
     config.url = currentUrl.c_str();
-    config.buffer_size = HTTP_RX_BUF;
+    config.buffer_size = clientRxBufferSize > 0 ? static_cast<int>(clientRxBufferSize) : HTTP_RX_BUF;
     config.buffer_size_tx = HTTP_TX_BUF;
     config.timeout_ms = HTTP_TIMEOUT_MS;
     config.crt_bundle_attach = esp_crt_bundle_attach;
@@ -214,6 +242,7 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
     config.event_handler = captureLocationHeader;
     config.user_data = &redirectLocation;
 
+    logHeapPhase("Before client init");
     esp_http_client_handle_t client = esp_http_client_init(&config);
     if (!client) {
       LOG_ERR("HTTP", "Client init failed");
@@ -221,9 +250,15 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
       return HttpDownloader::HTTP_ERROR;
     }
 
-    setRequestHeaders(client, username, password, sink.resumeOffset, sendAuthorization);
+    setRequestHeaders(client, username, password, sink.resumeOffset, sendAuthorization, extraHeaders);
 
     esp_err_t err = esp_http_client_open(client, 0);
+    logHeapPhase("After open (TLS up)");
+    // The handshake takes seconds; honor a cancel pressed during it before reading.
+    if (isCancelRequested(sink.cancelFlag, sink.shouldCancel)) {
+      esp_http_client_cleanup(client);
+      return HttpDownloader::ABORTED;
+    }
     if (err != ESP_OK) {
       LOG_ERR("HTTP", "Open failed: %s", esp_err_to_name(err));
       logTlsError(client, "Open failure");
@@ -234,6 +269,7 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
 
     int64_t responseLength = esp_http_client_fetch_headers(client);
     const int status = esp_http_client_get_status_code(client);
+    HttpDownloader::lastHttpStatus = status;
     if (responseLength < 0) {
       LOG_ERR("HTTP", "Fetch headers failed: %lld", static_cast<long long>(responseLength));
       logNetworkState("Fetch headers failure");
@@ -305,14 +341,6 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
     }
 #endif
 
-    auto buffer = makeUniqueNoThrow<char[]>(bufferSize);
-    if (!buffer) {
-      LOG_ERR("HTTP", "Failed to allocate %zu byte download buffer", bufferSize);
-      logNetworkState("Download buffer allocation failure");
-      esp_http_client_cleanup(client);
-      return HttpDownloader::HTTP_ERROR;
-    }
-
     ProgressNotifier progressNotifier(sink.total, std::move(sink.progress));
     LOG_DBG("HTTP", "Reading body: buffer=%zu bytes", bufferSize);
 #ifdef ESP_ERR_HTTP_EAGAIN
@@ -338,7 +366,8 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
           continue;
         }
 #endif
-        LOG_ERR("HTTP", "Read error after %zu/%zu bytes", sink.downloaded, sink.total);
+        LOG_ERR("HTTP", "Read error after %zu/%zu bytes (heap free=%u maxAlloc=%u)", sink.downloaded, sink.total,
+                (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMaxAllocHeap());
         logNetworkState("Read error");
         esp_http_client_cleanup(client);
         return HttpDownloader::HTTP_ERROR;
@@ -382,27 +411,40 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
 }
 }  // namespace
 
+int HttpDownloader::lastHttpStatus = 0;
+
 bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent, const std::string& username,
-                              const std::string& password) {
+                              const std::string& password, const HeaderList& extraHeaders) {
   return fetchUrl(
       url, [&outContent](const uint8_t* data, size_t len) { return outContent.write(data, len) == len; }, username,
-      password);
+      password, extraHeaders);
 }
 
 bool HttpDownloader::fetchUrl(const std::string& url, std::string& outContent, const std::string& username,
-                              const std::string& password) {
+                              const std::string& password, const HeaderList& extraHeaders) {
   outContent.clear();
   return fetchUrl(
       url,
       [&outContent](const uint8_t* data, size_t len) {
+        // std::string growth uses the throwing operator new, which aborts on OOM with
+        // -fno-exceptions. String reallocation also briefly holds old + new buffers.
+        // Refuse growth when the largest free block cannot absorb that, so an
+        // oversized response fails the fetch instead of panicking the device.
+        constexpr size_t HEAP_GUARD_MARGIN = 8192;
+        const size_t needed = outContent.size() + len;
+        if (needed > outContent.capacity() && ESP.getMaxAllocHeap() < needed * 2 + HEAP_GUARD_MARGIN) {
+          LOG_ERR("HTTP", "Response too large to buffer in RAM: %zu bytes (max alloc %u)", needed,
+                  (unsigned)ESP.getMaxAllocHeap());
+          return false;
+        }
         outContent.append(reinterpret_cast<const char*>(data), len);
         return true;
       },
-      username, password);
+      username, password, extraHeaders);
 }
 
 bool HttpDownloader::fetchUrl(const std::string& url, const DataCallback& onData, const std::string& username,
-                              const std::string& password) {
+                              const std::string& password, const HeaderList& extraHeaders) {
   WifiPowerSaveGuard wifiPowerSaveGuard;
   (void)wifiPowerSaveGuard;
 
@@ -415,13 +457,13 @@ bool HttpDownloader::fetchUrl(const std::string& url, const DataCallback& onData
 
   Sink sink;
   sink.write = onData;
-  return runGet(url, username, password, sink, DEFAULT_DOWNLOAD_BUFFER_SIZE) == OK;
+  return runGet(url, username, password, sink, DEFAULT_DOWNLOAD_BUFFER_SIZE, extraHeaders) == OK;
 }
 
 HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& url, const std::string& destPath,
                                                              ProgressCallback progress, bool* cancelFlag,
                                                              const std::string& username, const std::string& password,
-                                                             DownloadOptions options) {
+                                                             DownloadOptions options, const HeaderList& extraHeaders) {
   WifiPowerSaveGuard wifiPowerSaveGuard;
   (void)wifiPowerSaveGuard;
 
@@ -471,7 +513,7 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
 
   sink.write = [&](const uint8_t* data, size_t len) { return openOutputFile() && file.write(data, len) == len; };
 
-  DownloadError result = runGet(url, username, password, sink, bufferSize);
+  DownloadError result = runGet(url, username, password, sink, bufferSize, extraHeaders, options.clientRxBufferSize);
   if (sink.rangeIgnored) {
     if (fileOpen) {
       file.close();
@@ -483,7 +525,7 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
     sink.downloaded = 0;
     sink.total = 0;
     sink.write = [&](const uint8_t* data, size_t len) { return openOutputFile() && file.write(data, len) == len; };
-    result = runGet(url, username, password, sink, bufferSize);
+    result = runGet(url, username, password, sink, bufferSize, extraHeaders, options.clientRxBufferSize);
   }
 
   if (fileOpen) {

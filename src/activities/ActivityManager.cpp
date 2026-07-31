@@ -9,6 +9,7 @@
 #include "OpdsServerStore.h"
 #include "boot_sleep/BootActivity.h"
 #include "boot_sleep/SleepActivity.h"
+#include "browser/BookOrbitCatalogBrowserActivity.h"
 #include "browser/OpdsBookBrowserActivity.h"
 #include "home/AlertActivity.h"
 #include "home/CrashActivity.h"
@@ -233,6 +234,13 @@ void ActivityManager::goToBrowser() {
   }
 }
 
+void ActivityManager::goToBookOrbitCatalog() {
+  // Replace (not push): clearing the activity stack under the browser frees the
+  // 15-20KB of headroom the TLS session needs on the C3 (see .claude/CONTEXT.md).
+  // The browser exits via goHome, so there is no stack to return to.
+  replaceActivity(std::make_unique<BookOrbitCatalogBrowserActivity>(renderer, mappedInput));
+}
+
 void ActivityManager::goToReader(std::string path, const bool suppressBackRelease) {
   replaceActivity(std::make_unique<ReaderActivity>(renderer, mappedInput, std::move(path), suppressBackRelease));
 }
@@ -259,6 +267,8 @@ void ActivityManager::goHome(HomeMenuItem initialMenuItem) {
       initialMenuItem = HomeMenuItem::RECENTS;
     } else if (activityName == "OpdsBookBrowser") {
       initialMenuItem = HomeMenuItem::OPDS_BROWSER;
+    } else if (activityName == "BookOrbitCatalogBrowser") {
+      initialMenuItem = HomeMenuItem::BOOKORBIT_BROWSER;
     } else if (activityName == "CrossPointWebServer") {
       initialMenuItem = HomeMenuItem::FILE_TRANSFER;
     } else if (activityName == "NearbyStatsSync") {
