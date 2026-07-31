@@ -24,6 +24,11 @@ Keep this file focused on repo-specific gotchas that are worth reusing in future
 - Kindle EPUBs may contain paired high-res and old-Kindle fallback images. `ChapterHtmlSlimParser` should skip `<img>` nodes with `data-AmznRemoved-M8` to avoid duplicate stacked images.
 - After image/layout pipeline changes that affect cached EPUB output, clear the affected `.crosspoint/epub_<hash>/` cache if behavior looks stale.
 
+## Networking / Memory
+
+- `HttpDownloader::fetchUrl(std::string&)` buffers the whole response in RAM. std::string growth uses the throwing `operator new`, which aborts on OOM with `-fno-exceptions` — this crashed the device on large BookOrbit catalog responses (v1.4.0-dev). The overload now has a max-alloc heap guard, but for API JSON of unbounded size prefer `downloadToFile` to SD + `deserializeJson` from the file with a `DeserializationOption::Filter` (see BookOrbitCatalogClient::fetchJson).
+- Measured on X4 hardware (2026-07): active WiFi leaves ~65KB free; an HTTPS session (esp_http_client + crt bundle) costs ~54KB through the handshake. mbedTLS then allocates workspace per incoming TLS record (up to 16KB), so post-handshake `getMaxAllocHeap()` must stay ≥ ~16KB or reads fail mid-body against servers that send large records. Consequences: allocate transfer buffers *before* opening the connection, and launch network-heavy activities via `replaceActivity` (clears the whole activity stack — the settings screens alone hold 15-20KB) rather than pushing on top of it. `runGet` logs "Before client init"/"After open (TLS up)" heap breadcrumbs at INF for field diagnosis.
+
 ## Misc Repo Gotchas
 
 

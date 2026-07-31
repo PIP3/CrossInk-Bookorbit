@@ -24,6 +24,7 @@
 #include "../reader/BookReadingStats.h"
 #include "../reader/BookStatsActivity.h"
 #include "../reader/EpubReaderUtils.h"
+#include "BookOrbitCredentialStore.h"
 #include "BookmarkStore.h"
 #include "ClippingStore.h"
 #include "CrossPointSettings.h"
@@ -54,6 +55,7 @@ enum class HomeMenuAction {
   ContinueReading,
   RecentBooks,
   OpdsBrowser,
+  BookOrbitCatalog,
   ReadingStats,
   Bookmarks,
   FileTransfer,
@@ -256,6 +258,9 @@ void appendHomeMenuItems(HomeMenuEntries& items, bool hasOpdsServers, bool hasRe
   if (hasOpdsServers) {
     items.push({tr(STR_OPDS_BROWSER), Library, HomeMenuAction::OpdsBrowser});
   }
+  if (BOOKORBIT_STORE.hasCredentials()) {
+    items.push({tr(STR_BOOKORBIT), Library, HomeMenuAction::BookOrbitCatalog});
+  }
   if (hasReadingStats) {
     items.push({tr(STR_READING_STATS), Chart, HomeMenuAction::ReadingStats});
   }
@@ -279,6 +284,9 @@ HomeMenuEntries buildMinimalMenuItems(bool hasOpdsServers, bool hasReadingStats,
 
   if (hasOpdsServers) {
     items.push({tr(STR_OPDS_BROWSER), Library, HomeMenuAction::OpdsBrowser});
+  }
+  if (BOOKORBIT_STORE.hasCredentials()) {
+    items.push({tr(STR_BOOKORBIT), Library, HomeMenuAction::BookOrbitCatalog});
   }
   if (hasBookmarks || hasClippings) {
     items.push({savedItemsLabel(hasBookmarks, hasClippings), BookmarkIcon, HomeMenuAction::Bookmarks});
@@ -309,6 +317,8 @@ HomeMenuAction homeActionForInitialMenuItem(HomeMenuItem item) {
       return HomeMenuAction::RecentBooks;
     case HomeMenuItem::OPDS_BROWSER:
       return HomeMenuAction::OpdsBrowser;
+    case HomeMenuItem::BOOKORBIT_BROWSER:
+      return HomeMenuAction::BookOrbitCatalog;
     case HomeMenuItem::FILE_TRANSFER:
       return HomeMenuAction::FileTransfer;
     case HomeMenuItem::SETTINGS_MENU:
@@ -1458,6 +1468,9 @@ void HomeActivity::loop() {
           case HomeMenuAction::OpdsBrowser:
             onOpdsBrowserOpen();
             break;
+          case HomeMenuAction::BookOrbitCatalog:
+            activityManager.goToBookOrbitCatalog();
+            break;
           case HomeMenuAction::ReadingStats:
             onReadingStatsOpen();
             break;
@@ -1653,6 +1666,9 @@ void HomeActivity::loop() {
         break;
       case HomeMenuAction::OpdsBrowser:
         onOpdsBrowserOpen();
+        break;
+      case HomeMenuAction::BookOrbitCatalog:
+        activityManager.goToBookOrbitCatalog();
         break;
       case HomeMenuAction::ReadingStats:
         onReadingStatsOpen();

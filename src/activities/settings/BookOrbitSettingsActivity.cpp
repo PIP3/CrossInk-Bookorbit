@@ -7,15 +7,17 @@
 
 #include "BookOrbitCredentialStore.h"
 #include "MappedInputManager.h"
+#include "activities/ActivityManager.h"
+#include "activities/browser/BookOrbitCatalogBrowserActivity.h"
 #include "activities/settings/BookOrbitAuthActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
 namespace {
-constexpr int MENU_ITEMS = 4;
+constexpr int MENU_ITEMS = 5;
 const StrId menuNames[MENU_ITEMS] = {StrId::STR_USERNAME, StrId::STR_PASSWORD, StrId::STR_BOOKORBIT_SERVER_URL,
-                                     StrId::STR_AUTHENTICATE};
+                                     StrId::STR_AUTHENTICATE, StrId::STR_BOOKORBIT_CATALOG};
 }  // namespace
 
 void BookOrbitSettingsActivity::onEnter() {
@@ -96,6 +98,12 @@ void BookOrbitSettingsActivity::handleSelection() {
     }
     startActivityForResult(std::make_unique<BookOrbitAuthActivity>(renderer, mappedInput),
                            [](const ActivityResult&) {});
+  } else if (selectedIndex == 4) {
+    // Browse Catalog
+    if (!BOOKORBIT_STORE.hasCredentials()) {
+      return;
+    }
+    activityManager.goToBookOrbitCatalog();
   }
 }
 
@@ -124,6 +132,8 @@ void BookOrbitSettingsActivity::render(RenderLock&&) {
           auto serverUrl = BOOKORBIT_STORE.getServerUrl();
           return serverUrl.empty() ? std::string(tr(STR_NOT_SET)) : serverUrl;
         } else if (index == 3) {
+          return BOOKORBIT_STORE.hasCredentials() ? "" : std::string("[") + tr(STR_SET_CREDENTIALS_FIRST) + "]";
+        } else if (index == 4) {
           return BOOKORBIT_STORE.hasCredentials() ? "" : std::string("[") + tr(STR_SET_CREDENTIALS_FIRST) + "]";
         }
         return std::string(tr(STR_NOT_SET));
