@@ -392,8 +392,13 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
     auto truncatedTitle = renderer.truncatedText(UI_12_FONT_ID, title,
                                                  rect.width - padding * 2 - BaseMetrics::values.contentSidePadding * 2,
                                                  EpdFontFamily::BOLD);
-    const bool showHeaderClock = halClock.isAvailable() && (readerContext ? SETTINGS.shouldShowClockInReader()
-                                                                          : SETTINGS.shouldShowClockOutsideReader());
+    // A title and a centred clock would collide, so the title shifts left when the
+    // clock is centred. The home header (no title) is not affected: there the clock
+    // takes the left slot itself.
+    char probe[9];
+    const bool showHeaderClock =
+        halClock.formatCurrentTime(probe, sizeof(probe), SETTINGS.clockUtcOffsetQ, SETTINGS.clockFormat == 1) &&
+        (readerContext ? SETTINGS.shouldShowClockInReader() : SETTINGS.shouldShowClockOutsideReader());
     if (showHeaderClock) {
       renderer.drawText(UI_12_FONT_ID, rect.x + BaseMetrics::values.contentSidePadding, rect.y + 5,
                         truncatedTitle.c_str(), true, EpdFontFamily::BOLD);
@@ -906,10 +911,7 @@ void BaseTheme::drawTopStatusBarClock(const GfxRenderer& renderer, int topY, con
   char timeBuf[9];
   const char* timeText = previewTime;
   if (timeText == nullptr) {
-    if (!halClock.isAvailable()) {
-      return;
-    }
-    if (!halClock.formatTime(timeBuf, sizeof(timeBuf), SETTINGS.clockUtcOffsetQ, SETTINGS.clockFormat == 1)) {
+    if (!halClock.formatCurrentTime(timeBuf, sizeof(timeBuf), SETTINGS.clockUtcOffsetQ, SETTINGS.clockFormat == 1)) {
       return;
     }
     timeText = timeBuf;

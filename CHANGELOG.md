@@ -5,6 +5,17 @@ records only its own additions. Each release states the CrossInk version it is b
 on; for everything inherited from upstream, see the
 [CrossInk changelog](https://github.com/uxjulia/CrossInk/blob/main/CHANGELOG.md).
 
+## [Unreleased]
+
+### Added
+
+- The clock in the top status bar now works on devices without a clock chip (the X4), reading the system clock. The clock is refreshed from NTP on every WiFi connection on those devices. Hide Clock, Clock Format and Clock UTC Offset are all reachable now — they were hidden without a real RTC, which made the clock impossible to enable or configure.
+- "Keep Clock While Asleep" (Settings > System > Device, only shown on devices without a clock chip): keeps the board powered during sleep so wall-clock time keeps running instead of being lost at every sleep. Off by default, because it trades standby battery life for that: with it enabled the device no longer powers off completely when it sleeps and keeps drawing a small current, so it slowly discharges even when unused. Watch your own battery for a few days before relying on it. Turning the setting off restores the previous behaviour exactly.
+
+### Fixed
+
+- The reader's top clock and the first line of book text no longer touch: the text now keeps a few pixels of clearance below the clock band.
+
 ## [v1.4.1+bookorbit.1] - 2026-07-31
 
 Based on CrossInk v1.4.0.

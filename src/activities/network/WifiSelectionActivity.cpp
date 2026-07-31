@@ -464,12 +464,19 @@ void WifiSelectionActivity::checkConnectionStatus() {
     // Sync RTC from NTP on the first successful WiFi connection only. The DS3231
     // drifts ~2 ppm so one sync is enough; users can force a re-sync from
     // Settings > System > Device > Sync Date/Time Now.
-    if (halClock.isAvailable() && (!SETTINGS.clockHasBeenSynced || !SETTINGS.clockDateHasBeenSynced)) {
-      if (halClock.syncFromNTP()) {
-        SETTINGS.clockHasBeenSynced = 1;
-        SETTINGS.clockDateHasBeenSynced = 1;
-        SETTINGS.saveToFile();
+    if (halClock.isAvailable()) {
+      if (!SETTINGS.clockHasBeenSynced || !SETTINGS.clockDateHasBeenSynced) {
+        if (halClock.syncFromNTP()) {
+          SETTINGS.clockHasBeenSynced = 1;
+          SETTINGS.clockDateHasBeenSynced = 1;
+          SETTINGS.saveToFile();
+        }
       }
+    } else {
+      // No RTC to hold the time: the status-bar clock reads the system clock, which
+      // only NTP sets. Refresh it on every connection rather than once — the
+      // RC-oscillator-backed clock drifts, and a clock loss leaves it unset entirely.
+      halClock.syncSystemTimeFromNTP();
     }
 
     // Save this as the last connected network - SD card operations need lock as

@@ -80,7 +80,8 @@ void HalPowerManager::setPowerSaving(bool enabled) {
   // Otherwise, no change needed
 }
 
-void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
+void HalPowerManager::startDeepSleep(HalGPIO& gpio, const bool keepPowerLatched) const {
+  LOG_INF("PWR", "Deep sleep: power latch %s", keepPowerLatched ? "kept (clock keeps running)" : "released");
   disableWiFiBeforeDeepSleep();
 
   // Ensure that the power button has been released to avoid immediately turning back on if you're holding it
@@ -100,12 +101,22 @@ void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
   // Pre-sleep routines from the original firmware
   // GPIO13 is connected to battery latch MOSFET, we need to make sure it's low during sleep
   // Note that this means the MCU will be completely powered off during sleep, including RTC
+  //
+  // With keepPowerLatched, that release is skipped: the pin is left exactly as it is
+  // while the device is awake (nothing else in this firmware ever drives it, so the
+  // rail is held by the latch circuit itself). The board therefore stays powered and
+  // the ESP32 enters a real deep sleep, where the RTC timer keeps counting and
+  // wall-clock time survives. The cost is standby current, hence the opt-in setting.
   constexpr gpio_num_t GPIO_SPIWP = GPIO_NUM_13;
-  gpio_set_direction(GPIO_SPIWP, GPIO_MODE_OUTPUT);
-  gpio_set_level(GPIO_SPIWP, 0);
+  if (!keepPowerLatched) {
+    gpio_set_direction(GPIO_SPIWP, GPIO_MODE_OUTPUT);
+    gpio_set_level(GPIO_SPIWP, 0);
+  }
   esp_sleep_config_gpio_isolate();
   gpio_deep_sleep_hold_en();
-  gpio_hold_en(GPIO_SPIWP);
+  if (!keepPowerLatched) {
+    gpio_hold_en(GPIO_SPIWP);
+  }
   pinMode(InputManager::POWER_BUTTON_PIN, INPUT_PULLUP);
   // Arm the wakeup trigger *after* the button is released
   // Note: this is only useful for waking up on USB power. On battery, the MCU will be completely powered off, so the

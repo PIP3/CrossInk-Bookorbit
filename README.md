@@ -1,4 +1,4 @@
-> **This is a personal fork of [CrossInk](https://github.com/uxjulia/CrossInk)** that adds [BookOrbit](https://github.com/bookorbit/bookorbit) integration: reading-progress sync and a catalog browser for downloading books straight from your own BookOrbit server.
+> **This is a personal fork of [CrossInk](https://github.com/uxjulia/CrossInk)** that adds [BookOrbit](https://github.com/bookorbit/bookorbit) integration — reading-progress sync and a catalog browser for downloading books straight from your own server — plus a working clock on hardware that has no clock chip.
 
 Everything else — fonts, themes, reader features, reading stats, controls, the web server — comes from CrossInk unchanged. See the [upstream README](https://github.com/uxjulia/CrossInk#readme) for those, and the [docs](./docs/) folder in this repository for the detailed guides.
 
@@ -11,6 +11,7 @@ Everything else — fonts, themes, reader features, reading stats, controls, the
 - **BookOrbit progress sync** — sync your reading position with a self-hosted BookOrbit server, independently of (and alongside) KOReader Sync.
 - **BookOrbit catalog browser** — browse your server's library on the device and download EPUBs over WiFi, including by author and by series.
 - **Offline shortcuts to your own books** — "On device" and "In progress" categories that open a book directly, without touching the network.
+- **A working clock on the X4** — the status-bar clock, which upstream can only show on hardware that has a clock chip, plus an opt-in mode that keeps the time running through sleep.
 
 BookOrbit exposes a KOReader-compatible sync API, so this fork talks to it the same way the official BookOrbit KOReader plugin does. Your BookOrbit server must be recent enough to serve the KOReader plugin endpoints under `{server}/api/v1/koreader` — including `plugin/catalog/*` for the catalog browser.
 
@@ -20,7 +21,7 @@ BookOrbit exposes a KOReader-compatible sync API, so this fork talks to it the s
 
 1. On the device, go to **Settings → System → BookOrbit Sync**.
 2. Fill in **Username**, **Password** and **Server URL**. The URL accepts a bare hostname (`books.example.com`); `https://` is assumed, and a pasted `/api/v1` or `/api/v1/koreader` suffix is stripped for you.
-3. Choose **Authenticate**. The device connects to WiFi and validates the credentials against your server. You should see *Successfully authenticated!*
+3. Choose **Authenticate**. The device connects to WiFi and validates the credentials against your server. You should see _Successfully authenticated!_
 
 Credentials live on the SD card in `/.crosspoint/bookorbit.json`, obfuscated with the device's hardware MAC — the same scheme CrossInk uses for KOReader credentials. KOReader Sync keeps its own separate credentials and server, so you can use both providers at once.
 
@@ -37,7 +38,7 @@ BookOrbit identifies books by the binary partial-MD5 hash of the EPUB file (the 
 
 ### Syncing without opening the menu
 
-**Settings → Controls** lets you bind *BookOrbit Sync* to the power button (short or long press) or to a long press on Menu or Back. The action also works outside the reader: it syncs the book you last had open, or opens the BookOrbit settings if no account is configured yet.
+**Settings → Controls** lets you bind _BookOrbit Sync_ to the power button (short or long press) or to a long press on Menu or Back. The action also works outside the reader: it syncs the book you last had open, or opens the BookOrbit settings if no account is configured yet.
 
 ## Browsing and downloading from the catalog
 
@@ -45,19 +46,53 @@ Reach the catalog from **Settings → System → BookOrbit Sync → Browse Catal
 
 The root list contains:
 
-| Entry | What it shows |
-| --- | --- |
-| Recently added / Continue reading / All books | Your server's own sections |
-| **Authors** / **Series** | Paged lists with a book count per entry; pick one to see its books (series are listed in series order) |
-| **Search** | Free-text search of your library |
-| **On device** | Every EPUB already in the SD card root and the `/Read` folder — works offline |
-| **In progress** | Recent books you haven't finished yet — works offline |
+| Entry                                         | What it shows                                                                                          |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Recently added / Continue reading / All books | Your server's own sections                                                                             |
+| **Authors** / **Series**                      | Paged lists with a book count per entry; pick one to see its books (series are listed in series order) |
+| **Search**                                    | Free-text search of your library                                                                       |
+| **On device**                                 | Every EPUB already in the SD card root and the `/Read` folder — works offline                          |
+| **In progress**                               | Recent books you haven't finished yet — works offline                                                  |
 
 In a server book list, **Confirm** downloads the book to the SD card root as `Title - Author.epub`. A download that gets interrupted resumes automatically on retry, and **Back** cancels it. Books already present on the device are marked with a dot at the end of the line, so you can tell at a glance what is worth downloading.
 
 In **On device** and **In progress**, Confirm opens the book in the reader instead of downloading it.
 
-> If the catalog reports *"BookOrbit sent an unexpected reply"*, the server answered but not with the catalog API — usually a BookOrbit version without the KOReader catalog endpoints, a wrong server URL, or a reverse proxy/SSO layer intercepting `/api/v1/koreader/plugin/*`.
+> If the catalog reports _"BookOrbit sent an unexpected reply"_, the server answered but not with the catalog API — usually a BookOrbit version without the KOReader catalog endpoints, a wrong server URL, or a reverse proxy/SSO layer intercepting `/api/v1/koreader/plugin/*`.
+
+---
+
+## Clock on devices without a clock chip
+
+The X4 has no battery-backed RTC, so upstream's status-bar clock never appeared on it and
+its settings were hidden. Here the clock reads the device's system clock instead, which is
+refreshed from NTP on every WiFi connection.
+
+To turn it on, set **Settings → Display → Hide Clock** to `Never` (or `In reader` if you
+would rather not see it while reading), then set **Settings → System → Device → Clock UTC
+Offset** and **Clock Format**. The time appears once the device has been connected to WiFi at least
+once — before that there is nothing to display.
+
+### Keeping the time through sleep, and what it costs
+
+By default the device releases its own power latch when it sleeps, which cuts power to
+everything including the timer that counts wall-clock time. The time is therefore lost at
+every sleep and only comes back at the next WiFi connection. **Settings → System → Device
+→ Keep Clock While Asleep** skips that release, so the board stays powered, the processor
+enters a genuine deep sleep, and the clock keeps running.
+
+It is off by default because it trades standby battery life for an almost always-correct clock (time will drift when device is not connected to WiFi for a long time).
+Before leaving it on, know that:
+
+- **the device no longer powers off completely when it sleeps.** It keeps drawing a small
+  current, so it will slowly discharge in a drawer instead of sitting indefinitely.
+- **the cost has only been spot-checked.** On an X4, an hour of sleep with the setting
+  enabled cost under 1% of battery with no visible clock drift. The fuel gauge only
+  reports whole percent, so a single hour bounds the drain loosely — somewhere between
+  roughly four days and a month of standby. Treat it as "not catastrophic" rather than as
+  a measured figure, and watch your own battery over a few days before relying on it.
+
+Turning the setting back off restores the stock behaviour exactly.
 
 ---
 

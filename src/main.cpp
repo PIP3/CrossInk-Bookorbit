@@ -658,7 +658,7 @@ void enterDeepSleep(bool fromTimeout) {
   display.deepSleep();
   LOG_DBG("MAIN", "Entering deep sleep");
 
-  powerManager.startDeepSleep(gpio);
+  powerManager.startDeepSleep(gpio, SETTINGS.keepClockInSleep != 0);
 }
 
 void setupDisplayAndFonts(bool seamless = false) {

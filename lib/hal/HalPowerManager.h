@@ -40,7 +40,11 @@ class HalPowerManager {
 
   // Setup wake up GPIO and enter deep sleep
   // Should be called inside main loop() to handle the currentLockMode
-  void startDeepSleep(HalGPIO& gpio) const;
+  // keepPowerLatched leaves the battery latch engaged so the RTC timer keeps running
+  // through sleep (wall-clock time survives) at the cost of standby current. When
+  // false, the latch is released and the board powers off completely, as the stock
+  // firmware does.
+  void startDeepSleep(HalGPIO& gpio, bool keepPowerLatched = false) const;
 
   // Get battery percentage (range 0-100)
   uint16_t getBatteryPercentage() const;

@@ -65,21 +65,29 @@ void ClockSyncActivity::runSync() {
     return;
   }
 
-  const bool ok = halClock.syncFromNTP();
+  // With an RTC, write the fetched time to it; without one (X4) there is nothing to
+  // write to, so only the system clock is set — which is what the clock display reads
+  // there, and which drifts enough on the internal RC oscillator to make a manual
+  // re-sync genuinely useful between WiFi connections.
+  const bool ok = halClock.isAvailable() ? halClock.syncFromNTP() : halClock.syncSystemTimeFromNTP();
   if (!ok) {
     state = FAILED;
     requestUpdate();
     return;
   }
 
-  // Mark as synced so the auto-sync hook stops firing on future WiFi connects.
-  SETTINGS.clockHasBeenSynced = 1;
-  SETTINGS.clockDateHasBeenSynced = 1;
-  SETTINGS.saveToFile();
+  if (halClock.isAvailable()) {
+    // Mark as synced so the auto-sync hook stops firing on future WiFi connects.
+    // Boards without an RTC re-sync on every connection by design, so the flags stay
+    // untouched there.
+    SETTINGS.clockHasBeenSynced = 1;
+    SETTINGS.clockDateHasBeenSynced = 1;
+    SETTINGS.saveToFile();
+  }
 
   // Read the freshly synced time back for the user-facing confirmation.
   char buf[9];
-  if (halClock.formatTime(buf, sizeof(buf), SETTINGS.clockUtcOffsetQ, SETTINGS.clockFormat == 1)) {
+  if (halClock.formatCurrentTime(buf, sizeof(buf), SETTINGS.clockUtcOffsetQ, SETTINGS.clockFormat == 1)) {
     snprintf(syncedTime, sizeof(syncedTime), "%s", buf);
   }
   state = SUCCESS;

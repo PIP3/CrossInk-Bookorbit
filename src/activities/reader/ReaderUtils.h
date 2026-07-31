@@ -21,7 +21,8 @@ constexpr uint8_t STATUS_BAR_TEXT_PADDING = 3;
 // a negative to a huge positive). Note the book-text top margin is
 // std::max(screenMargin, reservedClockHeight + TOP_CLOCK_TEXT_PADDING), so this only
 // bites once reservedClockHeight + padding drops below the screen-margin setting.
-constexpr int8_t TOP_CLOCK_TEXT_PADDING = 0;
+// Kept at a few pixels so descenders in the first text line never touch the clock.
+constexpr int8_t TOP_CLOCK_TEXT_PADDING = 4;
 
 inline GfxRenderer::Orientation toRendererOrientation(const uint8_t orientation) {
   switch (orientation) {
@@ -42,7 +43,7 @@ inline void applyOrientation(GfxRenderer& renderer, const uint8_t orientation) {
   renderer.setOrientation(toRendererOrientation(orientation));
 }
 
-inline bool shouldShowTopClockStatusBar() { return halClock.isAvailable() && SETTINGS.shouldShowClockInReader(); }
+inline bool shouldShowTopClockStatusBar() { return SETTINGS.shouldShowClockInReader(); }
 
 inline bool readerDarkModeEnabled() { return SETTINGS.readerDarkMode != 0; }
 
