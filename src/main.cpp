@@ -16,6 +16,9 @@
 #include <Logging.h>
 #include <Memory.h>
 #include <SPI.h>
+#if !defined(SIMULATOR) && !FREEINK_MCU_C3
+#include <XteinkDetect.h>
+#endif
 #include <builtinFonts/all.h>
 #include <uzlib.h>
 
@@ -645,6 +648,19 @@ void enterDeepSleep(bool fromTimeout) {
 }
 
 void setupDisplayAndFonts(const bool seamless = false, const bool loadReaderResources = true) {
+#if !defined(SIMULATOR) && !FREEINK_MCU_C3
+  // C3 X3/X4 detection already runs in HalGPIO::begin() before SPI owns the
+  // panel pins. S3 boards initialize display SPI inside display.begin(), so an
+  // X4 Pro must resolve a UC8179 replacement panel here, before driver selection.
+  static bool controllerResolved = false;
+  if (!controllerResolved) {
+    controllerResolved = true;
+    if (freeink::applyXteinkDisplayController()) {
+      LOG_DBG("MAIN", "Panel controller: UltraChip UC81xx variant detected");
+    }
+  }
+#endif
+
 #ifdef SIMULATOR
   (void)seamless;
   display.begin();
@@ -787,7 +803,9 @@ void setup() {
   // restored from persisted settings. The on/off state defaults to OFF at wake/boot —
   // so the user isn't greeted by a surprise glow (or a silent battery drain) — unless
   // "Restore Light on Wake" is enabled, which brings back the pre-sleep on/off state too.
-  const bool restoreLightOn = SETTINGS.frontlightRestoreOnWake != 0 && SETTINGS.frontlightOn != 0;
+  // Silent/network restarts are automated transitions rather than deliberate
+  // sleep, so preserve the light state across them regardless of that setting.
+  const bool restoreLightOn = SETTINGS.frontlightOn != 0 && (SETTINGS.frontlightRestoreOnWake != 0 || isSilentReboot);
   Frontlight.begin(SETTINGS.frontlightBrightness, SETTINGS.frontlightWarmth, restoreLightOn);
 
   // Check wake duration before the remaining file loads so the user does not
@@ -818,9 +836,9 @@ void setup() {
       break;
   }
 
-  // Recovery firmware mode: hold left side button (BTN_UP) together with the power button at
-  // boot to skip directly to the SD-card firmware update screen. Useful on devices where USB
-  // flashing has been locked down (e.g. recent X3 firmware).
+  // Recovery firmware mode: hold a side button together with Power to open the
+  // SD-card firmware update screen. X4 Pro uses BTN_DOWN because BTN_UP is GPIO0,
+  // an S3 strap pin that can read low during boot and false-trigger recovery.
   bool recoveryFirmwareMode = false;
   if (wakeupReason == HalGPIO::WakeupReason::PowerButton) {
     // Refresh the cached button state a few times — isPressed() needs ~half a second to settle
@@ -831,9 +849,11 @@ void setup() {
       gpio.update();
       delay(10);
     }
-    if (gpio.isPressed(HalGPIO::BTN_UP)) {
+    const bool recoveryButtonHeld =
+        BoardConfig::isX4Pro() ? gpio.isPressed(HalGPIO::BTN_DOWN) : gpio.isPressed(HalGPIO::BTN_UP);
+    if (recoveryButtonHeld) {
       recoveryFirmwareMode = true;
-      LOG_INF("MAIN", "Recovery firmware mode (UP + POWER held at boot)");
+      LOG_INF("MAIN", "Recovery firmware mode (%s + POWER held at boot)", BoardConfig::isX4Pro() ? "DOWN" : "UP");
     }
   }
 

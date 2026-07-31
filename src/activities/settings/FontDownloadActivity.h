@@ -102,6 +102,9 @@ class FontDownloadActivity : public Activity {
   std::string errorMessage_;
   std::string errorHint_;
   bool cancelRequested_ = false;
+  // Set when a blocking download consumed Home; exit only after its file and
+  // network resources have unwound.
+  bool goHomeRequested_ = false;
 
   // FreeInkApp hosts the family list (themed rows, touch routing); the other
   // states keep their legacy centered-text rendering.

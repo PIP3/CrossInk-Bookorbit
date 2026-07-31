@@ -101,13 +101,15 @@ void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
 #endif
 
 #if !SOC_PM_SUPPORT_EXT1_WAKEUP
-  if (gpio.isXteinkDevice() && !gpio.deviceIsX3()) {
-    // X4 GPIO13 is connected to the battery latch MOSFET. Keeping it low powers
-    // the MCU off on battery, while the SDK wake source still handles USB power.
-    constexpr gpio_num_t GPIO_SPIWP = GPIO_NUM_13;
-    gpio_set_direction(GPIO_SPIWP, GPIO_MODE_OUTPUT);
-    gpio_set_level(GPIO_SPIWP, 0);
-    gpio_hold_en(GPIO_SPIWP);
+  // Release every configured battery latch. BoardConfig owns the pin mapping;
+  // the collision guard prevents a stale/mismatched profile from driving a
+  // display or SD bus pin low and holding it through sleep.
+  for (const int8_t pin : {BoardConfig::ACTIVE.power.latch0, BoardConfig::ACTIVE.power.latch1}) {
+    if (pin < 0 || BoardConfig::latchConflictsWithBus(pin)) continue;
+    const auto latch = static_cast<gpio_num_t>(pin);
+    gpio_set_direction(latch, GPIO_MODE_OUTPUT);
+    gpio_set_level(latch, 0);
+    gpio_hold_en(latch);
   }
 #endif
 

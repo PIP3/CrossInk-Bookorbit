@@ -16,6 +16,7 @@
 
 ### Changed
 
+- Language choices are now ordered by their native names, with English first.
 - Firmware releases now identify the supported device type: X3/X4 or Seeed Sticky.
 - Image-heavy EPUB chapters now index by reading image headers first and extract each full image only when its page is shown.
 - EPUB books with repeated byte-identical stylesheets now parse each unique stylesheet only once when building caches.
@@ -33,6 +34,10 @@
 
 ### Fixed
 
+- Automated network restarts now preserve the active frontlight state.
+- Home gestures now exit cleanly while OPDS books or fonts are downloading and while File Transfer is active.
+- Xteink power-off now follows board-specific latch pins without driving display or SD bus pins.
+- X4 Pro boot no longer mistakes its GPIO0 navigation button for the recovery shortcut, and newer panel-controller variants are detected before display startup.
 - CSS-heavy EPUBs now stop stylesheet parsing safely before low-memory rule storage can reboot X3/X4 devices.
 - KOReader Sync now sends CrossPoint-specific position data only to the official CrossPoint Sync server.
 - EPUB text now preserves explicit spaces between Hangul and other CJK words.

@@ -432,8 +432,9 @@ void CrossPointWebServerActivity::loop() {
           // Force trigger an update of which buttons are being pressed so be have accurate state
           // for back button checking
           mappedInput.update();
-          // Check for exit button inside loop for responsiveness
-          if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+          // This local update can consume the one-shot Home event before the
+          // ActivityManager sees it, so honor both exit routes here.
+          if (mappedInput.wasPressed(MappedInputManager::Button::Back) || mappedInput.wasHomeGesture()) {
             exitToOrigin();
             return;
           }
@@ -442,8 +443,8 @@ void CrossPointWebServerActivity::loop() {
       lastHandleClientTime = millis();
     }
 
-    // Handle exit on Back button (also check outside loop)
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+    // Handle exit on Back or Home (also check outside the tight server loop).
+    if (mappedInput.wasPressed(MappedInputManager::Button::Back) || mappedInput.wasHomeGesture()) {
       exitToOrigin();
       return;
     }
