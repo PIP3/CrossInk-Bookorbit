@@ -1,3 +1,9 @@
+## [Unreleased]
+
+### Added
+
+- BookOrbit Sync, an alternative reading-progress sync provider alongside KOReader Sync: configure your account under Settings > BookOrbit Sync, then sync a book from the reader menu. It can also be assigned to the power button (short or long press) or to long-press Menu/Back in the reader, like KOReader's Sync Progress.
+
 ## [v1.4.0] - 2026-07-10
 
 ### Added

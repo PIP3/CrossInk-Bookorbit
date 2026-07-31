@@ -11,7 +11,6 @@
 #include <Logging.h>
 #include <Memory.h>
 #include <MemoryBudget.h>
-
 #include <algorithm>
 #include <array>
 #include <cctype>
@@ -21,7 +20,10 @@
 #include <memory>
 #include <new>
 
+#include "../settings/BookOrbitSettingsActivity.h"
 #include "../settings/KOReaderSettingsActivity.h"
+#include "BookOrbitCredentialStore.h"
+#include "BookOrbitSyncActivity.h"
 #include "BookStatsActivity.h"
 #include "ClipSelectionActivity.h"
 #include "ClippingStore.h"
@@ -2742,6 +2744,63 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       }
       break;
     }
+    case EpubReaderMenuActivity::MenuAction::BOOKORBIT_SYNC: {
+      if (activeFootnotePreview) {
+        requestUpdate();
+        break;
+      }
+      if (BOOKORBIT_STORE.hasCredentials()) {
+        const int currentPage = section ? section->currentPage : nextPageNumber;
+        const int totalPages = section ? section->pageCount : cachedChapterTotalPageCount;
+        std::optional<uint16_t> paragraphIndex;
+        std::optional<uint16_t> listItemIndex;
+        if (section) {
+          getSyncPageAnchors(*section, currentPage, paragraphIndex, listItemIndex);
+        }
+
+        // Pre-compute local KO position and chapter name while Epub is still in RAM.
+        CrossPointPosition localPos = {currentSpineIndex, currentPage, totalPages};
+        if (paragraphIndex.has_value()) {
+          localPos.paragraphIndex = *paragraphIndex;
+          localPos.hasParagraphIndex = true;
+        }
+        if (listItemIndex.has_value()) {
+          localPos.liIndex = *listItemIndex;
+          localPos.hasLiIndex = true;
+        }
+        KOReaderPosition localKoPos = ProgressMapper::toKOReader(epub, localPos);
+        const int tocIdx = epub->getTocIndexForSpineIndex(currentSpineIndex);
+        std::string localChapterName = (tocIdx >= 0) ? epub->getTocItem(tocIdx).title : "";
+        const std::string savedEpubPath = epub->getPath();
+
+        // Persist current position so the reader resumes at the right page on return.
+        // goToReader() depends on this file, so abort the sync if the write fails.
+        if (!saveProgress(currentSpineIndex, currentPage, totalPages)) {
+          LOG_ERR("BookOrbit", "Aborting sync because current progress could not be saved");
+          pendingSyncSaveError = true;
+          requestUpdate();
+          return;
+        }
+
+        // Release the heavy Section now. Keep Epub alive until onExit(), which still
+        // needs it for stats/cache cleanup before the sync activity starts.
+        LOG_DBG("BookOrbit", "Releasing section for sync (heap before: %u)", (unsigned)ESP.getFreeHeap());
+        {
+          RenderLock lock(*this);
+          if (section) {
+            nextPageNumber = section->currentPage;
+          }
+          section.reset();
+        }
+        LOG_DBG("BookOrbit", "Section released for sync (heap after: %u)", (unsigned)ESP.getFreeHeap());
+
+        pauseReadingPaceTimer("sync_progress");
+        activityManager.replaceActivity(std::make_unique<BookOrbitSyncActivity>(
+            renderer, mappedInput, savedEpubPath, currentSpineIndex, currentPage, totalPages, std::move(localKoPos),
+            std::move(localChapterName), paragraphIndex));
+      }
+      break;
+    }
     case EpubReaderMenuActivity::MenuAction::NEARBY_POSITION_SYNC: {
       const int currentPage = section ? section->currentPage : nextPageNumber;
       const int totalPages = section ? section->pageCount : std::max(1, cachedChapterTotalPageCount);
@@ -3187,6 +3246,18 @@ void EpubReaderActivity::executeReaderQuickAction(CrossPointSettings::LONG_PRESS
                                });
       }
       break;
+    case CrossPointSettings::LONG_MENU_BOOKORBIT_SYNC:
+      if (BOOKORBIT_STORE.hasCredentials()) {
+        onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction::BOOKORBIT_SYNC);
+      } else {
+        pauseReadingPaceTimer("bookorbit_settings");
+        startActivityForResult(std::make_unique<BookOrbitSettingsActivity>(renderer, mappedInput),
+                               [this](const ActivityResult&) {
+                                 resumeReadingPaceTimer("bookorbit_settings_return");
+                                 saveGlobalSettingsPreservingBookOverrides();
+                               });
+      }
+      break;
     case CrossPointSettings::LONG_MENU_MARK_FINISHED: {
       const bool newCompleted = !stats.isCompleted;
       setBookCompleted(newCompleted);
@@ -3328,6 +3399,9 @@ bool EpubReaderActivity::executeShortPowerButtonAction() {
     case CrossPointSettings::SHORT_PWRBTN::SYNC_PROGRESS:
       executeReaderQuickAction(CrossPointSettings::LONG_MENU_SYNC_PROGRESS);
       return true;
+    case CrossPointSettings::SHORT_PWRBTN::BOOKORBIT_SYNC:
+      executeReaderQuickAction(CrossPointSettings::LONG_MENU_BOOKORBIT_SYNC);
+      return true;
     case CrossPointSettings::SHORT_PWRBTN::MARK_FINISHED:
       executeReaderQuickAction(CrossPointSettings::LONG_MENU_MARK_FINISHED);
       return true;
@@ -3418,6 +3492,10 @@ bool EpubReaderActivity::executeLongPowerButtonAction() {
     case CrossPointSettings::SHORT_PWRBTN::SYNC_PROGRESS:
       mappedInput.suppressNextPowerConfirmRelease();
       executeReaderQuickAction(CrossPointSettings::LONG_MENU_SYNC_PROGRESS);
+      return true;
+    case CrossPointSettings::SHORT_PWRBTN::BOOKORBIT_SYNC:
+      mappedInput.suppressNextPowerConfirmRelease();
+      executeReaderQuickAction(CrossPointSettings::LONG_MENU_BOOKORBIT_SYNC);
       return true;
     case CrossPointSettings::SHORT_PWRBTN::MARK_FINISHED:
       executeReaderQuickAction(CrossPointSettings::LONG_MENU_MARK_FINISHED);

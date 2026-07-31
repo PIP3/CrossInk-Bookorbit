@@ -7,6 +7,7 @@ inline bool isPowerButtonActionAvailableOutsideReader(const CrossPointSettings::
     case CrossPointSettings::SHORT_PWRBTN::SLEEP:
     case CrossPointSettings::SHORT_PWRBTN::FORCE_REFRESH:
     case CrossPointSettings::SHORT_PWRBTN::SYNC_PROGRESS:
+    case CrossPointSettings::SHORT_PWRBTN::BOOKORBIT_SYNC:
     case CrossPointSettings::SHORT_PWRBTN::SCREENSHOT:
     case CrossPointSettings::SHORT_PWRBTN::FILE_TRANSFER:
     case CrossPointSettings::SHORT_PWRBTN::CALIBRE_WIRELESS:
