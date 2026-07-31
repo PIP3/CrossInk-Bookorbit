@@ -1,158 +1,84 @@
-> **This is a personal fork of [CrossPoint Reader](https://github.com/crosspoint-reader/crosspoint-reader)** with a focus on improved fonts and minimal reading stats.
+> **This is a personal fork of [CrossInk](https://github.com/uxjulia/CrossInk)** that adds [BookOrbit](https://github.com/bookorbit/bookorbit) integration: reading-progress sync and a catalog browser for downloading books straight from your own BookOrbit server.
+
+Everything else — fonts, themes, reader features, reading stats, controls, the web server — comes from CrossInk unchanged. See the [upstream README](https://github.com/uxjulia/CrossInk#readme) for those, and the [docs](./docs/) folder in this repository for the detailed guides.
+
+**Note**: like upstream, this firmware runs on both the Xteink X3 and X4.
+
+---
 
 ## What's different in this fork
 
-My goal with this fork was to maintain the core Crosspoint firmware while integrating my preferred typography and some lightweight reading statistics. I’ve focused on keeping the underlying system stable while layering in a few "nice-to-have" features and UI refinements along the way.
+- **BookOrbit progress sync** — sync your reading position with a self-hosted BookOrbit server, independently of (and alongside) KOReader Sync.
+- **BookOrbit catalog browser** — browse your server's library on the device and download EPUBs over WiFi, including by author and by series.
+- **Offline shortcuts to your own books** — "On device" and "In progress" categories that open a book directly, without touching the network.
 
-<table>
-  <tr>
-    <td align="center">
-      <img src="./docs/images/bitter-small-15-margin.jpg" alt="Font: Bitter, Size: 12 pt, Margin: 15" /><br/>
-      <em>Font: Bitter, Size: 12 pt, Margin: 15</em>
-    </td>
-    <td align="center">
-      <img src="./docs/images/reading-stats.jpg" alt="Reading Stats with custom front button mapping shown" /><br/>
-      <em>Reading Stats with custom front button mapping shown</em>
-    </td>
-  </tr>
-</table>
+BookOrbit exposes a KOReader-compatible sync API, so this fork talks to it the same way the official BookOrbit KOReader plugin does. Your BookOrbit server must be recent enough to serve the KOReader plugin endpoints under `{server}/api/v1/koreader` — including `plugin/catalog/*` for the catalog browser.
 
 ---
 
-**Note**: This firmware is confirmed to be working on both the X3 and X4.
+## Setting up your BookOrbit account
 
-### Highlights
+1. On the device, go to **Settings → System → BookOrbit Sync**.
+2. Fill in **Username**, **Password** and **Server URL**. The URL accepts a bare hostname (`books.example.com`); `https://` is assumed, and a pasted `/api/v1` or `/api/v1/koreader` suffix is stripped for you.
+3. Choose **Authenticate**. The device connects to WiFi and validates the credentials against your server. You should see *Successfully authenticated!*
 
-- New reader fonts: Lexend Deca and Bitter.
-- Unicode emoji and miscellaneous symbols support (a limited subset).
-- Adjusted font sizes: 8 pt, 9 pt, 10 pt, 12 pt, 14 pt, 16 pt, 18 pt, and 20 pt. See [Font Build Variants](./docs/font-build-variants.md) for more details.
-- Added ~~strikethrough~~ support.
-- Made <u>underlines</u> thicker for better visibility.
-- Added a custom `Minimal` theme and sleep screen option for the minimalists out there.
-- Added a custom `Dashboard` theme and sleep screen option for reading stats enthusiasts.
-- Added support for `<hr>` section breaks.
-- Added support for "redaction" style rendering.
-- Added improved support for tables with simple markup.
-- Added ability to add bookmarks.
-- Added ability to remap front buttons that only applies in the reader.
-- Added Bionic Reading and Guide Dots as optional reader modes.
-- Added Force Paragraph Indents for books that render as one giant wall of text.
-- Added ability to pin a sleep image as a favorite. The favorited image will always be displayed when your sleep settings are set to `Custom` or `Cover + Custom` (when no cover is available).
-- Added more in-reader control remapping options for side buttons, short power button clicks, and long-press menu actions.
-- Added ability to mark a book as finished from the in-book menu. A pop-up will also display once 99% of the book is reached. This status allows tracking of total books read.
-- Added ability to move finished books to "Read" folder.
-- In-book menu to quickly adjust reader options without having to exit the book.
-- Reading stats: total books read, total reading time, number of sessions, pages turned, average session time, pages turned per minute. You can also set your reading stats as your sleep screen.
-- All-time reading stats [syncing](./docs/reading-stats-sync.md) between two CrossInk devices.
-- Reading [progress sync](./docs/nearby-position-sync.md) between two CrossInk devices.
-- Added customizable Auto Page Turn Interval (anything between 5-120 seconds).
-- Added ability to view Recent Books as a 3x3 grid view.
-- To view a more detailed list for each version, visit the [releases](https://github.com/uxjulia/CrossInk/releases) page to read release notes.
+Credentials live on the SD card in `/.crosspoint/bookorbit.json`, obfuscated with the device's hardware MAC — the same scheme CrossInk uses for KOReader credentials. KOReader Sync keeps its own separate credentials and server, so you can use both providers at once.
 
----
+## Syncing reading progress
 
-### Reader Fonts
+Open a book, then **Menu → Bookmarks tab → BookOrbit Sync**. The device compares the position stored on the server with your local one — chapter, page, percentage and the device name that last uploaded — and offers two choices:
 
-The default fonts have been replaced with Lexend Deca and Bitter. These fonts have been chosen specifically to improve reading fluency and e-ink performance. These 'sturdier' typefaces feature uniform stroke weights and open geometries, allowing the X4/X3 to render crisp, high-contrast text with font-aliasing on while significantly reducing ghosting and artifacts.
+- **Apply remote progress** — jump to the position from your other reader.
+- **Upload local progress** — publish your current position to the server.
 
-- [Lexend Deca](https://fonts.google.com/specimen/Lexend+Deca) - A research-backed sans-serif typeface designed to improve reading fluency. Lexend was engineered based on the theory that reading issues are often a design problem (visual crowding) rather than a cognitive one.
-- [Bitter](https://fonts.google.com/specimen/Bitter) - A "contemporary" slab serif typeface for text, it is specially designed for comfortably reading on digital screens. The consistent stroke weight of Bitter helps it render particularly well on e-ink devices. The medium weight has been chosen specifically for improved rendering on the X4/X3.
+The option matching the furthest-read position is preselected. If the server has no progress for the book yet, you are offered a straight upload.
 
-The UI now uses [Inter](https://fonts.google.com/specimen/Inter) as the display font which has improved readability at smaller sizes.
+BookOrbit identifies books by the binary partial-MD5 hash of the EPUB file (the same "Binary" matching KOReader offers), so the **same EPUB file** has to be present on both readers for positions to pair up. A book downloaded from your BookOrbit catalog is the exact file your server knows about, so it matches automatically.
 
-### Emojis and Misc Glyphs
+### Syncing without opening the menu
 
-- Support for a limited set of Unicode [Emoticons](https://unicode-explorer.com/b/1F600) and [Miscellaneous Symbols](https://unicode-explorer.com/b/2600) using [Noto Emoji](https://fonts.google.com/noto/specimen/Noto+Emoji) and [Noto Sans Symbols](https://fonts.google.com/noto/specimen/Noto+Sans+Symbols) font.
+**Settings → Controls** lets you bind *BookOrbit Sync* to the power button (short or long press) or to a long press on Menu or Back. The action also works outside the reader: it syncs the book you last had open, or opens the BookOrbit settings if no account is configured yet.
 
----
+## Browsing and downloading from the catalog
 
-### Font Sizes
+Reach the catalog from **Settings → System → BookOrbit Sync → Browse Catalog**, or from the **BookOrbit** entry in the home menu (it appears once an account is configured).
 
-There are 2 available build variants to choose from due to build size constraints: `tiny`, and `xlarge`.
+The root list contains:
 
-See [Font Build Variants](./docs/font-build-variants.md) for the full point-size and emoji-support matrix.
+| Entry | What it shows |
+| --- | --- |
+| Recently added / Continue reading / All books | Your server's own sections |
+| **Authors** / **Series** | Paged lists with a book count per entry; pick one to see its books (series are listed in series order) |
+| **Search** | Free-text search of your library |
+| **On device** | Every EPUB already in the SD card root and the `/Read` folder — works offline |
+| **In progress** | Recent books you haven't finished yet — works offline |
 
----
+In a server book list, **Confirm** downloads the book to the SD card root as `Title - Author.epub`. A download that gets interrupted resumes automatically on retry, and **Back** cancels it. Books already present on the device are marked with a dot at the end of the line, so you can tell at a glance what is worth downloading.
 
-### Reader features
+In **On device** and **In progress**, Confirm opens the book in the reader instead of downloading it.
 
-Reader Options, Bionic Reading, Guide Dots, Force Paragraph Indents, reading stats, and finished-book behavior are documented in [Reader Features](./docs/reader-features.md).
-
-### Custom button actions
-
-CrossInk adds configurable button shortcuts.
-
-See [Controls](./docs/controls.md) for the full action list and defaults.
-
----
-
-## Tips for the best reading experience
-
-CrossInk runs on an ESP32-C3 with limited RAM, so very large folders or complex EPUBs can be slower than they would be on a phone, tablet, or desktop app.
-
-- Keep folders under about 200 files. For the smoothest browsing, aim for 50-100 files per folder.
-- Having 1000+ books on the SD card is fine if they are split into smaller folders, such as by author, series, genre, or read/unread status.
-- Avoid putting every book in the SD card root. The file browser has to scan and sort the current folder before it can show it.
-- Text-first EPUBs are the best fit. Large image-heavy EPUBs, scanned books, comics, and omnibus files with thousands of sections may load slowly or fail under memory pressure.
-- As a rough target, EPUBs under 20 MB tend to work the best. Files over 50 MB may still work, but they are more likely to be slow or memory-sensitive, especially if they contain many large images.
-- If an EPUB is unusually slow, try [optimizing](./docs/webserver.md#epub-optimization) it with the built-in web optimizer (via File Transfer) before copying it to the SD card: remove unused high-resolution images, split very large omnibus files, and avoid embedding multiple full font families when possible.
-- Use a reliable SD card and leave some free space. CrossInk stores settings, reading progress, cache files, stats, and generated book data on the card.
-
-## Development Device Simulator
-
-The [device simulator](https://github.com/uxjulia/crosspoint-simulator) renders the e-ink display in an SDL2 window so firmware changes can be sanity-checked without flashing hardware.
-
-See [Simulator](./docs/simulator.md) for setup, platform notes, keyboard controls, and cache tips.
+> If the catalog reports *"BookOrbit sent an unexpected reply"*, the server answered but not with the catalog API — usually a BookOrbit version without the KOReader catalog endpoints, a wrong server URL, or a reverse proxy/SSO layer intercepting `/api/v1/koreader/plugin/*`.
 
 ---
 
 ## Installation
 
-Download a `firmware-*.bin` from the [releases page](https://github.com/uxjulia/CrossInk/releases), then flash it with the web installer or command line.
+Download a `firmware-*.bin` from **this repository's** [releases page](https://github.com/agosez/CrossInk-Bookorbit/releases) — not upstream's, which does not include BookOrbit support — then flash it with the web installer or the command line. See [Installation](./docs/installation.md) for step-by-step flashing and revert instructions, and [Font Build Variants](./docs/font-build-variants.md) to pick between the `tiny` and `xlarge` builds.
 
-See [Installation](./docs/installation.md) for step-by-step flashing and revert instructions.
+Once this firmware is installed, **Settings → System → Check for Updates** resolves against this fork's releases, so later versions arrive over the air. Devices running upstream CrossInk will not see these releases: the first install has to be done by USB or SD card.
 
----
+## Development
+
+```sh
+pio run -e tiny --target upload   # build and flash over USB-C
+```
+
+See [Getting Started](./docs/contributing/getting-started.md) for prerequisites and validation commands, and [Testing and Debugging](./docs/contributing/testing-debugging.md) for serial logging and static analysis. `AGENTS.md` holds the repository's engineering conventions.
 
 ## Documentation
 
-- [User Guide](./USER_GUIDE.md)
-- [Installation](./docs/installation.md)
-- [Font Build Variants](./docs/font-build-variants.md)
-- [Reader Features](./docs/reader-features.md)
-- [Controls](./docs/controls.md)
-- [Simulator](./docs/simulator.md)
-- [Data Cache](./docs/data-cache.md)
-- [Web server usage](./docs/webserver.md)
-- [Web server endpoints](./docs/webserver-endpoints.md)
+- [User Guide](./USER_GUIDE.md) and [Reader Features](./docs/reader-features.md)
+- [Controls](./docs/controls.md) — full button action list
+- [Installation](./docs/installation.md) and [Font Build Variants](./docs/font-build-variants.md)
+- [Data Cache](./docs/data-cache.md) and [File Formats](./docs/file-formats.md)
 - [Common issues](./docs/troubleshooting.md)
-- [Project scope](./SCOPE.md)
-- [Contributing docs](./docs/contributing/README.md)
-
----
-
-## Development quick start
-
-CrossInk uses PlatformIO for building and flashing firmware.
-
-See [Getting Started](./docs/contributing/getting-started.md) for prerequisites, clone setup, hooks, and validation commands.
-
-### Build / flash / monitor
-
-Connect your Xteink X4 or X3 via USB-C and run:
-
-```sh
-pio run -e tiny --target upload
-```
-
-Replace `tiny` with another build variant if needed. See [Font Build Variants](./docs/font-build-variants.md).
-
-See [Testing and Debugging](./docs/contributing/testing-debugging.md) for serial logging, simulator checks, static analysis, and bug-report guidance.
-
----
-
-## Internals
-
-The ESP32-C3 has about 380 KB of usable RAM, so CrossInk stores reusable book and device data on the SD card instead of rebuilding everything in memory.
-
-See [Data Cache](./docs/data-cache.md) for the `.crosspoint` layout and [File Formats](./docs/file-formats.md) for binary cache details.
