@@ -362,21 +362,22 @@ void ClipSelectionActivity::applyWordStyle(const WordRef& word, const ClipWordSt
   const int drawX = word.x + skipX;
   const int drawW = word.w - skipX;
   if (drawW <= 0) return;
+  const bool foregroundBlack = ReaderUtils::readerForegroundBlack();
 
   const bool fill = (style.flags & ClipWordStyle::FILL) != 0;
   if (fill) {
-    // Add the dither's black pixels without clearing the word's existing black
-    // pixels. This preserves the snapshotted glyphs and avoids a font-cache
+    // Add foreground-colored dither without clearing the word's existing pixels.
+    // This preserves the snapshotted glyphs and avoids a font-cache
     // allocation/redraw on every selection step.
     for (int y = word.y; y < word.y + word.h; y += 2) {
       for (int x = drawX; x < drawX + drawW; x += 2) {
-        renderer.drawPixel(x, y, true);
+        renderer.drawPixel(x, y, foregroundBlack);
       }
     }
   }
 
   if ((style.flags & ClipWordStyle::BORDER) != 0) {
-    renderer.drawRect(drawX, word.y, drawW, word.h, true);
+    renderer.drawRect(drawX, word.y, drawW, word.h, foregroundBlack);
   }
 }
 
