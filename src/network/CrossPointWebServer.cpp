@@ -10,6 +10,7 @@
 #include <HalGPIO.h>
 #include <HalStorage.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <WiFi.h>
 #include <esp_efuse.h>
 #include <esp_efuse_table.h>
@@ -645,13 +646,32 @@ void CrossPointWebServer::handleFileListData() const {
 
   server->setContentLength(CONTENT_LENGTH_UNKNOWN);
   server->send(200, "application/json", "");
-  server->sendContent("[");
+
+  // This response runs on the web-server task, so a TCP-sized heap buffer is
+  // safer than adding 1.4KB to its stack. Allocation is fallible and retains
+  // the old per-entry path as a low-memory fallback.
+  constexpr size_t BATCH_CAPACITY = 1400;
+  auto batch = makeUniqueNoThrow<char[]>(BATCH_CAPACITY);
+  size_t batchLen = 0;
+  const auto flushBatch = [&]() {
+    if (batchLen == 0) return;
+    server->sendContent(batch.get(), batchLen);
+    batchLen = 0;
+  };
+
   char output[512];
   constexpr size_t outputSize = sizeof(output);
   bool seenFirst = false;
   JsonDocument doc;
 
-  scanFiles(currentPath.c_str(), [this, &output, &doc, seenFirst](const FileInfo& info) mutable {
+  if (batch) {
+    batch[batchLen++] = '[';
+  } else {
+    LOG_ERR("WEB", "OOM: file list batch buffer; falling back to per-entry sends");
+    server->sendContent("[");
+  }
+
+  scanFiles(currentPath.c_str(), [&](const FileInfo& info) {
     doc.clear();
     doc["name"] = info.name;
     doc["size"] = info.size;
@@ -665,14 +685,26 @@ void CrossPointWebServer::handleFileListData() const {
       return;
     }
 
-    if (seenFirst) {
-      server->sendContent(",");
+    const size_t required = written + (seenFirst ? 1 : 0);
+    if (batch) {
+      if (batchLen + required > BATCH_CAPACITY) flushBatch();
+      if (seenFirst) batch[batchLen++] = ',';
+      memcpy(batch.get() + batchLen, output, written);
+      batchLen += written;
     } else {
-      seenFirst = true;
+      if (seenFirst) server->sendContent(",");
+      server->sendContent(output);
     }
-    server->sendContent(output);
+    seenFirst = true;
   });
-  server->sendContent("]");
+
+  if (batch) {
+    if (batchLen + 1 > BATCH_CAPACITY) flushBatch();
+    batch[batchLen++] = ']';
+    flushBatch();
+  } else {
+    server->sendContent("]");
+  }
   // End of streamed response, empty chunk to signal client
   server->sendContent("");
 }
