@@ -140,6 +140,13 @@ Project: Open-source e-reader firmware for Xteink X4 (ESP32-C3).
 
 When new features are added or issues are fixed, make sure to add an entry to `CHANGELOG.md` with the user-facing description of the change. Types of changes should have their own section.
 
+This repository is a fork of CrossInk and its changelog records **only this fork's own
+changes**. Do not copy or restore upstream CrossInk entries into it; upstream keeps its
+own changelog, which the file links to. Each release section names the CrossInk version
+it is based on (`Based on CrossInk vX.Y.Z.`), so update that line whenever the fork is
+rebased on a newer upstream release. When an upstream sync conflicts on `CHANGELOG.md`,
+the resolution is to keep this fork's version and drop the incoming upstream sections.
+
 ### Changelog Guiding Principles
 
 - Changelogs are _for humans_, not machines.
