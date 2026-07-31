@@ -608,13 +608,11 @@ bool Dictionary::binarySearchCspt(HalFile& cspt, const char* target, uint32_t id
   return true;
 }
 
-bool Dictionary::binarySearchQuickIndex(HalFile& qidx, HalFile& idx, const char* target, uint32_t idxFileSize,
-                                        uint32_t* startByte, uint32_t* endByte) {
-  const QidxHeader header = readQidxHeader(qidx, idxFileSize);
-  if (!header.valid) return false;
-
+bool Dictionary::binarySearchQuickIndex(HalFile& qidx, HalFile& idx, const uint32_t sampleCount, const char* target,
+                                        const uint32_t idxFileSize, uint32_t* startByte, uint32_t* endByte) {
+  if (sampleCount == 0) return false;
   uint32_t lo = 0;
-  uint32_t hi = header.sampleCount - 1;
+  uint32_t hi = sampleCount - 1;
   while (lo < hi) {
     const uint32_t mid = lo + (hi - lo + 1) / 2;
     uint32_t offset = 0;
@@ -630,7 +628,7 @@ bool Dictionary::binarySearchQuickIndex(HalFile& qidx, HalFile& idx, const char*
   }
 
   if (!readQidxOffset(qidx, lo, startByte) || *startByte >= idxFileSize) return false;
-  if (lo + 1 < header.sampleCount) {
+  if (lo + 1 < sampleCount) {
     if (!readQidxOffset(qidx, lo + 1, endByte) || *endByte <= *startByte || *endByte > idxFileSize) return false;
   } else {
     *endByte = idxFileSize;
@@ -786,94 +784,148 @@ DictDefinitionSlice Dictionary::resolveDefinitionSlice(const DictLocation& locat
 // Locate (index search only — no definition read, zero RAM growth)
 // ---------------------------------------------------------------------------
 
-DictLocation Dictionary::locate(const std::string& word, const DictLookupCallbacks& cbs, const char* cachePath) {
-  DictLocation result;
-  result.folderPath = readDictPath(cachePath);
-  if (result.folderPath.empty()) return result;
+bool Dictionary::openLookupSession(LookupSession& session, const char* cachePath) {
+  session.folderPath = readDictPath(cachePath);
+  if (session.folderPath.empty()) return false;
 
-  DictPaths dp(result.folderPath);
-  const DictInfo info = readInfo(result.folderPath.c_str());
-  const uint8_t suffixBytes = idxEntrySuffixBytes(info);
-  HalFile idx;
-  if (!Storage.openFileForRead("DICT", dp.idx().c_str(), idx)) {
-    LOG_ERR("DICT", "Failed to open index %s", dp.idx().c_str());
-    result.readError = true;
-    return result;
+  const DictPaths paths(session.folderPath);
+  session.suffixBytes = idxEntrySuffixBytes(readInfo(session.folderPath.c_str()));
+  const std::string idxPath = paths.idx();
+  if (!Storage.openFileForRead("DICT", idxPath.c_str(), session.idx)) {
+    LOG_ERR("DICT", "Failed to open index %s", idxPath.c_str());
+    return false;
   }
+  session.idxFileSize = static_cast<uint32_t>(session.idx.fileSize());
 
-  const uint32_t idxFileSize = static_cast<uint32_t>(idx.fileSize());
-  uint32_t startByte = 0;
-  uint32_t endByte = idxFileSize;
-
-  bool boundsResolved = false;
-  if (suffixBytes == 8) {
-    boundsResolved = resolveScanBounds(dp.idxOftCspt().c_str(), dp.idxOft().c_str(), idx, idxFileSize, word.c_str(),
-                                       &startByte, &endByte, true);
-  }
-  if (!boundsResolved) {
-    HalFile qidx;
-    if (Storage.openFileForRead("DICT", dp.quickIdx().c_str(), qidx)) {
-      uint32_t qidxStart = 0;
-      uint32_t qidxEnd = idxFileSize;
-      if (binarySearchQuickIndex(qidx, idx, word.c_str(), idxFileSize, &qidxStart, &qidxEnd)) {
-        startByte = qidxStart;
-        endByte = qidxEnd;
+  if (session.suffixBytes == 8) {
+    const std::string csptPath = paths.idxOftCspt();
+    if (Storage.openFileForRead("DICT", csptPath.c_str(), session.accelerator)) {
+      uint8_t header[CSPT_HEADER_SIZE];
+      const bool headerRead = session.accelerator.seekSet(0) &&
+                              session.accelerator.read(header, sizeof(header)) == static_cast<int>(sizeof(header));
+      uint32_t entryCount = 0;
+      if (headerRead) memcpy(&entryCount, header + 8, sizeof(entryCount));
+      const uint8_t prefixLen = headerRead ? header[5] : 0;
+      const uint64_t requiredSize = static_cast<uint64_t>(CSPT_HEADER_SIZE) +
+                                    static_cast<uint64_t>(entryCount) * (static_cast<uint32_t>(prefixLen) + 4U);
+      if (headerRead && memcmp(header, CSPT_MAGIC, sizeof(CSPT_MAGIC)) == 0 && header[4] == CSPT_VERSION &&
+          prefixLen > 0 && prefixLen <= 128 && requiredSize <= session.accelerator.fileSize()) {
+        session.acceleratorKind = LookupAccelerator::Cspt;
+        return true;
       }
-      qidx.close();
+      session.accelerator.close();
     }
+
+    const std::string oftPath = paths.idxOft();
+    if (Storage.openFileForRead("DICT", oftPath.c_str(), session.accelerator)) {
+      session.acceleratorKind = LookupAccelerator::Oft;
+      return true;
+    }
+  }
+
+  const std::string qidxPath = paths.quickIdx();
+  if (Storage.openFileForRead("DICT", qidxPath.c_str(), session.accelerator)) {
+    const QidxHeader header = readQidxHeader(session.accelerator, session.idxFileSize);
+    if (header.valid && header.sampleCount > 0) {
+      session.qidxSampleCount = header.sampleCount;
+      session.acceleratorKind = LookupAccelerator::QuickIndex;
+    } else {
+      session.accelerator.close();
+    }
+  }
+  return true;
+}
+
+void Dictionary::closeLookupSession(LookupSession& session) {
+  session.accelerator.close();
+  session.idx.close();
+}
+
+DictLocation Dictionary::locateInSession(LookupSession& session, const std::string& word,
+                                         const DictLookupCallbacks& cbs) {
+  DictLocation result;
+  uint32_t startByte = 0;
+  uint32_t endByte = session.idxFileSize;
+
+  switch (session.acceleratorKind) {
+    case LookupAccelerator::Cspt:
+      if (!binarySearchCspt(session.accelerator, word.c_str(), session.idxFileSize, &startByte, &endByte, true)) {
+        // A structurally valid but unreadable .cspt should degrade to .oft for
+        // this and later probes, matching the single-locate fallback order.
+        session.accelerator.close();
+        const std::string oftPath = DictPaths(session.folderPath).idxOft();
+        if (Storage.openFileForRead("DICT", oftPath.c_str(), session.accelerator)) {
+          session.acceleratorKind = LookupAccelerator::Oft;
+          findPageBounds(session.accelerator, session.idx, session.idxFileSize, word.c_str(), &startByte, &endByte,
+                         true);
+        } else {
+          session.acceleratorKind = LookupAccelerator::None;
+        }
+      }
+      break;
+    case LookupAccelerator::Oft:
+      findPageBounds(session.accelerator, session.idx, session.idxFileSize, word.c_str(), &startByte, &endByte, true);
+      break;
+    case LookupAccelerator::QuickIndex:
+      if (!binarySearchQuickIndex(session.accelerator, session.idx, session.qidxSampleCount, word.c_str(),
+                                  session.idxFileSize, &startByte, &endByte)) {
+        session.accelerator.close();
+        session.acceleratorKind = LookupAccelerator::None;
+        startByte = 0;
+        endByte = session.idxFileSize;
+      }
+      break;
+    case LookupAccelerator::None:
+      break;
   }
 
   if (cbs.onProgress) cbs.onProgress(cbs.ctx, 70);
 
-  if (!idx.seekSet(startByte)) {
-    LOG_ERR("DICT", "Failed to seek index %s", dp.idx().c_str());
+  if (!session.idx.seekSet(startByte)) {
+    LOG_ERR("DICT", "Failed to seek index %s", session.folderPath.c_str());
     result.readError = true;
-    idx.close();
     return result;
   }
 
   // The start bound deliberately precedes any case-equivalent samples. Scan
   // until lexical order passes the target so a match exactly on the next
   // accelerator boundary is included too.
-  while (static_cast<uint32_t>(idx.position()) < idxFileSize) {
+  while (static_cast<uint32_t>(session.idx.position()) < session.idxFileSize) {
     if (cbs.shouldCancel && cbs.shouldCancel(cbs.ctx)) {
-      idx.close();
       return result;
     }
 
-    int len = readWordInto(idx, wordBuf, sizeof(wordBuf));
+    int len = readWordInto(session.idx, wordBuf, sizeof(wordBuf));
     if (len < 0) {
       // The loop already guards normal EOF with position() < fileSize(), so a
       // failed read here means a truncated or unreadable index.
-      LOG_ERR("DICT", "Failed reading index entry from %s", dp.idx().c_str());
+      LOG_ERR("DICT", "Failed reading index entry from %s", session.folderPath.c_str());
       result.readError = true;
       break;
     }
 
     uint8_t suffix[12];
-    if (idx.read(suffix, suffixBytes) != suffixBytes) {
-      LOG_ERR("DICT", "Truncated index entry in %s", dp.idx().c_str());
+    if (session.idx.read(suffix, session.suffixBytes) != session.suffixBytes) {
+      LOG_ERR("DICT", "Truncated index entry in %s", session.folderPath.c_str());
       result.readError = true;
       break;
     }
 
     int cmp = cistrcmp(wordBuf, word.c_str());
     if (cmp == 0) {
-      if (suffixBytes == 12 && readBigEndian32(suffix) != 0) {
+      if (session.suffixBytes == 12 && readBigEndian32(suffix) != 0) {
         LOG_ERR("DICT", "64-bit dictionary offset exceeds supported range");
-        idx.close();
         return result;
       }
-      const uint8_t sizeOffset = suffixBytes == 12 ? 8 : 4;
+      const uint8_t sizeOffset = session.suffixBytes == 12 ? 8 : 4;
       const bool exactCase = strcmp(wordBuf, word.c_str()) == 0;
       if (!result.found || exactCase) {
         result.headword.assign(wordBuf, static_cast<size_t>(len));
-        result.offset = suffixBytes == 12 ? readBigEndian32(suffix + 4) : readBigEndian32(suffix);
+        result.offset = session.suffixBytes == 12 ? readBigEndian32(suffix + 4) : readBigEndian32(suffix);
         result.size = readBigEndian32(suffix + sizeOffset);
         result.found = true;
       }
       if (exactCase) {
-        idx.close();
         if (cbs.onProgress) cbs.onProgress(cbs.ctx, 100);
         return result;
       }
@@ -883,8 +935,48 @@ DictLocation Dictionary::locate(const std::string& word, const DictLookupCallbac
     if (cmp > 0) break;
   }
 
-  idx.close();
   if (cbs.onProgress) cbs.onProgress(cbs.ctx, 100);
+  return result;
+}
+
+DictLocation Dictionary::locate(const std::string& word, const DictLookupCallbacks& cbs, const char* cachePath) {
+  LookupSession session;
+  if (!openLookupSession(session, cachePath)) {
+    DictLocation result;
+    result.readError = !session.folderPath.empty();
+    return result;
+  }
+  DictLocation result = locateInSession(session, word, cbs);
+  result.folderPath = session.folderPath;
+  closeLookupSession(session);
+  return result;
+}
+
+DictLocation Dictionary::locateWithStemVariants(const std::string& word, bool* matchedStem,
+                                                const DictLookupCallbacks& cbs, const char* cachePath) {
+  if (matchedStem) *matchedStem = false;
+  LookupSession session;
+  if (!openLookupSession(session, cachePath)) {
+    DictLocation result;
+    result.readError = !session.folderPath.empty();
+    return result;
+  }
+
+  DictLocation result = locateInSession(session, word, cbs);
+  if (!result.found && !result.readError && !(cbs.shouldCancel && cbs.shouldCancel(cbs.ctx))) {
+    const auto stems = getStemVariants(word);
+    for (const auto& stem : stems) {
+      result = locateInSession(session, stem, cbs);
+      if (result.found) {
+        if (matchedStem) *matchedStem = true;
+        break;
+      }
+      if (result.readError || (cbs.shouldCancel && cbs.shouldCancel(cbs.ctx))) break;
+    }
+  }
+
+  result.folderPath = session.folderPath;
+  closeLookupSession(session);
   return result;
 }
 

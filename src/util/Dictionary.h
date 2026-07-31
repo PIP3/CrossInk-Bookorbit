@@ -119,6 +119,11 @@ class Dictionary {
   static DictLocation locate(const std::string& word, const DictLookupCallbacks& cbs = {},
                              const char* cachePath = nullptr);
 
+  // Search the exact word and then its stem variants while reusing one open
+  // index/accelerator session. matchedStem is set only when a variant matched.
+  static DictLocation locateWithStemVariants(const std::string& word, bool* matchedStem,
+                                             const DictLookupCallbacks& cbs = {}, const char* cachePath = nullptr);
+
   // Look up word in .idx (via .idx.oft if present). Returns definition or empty string.
   static std::string lookup(const std::string& word, const DictLookupCallbacks& cbs = {},
                             const char* cachePath = nullptr);
@@ -150,6 +155,22 @@ class Dictionary {
   // putting a 256-byte array on the stack in every caller (and 512B peak when nested).
   static char wordBuf[256];
 
+  enum class LookupAccelerator : uint8_t { None, Cspt, Oft, QuickIndex };
+
+  struct LookupSession {
+    std::string folderPath;
+    HalFile idx;
+    HalFile accelerator;
+    uint32_t idxFileSize = 0;
+    uint32_t qidxSampleCount = 0;
+    uint8_t suffixBytes = 8;
+    LookupAccelerator acceleratorKind = LookupAccelerator::None;
+  };
+
+  static bool openLookupSession(LookupSession& session, const char* cachePath);
+  static void closeLookupSession(LookupSession& session);
+  static DictLocation locateInSession(LookupSession& session, const std::string& word, const DictLookupCallbacks& cbs);
+
   // Read a null-terminated word from an open file into buf (max bufSize-1 chars).
   // Returns the number of characters read (excluding null), or -1 on error.
   static int readWordInto(HalFile& file, char* buf, size_t bufSize);
@@ -172,8 +193,8 @@ class Dictionary {
                                uint32_t* endByte, bool startBeforeCaseMatches);
 
   // Binary search a device-generated sampled .qidx sidecar.
-  static bool binarySearchQuickIndex(HalFile& qidx, HalFile& idx, const char* target, uint32_t idxFileSize,
-                                     uint32_t* startByte, uint32_t* endByte);
+  static bool binarySearchQuickIndex(HalFile& qidx, HalFile& idx, uint32_t sampleCount, const char* target,
+                                     uint32_t idxFileSize, uint32_t* startByte, uint32_t* endByte);
 
   static bool buildQuickIndex(HalFile& idx, uint32_t idxFileSize, uint8_t suffixBytes, const char* qidxPath,
                               const DictLookupCallbacks& cbs);

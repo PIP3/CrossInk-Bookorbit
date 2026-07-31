@@ -136,7 +136,9 @@ class DictionaryLookupController {
   LookupState state = LookupState::Idle;
   FoundStatus foundStatus = FoundStatus::Direct;
   bool nextIsSuggestion = false;
+  bool lookupMatchedStem = false;
   bool recordHistory_ = true;
+  std::string preparedQuickIndexPath;
 
   std::string lookupWord;
   std::string foundWord;

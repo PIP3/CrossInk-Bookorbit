@@ -64,6 +64,7 @@ void DictionaryLookupController::startLookup(const std::string& word, bool recor
   lookupCancelled = false;
   lookupCancelRequested = false;
   lookupReadError = false;
+  lookupMatchedStem = false;
   recordHistory_ = recordHistory;
   state = LookupState::LookingUp;
   // CLEANUP: on Auto-only commit, delete only this line (gate below stays — it's the Auto check)
@@ -107,7 +108,8 @@ DictionaryLookupController::LookupEvent DictionaryLookupController::handleInput(
 
       if (foundLocation.found) {
         foundWord = std::move(foundLocation.headword);
-        foundStatus = nextIsSuggestion ? FoundStatus::Suggestion : FoundStatus::Direct;
+        foundStatus =
+            nextIsSuggestion ? FoundStatus::Suggestion : (lookupMatchedStem ? FoundStatus::Stem : FoundStatus::Direct);
         nextIsSuggestion = false;
         return LookupEvent::FoundDefinition;
       }
@@ -115,23 +117,6 @@ DictionaryLookupController::LookupEvent DictionaryLookupController::handleInput(
       if (lookupReadError) {
         showReadError();
         return LookupEvent::None;
-      }
-
-      // Try stem variants (locate only — no definition loaded into RAM)
-      auto stems = Dictionary::getStemVariants(lookupWord);
-      for (const auto& stem : stems) {
-        auto loc = Dictionary::locate(stem, {}, cachePath.c_str());
-        if (loc.found) {
-          foundWord = std::move(loc.headword);
-          foundLocation = std::move(loc);
-          foundStatus = nextIsSuggestion ? FoundStatus::Suggestion : FoundStatus::Stem;
-          nextIsSuggestion = false;
-          return LookupEvent::FoundDefinition;
-        }
-        if (loc.readError) {
-          showReadError();
-          return LookupEvent::None;
-        }
       }
 
       // Try alt forms
@@ -415,16 +400,18 @@ void DictionaryLookupController::runLookup() {
   cbs.ctx = this;
   cbs.onProgress = &DictionaryLookupController::progressCallback;
   cbs.shouldCancel = &DictionaryLookupController::cancelCallback;
-  // A missing/unwritable sidecar is non-fatal: locate() retains its full-index
-  // scan fallback, so an unprepared dictionary always remains usable.
-  Dictionary::prepareQuickIndex(cbs, cachePath.c_str());
+  const std::string dictionaryPath = Dictionary::readDictPath(cachePath.c_str());
+  if (!dictionaryPath.empty() && dictionaryPath != preparedQuickIndexPath &&
+      Dictionary::prepareQuickIndex(cbs, cachePath.c_str())) {
+    preparedQuickIndexPath = dictionaryPath;
+  }
   if (lookupCancelRequested) {
     lookupCancelled = true;
     lookupDone = true;
     logDictionaryLookupTaskEnd();
     return;
   }
-  foundLocation = Dictionary::locate(lookupWord, cbs, cachePath.c_str());
+  foundLocation = Dictionary::locateWithStemVariants(lookupWord, &lookupMatchedStem, cbs, cachePath.c_str());
   lookupReadError = foundLocation.readError;
   lookupCancelled = lookupCancelRequested.load();
   lookupDone = true;
