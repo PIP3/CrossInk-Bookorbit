@@ -445,26 +445,25 @@ bool isCjkIdeograph(const uint32_t cp) {
 
 void ParsedText::reserveTokenCapacity(const size_t additionalTokens) {
   const size_t requiredSize = words.size() + additionalTokens;
-  if (words.capacity() >= requiredSize && wordStyles.capacity() >= requiredSize &&
-      wordContinues.capacity() >= requiredSize && wordNoSpaceBefore.capacity() >= requiredSize &&
-      wordBionicBoundary.capacity() >= requiredSize && wordGuideDotBefore.capacity() >= requiredSize &&
-      wordBackgroundBlack.capacity() >= requiredSize && (rubyTexts.empty() || rubyTexts.capacity() >= requiredSize)) {
+  if (wordStyles.capacity() >= requiredSize && wordContinues.capacity() >= requiredSize &&
+      wordNoSpaceBefore.capacity() >= requiredSize && wordBionicBoundary.capacity() >= requiredSize &&
+      wordGuideDotBefore.capacity() >= requiredSize && wordBackgroundBlack.capacity() >= requiredSize) {
     return;
   }
 
-  size_t newCapacity = words.capacity() == 0 ? INITIAL_TOKEN_VECTOR_RESERVE : words.capacity() * 2;
+  size_t newCapacity = wordStyles.capacity() == 0 ? INITIAL_TOKEN_VECTOR_RESERVE : wordStyles.capacity() * 2;
   if (newCapacity < requiredSize) {
     newCapacity = requiredSize;
   }
 
-  words.reserve(newCapacity);
+  // words and rubyTexts are deques: their chunked growth avoids the large
+  // contiguous reallocations this method is intended to prevent.
   wordStyles.reserve(newCapacity);
   wordContinues.reserve(newCapacity);
   wordNoSpaceBefore.reserve(newCapacity);
   wordBionicBoundary.reserve(newCapacity);
   wordGuideDotBefore.reserve(newCapacity);
   wordBackgroundBlack.reserve(newCapacity);
-  if (!rubyTexts.empty()) rubyTexts.reserve(newCapacity);
 }
 
 void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle, const bool underline,
@@ -650,9 +649,8 @@ void ParsedText::setRubyGroupAt(size_t startIndex, size_t count, const std::stri
 }
 
 void ParsedText::ensureRubyCapacity() {
-  if (rubyTexts.capacity() < words.capacity()) {
-    rubyTexts.reserve(words.capacity());
-  }
+  // No-op: rubyTexts is a std::deque (chunked growth, no capacity to pre-reserve
+  // and no large contiguous reallocation to avoid). Kept for call-site stability.
 }
 
 int ParsedText::resolveFirstLineIndent(const bool isFirstLine, const GfxRenderer& renderer, const int fontId) const {

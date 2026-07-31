@@ -2,6 +2,7 @@
 
 #include <EpdFontFamily.h>
 
+#include <deque>
 #include <functional>
 #include <memory>
 #include <string>
@@ -16,14 +17,23 @@ template <typename T>
 class ArenaVector;
 
 class ParsedText {
-  std::vector<std::string> words;
+  // words/rubyTexts are std::deque, not std::vector: a paragraph can hold thousands
+  // of tokens (CJK splits every character), and a vector grows by reallocating its
+  // whole element array into one contiguous block (32 B/std::string -> 64-128 KB at
+  // a few thousand tokens). On the ESP32-C3 that single large contiguous request
+  // fails under a fragmented, BLE-resident heap and the throwing operator new
+  // abort()s the firmware (fresh-open CJK crash). A deque grows in fixed ~512 B nodes
+  // (largest contiguous alloc stays ~2 KB regardless of token count), so it never
+  // triggers that. The per-token parallel arrays below stay vectors: 1 byte / 1 bit
+  // each, they never approach the contiguous-block ceiling.
+  std::deque<std::string> words;
   std::vector<EpdFontFamily::Style> wordStyles;
   std::vector<bool> wordContinues;          // true = word attaches to previous (no space before it)
   std::vector<bool> wordNoSpaceBefore;      // true = may break before token, but no synthetic space when joined
   std::vector<uint8_t> wordBionicBoundary;  // UTF-8 byte offset where the regular suffix starts; 0 = no split
   std::vector<bool> wordGuideDotBefore;     // true = virtual guide dot belongs between previous token and this one
   std::vector<uint8_t> wordBackgroundBlack;
-  std::vector<std::string> rubyTexts;
+  std::deque<std::string> rubyTexts;
   bool extraParagraphSpacing;
   bool forceParagraphIndents;
   bool hyphenationEnabled;
