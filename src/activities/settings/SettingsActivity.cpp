@@ -990,8 +990,10 @@ void SettingsActivity::toggleCurrentSetting() {
 
   syncQuickResumeTimeoutForSleepScreen(sleepScreenChanged, quickResumeTimeoutChanged);
   SETTINGS.saveToFile();
-  rebuildSettingsLists();
+  // Apply this while `setting` still refers to the current list; rebuilding
+  // below clears its backing vector and invalidates the reference.
   applyUiSettingChange(setting.valuePtr);
+  rebuildSettingsLists();
   selectedSettingIndex = std::min(selectedSettingIndex, settingsCount);
 }
 
