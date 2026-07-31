@@ -1,4 +1,4 @@
-## [Unreleased]
+## [v1.4.1+bookorbit.1] - 2026-07-31
 
 ### Added
 
