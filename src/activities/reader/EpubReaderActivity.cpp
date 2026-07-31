@@ -45,6 +45,7 @@
 #include "ProgressMapper.h"
 #include "QrDisplayActivity.h"
 #include "ReaderUtils.h"
+#include "activities/home/RecentBookProgress.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
 #include "SilentRestart.h"
@@ -5239,6 +5240,9 @@ bool EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageC
     lastSavedSpineIndex = spineIndex;
     lastSavedPage = currentPage;
     lastSavedPageCount = pageCount;
+    // Home reads this lightweight value instead of opening the EPUB, so keep it
+    // in sync with the position file written above.
+    RecentBookProgress::saveCachedEpubPercent(*epub, spineIndex, currentPage, pageCount);
   }
   return saved;
 }
