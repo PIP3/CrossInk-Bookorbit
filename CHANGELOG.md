@@ -36,6 +36,7 @@
 
 ### Fixed
 
+- Wi-Fi File Transfer directory browsing no longer risks rebooting X3/X4 devices when memory is tight.
 - EPUB clipping selection markers now remain visible in dark mode.
 - EPUB clipping highlights now re-match their saved text after font or layout changes, even when the page count stays the same.
 - Book-specific Embedded Style choices now apply before EPUB stylesheet caches are loaded.
