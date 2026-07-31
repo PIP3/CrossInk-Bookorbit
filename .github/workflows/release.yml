@@ -57,6 +57,12 @@ jobs:
           VERSION="${VERSION#v}"
           echo "RELEASE_VERSION=$VERSION" >> "$GITHUB_ENV"
           sed -i "s/crossink_version = .*/crossink_version = $VERSION/" platformio.ini
+          # scripts/rename_firmware.py sanitises the version for artifact names:
+          # anything outside [A-Za-z0-9._-] becomes '-'. Semver build metadata such
+          # as "+bookorbit.1" therefore reaches the filename as "-bookorbit.1", so
+          # the asset paths below must use the sanitised form, not $VERSION.
+          ASSET_VERSION="$(printf '%s' "$VERSION" | sed 's/[^A-Za-z0-9._-]\{1,\}/-/g')"
+          echo "ASSET_VERSION=$ASSET_VERSION" >> "$GITHUB_ENV"
 
       - name: Build CrossInk
         env:
@@ -70,5 +76,5 @@ jobs:
           target_commitish: ${{ github.sha }}
           draft: true
           files: |
-            .pio/build/tiny/firmware-tiny-v${{ env.RELEASE_VERSION }}.bin
-            .pio/build/xlarge/firmware-xlarge-v${{ env.RELEASE_VERSION }}.bin
+            .pio/build/tiny/firmware-tiny-v${{ env.ASSET_VERSION }}.bin
+            .pio/build/xlarge/firmware-xlarge-v${{ env.ASSET_VERSION }}.bin
