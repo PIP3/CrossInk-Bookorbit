@@ -287,10 +287,12 @@ RTC_NOINIT_ATTR uint32_t silentRebootPayload;
 RTC_NOINIT_ATTR uint32_t silentReaderPageBuildMagic;
 RTC_NOINIT_ATTR uint32_t silentReaderPageBuildBookHash;
 RTC_NOINIT_ATTR uint32_t silentReaderPageBuildPackedTarget;
+RTC_NOINIT_ATTR uint32_t silentReaderPageBuildFlags;
 constexpr uint32_t SILENT_REBOOT_MAGIC = 0xC1EAB007;
 constexpr uint32_t SILENT_REBOOT_TARGET_HOME = 0;
 constexpr uint32_t SILENT_REBOOT_TARGET_READER = 1;
 constexpr uint32_t SILENT_READER_PAGE_BUILD_MAGIC = 0xC1EAB017;
+constexpr uint32_t SILENT_READER_PAGE_BUILD_AUTO_TURN = 1U << 0;
 constexpr uint32_t NETWORK_RENDER_TASK_STACK_BYTES = 8192;
 constexpr uint32_t READER_RENDER_TASK_STACK_BYTES = 16384;
 
@@ -327,6 +329,7 @@ static void clearSilentRestartReaderPageBuild() {
   silentReaderPageBuildMagic = 0;
   silentReaderPageBuildBookHash = 0;
   silentReaderPageBuildPackedTarget = 0;
+  silentReaderPageBuildFlags = 0;
 }
 
 void silentRestart() {
@@ -345,24 +348,29 @@ void silentRestart() {
   restartWithSilentToken();
 }
 
-void armSilentRestartReaderPageBuild(const std::string& bookPath, const uint16_t spineIndex,
-                                     const uint16_t targetPage) {
+void armSilentRestartReaderPageBuild(const std::string& bookPath, const uint16_t spineIndex, const uint16_t targetPage,
+                                     const bool autoPageTurnActive) {
   silentReaderPageBuildBookHash = silentRestartBookHash(bookPath);
   silentReaderPageBuildPackedTarget = (static_cast<uint32_t>(spineIndex) << 16) | targetPage;
+  silentReaderPageBuildFlags = autoPageTurnActive ? SILENT_READER_PAGE_BUILD_AUTO_TURN : 0;
   silentReaderPageBuildMagic = SILENT_READER_PAGE_BUILD_MAGIC;
 }
 
-bool consumeSilentRestartReaderPageBuild(const std::string& bookPath, uint16_t& spineIndex, uint16_t& targetPage) {
+bool consumeSilentRestartReaderPageBuild(const std::string& bookPath, uint16_t& spineIndex, uint16_t& targetPage,
+                                         bool& autoPageTurnActive) {
   const bool matches = silentReaderPageBuildMagic == SILENT_READER_PAGE_BUILD_MAGIC &&
                        silentReaderPageBuildBookHash == silentRestartBookHash(bookPath);
   const uint32_t packedTarget = silentReaderPageBuildPackedTarget;
+  const uint32_t flags = silentReaderPageBuildFlags;
   clearSilentRestartReaderPageBuild();
   if (!matches) {
+    autoPageTurnActive = false;
     return false;
   }
 
   spineIndex = static_cast<uint16_t>(packedTarget >> 16);
   targetPage = static_cast<uint16_t>(packedTarget & 0xFFFFU);
+  autoPageTurnActive = (flags & SILENT_READER_PAGE_BUILD_AUTO_TURN) != 0;
   return true;
 }
 

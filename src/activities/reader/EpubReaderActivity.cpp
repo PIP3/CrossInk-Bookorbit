@@ -1901,8 +1901,9 @@ void EpubReaderActivity::onEnter() {
 
   uint16_t restartPageBuildSpine = UINT16_MAX;
   uint16_t restartPageBuildTarget = 0;
-  const bool resumePageBuildAfterRestart =
-      consumeSilentRestartReaderPageBuild(epub->getPath(), restartPageBuildSpine, restartPageBuildTarget);
+  bool resumeAutoPageTurnAfterRestart = false;
+  const bool resumePageBuildAfterRestart = consumeSilentRestartReaderPageBuild(
+      epub->getPath(), restartPageBuildSpine, restartPageBuildTarget, resumeAutoPageTurnAfterRestart);
 
   if (APP_STATE.pendingBookmarkSpine != UINT16_MAX && APP_STATE.pendingBookmarkProgress >= 0.0f) {
     // Resume from a bookmark selected on the Home screen
@@ -1952,6 +1953,13 @@ void EpubReaderActivity::onEnter() {
       lowMemoryPartialRestartAttempted = true;
       LOG_INF("ERS", "Resuming low-memory partial build after silent restart: spine=%u target=%u",
               restartPageBuildSpine, restartPageBuildTarget);
+      if (resumeAutoPageTurnAfterRestart) {
+        const uint16_t seconds = getAutoPageTurnIntervalSeconds();
+        lastPageTurnTime = millis();
+        pageTurnDuration = static_cast<unsigned long>(seconds) * 1000UL;
+        automaticPageTurnActive = true;
+        LOG_INF("ERS", "Restored Auto Page Turn after silent restart: interval=%u", seconds);
+      }
     } else {
       LOG_ERR("ERS", "Ignoring invalid low-memory partial restart target: spine=%u target=%u", restartPageBuildSpine,
               restartPageBuildTarget);
@@ -4830,7 +4838,8 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       LOG_ERR("ERS", "Low heap at partial watermark; silent restarting to retry page %u (spine=%d)", targetPage,
               currentSpineIndex);
       if (saveProgress(currentSpineIndex, lastReadablePage, estimatedPages)) {
-        armSilentRestartReaderPageBuild(epub->getPath(), static_cast<uint16_t>(currentSpineIndex), targetPage);
+        armSilentRestartReaderPageBuild(epub->getPath(), static_cast<uint16_t>(currentSpineIndex), targetPage,
+                                        automaticPageTurnActive);
         lowMemoryPartialRestartAttempted = true;
         silentRestartToReader();
         return;

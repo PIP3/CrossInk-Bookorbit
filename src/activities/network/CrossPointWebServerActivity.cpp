@@ -18,6 +18,7 @@
 #include "activities/ActivityManager.h"
 #include "activities/network/CalibreConnectActivity.h"
 #include "components/CompactHeader.h"
+#include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/QrUtils.h"
@@ -353,6 +354,12 @@ void CrossPointWebServerActivity::stopWebServer() {
 }
 
 void CrossPointWebServerActivity::loop() {
+  if ((state == WebServerActivityState::SERVER_RUNNING || state == WebServerActivityState::AP_STARTING) &&
+      exitRequested()) {
+    exitToOrigin();
+    return;
+  }
+
   // Handle different states
   if (state == WebServerActivityState::SERVER_RUNNING) {
     // Handle DNS requests for captive portal (AP mode only)
@@ -433,19 +440,13 @@ void CrossPointWebServerActivity::loop() {
           // for back button checking
           mappedInput.update();
           // Check for exit button inside loop for responsiveness
-          if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+          if (exitRequested()) {
             exitToOrigin();
             return;
           }
         }
       }
       lastHandleClientTime = millis();
-    }
-
-    // Handle exit on Back button (also check outside loop)
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      exitToOrigin();
-      return;
     }
   }
 }
@@ -455,17 +456,12 @@ void CrossPointWebServerActivity::render(RenderLock&&) {
   // Subactivities handle their own rendering
   if (state == WebServerActivityState::SERVER_RUNNING || state == WebServerActivityState::AP_STARTING) {
     renderer.clearScreen();
-    const auto& metrics = UITheme::getInstance().getMetrics();
-    const auto pageWidth = renderer.getScreenWidth();
     const auto pageHeight = renderer.getScreenHeight();
 
-    CompactHeader::drawTitle(renderer, isApMode ? tr(STR_HOTSPOT_MODE) : tr(STR_FILE_TRANSFER));
-
     if (state == WebServerActivityState::SERVER_RUNNING) {
-      GUI.drawSubHeader(renderer, Rect{0, CompactHeader::contentTop(metrics), pageWidth, metrics.tabBarHeight},
-                        connectedSSID.c_str());
       renderServerRunning();
     } else {
+      renderHeader();
       const auto height = renderer.getLineHeight(UI_10_FONT_ID);
       const auto top = (pageHeight - height) / 2;
       renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_STARTING_HOTSPOT));
@@ -474,11 +470,25 @@ void CrossPointWebServerActivity::render(RenderLock&&) {
   }
 }
 
+void CrossPointWebServerActivity::renderHeader() const {
+  const char* title = isApMode ? tr(STR_HOTSPOT_MODE) : tr(STR_FILE_TRANSFER);
+  if (mappedInput.hasTouchHardware()) {
+    TouchHeaderBackButton::drawCompact(renderer, title);
+  } else {
+    CompactHeader::drawTitle(renderer, title);
+  }
+}
+
+bool CrossPointWebServerActivity::exitRequested() const {
+  return TouchHeaderBackButton::wasTapped(mappedInput, renderer) ||
+         mappedInput.wasPressed(MappedInputManager::Button::Back);
+}
+
 void CrossPointWebServerActivity::renderServerRunning() const {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
 
-  CompactHeader::drawTitle(renderer, isApMode ? tr(STR_HOTSPOT_MODE) : tr(STR_FILE_TRANSFER));
+  renderHeader();
   const int subHeaderTop = CompactHeader::contentTop(metrics);
   GUI.drawSubHeader(renderer, Rect{0, subHeaderTop, pageWidth, metrics.tabBarHeight}, connectedSSID.c_str());
 

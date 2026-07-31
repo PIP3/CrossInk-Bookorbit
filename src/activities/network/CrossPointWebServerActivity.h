@@ -58,7 +58,9 @@ class CrossPointWebServerActivity final : public Activity {
   int lastWifiBars = 0;
 
   void renderServerRunning() const;
+  void renderHeader() const;
   void renderWifiIndicator(int subHeaderTop) const;
+  bool exitRequested() const;
 
   void onNetworkModeSelected(NetworkMode mode);
   void onWifiSelectionComplete(bool connected);
