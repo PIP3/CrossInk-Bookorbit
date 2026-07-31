@@ -94,6 +94,10 @@ class EpubReaderActivity final : public Activity {
   unsigned long lastPageTurnTime = 0UL;
   unsigned long pageTurnDuration = 0UL;
   unsigned long pageShownAtMs = 0UL;
+  unsigned long lastRenderCompleteMs = 0UL;
+  int idlePrewarmSpine = -1;
+  int idlePrewarmPage = -1;
+  int idlePrewarmFontId = 0;
   bool paceSampleWarmupPending = true;
   uint32_t sessionPaceSampleSeconds = 0;
   uint16_t sessionPaceSampleCount = 0;
@@ -363,6 +367,7 @@ class EpubReaderActivity final : public Activity {
             static_cast<int>(section->pageCount) < section->currentPage + BUILD_WINDOW_AHEAD);
   }
   bool backgroundSectionBuildHasHeap();
+  void idlePrewarmNextPage();
   bool skipLoopDelay() override { return sectionBuildWantsTick() && !backgroundBuildPausedForLowMemory; }
   bool isReaderActivity() const override { return true; }
   bool canSnapshotForSleepOverlay() const override { return true; }

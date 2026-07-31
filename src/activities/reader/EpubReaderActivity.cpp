@@ -82,6 +82,9 @@ constexpr char READER_SETTINGS_FILE_NAME[] = "/reader_settings.bin";
 constexpr char BALANCED_SECTION_CACHE_SUFFIX[] = "_balanced";
 constexpr char LIGHT_SECTION_CACHE_SUFFIX[] = "_light";
 constexpr unsigned long RENDER_MODE_TOAST_MS = 1500UL;
+constexpr unsigned long IDLE_SD_FONT_PREWARM_DELAY_MS = 400UL;
+constexpr uint32_t IDLE_SD_FONT_PREWARM_MIN_FREE = 64U * 1024U;
+constexpr uint32_t IDLE_SD_FONT_PREWARM_MIN_MAX_ALLOC = 40U * 1024U;
 constexpr unsigned long MIN_READING_STATS_PAGE_MS = 2000UL;
 constexpr uint32_t MIN_READING_PACE_SAMPLE_SECONDS = 2;
 constexpr uint16_t MIN_STORED_TIME_LEFT_PACE_SAMPLE_COUNT = 3;
@@ -2167,6 +2170,50 @@ bool EpubReaderActivity::backgroundSectionBuildHasHeap() {
   return false;
 }
 
+void EpubReaderActivity::idlePrewarmNextPage() {
+  if (!section || section->isBuilding() || activeFootnotePreview || automaticPageTurnActive ||
+      !renderer.hasFrameBuffer() || RenderLock::peek() || lastRenderCompleteMs == 0 ||
+      (millis() - lastRenderCompleteMs) < IDLE_SD_FONT_PREWARM_DELAY_MS) {
+    return;
+  }
+
+  const int renderFontId = activeSectionFontId != 0 ? activeSectionFontId : SETTINGS.getReaderFontId();
+  if (!renderer.isSdCardFont(renderFontId) ||
+      (idlePrewarmSpine == currentSpineIndex && idlePrewarmPage == section->currentPage &&
+       idlePrewarmFontId == renderFontId)) {
+    return;
+  }
+
+  const int nextPage = section->currentPage + 1;
+  if (nextPage >= section->pageCount) {
+    return;
+  }
+
+  const auto heap = MemoryBudget::snapshot();
+  if (!MemoryBudget::hasHeap(heap, IDLE_SD_FONT_PREWARM_MIN_FREE, IDLE_SD_FONT_PREWARM_MIN_MAX_ALLOC)) {
+    return;
+  }
+
+  // The scan loads one serialized page and may grow persistent SD-font mini buffers. Keep it
+  // behind both free-heap and contiguous-block gates, and run it once per visible page/font.
+  idlePrewarmSpine = currentSpineIndex;
+  idlePrewarmPage = section->currentPage;
+  idlePrewarmFontId = renderFontId;
+
+  RenderLock lock(*this);
+  auto page = section->loadPage(nextPage);
+  if (!page) {
+    LOG_DBG("ERS", "Idle SD font prewarm skipped: failed to load spine=%d page=%d", currentSpineIndex, nextPage);
+    return;
+  }
+
+  const unsigned long startedAt = millis();
+  auto scope = renderer.getFontCacheManager()->createPrewarmScope();
+  page->renderText(renderer, renderFontId, 0, 0);
+  scope.endScanAndPrewarm();
+  LOG_DBG("ERS", "Idle SD font prewarm: spine=%d page=%d in %lums", currentSpineIndex, nextPage, millis() - startedAt);
+}
+
 void EpubReaderActivity::loop() {
   if (!epub) {
     // Should never happen
@@ -2606,6 +2653,7 @@ void EpubReaderActivity::loop() {
     heldLongPowerTurn = true;
   }
   if (!prevTriggered && !nextTriggered) {
+    idlePrewarmNextPage();
     return;
   }
 
@@ -4996,6 +5044,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     const int renderFontId = activeSectionFontId != 0 ? activeSectionFontId : SETTINGS.getReaderFontId();
     renderContents(std::move(p), renderFontId, layout.marginTop, layout.marginRight, layout.marginBottom,
                    layout.marginLeft);
+    lastRenderCompleteMs = millis();
     const uint8_t heapShapeRedrawStages = pendingHeapShapeReaderRedrawStages.exchange(0, std::memory_order_relaxed);
     if (heapShapeRedrawStages & HEAP_SHAPE_REDRAW_CLIP) {
       MemoryBudget::logHeapShape("clip.reader_redrawn");

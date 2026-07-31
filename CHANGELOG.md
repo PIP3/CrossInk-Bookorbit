@@ -16,6 +16,7 @@
 
 ### Changed
 
+- EPUB page turns using SD-card fonts now prepare the next page's glyphs while the reader is idle.
 - Firmware releases now identify the supported device type: X3/X4 or Seeed Sticky.
 - Image-heavy EPUB chapters now index by reading image headers first and extract each full image only when its page is shown.
 - EPUB books with repeated byte-identical stylesheets now parse each unique stylesheet only once when building caches.
