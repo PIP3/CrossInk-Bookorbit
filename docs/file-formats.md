@@ -147,7 +147,7 @@ struct ReaderSettingsBin {
 
 ## `/.crosspoint/clippings/<bookType>_<crc32(path)>.bin`
 
-### Version 1
+### Versions 1-3
 
 Clipping files store the per-book EPUB clipping list used by the reader. A
 saved clipping is also what CrossInk renders as an in-reader highlight; there is
@@ -165,8 +165,8 @@ example:
 
 Binary layout:
 
-- `[0]` version (`1`)
-- `[1-2]` clipping count (`uint16_t` LE, maximum `64`)
+- `[0]` version (`1`, `2`, or current version `3`)
+- `[1-2]` clipping count (`uint16_t` LE, maximum `256`)
 - book title (`String`)
 - book author (`String`)
 - book path (`String`)
@@ -180,14 +180,26 @@ Binary layout:
   - `wordCount` (`uint16_t` LE)
   - `paragraphIndex` (`uint16_t` LE, `UINT16_MAX` when unavailable)
   - `timestamp` (`uint32_t` LE, seconds since firmware boot when saved)
+  - version 3 only: reader layout signature (`uint32_t` LE; font, spacing,
+    viewport, and other section-layout inputs)
   - `chapterTitle` (`char[48]`, null-terminated/truncated)
-  - selected text (`String`, truncated to `512` bytes for the in-app store)
+  - version 1: selected text (`String`, truncated to `512` bytes for the
+    in-app store)
+  - versions 2-3: selected-text length (`uint16_t` LE) followed by that many
+    UTF-8 bytes (maximum `512`)
 
 CrossInk uses the stored spine/page/paragraph fields as anchors, then searches
 near that location for the stored clipping text after relayout. This is similar
 to keeping both a DOM position and a text quote in a web app: the numeric
 position gives a fast starting point, while the text makes jumps and highlights
 survive font, layout, or page-count changes when possible.
+
+Version 3 records which reader layout produced the numeric page/word anchor.
+When that signature differs, CrossInk ignores the stale numeric range and
+matches the saved text instead, including when both layouts happen to have the
+same total page count. Versions 1-2 retain their numeric fast path until the
+reader sees a relayout, when it stamps the previously active layout before
+rebuilding.
 
 Creating a clipping also appends a Kindle-style export entry to
 `/My Clippings.txt` on the SD-card root. That text export can keep up to `2000`

@@ -45,11 +45,11 @@
 #include "ProgressMapper.h"
 #include "QrDisplayActivity.h"
 #include "ReaderUtils.h"
-#include "activities/home/RecentBookProgress.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
 #include "SilentRestart.h"
 #include "WordRef.h"
+#include "activities/home/RecentBookProgress.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "activities/util/IntervalSelectionActivity.h"
 #include "clippings/ClippingsManager.h"
@@ -2118,9 +2118,7 @@ void EpubReaderActivity::openReaderMenu() {
           if (clipping->settingsChanged) {
             ensureReaderSdFontLoaded(renderer);
             RenderLock lock(*this);
-            if (section) {
-              cacheCurrentSectionPosition();
-            }
+            prepareCurrentSectionForRelayout();
             section.reset();  // Force re-layout with changed reader settings
           }
           handleClippingJump(*clipping);
@@ -2139,9 +2137,7 @@ void EpubReaderActivity::openReaderMenu() {
         if (menu->settingsChanged) {
           ensureReaderSdFontLoaded(renderer);
           RenderLock lock(*this);
-          if (section) {
-            cacheCurrentSectionPosition();
-          }
+          prepareCurrentSectionForRelayout();
           section.reset();  // Force re-layout with changed reader settings
         }
         resumeReadingPaceTimer("reader_menu_return");
@@ -3408,9 +3404,7 @@ void EpubReaderActivity::reindexCurrentSection() {
   {
     RenderLock lock(*this);
     GUI.drawPopup(renderer, tr(STR_INDEXING));
-    if (section) {
-      cacheCurrentSectionPosition();
-    }
+    prepareCurrentSectionForRelayout();
     section.reset();
     // The newly selected SD font can still hold glyph and advance-table caches from
     // the previous page. Release them before the relayout so the parser gets a
@@ -3465,6 +3459,7 @@ void EpubReaderActivity::startClipSelection() {
   std::string chapterTitle;
   std::unique_ptr<ClipAdvanceCollector> advanceCollector;
   uint8_t clipAdvanceCapLoggedStyles = 0;
+  uint32_t clippingLayoutSignature = activeSectionLayoutSignature;
 
   MemoryBudget::logHeapShape("clip.before");
 
@@ -3683,52 +3678,52 @@ void EpubReaderActivity::startClipSelection() {
     requestUpdate();
     return;
   }
-  startActivityForResult(
-      std::move(clipSelection), [this, bookTitle = std::move(bookTitle), author = std::move(author),
-                                 chapterTitle = std::move(chapterTitle)](const ActivityResult& result) {
-        MemoryBudget::logHeapShape("clip.child_destroyed");
-        const char* clippingFeedback = nullptr;
-        bool saved = false;
-        if (!result.isCancelled) {
-          const auto& clip = std::get<ClippingResult>(result.data);
-          if (!clip.text.empty()) {
-            const size_t clippingIndex = CLIPPINGS.clippingCount();
-            const auto addResult =
-                CLIPPINGS.addClipping(static_cast<uint16_t>(currentSpineIndex), clip.sectionPage, clip.endSectionPage,
-                                      clip.sectionPageCount, clip.startPageWordIndex, clip.endPageWordIndex,
-                                      clip.wordCount, chapterTitle.c_str(), clip.paragraphIndex, clip.text);
-            bool exported = false;
-            if (addResult == ClippingStore::AddResult::Added) {
-              exported = ClippingsManager::saveClipping(bookTitle, author, chapterTitle,
-                                                        static_cast<int>(clip.sectionPage) + 1, clip.text);
-              if (!exported && !CLIPPINGS.removeClippingAt(clippingIndex)) {
-                LOG_ERR("CLIP", "Failed to roll back clipping after export failure");
-              }
-            }
-            saved = addResult == ClippingStore::AddResult::Added && exported;
-            clippingFeedback = addResult == ClippingStore::AddResult::LimitReached ? tr(STR_CLIPPING_LIMIT_REACHED)
-                               : saved                                             ? tr(STR_CLIPPING_SAVED)
-                                                                                   : tr(STR_CLIPPING_FAILED);
+  startActivityForResult(std::move(clipSelection), [this, bookTitle = std::move(bookTitle), author = std::move(author),
+                                                    chapterTitle = std::move(chapterTitle),
+                                                    clippingLayoutSignature](const ActivityResult& result) {
+    MemoryBudget::logHeapShape("clip.child_destroyed");
+    const char* clippingFeedback = nullptr;
+    bool saved = false;
+    if (!result.isCancelled) {
+      const auto& clip = std::get<ClippingResult>(result.data);
+      if (!clip.text.empty()) {
+        const size_t clippingIndex = CLIPPINGS.clippingCount();
+        const auto addResult =
+            CLIPPINGS.addClipping(static_cast<uint16_t>(currentSpineIndex), clip.sectionPage, clip.endSectionPage,
+                                  clip.sectionPageCount, clip.startPageWordIndex, clip.endPageWordIndex, clip.wordCount,
+                                  chapterTitle.c_str(), clip.paragraphIndex, clip.text, clippingLayoutSignature);
+        bool exported = false;
+        if (addResult == ClippingStore::AddResult::Added) {
+          exported = ClippingsManager::saveClipping(bookTitle, author, chapterTitle,
+                                                    static_cast<int>(clip.sectionPage) + 1, clip.text);
+          if (!exported && !CLIPPINGS.removeClippingAt(clippingIndex)) {
+            LOG_ERR("CLIP", "Failed to roll back clipping after export failure");
           }
         }
-        resumeReadingPaceTimer("clip_selection_return");
-        releaseReaderSdFontCachesForLowMemory(renderer, "CLIP", "clipping selection exit");
-        MemoryBudget::logHeapShape("clip.after_font_release");
-        pendingHeapShapeReaderRedrawStages.fetch_or(HEAP_SHAPE_REDRAW_CLIP, std::memory_order_relaxed);
-        if (clippingFeedback) {
+        saved = addResult == ClippingStore::AddResult::Added && exported;
+        clippingFeedback = addResult == ClippingStore::AddResult::LimitReached ? tr(STR_CLIPPING_LIMIT_REACHED)
+                           : saved                                             ? tr(STR_CLIPPING_SAVED)
+                                                                               : tr(STR_CLIPPING_FAILED);
+      }
+    }
+    resumeReadingPaceTimer("clip_selection_return");
+    releaseReaderSdFontCachesForLowMemory(renderer, "CLIP", "clipping selection exit");
+    MemoryBudget::logHeapShape("clip.after_font_release");
+    pendingHeapShapeReaderRedrawStages.fetch_or(HEAP_SHAPE_REDRAW_CLIP, std::memory_order_relaxed);
+    if (clippingFeedback) {
 #if CROSSINK_APP_CAP_TOUCH
-          if (saved && mappedInput.hasTouchHardware() && requestUpdateAndWait() != RequestUpdateResult::Rendered) {
-            LOG_ERR("CLIP", "Could not render saved highlight before clipping toast");
-          }
+      if (saved && mappedInput.hasTouchHardware() && requestUpdateAndWait() != RequestUpdateResult::Rendered) {
+        LOG_ERR("CLIP", "Could not render saved highlight before clipping toast");
+      }
 #endif
-          {
-            RenderLock lock(*this);
-            drawToast(renderer, clippingFeedback);
-          }
-          delay(1000);
-        }
-        requestUpdate();
-      });
+      {
+        RenderLock lock(*this);
+        drawToast(renderer, clippingFeedback);
+      }
+      delay(1000);
+    }
+    requestUpdate();
+  });
 }
 
 void EpubReaderActivity::resetReadingPaceData() {
@@ -4233,7 +4228,7 @@ void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
 
     // Preserve current reading position only when we need a live re-layout.
     if (rendererChanged && section) {
-      cacheCurrentSectionPosition();
+      prepareCurrentSectionForRelayout();
     }
 
     if (settingsChanged) {
@@ -4283,9 +4278,7 @@ void EpubReaderActivity::setAutoPageTurnIntervalSeconds(uint16_t seconds) {
   if (statusBarHeight == 0 || statusBarHeight == UITheme::getInstance().getProgressBarHeight()) {
     // Preserve current reading position so we can restore after reflow.
     RenderLock lock(*this);
-    if (section) {
-      cacheCurrentSectionPosition();
-    }
+    prepareCurrentSectionForRelayout();
     section.reset();
   }
 }
@@ -4470,12 +4463,14 @@ void EpubReaderActivity::render(RenderLock&& lock) {
                 fontId, ESP.getFreeHeap(), ESP.getMaxAllocHeap());
         return false;
       }
-      if (!section->loadSectionFile(readerRenderSpecForProfile(fontId, viewportWidth, viewportHeight,
-                                                               buildProfileForRenderMode(renderMode)))) {
+      const ReaderRenderSpec spec =
+          readerRenderSpecForProfile(fontId, viewportWidth, viewportHeight, buildProfileForRenderMode(renderMode));
+      if (!section->loadSectionFile(spec)) {
         section.reset();
         return false;
       }
       activeSectionFontId = fontId;
+      activeSectionLayoutSignature = readerRenderSpecSignature(spec);
       usedRenderMode = renderMode;
       return true;
     };
@@ -4535,6 +4530,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
         const SectionBuildOptions buildOptions{
             buildingFootnotePreview ? pendingFootnotePreviewAnchor.c_str() : nullptr,
             static_cast<uint16_t>(buildingFootnotePreview ? FOOTNOTE_PREVIEW_MAX_PAGES : 0)};
+        const ReaderRenderSpec spec = readerRenderSpecForProfile(fontId, viewportWidth, viewportHeight, profile);
         const bool needsFullBuild = fullSectionIndexing || buildingFootnotePreview || pendingPercentJump ||
                                     pendingClippingIndex != UINT16_MAX || pendingParagraphIndex != UINT16_MAX;
         bool buildSucceeded = false;
@@ -4542,9 +4538,8 @@ void EpubReaderActivity::render(RenderLock&& lock) {
           showIndexingPopup();
           {
             GfxRenderer::FrameBufferLoan loan(renderer);
-            buildSucceeded = section->createSectionFile(
-                readerRenderSpecForProfile(fontId, viewportWidth, viewportHeight, profile), popupFn,
-                &attemptImagesWereSuppressed, &attemptLayoutAbortedForLowMemory, buildOptions);
+            buildSucceeded = section->createSectionFile(spec, popupFn, &attemptImagesWereSuppressed,
+                                                        &attemptLayoutAbortedForLowMemory, buildOptions);
           }
         } else {
           const int target = pendingPageJump.has_value() ? *pendingPageJump : (nextPageNumber < 0 ? 0 : nextPageNumber);
@@ -4582,8 +4577,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
             bool started;
             {
               GfxRenderer::FrameBufferLoan loan(renderer);
-              started = section->startBuild(readerRenderSpecForProfile(fontId, viewportWidth, viewportHeight, profile),
-                                            buildOptions, [this] { showBuildPopup(); });
+              started = section->startBuild(spec, buildOptions, [this] { showBuildPopup(); });
             }
             if (started) {
               bool buildFailed = false;
@@ -4636,6 +4630,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
         layoutAbortedForLowMemory = attemptLayoutAbortedForLowMemory;
         if (buildSucceeded) {
           activeSectionFontId = fontId;
+          activeSectionLayoutSignature = readerRenderSpecSignature(spec);
           usedRenderMode = profile.renderMode;
           safeModeBuildSucceeded = profile.safeMode;
           LOG_DBG("ERS",
@@ -5353,6 +5348,14 @@ void EpubReaderActivity::cacheCurrentSectionPosition() {
   }
 }
 
+void EpubReaderActivity::prepareCurrentSectionForRelayout() {
+  if (!section) return;
+  cacheCurrentSectionPosition();
+  if (!CLIPPINGS.stampMissingLayoutSignature(activeSectionLayoutSignature)) {
+    LOG_ERR("CLIP", "Failed to stamp legacy clipping layout before relayout");
+  }
+}
+
 void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int fontId, const int orientedMarginTop,
                                         const int orientedMarginRight, const int orientedMarginBottom,
                                         const int orientedMarginLeft) {
@@ -5651,10 +5654,13 @@ void EpubReaderActivity::drawClippingHighlights(const Page& page, const int font
       continue;
     }
     ClippingPageMatch match;
+    const bool storedLayoutMatches =
+        canUseStoredRanges &&
+        clippingStoredRangeMatchesLayout(clipping, currentPageCount, activeSectionLayoutSignature);
     const bool matchedStoredRange =
-        canUseStoredRanges && findClippingStoredRangeOnPage(page, clipping, currentPage, currentPageCount, match);
-    const bool shouldSearchText = !canUseStoredRanges || clipping.pageCount != currentPageCount ||
-                                  (currentPage >= clipping.startPage && currentPage <= clipping.endPage);
+        storedLayoutMatches && findClippingStoredRangeOnPage(page, clipping, currentPage, currentPageCount, match);
+    const bool shouldSearchText =
+        !storedLayoutMatches || (currentPage >= clipping.startPage && currentPage <= clipping.endPage);
     bool matchedText = false;
     if (!matchedStoredRange && shouldSearchText) {
       clippingText.clear();
