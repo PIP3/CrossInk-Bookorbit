@@ -684,6 +684,8 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     add(SettingInfo::Enum(StrId::STR_CLOCK_FORMAT, &CrossPointSettings::clockFormat,
                           {StrId::STR_CLOCK_FORMAT_24H, StrId::STR_CLOCK_FORMAT_12H}, "clockFormat",
                           StrId::STR_CAT_SYSTEM));
+    add(SettingInfo::Toggle(StrId::STR_KEEP_CLOCK_IN_SLEEP, &CrossPointSettings::keepClockInSleep, "keepClockInSleep",
+                            StrId::STR_CAT_SYSTEM));
     // Persistence flag for NTP debounce. Resetting from the web UI forces a re-sync
     // on next WiFi connect, which is useful when crossing time zones.
     add(SettingInfo::Toggle(StrId::STR_CLOCK_SYNCED, &CrossPointSettings::clockHasBeenSynced, "clockHasBeenSynced",
@@ -910,9 +912,8 @@ inline std::vector<SettingInfo> buildGroupedDisplaySettingsList(const std::vecto
 
   displaySettings.push_back(SettingInfo::Submenu(StrId::STR_DISPLAY_SLEEP_SCREEN, SettingAction::DisplaySleepScreen));
   addDisplaySetting(StrId::STR_HIDE_BATTERY);
-  if (halClock.isAvailable()) {
-    addDisplaySetting(StrId::STR_HIDE_CLOCK);
-  }
+  // Shown on every board: without an RTC the clock reads the system clock instead.
+  addDisplaySetting(StrId::STR_HIDE_CLOCK);
   addDisplaySetting(StrId::STR_REFRESH_FREQ);
   addDisplaySetting(StrId::STR_UI_THEME);
   addDisplaySetting(StrId::STR_RECENT_BOOKS_VIEW);
@@ -963,10 +964,15 @@ inline std::vector<SettingInfo> buildSystemDeviceSettingsList(const std::vector<
   addSettingByName(settings, allSettings, StrId::STR_DEVICE_NAME);
   addSettingByName(settings, allSettings, StrId::STR_TIME_TO_SLEEP);
   settings.push_back(SettingInfo::Action(StrId::STR_LANGUAGE, SettingAction::Language));
-  if (halClock.isAvailable()) {
-    addSettingByName(settings, allSettings, StrId::STR_CLOCK_FORMAT);
-    addSettingByName(settings, allSettings, StrId::STR_CLOCK_UTC_OFFSET);
-    settings.push_back(SettingInfo::Action(StrId::STR_CLOCK_SYNC_NOW, SettingAction::ClockSync));
+  addSettingByName(settings, allSettings, StrId::STR_CLOCK_FORMAT);
+  addSettingByName(settings, allSettings, StrId::STR_CLOCK_UTC_OFFSET);
+  // Offered on both clock sources: it writes the RTC where there is one, and sets the
+  // system clock otherwise — useful there precisely because that clock drifts.
+  settings.push_back(SettingInfo::Action(StrId::STR_CLOCK_SYNC_NOW, SettingAction::ClockSync));
+  if (!halClock.isAvailable()) {
+    // Without a battery-backed RTC the displayed time comes from the system clock,
+    // which only survives sleep while the power latch is kept engaged.
+    addSettingByName(settings, allSettings, StrId::STR_KEEP_CLOCK_IN_SLEEP);
   }
   return settings;
 }

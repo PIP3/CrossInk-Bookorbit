@@ -1,6 +1,7 @@
 #include "SettingsActivity.h"
 
 #include <GfxRenderer.h>
+#include <HalClock.h>
 #include <Logging.h>
 
 #include <algorithm>
@@ -397,8 +398,34 @@ void SettingsActivity::openEnumOptionPicker(const SettingInfo& setting) {
     SETTINGS.saveToFile();
     rebuildSettingsLists();
     requestUpdate();
+    maybePromptKeepClockInSleep(selectedSetting);
   });
   requestUpdate();
+}
+
+void SettingsActivity::maybePromptKeepClockInSleep(const SettingInfo& changed) {
+  if (changed.valuePtr != &CrossPointSettings::hideClock) return;
+  // Only worth asking once the clock is actually visible somewhere, on a board with no
+  // RTC to carry the time across sleep, and only while the option is still off.
+  if (!SETTINGS.shouldShowClockInReader() && !SETTINGS.shouldShowClockOutsideReader()) return;
+  if (halClock.isAvailable() || SETTINGS.keepClockInSleep != 0) return;
+
+  startActivityForResult(std::make_unique<ConfirmationActivity>(renderer, mappedInput, tr(STR_CLOCK_SLEEP_PROMPT_TITLE),
+                                                                tr(STR_CLOCK_SLEEP_PROMPT_BODY)),
+                         [this](const ActivityResult& promptResult) {
+                           if (promptResult.isCancelled) {
+                             requestUpdate();
+                             return;
+                           }
+                           SETTINGS.keepClockInSleep = 1;
+                           SETTINGS.saveToFile();
+                           rebuildSettingsLists();
+                           // Point at the two settings that make the displayed time actually correct.
+                           startActivityForResult(std::make_unique<ConfirmationActivity>(
+                                                      renderer, mappedInput, tr(STR_CLOCK_SLEEP_ENABLED_TITLE),
+                                                      tr(STR_CLOCK_SLEEP_ENABLED_BODY)),
+                                                  [this](const ActivityResult&) { requestUpdate(); });
+                         });
 }
 
 void SettingsActivity::openScreenMarginPicker(const SettingInfo& setting) {

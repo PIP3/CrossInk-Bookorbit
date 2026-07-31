@@ -6,6 +6,7 @@
 #include <time.h>
 
 #include <cassert>
+#include <cstdio>
 
 HalClock halClock;  // Singleton instance
 
@@ -303,9 +304,38 @@ bool HalClock::writeDateTimeToRTC(uint16_t year, uint8_t month, uint8_t day, uin
   return true;
 }
 
-bool HalClock::syncFromNTP() {
-  if (!_available) return false;
+namespace {
+// 2020-01-01: anything earlier means the system clock was never set.
+constexpr time_t MIN_PLAUSIBLE_EPOCH = 1577836800;
 
+bool systemClockIsSet() { return time(nullptr) >= MIN_PLAUSIBLE_EPOCH; }
+}  // namespace
+
+bool HalClock::hasCurrentTime() const { return _available || systemClockIsSet(); }
+
+bool HalClock::formatCurrentTime(char* buf, const size_t bufSize, const uint8_t utcOffsetQuarterHoursBiased,
+                                 const bool use12Hour) const {
+  if (_available) {
+    return formatTime(buf, bufSize, utcOffsetQuarterHoursBiased, use12Hour);
+  }
+  if (buf == nullptr || bufSize == 0 || !systemClockIsSet()) {
+    return false;
+  }
+
+  // The system clock runs in UTC; the offset is quarter-hours biased by 48 (48 = UTC+0).
+  const time_t local =
+      time(nullptr) + static_cast<time_t>(static_cast<int>(utcOffsetQuarterHoursBiased) - 48) * 15 * 60;
+  struct tm localTm = {};
+  gmtime_r(&local, &localTm);
+
+  if (!use12Hour) {
+    return snprintf(buf, bufSize, "%02d:%02d", localTm.tm_hour, localTm.tm_min) > 0;
+  }
+  const int hour12 = localTm.tm_hour % 12 == 0 ? 12 : localTm.tm_hour % 12;
+  return snprintf(buf, bufSize, "%d:%02d %s", hour12, localTm.tm_min, localTm.tm_hour < 12 ? "AM" : "PM") > 0;
+}
+
+bool HalClock::syncSystemTimeFromNTP() {
   if (WiFi.status() != WL_CONNECTED) {
     LOG_ERR("CLK", "WiFi not connected, cannot sync NTP");
     return false;
@@ -318,24 +348,32 @@ bool HalClock::syncFromNTP() {
   constexpr int maxAttempts = 50;
   for (int i = 0; i < maxAttempts; i++) {
     if (sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED) {
-      time_t now = time(nullptr);
-      struct tm timeinfo;
-      gmtime_r(&now, &timeinfo);
-
-      const uint16_t year = static_cast<uint16_t>(timeinfo.tm_year + 1900);
-      const uint8_t month = static_cast<uint8_t>(timeinfo.tm_mon + 1);
-      const uint8_t day = static_cast<uint8_t>(timeinfo.tm_mday);
-      const uint8_t weekday = static_cast<uint8_t>(timeinfo.tm_wday + 1);
-      if (writeDateTimeToRTC(year, month, day, weekday, timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec)) {
-        LOG_INF("CLK", "RTC set to %04d-%02d-%02d %02d:%02d:%02d UTC", year, month, day, timeinfo.tm_hour,
-                timeinfo.tm_min, timeinfo.tm_sec);
-        return true;
-      }
-      return false;
+      LOG_INF("CLK", "System clock set from NTP");
+      return true;
     }
     delay(100);
   }
 
   LOG_ERR("CLK", "NTP sync timed out");
   return false;
+}
+
+bool HalClock::syncFromNTP() {
+  if (!_available) return false;
+  if (!syncSystemTimeFromNTP()) return false;
+
+  const time_t now = time(nullptr);
+  struct tm timeinfo;
+  gmtime_r(&now, &timeinfo);
+
+  const uint16_t year = static_cast<uint16_t>(timeinfo.tm_year + 1900);
+  const uint8_t month = static_cast<uint8_t>(timeinfo.tm_mon + 1);
+  const uint8_t day = static_cast<uint8_t>(timeinfo.tm_mday);
+  const uint8_t weekday = static_cast<uint8_t>(timeinfo.tm_wday + 1);
+  if (!writeDateTimeToRTC(year, month, day, weekday, timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec)) {
+    return false;
+  }
+  LOG_INF("CLK", "RTC set to %04d-%02d-%02d %02d:%02d:%02d UTC", year, month, day, timeinfo.tm_hour, timeinfo.tm_min,
+          timeinfo.tm_sec);
+  return true;
 }

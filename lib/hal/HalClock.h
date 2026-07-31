@@ -56,6 +56,23 @@ class HalClock {
   //
   // Debouncing (skip if already synced once) is enforced by the caller, not here,
   // so the HAL stays free of any app-layer settings dependency.
+  // True when a wall-clock time can be displayed: either the DS3231 is present, or the
+  // system clock has been set (by NTP). Callers that reserve screen space for a clock
+  // must use this rather than isAvailable(), so the reservation matches what is drawn.
+  bool hasCurrentTime() const;
+
+  // Formats the current local time, preferring the DS3231 and falling back to the
+  // system clock on boards without one. Output matches formatTime(): "HH:MM", or
+  // "H:MM AM"/"HH:MM PM" in 12-hour mode. Returns false when no clock has been set.
+  bool formatCurrentTime(char* buf, size_t bufSize, uint8_t utcOffsetQuarterHoursBiased = 48,
+                         bool use12Hour = false) const;
+
+  // Sets the system clock from NTP. Works with or without a DS3231: boards without one
+  // have nothing else keeping wall-clock time, and their status-bar clock reads the
+  // system clock directly. Requires an active WiFi connection.
+  bool syncSystemTimeFromNTP();
+
+  // Sets the system clock from NTP and writes it to the DS3231. Requires the RTC.
   bool syncFromNTP();
 
  private:
