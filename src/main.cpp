@@ -64,6 +64,7 @@ inline esp_sleep_wakeup_cause_t esp_sleep_get_wakeup_cause() { return ESP_SLEEP_
 #include <cstring>
 
 #include "AppVersion.h"
+#include "BookOrbitCredentialStore.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "GlobalActions.h"
@@ -74,10 +75,12 @@ inline esp_sleep_wakeup_cause_t esp_sleep_get_wakeup_cause() { return ESP_SLEEP_
 #include "SdCardFontSystem.h"
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
+#include "activities/reader/BookOrbitSyncActivity.h"
 #include "activities/reader/EpubReaderUtils.h"
 #include "activities/reader/KOReaderSyncActivity.h"
 #include "activities/reader/ReadingStatsUtils.h"
 #include "activities/reader/StatsBackup.h"
+#include "activities/settings/BookOrbitSettingsActivity.h"
 #include "activities/settings/KOReaderSettingsActivity.h"
 #include "activities/settings/SdFirmwareUpdateActivity.h"
 #include "components/UITheme.h"
@@ -434,6 +437,57 @@ bool startGlobalSyncProgress() {
   return true;
 }
 
+// Mirrors startGlobalSyncProgress() for the BookOrbit provider (kept separate, like the
+// sync activities themselves, so BookOrbit support cannot regress the KOReader path).
+bool startGlobalBookOrbitSync() {
+  if (!BOOKORBIT_STORE.hasCredentials()) {
+    activityManager.pushActivity(std::make_unique<BookOrbitSettingsActivity>(renderer, mappedInputManager));
+    return true;
+  }
+
+  const std::string epubPath = APP_STATE.openEpubPath;
+  if (epubPath.empty() || !FsHelpers::hasEpubExtension(epubPath) || !Storage.exists(epubPath.c_str())) {
+    LOG_DBG("MAIN", "No syncable EPUB open, opening BookOrbit settings instead");
+    activityManager.pushActivity(std::make_unique<BookOrbitSettingsActivity>(renderer, mappedInputManager));
+    return true;
+  }
+
+  auto epub = std::make_shared<Epub>(epubPath, "/.crosspoint");
+  if (!epub->load(true, SETTINGS.embeddedStyle == 0)) {
+    LOG_ERR("MAIN", "Failed to load EPUB for global BookOrbit sync: %s", epubPath.c_str());
+    activityManager.pushActivity(std::make_unique<BookOrbitSettingsActivity>(renderer, mappedInputManager));
+    return true;
+  }
+
+  epub->setupCacheDir();
+
+  int spineIndex = 0;
+  int pageNumber = 0;
+  int totalPagesInSpine = 1;
+  EpubReaderUtils::Progress progress;
+  if (EpubReaderUtils::loadProgress(*epub, progress, "MAIN")) {
+    spineIndex = progress.spineIndex;
+    pageNumber = progress.pageNumber;
+    if (progress.hasPageCount) {
+      totalPagesInSpine = std::max(1, progress.pageCount);
+    }
+  }
+
+  if (spineIndex < 0 || spineIndex >= epub->getSpineItemsCount()) {
+    spineIndex = 0;
+  }
+
+  CrossPointPosition localPos = {spineIndex, pageNumber, totalPagesInSpine};
+  KOReaderPosition localKoPos = ProgressMapper::toKOReader(epub, localPos);
+  const int tocIdx = epub->getTocIndexForSpineIndex(spineIndex);
+  std::string localChapterName = (tocIdx >= 0) ? epub->getTocItem(tocIdx).title : "";
+
+  activityManager.pushActivity(
+      std::make_unique<BookOrbitSyncActivity>(renderer, mappedInputManager, epubPath, spineIndex, pageNumber,
+                                              totalPagesInSpine, std::move(localKoPos), std::move(localChapterName)));
+  return true;
+}
+
 CrossPointSettings::SHORT_PWRBTN getPowerButtonAction() {
   static bool longPowerButtonHandled = false;
 
@@ -492,6 +546,11 @@ bool handleGlobalPowerButtonAction(const CrossPointSettings::SHORT_PWRBTN action
         return false;
       }
       return startGlobalSyncProgress();
+    case CrossPointSettings::SHORT_PWRBTN::BOOKORBIT_SYNC:
+      if (activityManager.canSnapshotForSleepOverlay()) {
+        return false;
+      }
+      return startGlobalBookOrbitSync();
     case CrossPointSettings::SHORT_PWRBTN::FILE_TRANSFER:
       if (activityManager.canSnapshotForSleepOverlay()) {
         return false;
@@ -745,6 +804,7 @@ void setup() {
   RECENT_BOOKS.loadFromFile();
   I18N.setLanguage(static_cast<Language>(SETTINGS.language));
   KOREADER_STORE.loadFromFile();
+  BOOKORBIT_STORE.loadFromFile();
   OPDS_STORE.loadFromFile();
   UITheme::getInstance().reload();
   ButtonNavigator::setMappedInputManager(mappedInputManager);

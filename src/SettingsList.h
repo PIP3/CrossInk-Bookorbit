@@ -13,6 +13,7 @@
 #include <utility>
 #include <vector>
 
+#include "BookOrbitCredentialStore.h"
 #include "CrossPointSettings.h"
 #include "KOReaderCredentialStore.h"
 #include "activities/settings/SettingsActivity.h"
@@ -395,6 +396,7 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                            StrId::STR_TOGGLE_BIONIC_READING,
                            StrId::STR_CYCLE_PAGE_TURN,
                            StrId::STR_SYNC_PROGRESS,
+                           StrId::STR_BOOKORBIT_SYNC,
                            StrId::STR_FILE_TRANSFER,
                            StrId::STR_CALIBRE_WIRELESS,
                            StrId::STR_JOIN_NETWORK,
@@ -417,6 +419,7 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                                 CrossPointSettings::TOGGLE_BIONIC_READING,
                                 CrossPointSettings::CYCLE_PAGE_TURN,
                                 CrossPointSettings::SYNC_PROGRESS,
+                                CrossPointSettings::BOOKORBIT_SYNC,
                                 CrossPointSettings::FILE_TRANSFER,
                                 CrossPointSettings::CALIBRE_WIRELESS,
                                 CrossPointSettings::JOIN_NETWORK,
@@ -439,6 +442,7 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                            StrId::STR_TOGGLE_BIONIC_READING,
                            StrId::STR_CYCLE_PAGE_TURN,
                            StrId::STR_SYNC_PROGRESS,
+                           StrId::STR_BOOKORBIT_SYNC,
                            StrId::STR_FILE_TRANSFER,
                            StrId::STR_CALIBRE_WIRELESS,
                            StrId::STR_JOIN_NETWORK,
@@ -461,6 +465,7 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                                 CrossPointSettings::TOGGLE_BIONIC_READING,
                                 CrossPointSettings::CYCLE_PAGE_TURN,
                                 CrossPointSettings::SYNC_PROGRESS,
+                                CrossPointSettings::BOOKORBIT_SYNC,
                                 CrossPointSettings::FILE_TRANSFER,
                                 CrossPointSettings::CALIBRE_WIRELESS,
                                 CrossPointSettings::JOIN_NETWORK,
@@ -482,6 +487,7 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                            StrId::STR_TOGGLE_BIONIC_READING,
                            StrId::STR_CYCLE_PAGE_TURN,
                            StrId::STR_SYNC_PROGRESS,
+                           StrId::STR_BOOKORBIT_SYNC,
                            StrId::STR_FILE_TRANSFER,
                            StrId::STR_CALIBRE_WIRELESS,
                            StrId::STR_JOIN_NETWORK,
@@ -503,6 +509,7 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                                 CrossPointSettings::LONG_MENU_TOGGLE_BIONIC,
                                 CrossPointSettings::LONG_MENU_CYCLE_PAGE_TURN,
                                 CrossPointSettings::LONG_MENU_SYNC_PROGRESS,
+                                CrossPointSettings::LONG_MENU_BOOKORBIT_SYNC,
                                 CrossPointSettings::LONG_MENU_FILE_TRANSFER,
                                 CrossPointSettings::LONG_MENU_CALIBRE_WIRELESS,
                                 CrossPointSettings::LONG_MENU_JOIN_NETWORK,
@@ -524,6 +531,7 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                            StrId::STR_TOGGLE_BIONIC_READING,
                            StrId::STR_CYCLE_PAGE_TURN,
                            StrId::STR_SYNC_PROGRESS,
+                           StrId::STR_BOOKORBIT_SYNC,
                            StrId::STR_FILE_TRANSFER,
                            StrId::STR_CALIBRE_WIRELESS,
                            StrId::STR_JOIN_NETWORK,
@@ -545,6 +553,7 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                                 CrossPointSettings::LONG_MENU_TOGGLE_BIONIC,
                                 CrossPointSettings::LONG_MENU_CYCLE_PAGE_TURN,
                                 CrossPointSettings::LONG_MENU_SYNC_PROGRESS,
+                                CrossPointSettings::LONG_MENU_BOOKORBIT_SYNC,
                                 CrossPointSettings::LONG_MENU_FILE_TRANSFER,
                                 CrossPointSettings::LONG_MENU_CALIBRE_WIRELESS,
                                 CrossPointSettings::LONG_MENU_JOIN_NETWORK,
@@ -616,6 +625,29 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
           KOREADER_STORE.saveToFile();
         },
         "koMatchMethod", StrId::STR_KOREADER_SYNC));
+
+    // --- BookOrbit Sync (web-only, uses BookOrbitCredentialStore) ---
+    add(SettingInfo::DynamicString(
+        StrId::STR_BOOKORBIT_USERNAME, [] { return BOOKORBIT_STORE.getUsername(); },
+        [](const std::string& v) {
+          BOOKORBIT_STORE.setCredentials(v, BOOKORBIT_STORE.getPassword());
+          BOOKORBIT_STORE.saveToFile();
+        },
+        "boUsername", StrId::STR_BOOKORBIT_SYNC));
+    add(SettingInfo::DynamicString(
+        StrId::STR_BOOKORBIT_PASSWORD, [] { return BOOKORBIT_STORE.getPassword(); },
+        [](const std::string& v) {
+          BOOKORBIT_STORE.setCredentials(BOOKORBIT_STORE.getUsername(), v);
+          BOOKORBIT_STORE.saveToFile();
+        },
+        "boPassword", StrId::STR_BOOKORBIT_SYNC));
+    add(SettingInfo::DynamicString(
+        StrId::STR_BOOKORBIT_SERVER_URL, [] { return BOOKORBIT_STORE.getServerUrl(); },
+        [](const std::string& v) {
+          BOOKORBIT_STORE.setServerUrl(v);
+          BOOKORBIT_STORE.saveToFile();
+        },
+        "boServerUrl", StrId::STR_BOOKORBIT_SYNC));
 
     // --- Status Bar Settings (web-only, uses StatusBarSettingsActivity) ---
     add(SettingInfo::Toggle(StrId::STR_CHAPTER_PAGE_COUNT, &CrossPointSettings::statusBarChapterPageCount,
@@ -912,12 +944,13 @@ inline std::vector<SettingInfo> buildDisplaySleepSettingsList(const std::vector<
 
 inline std::vector<SettingInfo> buildSystemSettingsParentList(const std::vector<SettingInfo>& allSettings) {
   std::vector<SettingInfo> systemSettings;
-  systemSettings.reserve(8);
+  systemSettings.reserve(9);
   systemSettings.push_back(SettingInfo::Submenu(StrId::STR_SYSTEM_DEVICE, SettingAction::SystemDevice));
   systemSettings.push_back(SettingInfo::Submenu(StrId::STR_SYSTEM_FILES_CACHE, SettingAction::SystemFilesCache));
   systemSettings.push_back(SettingInfo::Submenu(StrId::STR_READING_STATS, SettingAction::SystemReadingStats));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_WIFI_NETWORKS, SettingAction::Network));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_KOREADER_SYNC, SettingAction::KOReaderSync));
+  systemSettings.push_back(SettingInfo::Action(StrId::STR_BOOKORBIT_SYNC, SettingAction::BookOrbitSync));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_OPDS_SERVERS, SettingAction::OPDSBrowser));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_SD_FIRMWARE_UPDATE, SettingAction::SdFirmwareUpdate));

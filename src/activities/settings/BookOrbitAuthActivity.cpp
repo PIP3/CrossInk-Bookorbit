@@ -1,0 +1,116 @@
+#include "BookOrbitAuthActivity.h"
+
+#include <GfxRenderer.h>
+#include <I18n.h>
+#include <WiFi.h>
+
+#include "BookOrbitSyncClient.h"
+#include "MappedInputManager.h"
+#include "SdCardFontSystem.h"
+#include "SilentRestart.h"
+#include "activities/network/WifiSelectionActivity.h"
+#include "components/UITheme.h"
+#include "fontIds.h"
+
+void BookOrbitAuthActivity::onWifiSelectionComplete(const bool success) {
+  if (!success) {
+    {
+      RenderLock lock(*this);
+      state = FAILED;
+      errorMessage = tr(STR_WIFI_CONN_FAILED);
+    }
+    requestUpdate();
+    return;
+  }
+
+  sdFontSystem.releaseForNetwork(renderer);
+
+  {
+    RenderLock lock(*this);
+    state = AUTHENTICATING;
+    statusMessage = tr(STR_AUTHENTICATING);
+  }
+  requestUpdate();
+
+  performAuthentication();
+}
+
+void BookOrbitAuthActivity::performAuthentication() {
+  const auto result = BookOrbitSyncClient::authenticate();
+
+  {
+    RenderLock lock(*this);
+    if (result == BookOrbitSyncClient::OK) {
+      state = SUCCESS;
+      statusMessage = tr(STR_AUTH_SUCCESS);
+    } else {
+      state = FAILED;
+      errorMessage = BookOrbitSyncClient::errorString(result);
+    }
+  }
+  requestUpdate();
+}
+
+void BookOrbitAuthActivity::onEnter() {
+  Activity::onEnter();
+  sdFontSystem.releaseLoadedFont(renderer);
+
+  // Check if already connected
+  if (WiFi.status() == WL_CONNECTED) {
+    onWifiSelectionComplete(true);
+    return;
+  }
+
+  // Launch WiFi selection
+  startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput),
+                         [this](const ActivityResult& result) { onWifiSelectionComplete(!result.isCancelled); });
+}
+
+void BookOrbitAuthActivity::onExit() {
+  Activity::onExit();
+
+  if (WiFi.getMode() != WIFI_MODE_NULL) {
+    WiFi.disconnect(false);
+    delay(30);
+    silentRestart();
+  }
+}
+
+void BookOrbitAuthActivity::render(RenderLock&&) {
+  renderer.clearScreen();
+
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const auto pageWidth = renderer.getScreenWidth();
+  const auto pageHeight = renderer.getScreenHeight();
+
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_BOOKORBIT_AUTH));
+  const auto height = renderer.getLineHeight(UI_10_FONT_ID);
+  const auto top = (pageHeight - height) / 2;
+
+  if (state == AUTHENTICATING) {
+    renderer.drawCenteredText(UI_10_FONT_ID, top, statusMessage.c_str());
+  } else if (state == SUCCESS) {
+    renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_AUTH_SUCCESS), true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, top + height + 10, tr(STR_BOOKORBIT_SYNC_READY));
+  } else if (state == FAILED) {
+    renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_AUTH_FAILED), true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, top + height + 10, errorMessage.c_str());
+  }
+
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  renderer.displayBuffer();
+}
+
+void BookOrbitAuthActivity::loop() {
+  if (state == SUCCESS || state == FAILED) {
+    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+      finishAfterBackPress();
+      return;
+    }
+
+    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+      finish();
+    }
+  }
+}
