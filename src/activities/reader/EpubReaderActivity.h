@@ -382,6 +382,7 @@ class EpubReaderActivity final : public Activity {
   // Used by SleepActivity to prepare the background for the overlay sleep mode.
   // Returns false if the page cannot be loaded (missing cache / file error).
   static bool drawCurrentPageToBuffer(const std::string& filePath, GfxRenderer& renderer);
+  static uint8_t resolveBookEmbeddedStyle(const Epub& epub, uint8_t fallback);
   static uint8_t loadBookRenderMode(const std::string& filePath);
   static bool saveBookRenderMode(const std::string& filePath, uint8_t renderMode);
   static bool resetBookReaderSettings(const std::string& filePath);

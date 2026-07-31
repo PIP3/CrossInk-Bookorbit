@@ -66,11 +66,15 @@ std::unique_ptr<Epub> ReaderActivity::loadEpub(const std::string& path) {
     allowFastInitialRefresh = false;
     GUI.drawPopup(renderer, tr(STR_INDEXING));
   }
+  // Resolve the book override before Epub::load() decides whether to build or
+  // load the publisher CSS cache. EpubReaderActivity applies the same saved
+  // settings again after the handoff for section layout.
+  const uint8_t embeddedStyle = EpubReaderActivity::resolveBookEmbeddedStyle(*epub, SETTINGS.embeddedStyle);
   // Lend the framebuffer's 48 KB for every EPUB load: even a cached book may
   // rebuild stale/missing CSS and need miniz's ~43 KB streaming workspace. The
   // panel keeps showing its last image, and the next activity redraws fully.
   GfxRenderer::FrameBufferLoan loan(renderer);
-  const bool loaded = epub->load(true, SETTINGS.embeddedStyle == 0);
+  const bool loaded = epub->load(true, embeddedStyle == 0);
   loan.end();
   if (loaded) {
     return epub;

@@ -1270,6 +1270,11 @@ void moveFinishedBookToReadFolder(const std::string& srcPath, const std::string&
 
 }  // namespace
 
+uint8_t EpubReaderActivity::resolveBookEmbeddedStyle(const Epub& epub, const uint8_t fallback) {
+  const BookReaderSettingsData data = loadBookReaderSettingsFile(epub.getCachePath());
+  return data.hasCustomReaderSettings ? (data.readerSettings.embeddedStyle ? 1 : 0) : (fallback ? 1 : 0);
+}
+
 uint8_t EpubReaderActivity::loadBookRenderMode(const std::string& filePath) {
   Epub epub(filePath, "/.crosspoint");
   epub.setupCacheDir();

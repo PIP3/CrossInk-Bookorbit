@@ -33,6 +33,7 @@
 
 ### Fixed
 
+- Book-specific Embedded Style choices now apply before EPUB stylesheet caches are loaded.
 - CSS-heavy EPUBs now stop stylesheet parsing safely before low-memory rule storage can reboot X3/X4 devices.
 - KOReader Sync now sends CrossPoint-specific position data only to the official CrossPoint Sync server.
 - EPUB text now preserves explicit spaces between Hangul and other CJK words.
