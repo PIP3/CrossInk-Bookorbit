@@ -76,15 +76,10 @@ jobs:
       - name: Verify PlatformIO Core
         run: pio --version
 
-      - name: Build CrossInk X3/X4
+      - name: Build CrossInk firmware
         run: |
           set -euo pipefail
-          pio run -e default | tee pio.log
-
-      - name: Build CrossInk (Seeed Sticky)
-        run: |
-          set -euo pipefail
-          pio run -e sticky
+          pio run -e default -e sticky -e x4-pro | tee pio.log
 
       - name: Smoke test button simulator
         run: |
