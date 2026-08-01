@@ -96,8 +96,9 @@ void BookOrbitSettingsActivity::handleSelection() {
       // Can't authenticate without credentials - just show message briefly
       return;
     }
-    startActivityForResult(std::make_unique<BookOrbitAuthActivity>(renderer, mappedInput),
-                           [](const ActivityResult&) {});
+    // Replaces this screen rather than stacking on top of it, so the TLS handshake gets
+    // the memory the settings stack was holding (see ActivityManager::goToBookOrbitAuth).
+    activityManager.goToBookOrbitAuth();
   } else if (selectedIndex == 4) {
     // Browse Catalog
     if (!BOOKORBIT_STORE.hasCredentials()) {
