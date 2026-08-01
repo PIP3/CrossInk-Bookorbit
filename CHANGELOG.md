@@ -15,6 +15,7 @@ on; for everything inherited from upstream, see the
 ### Fixed
 
 - BookOrbit authentication now releases the settings screens it was opened from before connecting. Those screens hold 15-20 KB, and on this hardware a TLS handshake completes with only a few KB to spare, so authentication could fail outright while the same server answered fine from the catalog — which already worked this way. Nothing changes on screen: authenticating brought WiFi up, and that has always ended in a silent restart to the home screen.
+- The clock's NTP refresh no longer leaves the SNTP client running once it has read the time. On devices without a clock chip that refresh happens on every WiFi connection, immediately before whatever request you connected for, and the idle client held a socket and its buffers for the rest of the session — memory the following HTTPS connection needs on hardware this tight.
 - The reader's top clock and the first line of book text no longer touch: the text now keeps a few pixels of clearance below the clock band.
 
 ## [v1.4.1+bookorbit.1] - 2026-07-31

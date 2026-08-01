@@ -346,14 +346,25 @@ bool HalClock::syncSystemTimeFromNTP() {
 
   // Wait for SNTP sync to complete (up to 5 seconds)
   constexpr int maxAttempts = 50;
-  for (int i = 0; i < maxAttempts; i++) {
-    if (sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED) {
-      LOG_INF("CLK", "System clock set from NTP");
-      return true;
-    }
-    delay(100);
+  bool synced = false;
+  for (int i = 0; i < maxAttempts && !synced; i++) {
+    synced = sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED;
+    if (!synced) delay(100);
   }
 
+  // Release the SNTP client before returning: the clock only needs this one reading, and
+  // on devices without an RTC this runs on EVERY WiFi connection — immediately before
+  // whatever request the caller connected for. Left running, it holds a socket and its
+  // buffers for the rest of the session, taking them from the TLS handshake that follows,
+  // which on this hardware completes with only a few KB to spare.
+  if (esp_sntp_enabled()) {
+    esp_sntp_stop();
+  }
+
+  if (synced) {
+    LOG_INF("CLK", "System clock set from NTP");
+    return true;
+  }
   LOG_ERR("CLK", "NTP sync timed out");
   return false;
 }
