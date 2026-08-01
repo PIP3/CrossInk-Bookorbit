@@ -20,6 +20,7 @@
 #include "network/CrossPointWebServerActivity.h"
 #include "network/NearbyStatsSyncActivity.h"
 #include "reader/ReaderActivity.h"
+#include "settings/BookOrbitAuthActivity.h"
 #include "settings/OpdsServerListActivity.h"
 #include "settings/SettingsActivity.h"
 #include "util/FullScreenMessageActivity.h"
@@ -239,6 +240,14 @@ void ActivityManager::goToBookOrbitCatalog() {
   // 15-20KB of headroom the TLS session needs on the C3 (see .claude/CONTEXT.md).
   // The browser exits via goHome, so there is no stack to return to.
   replaceActivity(std::make_unique<BookOrbitCatalogBrowserActivity>(renderer, mappedInput));
+}
+
+void ActivityManager::goToBookOrbitAuth() {
+  // Replace for the same reason as the catalog: authentication is a TLS session, and the
+  // settings screens it is reached through hold 15-20KB that the handshake needs. Nothing
+  // is lost by dropping them — the activity ends in a silentRestart() to the home screen
+  // once WiFi has been up, so the stack would not have been returned to anyway.
+  replaceActivity(std::make_unique<BookOrbitAuthActivity>(renderer, mappedInput));
 }
 
 void ActivityManager::goToReader(std::string path, const bool suppressBackRelease) {

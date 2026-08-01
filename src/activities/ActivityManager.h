@@ -100,6 +100,7 @@ class ActivityManager {
   void goToRecentBooks();
   void goToBrowser();
   void goToBookOrbitCatalog();
+  void goToBookOrbitAuth();
   void goToReader(std::string path, bool suppressBackRelease = false);
   void goToSleep(bool fromTimeout = false);
   void goToBoot();

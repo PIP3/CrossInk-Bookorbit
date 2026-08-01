@@ -104,13 +104,12 @@ void BookOrbitAuthActivity::render(RenderLock&&) {
 
 void BookOrbitAuthActivity::loop() {
   if (state == SUCCESS || state == FAILED) {
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      finishAfterBackPress();
-      return;
-    }
-
-    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      finish();
+    // This activity replaced the settings stack rather than stacking on it, so there is
+    // nothing to return to: both buttons go home. When WiFi came up, onExit() restarts
+    // silently to the home screen anyway.
+    if (mappedInput.wasPressed(MappedInputManager::Button::Back) ||
+        mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+      onGoHome();
     }
   }
 }
