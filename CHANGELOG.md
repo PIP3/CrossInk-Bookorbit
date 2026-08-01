@@ -40,6 +40,7 @@
 
 ### Fixed
 
+- Syncing the clock on memory-constrained X3/X4 devices no longer risks a reboot while saving settings.
 - EPUB clipping selection markers now remain visible in dark mode.
 - EPUB clipping highlights now re-match their saved text after font or layout changes, even when the page count stays the same.
 - EPUB low-memory rendering fallbacks now apply consistently when opening chapters, prefetching pages, and preparing the sleep screen.
