@@ -52,6 +52,49 @@ DEFAULT_FALLBACK_FONT = EPDFONTS_DIR / "builtinFonts/source/NotoSans/NotoSans-Re
 # as the built-in reader fonts. Families can still add extra script presets.
 PATCHED_INTERVAL_PRESETS = ("builtin",)
 
+# Keep the SD-card fallback stack aligned with convert-builtin-fonts.sh. Each
+# tuple is an inclusive Unicode range assigned to its corresponding fallback
+# face. Noto Sans remains the final unrestricted fallback for missing glyphs,
+# including the IPA ranges requested by dictionary fonts.
+COMMON_FALLBACK_RANGES = (
+    (0x03BB, 0x03BB),
+    (0x0410, 0x0414), (0x0418, 0x0418), (0x041B, 0x041B),
+    (0x041D, 0x0423), (0x0425, 0x0425), (0x0427, 0x0427),
+    (0x042B, 0x042C), (0x042E, 0x0432), (0x0434, 0x0435),
+    (0x0437, 0x0437), (0x043A, 0x043A), (0x043D, 0x043E),
+    (0x0440, 0x0440), (0x0442, 0x0442), (0x0446, 0x0446),
+    (0x044C, 0x044C), (0x044E, 0x044E), (0x2113, 0x2113),
+)
+EMOJI_FALLBACK_RANGES = (
+    (0x2669, 0x266F),
+    (0x1F600, 0x1F607), (0x1F609, 0x1F614), (0x1F618, 0x1F618),
+    (0x1F61A, 0x1F61A), (0x1F61C, 0x1F61D), (0x1F620, 0x1F622),
+    (0x1F624, 0x1F625), (0x1F629, 0x1F629), (0x1F62C, 0x1F62E),
+    (0x1F631, 0x1F635), (0x1F641, 0x1F642), (0x1F644, 0x1F644),
+    (0x1F44B, 0x1F44F), (0x2764, 0x2764),
+)
+SYMBOL_FALLBACK_RANGES = ((0x2669, 0x266F),)
+PHM_FALLBACK_RANGES = (
+    (0x4F1A, 0x4F1A), (0x53BB, 0x53BB), (0x5458, 0x5458),
+    (0x59DA, 0x59DA), (0x5B98, 0x5B98), (0x5BA4, 0x5BA4),
+    (0x5E26, 0x5E26), (0x6211, 0x6211), (0x62C9, 0x62C9),
+    (0x653E, 0x653E), (0x6746, 0x677F), (0x7532, 0x7532),
+    (0x7684, 0x7684), (0x8BAE, 0x8BAE), (0x8BF7, 0x8BF7),
+    (0x91CA, 0x91CA),
+)
+PATCHED_INTERVAL_RANGES = (
+    *COMMON_FALLBACK_RANGES,
+    *EMOJI_FALLBACK_RANGES,
+    *SYMBOL_FALLBACK_RANGES,
+    *PHM_FALLBACK_RANGES,
+)
+STYLE_SUFFIXES = {
+    "regular": "Regular",
+    "bold": "Bold",
+    "italic": "Italic",
+    "bolditalic": "BoldItalic",
+}
+
 
 def is_url(value: str) -> bool:
     return value.startswith(("http://", "https://"))
@@ -89,7 +132,63 @@ def patched_intervals(intervals: str) -> str:
         if preset not in normalized:
             patched.append(preset)
 
+    for start, end in PATCHED_INTERVAL_RANGES:
+        interval = f"(0x{start:04X}-0x{end:04X})"
+        if interval.lower() not in normalized:
+            patched.append(interval)
+
     return ",".join(patched)
+
+
+def builtin_fallback_specs(style_name: str, family_name: str) -> list[tuple[Path, tuple | None]]:
+    """Return the built-in fallback faces and their restricted ranges."""
+    suffix = STYLE_SUFFIXES[style_name]
+    specs = []
+
+    # ChareInk is the common fallback used by the built-in reader families.
+    # Do not add it to ChareInk itself; its primary face is already that font.
+    if family_name.lower() != "chareink":
+        specs.append((
+            EPDFONTS_DIR / f"builtinFonts/source/ChareInk7/ChareInk7-{suffix}.ttf",
+            COMMON_FALLBACK_RANGES,
+        ))
+
+    # The built-in script uses the regular emoji/symbol face for every style.
+    specs.append((
+        EPDFONTS_DIR / "builtinFonts/source/NotoEmoji/NotoEmoji-Regular.ttf",
+        EMOJI_FALLBACK_RANGES,
+    ))
+    specs.append((
+        EPDFONTS_DIR / "builtinFonts/source/NotoSymbols/NotoSansSymbols-Regular.ttf",
+        SYMBOL_FALLBACK_RANGES,
+    ))
+
+    # PHM CJK fallback is intentionally only part of regular reader fonts.
+    if style_name == "regular":
+        specs.append((
+            EPDFONTS_DIR / "builtinFonts/source/NotoSansCJKsc/NotoSansCJKsc-Regular.otf",
+            PHM_FALLBACK_RANGES,
+        ))
+
+    # Keep the existing SD-font behavior for any requested glyph not supplied
+    # by the built-in fallback stack, including dictionary IPA coverage.
+    specs.append((DEFAULT_FALLBACK_FONT, None))
+    return specs
+
+
+def encode_fallback_ranges(ranges: tuple | None) -> str:
+    """Encode fallback ranges for fontconvert_sdcard.py's CLI."""
+    if not ranges:
+        return ""
+    return ";".join(f"0x{start:X}-0x{end:X}" for start, end in ranges)
+
+
+def append_fallback_args(cmd: list[str], style_name: str, family_name: str) -> None:
+    """Append one ordered fallback stack for a style."""
+    range_flag = f"--fallback-{style_name}-ranges"
+    font_flag = f"--fallback-{style_name}"
+    for fallback_path, ranges in builtin_fallback_specs(style_name, family_name):
+        cmd.extend([font_flag, str(fallback_path), range_flag, encode_fallback_ranges(ranges)])
 
 
 _orig_getaddrinfo = socket.getaddrinfo
@@ -257,14 +356,14 @@ def build_family(
         # Multi-style mode
         for style_name, font_path in resolved_styles.items():
             cmd.extend([f"--{style_name}", str(font_path)])
-            cmd.extend([f"--fallback-{style_name}", str(DEFAULT_FALLBACK_FONT)])
+            append_fallback_args(cmd, style_name, name)
     else:
         # Single-style mode
         style_name = next(iter(resolved_styles))
         font_path = resolved_styles[style_name]
         cmd.append(str(font_path))
         cmd.extend(["--style", style_name])
-        cmd.extend([f"--fallback-{style_name}", str(DEFAULT_FALLBACK_FONT)])
+        append_fallback_args(cmd, style_name, name)
 
     cmd.extend(["--intervals", intervals])
     cmd.extend(["--sizes", sizes])
@@ -273,6 +372,12 @@ def build_family(
 
     if family.get("force_autohint", False):
         cmd.append("--force-autohint")
+
+    # SD-card fonts are reader fonts, so they get the same darkened anti-alias
+    # thresholds as the built-in reader fonts in convert-builtin-fonts.sh
+    # (READING_FONT_RENDER_ARGS). Without this the two look noticeably
+    # different at the same size on the same panel.
+    cmd.append("--darken-aa")
 
     # Run fontconvert_sdcard.py
     start = time.monotonic()
@@ -410,6 +515,19 @@ def main():
             "This font is required for fallback glyphs in SD font builds.",
             file=sys.stderr,
         )
+        sys.exit(1)
+
+    fallback_paths = {
+        fallback_path
+        for family in families
+        for style_name in family.get("styles", {})
+        for fallback_path, _ in builtin_fallback_specs(style_name, family["name"])
+    }
+    missing_fallbacks = sorted(path for path in fallback_paths if not path.is_file())
+    if missing_fallbacks:
+        print("ERROR: Missing built-in fallback fonts:", file=sys.stderr)
+        for fallback_path in missing_fallbacks:
+            print(f"  {fallback_path}", file=sys.stderr)
         sys.exit(1)
 
     # Filter if --only specified
