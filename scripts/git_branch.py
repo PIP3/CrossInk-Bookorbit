@@ -90,9 +90,15 @@ def get_git_short_sha(project_dir):
 
 def _read_ini(project_dir):
     ini_path = os.path.join(project_dir, 'platformio.ini')
+    local_ini_path = os.path.join(project_dir, 'platformio.local.ini')
     config = configparser.ConfigParser()
     if os.path.isfile(ini_path):
-        config.read(ini_path)
+        config_paths = [ini_path]
+        if os.path.isfile(local_ini_path):
+            # Match PlatformIO's local override convention: values from the
+            # optional local file take precedence over the tracked config.
+            config_paths.append(local_ini_path)
+        config.read(config_paths)
     else:
         warn(f'platformio.ini not found at {ini_path}')
     return config
@@ -102,7 +108,7 @@ def get_crossink_version(project_dir):
     config = _read_ini(project_dir)
     if not config.has_option('crossink', 'version'):
         warn(
-            'No [crossink] version in platformio.ini; '
+            'No [crossink] version in platformio.ini or platformio.local.ini; '
             'build version will be "0.0.0"'
         )
         return '0.0.0'
