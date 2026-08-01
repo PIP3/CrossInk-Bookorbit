@@ -260,7 +260,7 @@ std::string loadChapterTitleForPath(const std::string& path) {
   }
 
   Epub epub(path, "/.crosspoint");
-  if (!epub.load(false, true)) {
+  if (!epub.load(false, true, Epub::XLocationLoadMode::Skip)) {
     return {};
   }
 

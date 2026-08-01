@@ -688,7 +688,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
           if (FsHelpers::hasEpubExtension(book.path)) {
             Epub epub(book.path, "/.crosspoint");
             showLoadingProgress(10 + progress * progressIncrement);
-            if (!epub.load(true, true)) {
+            if (!epub.load(true, true, Epub::XLocationLoadMode::Skip)) {
               LOG_ERR("HOME", "carousel: failed to load EPUB cache for thumb generation: %s", book.path.c_str());
               updateRecentBookCoverPath(book, "");
               book.coverBmpPath = "";
@@ -751,7 +751,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
           if (FsHelpers::hasEpubExtension(book.path)) {
             Epub epub(book.path, "/.crosspoint");
             showLoadingProgress(10 + progress * progressIncrement);
-            if (!epub.load(true, true)) {
+            if (!epub.load(true, true, Epub::XLocationLoadMode::Skip)) {
               LOG_ERR("HOME", "failed to load EPUB cache for thumb generation: %s", book.path.c_str());
               updateRecentBookCoverPath(book, "");
               book.coverBmpPath = "";

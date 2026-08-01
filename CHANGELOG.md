@@ -2,6 +2,7 @@
 
 ### Added
 
+- Touch support for Seeed Studio Sticky
 - Nearby File Transfer can send EPUB, TXT, XTC, XTCH, PNG, and BMP files directly between two CrossInk devices without a Wi-Fi network.
 - Recent Books and image-file long-press actions can send files directly to a nearby CrossInk device.
 - Dictionary lookup and lookup history
@@ -38,6 +39,10 @@
 
 - EPUB clipping selection markers now remain visible in dark mode.
 - EPUB clipping highlights now re-match their saved text after font or layout changes, even when the page count stays the same.
+- EPUB low-memory rendering fallbacks now apply consistently when opening chapters, prefetching pages, and preparing the sleep screen.
+- When Embedded Style is off, EPUB opening now consistently skips unused stylesheet discovery; optional location metadata is deferred until the first page is ready.
+- Sleep-screen EPUB rendering now handles book allocation failure safely instead of rebooting.
+- EPUB preparation failures now show whether the book is unreadable or the device ran out of memory instead of silently returning to the library.
 - Book-specific Embedded Style choices now apply before EPUB stylesheet caches are loaded.
 - CSS-heavy EPUBs now stop stylesheet parsing safely before low-memory rule storage can reboot X3/X4 devices.
 - KOReader Sync now sends CrossPoint-specific position data only to the official CrossPoint Sync server.

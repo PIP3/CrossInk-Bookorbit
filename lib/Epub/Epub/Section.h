@@ -21,7 +21,8 @@ struct SectionBuildOptions {
 };
 
 class Section {
-  std::shared_ptr<Epub> epub;
+  std::shared_ptr<Epub> epubOwner;
+  Epub* epub;
   const int spineIndex;
   GfxRenderer& renderer;
   std::string filePath;
@@ -90,6 +91,7 @@ class Section {
 
   explicit Section(const std::shared_ptr<Epub>& epub, int spineIndex, GfxRenderer& renderer,
                    const char* cacheSuffix = "");
+  explicit Section(Epub& epub, int spineIndex, GfxRenderer& renderer, const char* cacheSuffix = "");
   ~Section();
   bool loadSectionFile(const ReaderRenderSpec& spec);
   bool clearCache() const;

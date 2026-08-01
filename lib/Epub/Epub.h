@@ -47,6 +47,12 @@ class Epub {
   };
 
  public:
+  enum class OpenFailure : uint8_t {
+    None,
+    OutOfMemory,
+    InvalidOrUnreadable,
+  };
+
   struct SourceChildRange {
     char name[12] = {};
     uint16_t offset = 0;
@@ -60,7 +66,8 @@ class Epub {
   };
 
  private:
-  std::vector<LocationSpineEntry> locationSpine;
+  std::unique_ptr<LocationSpineEntry[]> locationSpine;
+  size_t locationSpineCount = 0;
   std::unique_ptr<LocationChapterGroupEntry[]> locationChapterGroups;
   size_t locationChapterGroupCount = 0;
   std::unique_ptr<SourceSpineMapEntry[]> sourceSpineMap;
@@ -73,6 +80,7 @@ class Epub {
   uint32_t wordsPerReferencePage = 0;
   uint32_t totalReferencePages = 0;
   bool xLocationsLoaded = false;
+  OpenFailure lastLoadFailure = OpenFailure::None;
   bool sourceSpineMapDeclared = false;
   enum class CssParseStatus : uint8_t {
     Failed,
@@ -82,13 +90,20 @@ class Epub {
 
   void migrateLegacyCachePath(const std::string& cacheDir) const;
   bool findContentOpfFile(std::string* contentOpfFile) const;
-  bool parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, bool writeSpineEntries = true);
+  bool parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, bool writeSpineEntries = true,
+                       bool collectCssFiles = true);
   bool parseTocNcxFile() const;
   bool parseTocNavFile() const;
   CssParseStatus parseCssFiles(bool forceRebuild = false) const;
   void discoverCssFilesFromZip();
+  void releaseCssFileList();
 
  public:
+  enum class XLocationLoadMode : uint8_t {
+    Immediate,
+    Skip,
+  };
+
   explicit Epub(std::string filepath, const std::string& cacheDir);
   ~Epub() = default;
   static std::string cachePathForFilePath(const std::string& filepath, const std::string& cacheDir);
@@ -96,7 +111,12 @@ class Epub {
   // hit the fast path instead of rebuilding. Cheap: no parsing, just a stat.
   static bool hasCache(const std::string& filepath, const std::string& cacheDir);
   std::string& getBasePath() { return contentBasePath; }
-  bool load(bool buildIfMissing = true, bool skipLoadingCss = false);
+  bool load(bool buildIfMissing = true, bool skipLoadingCss = false,
+            XLocationLoadMode xLocationLoadMode = XLocationLoadMode::Immediate);
+  // Loads optional stable-page and source-spine metadata after a Skip-mode open.
+  // Failure leaves normal size-based progress available.
+  bool loadXLocations();
+  OpenFailure getLastLoadFailure() const { return lastLoadFailure; }
   bool clearCache() const;
   void setupCacheDir() const;
   const std::string& getCachePath() const;
@@ -168,7 +188,6 @@ class Epub {
   int resolveHrefToSpineIndex(const std::string& href) const;
 
  private:
-  bool loadXLocations();
   std::string getCachedCoverImagePath(const std::string& coverImageHref) const;
   bool ensureCachedCoverImage(const std::string& coverImageHref, std::string& outPath) const;
   bool generateThumbBmpInternal(int width, int height, bool adaptiveContain, const GfxRenderer* renderer,

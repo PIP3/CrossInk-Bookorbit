@@ -263,7 +263,7 @@ void RecentBooksGridActivity::loadPageCovers(int pageStart) {
     if (needsCoverThumbGeneration(book, coverPath)) {
       if (FsHelpers::hasEpubExtension(book.path)) {
         Epub epub(book.path, "/.crosspoint");
-        if (epub.load(true, true)) {
+        if (epub.load(true, true, Epub::XLocationLoadMode::Skip)) {
           if (!showingLoading) {
             showingLoading = true;
             popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
