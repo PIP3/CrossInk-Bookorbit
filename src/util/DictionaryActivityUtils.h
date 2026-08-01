@@ -20,7 +20,7 @@ inline void cancelAndFinish(Activity& act) {
 inline void drawWordSelectButtonHints(GfxRenderer& renderer, const MappedInputManager& mappedInput,
                                       const WordSelectNavigator& navigator) {
   const char* confirmLabel = navigator.isMultiSelecting() ? tr(STR_DONE) : tr(STR_LOOKUP_SHORT);
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
