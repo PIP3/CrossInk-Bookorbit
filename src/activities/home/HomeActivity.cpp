@@ -69,12 +69,21 @@ struct HomeMenuEntry {
 };
 
 struct HomeMenuEntries {
-  static constexpr int kCapacity = 8;
+  // Room for every entry the fullest menu can hold, with headroom. That menu is the
+  // selectable one: Continue Reading, Browse Files, Recent Books, OPDS, BookOrbit, Reading
+  // Stats, Bookmarks/Clippings, File Transfer and Settings — nine. It was exactly eight
+  // before BookOrbit was added, so the ninth was dropped, and since Settings is pushed last
+  // it was Settings that vanished from the home menu. Overflow is logged rather than silent
+  // so the next entry added here cannot repeat that.
+  static constexpr int kCapacity = 12;
   std::array<HomeMenuEntry, kCapacity> entries{};
   int count = 0;
 
   void push(const HomeMenuEntry& entry) {
-    if (count >= kCapacity) return;
+    if (count >= kCapacity) {
+      LOG_ERR("HOME", "Home menu is full (%d); dropping entry '%s'", kCapacity, entry.label ? entry.label : "");
+      return;
+    }
     entries[count++] = entry;
   }
 
