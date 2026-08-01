@@ -256,6 +256,7 @@ void DictionaryWordSelectActivity::extractWords(std::vector<WordSelectNavigator:
       if (derivedGap > naturalSpaceWidth / 2) lineGapWidth = derivedGap;
     }
 
+    int lastSelectableWordIndex = -2;
     for (uint16_t wordIndex = 0; wordIndex < wordCount; ++wordIndex) {
       int16_t screenX = line->xPos + block->wordXpos(wordIndex) + marginLeft;
       int16_t screenY = line->yPos + marginTop + rubyShift;
@@ -265,8 +266,11 @@ void DictionaryWordSelectActivity::extractWords(std::vector<WordSelectNavigator:
       const uint16_t bionicSuffixX = block->bionicRunOffset(wordIndex);
       const bool wordIsRtl = isRtlWord(wordText.c_str(), block->getBlockStyle().isRtl);
 
-      // Skip tokens with no alphanumeric characters (bullets, punctuation, etc.)
-      if (!std::any_of(wordText.begin(), wordText.end(), [](unsigned char c) { return std::isalnum(c); })) {
+      // Use the same Unicode-aware predicate as lookup cleanup so accented
+      // Latin, CJK, Cyrillic, Greek, Arabic, Hebrew, and other rendered scripts
+      // remain selectable while standalone punctuation/symbols do not.
+      if (!utf8ContainsLookupCharacter(wordText)) {
+        lastSelectableWordIndex = -2;
         continue;
       }
 
@@ -309,6 +313,33 @@ void DictionaryWordSelectActivity::extractWords(std::vector<WordSelectNavigator:
           wordWidth = measureWordAdvanceX(renderer, SETTINGS.getReaderFontId(), wordText, wordStyle, bionicBoundary,
                                           bionicSuffixX);
         }
+
+        bool joinWithoutSpaceBefore = false;
+        if (lastSelectableWordIndex == static_cast<int>(wordIndex) - 1 && !words.empty()) {
+          const uint16_t previousIndex = wordIndex - 1;
+          const auto previousStyle = block->wordStyle(previousIndex);
+          // Adjacent lookup tokens are overwhelmingly per-character CJK runs,
+          // which bypass bionic splitting. Measure the prior null-terminated
+          // block token directly to avoid allocating another std::string in
+          // this per-word loop.
+          const int16_t previousMeasuredWidth = static_cast<int16_t>(
+              renderer.getTextAdvanceX(SETTINGS.getReaderFontId(), block->wordText(previousIndex), previousStyle));
+          const int16_t currentMeasuredWidth = measureWordAdvanceX(renderer, SETTINGS.getReaderFontId(), wordText,
+                                                                   wordStyle, bionicBoundary, bionicSuffixX, wordIsRtl);
+          const int currentLeft = screenX;
+          const int currentRight = screenX + currentMeasuredWidth;
+          const int previousLeft = words.back().screenX;
+          const int previousRight = previousLeft + previousMeasuredWidth;
+          const int gap = currentLeft >= previousLeft ? currentLeft - previousRight : previousLeft - currentRight;
+          joinWithoutSpaceBefore = gap < naturalSpaceWidth / 2;
+          if (joinWithoutSpaceBefore) {
+            // The generic width heuristic subtracts an inter-word gap. Adjacent
+            // script tokens have no such gap, so retain their measured widths
+            // for accurate highlights and future adjacency checks.
+            words.back().width = previousMeasuredWidth;
+            wordWidth = currentMeasuredWidth;
+          }
+        }
         {
           uint16_t off = WordSelectNavigator::poolAppend(textPool, wordText.c_str(), wordText.size());
           WordSelectNavigator::WordInfo wi;
@@ -322,9 +353,11 @@ void DictionaryWordSelectActivity::extractWords(std::vector<WordSelectNavigator:
           wi.style = wordStyle;
           wi.fontId = SETTINGS.getReaderFontId();
           wi.isRtl = wordIsRtl;
+          wi.joinWithoutSpaceBefore = joinWithoutSpaceBefore;
           wi.bionicBoundary = bionicBoundary;
           wi.bionicSuffixX = bionicSuffixX;
           words.push_back(wi);
+          lastSelectableWordIndex = wordIndex;
         }
       } else {
         for (size_t si = 0; si < splitStarts.size(); si++) {
@@ -367,6 +400,10 @@ void DictionaryWordSelectActivity::extractWords(std::vector<WordSelectNavigator:
             words.push_back(wi);
           }
         }
+        // Dash-separated pieces are independent lookup choices. Do not infer
+        // that the following source token was directly attached to the last
+        // emitted piece merely because the dash itself is not selectable.
+        lastSelectableWordIndex = -2;
       }
     }
   }
