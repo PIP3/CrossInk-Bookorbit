@@ -1107,6 +1107,69 @@ bool CssParser::lookupRule(std::string_view selector, CssStyle& outStyle) const 
 
 bool CssParser::hasCache() const { return Storage.exists((cachePath + rulesCache).c_str()); }
 
+CssParser::CacheStatus CssParser::inspectCache() const {
+  if (cachePath.empty() || !hasCache()) {
+    return CacheStatus::Missing;
+  }
+
+  FsFile file;
+  if (!Storage.openFileForRead("CSS", cachePath + rulesCache, file)) {
+    return CacheStatus::Invalid;
+  }
+  struct FileGuard {
+    FsFile& file;
+    ~FileGuard() {
+      if (file.isOpen()) file.close();
+    }
+  } fileGuard{file};
+
+  const auto readExact = [&file](void* out, const size_t size) { return file.read(out, size) == size; };
+  const auto skipBytes = [&file](const size_t size) {
+    if (static_cast<size_t>(file.available()) < size) return false;
+    return file.seek(file.position() + size);
+  };
+
+  uint32_t magic = 0;
+  uint8_t version = 0;
+  uint8_t flags = 0;
+  uint16_t ruleCount = 0;
+  if (!readExact(&magic, sizeof(magic)) || magic != CSS_CACHE_MAGIC || !readExact(&version, sizeof(version)) ||
+      version != CSS_CACHE_VERSION || !readExact(&flags, sizeof(flags)) || (flags & ~CSS_CACHE_FLAG_PARTIAL) != 0 ||
+      !readExact(&ruleCount, sizeof(ruleCount)) || ruleCount > MAX_RULES) {
+    return CacheStatus::Invalid;
+  }
+
+  if (!skipBytes(static_cast<size_t>(ruleCount) * sizeof(SelectorEntry))) {
+    return CacheStatus::Invalid;
+  }
+  for (uint16_t i = 0; i < ruleCount; ++i) {
+    uint16_t selectorLen = 0;
+    if (!readExact(&selectorLen, sizeof(selectorLen)) || selectorLen == 0 || selectorLen > MAX_SELECTOR_LENGTH ||
+        !skipBytes(static_cast<size_t>(selectorLen) + CSS_FIXED_STYLE_BYTES)) {
+      return CacheStatus::Invalid;
+    }
+  }
+
+  uint16_t descendantCount = 0;
+  if (!readExact(&descendantCount, sizeof(descendantCount)) || descendantCount > MAX_DESCENDANT_RULES) {
+    return CacheStatus::Invalid;
+  }
+  for (uint16_t i = 0; i < descendantCount; ++i) {
+    for (uint8_t selectorIndex = 0; selectorIndex < 2; ++selectorIndex) {
+      uint16_t selectorLen = 0;
+      if (!readExact(&selectorLen, sizeof(selectorLen)) || selectorLen == 0 || selectorLen > MAX_SELECTOR_LENGTH ||
+          !skipBytes(selectorLen)) {
+        return CacheStatus::Invalid;
+      }
+    }
+    if (!skipBytes(CSS_FIXED_STYLE_BYTES)) {
+      return CacheStatus::Invalid;
+    }
+  }
+
+  return (flags & CSS_CACHE_FLAG_PARTIAL) != 0 ? CacheStatus::Partial : CacheStatus::Complete;
+}
+
 void CssParser::deleteCache() const {
   if (hasCache()) Storage.remove((cachePath + rulesCache).c_str());
   Storage.remove((cachePath + rulesCacheTmp).c_str());

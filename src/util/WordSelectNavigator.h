@@ -43,9 +43,16 @@ class WordSelectNavigator {
     EpdFontFamily::Style style = EpdFontFamily::REGULAR;
     bool isIpa = false;
     int fontId = 0;  // resolved at extraction time; used by renderHighlight()
-    bool isRtl = false;
+    // Pack the two display/lookup flags into the byte that already preceded
+    // bionicBoundary so WordInfo remains 36 bytes on 32-bit targets.
+    bool isRtl : 1;
+    // The source layout placed this token directly beside the previous
+    // selectable token without whitespace (for example adjacent CJK glyphs).
+    bool joinWithoutSpaceBefore : 1;
     uint8_t bionicBoundary = 0;
     uint16_t bionicSuffixX = 0;
+
+    WordInfo() : isRtl(false), joinWithoutSpaceBefore(false) {}
   };
 
   struct Row {

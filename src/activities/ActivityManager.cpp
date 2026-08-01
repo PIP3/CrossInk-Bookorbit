@@ -526,8 +526,23 @@ std::string ActivityManager::getCurrentBookPath() const {
 
 ScreenshotInfo ActivityManager::getScreenshotInfo() const {
   if (currentActivity) {
-    return currentActivity->getScreenshotInfo();
+    const ScreenshotInfo info = currentActivity->getScreenshotInfo();
+    if (info.readerType != ScreenshotInfo::ReaderType::None) {
+      return info;
+    }
   }
+
+  // Reader overlays such as the dictionary are pushed above the book activity.
+  // Keep their visible framebuffer, but inherit the book's screenshot filename.
+  for (auto it = stackActivities.rbegin(); it != stackActivities.rend(); ++it) {
+    if (*it) {
+      const ScreenshotInfo info = (*it)->getScreenshotInfo();
+      if (info.readerType != ScreenshotInfo::ReaderType::None) {
+        return info;
+      }
+    }
+  }
+
   return {};
 }
 

@@ -122,10 +122,15 @@ bool promoteSectionCache(const std::string& tmpPath, const std::string& filePath
 
 Section::Section(const std::shared_ptr<Epub>& epub, const int spineIndex, GfxRenderer& renderer,
                  const char* cacheSuffix)
-    : epub(epub),
+    : Section(*epub, spineIndex, renderer, cacheSuffix) {
+  epubOwner = epub;
+}
+
+Section::Section(Epub& epub, const int spineIndex, GfxRenderer& renderer, const char* cacheSuffix)
+    : epub(&epub),
       spineIndex(spineIndex),
       renderer(renderer),
-      filePath(epub->getCachePath() + "/sections/" + std::to_string(spineIndex) + (cacheSuffix ? cacheSuffix : "") +
+      filePath(epub.getCachePath() + "/sections/" + std::to_string(spineIndex) + (cacheSuffix ? cacheSuffix : "") +
                ".bin") {
   recoverSectionCacheBackup(filePath);
 }
@@ -572,7 +577,7 @@ bool Section::createSectionFile(const ReaderRenderSpec& spec, const std::functio
   }
 
   ChapterHtmlSlimParser visitor(
-      epub, parsePath, renderer, fontId, lineCompression, extraParagraphSpacing, forceParagraphIndents,
+      *epub, parsePath, renderer, fontId, lineCompression, extraParagraphSpacing, forceParagraphIndents,
       paragraphAlignment, viewportWidth, viewportHeight, hyphenationEnabled, effectiveBionicReadingEnabled,
       effectiveGuideReadingEnabled, wordSpacing,
       [this, &lut, &lutCapacity, &lutCount, &pageCompletionFailed, layoutAbortedForLowMemory](
@@ -835,6 +840,7 @@ bool Section::startBuild(const ReaderRenderSpec& spec, const SectionBuildOptions
   auto ctx = makeUniqueNoThrow<BuildContext>();
   if (!ctx) {
     LOG_ERR("SCT", "Failed to allocate section build context");
+    lastLayoutAbortedForLowMemory_ = true;
     file.close();
     Storage.remove(tmpSectionPath.c_str());
     cleanupTempHtml();
@@ -893,7 +899,7 @@ bool Section::startBuild(const ReaderRenderSpec& spec, const SectionBuildOptions
 
   BuildContext* ctxPtr = ctx.get();
   ctx->parser = makeUniqueNoThrow<ChapterHtmlSlimParser>(
-      epub, ctxPtr->parsePath, renderer, fontId, lineCompression, extraParagraphSpacing, forceParagraphIndents,
+      *epub, ctxPtr->parsePath, renderer, fontId, lineCompression, extraParagraphSpacing, forceParagraphIndents,
       paragraphAlignment, viewportWidth, viewportHeight, hyphenationEnabled, bionicReadingEnabled, guideReadingEnabled,
       wordSpacing,
       [this, ctxPtr](std::unique_ptr<Page> page, const uint16_t paragraphIndex, const uint16_t listItemIndex) {
@@ -919,6 +925,7 @@ bool Section::startBuild(const ReaderRenderSpec& spec, const SectionBuildOptions
       buildOptions.previewMaxPages);
   if (!ctx->parser) {
     LOG_ERR("SCT", "Failed to allocate section parser");
+    lastLayoutAbortedForLowMemory_ = true;
     if (ctx->cssParser) ctx->cssParser->clear();
     file.close();
     Storage.remove(tmpSectionPath.c_str());
@@ -930,7 +937,12 @@ bool Section::startBuild(const ReaderRenderSpec& spec, const SectionBuildOptions
   build_ = std::move(ctx);
   if (!build_->parser->beginParse()) {
     LOG_ERR("SCT", "Failed to begin incremental section parse");
-    abandonBuild();
+    lastLayoutAbortedForLowMemory_ = build_->parser->wasLowMemoryAbortTriggered();
+    if (lastLayoutAbortedForLowMemory_ && partial_) {
+      suspendBuild();
+    } else {
+      abandonBuild();
+    }
     return false;
   }
   build_->totalBytes = build_->parser->parseTotalBytes();

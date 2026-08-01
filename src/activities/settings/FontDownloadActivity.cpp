@@ -181,6 +181,10 @@ void FontDownloadActivity::onWifiSelectionComplete(const bool success) {
   requestUpdateAndWait();
 
   if (!fetchAndParseManifest()) {
+    if (goHomeRequested_) {
+      onGoHome();
+      return;
+    }
     if (cancelRequested_) {
       finishAfterBackPress();
       return;
@@ -209,6 +213,7 @@ bool FontDownloadActivity::fetchAndParseManifest() {
   baseUrl_.clear();
   clearManifestFamilies();
   cancelRequested_ = false;
+  goHomeRequested_ = false;
 
   // Poll the Cancel (Back) button while the manifest downloads so a slow or
   // failing network can be backed out of. HttpDownloader checks shouldCancel on
@@ -220,6 +225,10 @@ bool FontDownloadActivity::fetchAndParseManifest() {
       return true;
     }
     mappedInput.update();
+    if (mappedInput.wasHomeGesture()) {
+      goHomeRequested_ = true;
+      cancelRequested_ = true;
+    }
     if (mappedInput.isPressed(MappedInputManager::Button::Back) ||
         mappedInput.wasPressed(MappedInputManager::Button::Back) ||
         mappedInput.wasReleased(MappedInputManager::Button::Back)) {
@@ -626,6 +635,7 @@ void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
     downloadAttempt_ = 0;
     downloadAttemptTotal_ = 0;
     cancelRequested_ = false;
+    goHomeRequested_ = false;
   }
   requestUpdateAndWait();
 
@@ -682,6 +692,10 @@ void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
         return true;
       }
       mappedInput.update();
+      if (mappedInput.wasHomeGesture()) {
+        goHomeRequested_ = true;
+        cancelRequested_ = true;
+      }
       if (mappedInput.isPressed(MappedInputManager::Button::Back) ||
           mappedInput.wasPressed(MappedInputManager::Button::Back) ||
           mappedInput.wasReleased(MappedInputManager::Button::Back)) {
@@ -713,6 +727,10 @@ void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
       if (result == HttpDownloader::ABORTED) {
         LOG_INF("FONT", "Download cancelled: %s", file.name.c_str());
         Storage.remove(tempPath);
+        if (goHomeRequested_) {
+          onGoHome();
+          return;
+        }
         // The Back release that confirmed the cancel would otherwise be seen by
         // the family list and treated as a request to leave the screen.
         mappedInput.suppressNextBackRelease();

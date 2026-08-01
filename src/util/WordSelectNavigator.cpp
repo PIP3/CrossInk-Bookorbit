@@ -124,7 +124,7 @@ std::string WordSelectNavigator::buildPhrase(int fromIdx, int toIdx) const {
     if (i == skipIdx) continue;
     const auto* w = getWordAt(i);
     if (!w) continue;
-    if (!phrase.empty()) phrase += ' ';
+    if (!phrase.empty() && !w->joinWithoutSpaceBefore) phrase += ' ';
     // getLookup() returns the merged, hyphen-stripped text for a hyphenated
     // pair (e.g. "externity" for "exter-" + "nity"), matching the single-word
     // lookup path. For ordinary words it equals the display text.

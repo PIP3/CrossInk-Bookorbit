@@ -2972,12 +2972,14 @@ bool ChapterHtmlSlimParser::beginParse() {
                                  : static_cast<CssTextAlign>(this->paragraphAlignment);
   if (!parseArena_.init(PARSE_ARENA_SLAB_SIZE)) {
     LOG_ERR("EHP", "Failed to init parse arena");
+    lowMemoryAbort = true;
     return false;
   }
   inlineStyleBuf_ = arenaNewArray<StyleStackEntry>(parseArena_, MAX_INLINE_STYLE_DEPTH);
   blockStyleBuf_ = arenaNewArray<BlockStyle>(parseArena_, MAX_BLOCK_STYLE_DEPTH);
   if (!inlineStyleBuf_ || !blockStyleBuf_) {
     LOG_ERR("EHP", "Parse arena OOM for style stacks");
+    lowMemoryAbort = true;
     parseArena_.release();
     return false;
   }
@@ -3006,6 +3008,7 @@ bool ChapterHtmlSlimParser::beginParse() {
   activeParser = XML_ParserCreate(nullptr);
   if (!activeParser) {
     LOG_ERR("EHP", "Couldn't allocate memory for parser");
+    lowMemoryAbort = true;
     parseArena_.release();
     inlineStyleBuf_ = nullptr;
     blockStyleBuf_ = nullptr;

@@ -371,7 +371,7 @@ uint16_t CrossPointSettings::getReadingIdleTimeThresholdSeconds() const {
 
 void CrossPointSettings::toJson(JsonDocument& doc) const {
   std::lock_guard<std::mutex> lock(_mutex);
-  for (const auto& info : getSettingsList()) {
+  for (const auto& info : getBaseSettingsList()) {
     if (!info.key || (!info.valuePtr && !info.stringOffset)) continue;
     if (info.stringOffset) {
       const char* value = reinterpret_cast<const char*>(this) + info.stringOffset;
@@ -419,7 +419,7 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
 
   if (doc["statusBarChapterPageCount"].isNull()) applyLegacyStatusBarSettings(*this);
 
-  for (const auto& info : getSettingsList()) {
+  for (const auto& info : getBaseSettingsList()) {
     if (!info.key || (!info.valuePtr && !info.stringOffset)) continue;
     if (info.stringOffset) {
       char* destination = reinterpret_cast<char*>(this) + info.stringOffset;

@@ -583,6 +583,7 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   statusMessage = book.title;
   downloadProgress = downloadTotal = 0;
   cancelDownload = false;
+  goHomeAfterCancel = false;
   requestUpdate(true);
 
 #ifdef SIMULATOR
@@ -620,6 +621,10 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
       return true;
     }
     mappedInput.update();
+    if (mappedInput.wasHomeGesture()) {
+      goHomeAfterCancel = true;
+      cancelRequested = true;
+    }
     if (mappedInput.isPressed(MappedInputManager::Button::Back) ||
         mappedInput.wasPressed(MappedInputManager::Button::Back) ||
         mappedInput.wasReleased(MappedInputManager::Button::Back)) {
@@ -643,6 +648,10 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
         // The activity loop is blocked for the whole download; pump input here
         // so the Cancel button or a Back press can abort mid-transfer.
         mappedInput.update();
+        if (mappedInput.wasHomeGesture()) {
+          goHomeAfterCancel = true;
+          cancelRequested = true;
+        }
         if (mappedInput.wasReleased(MappedInputManager::Button::Back)) cancelRequested = true;
         if (uiReady) {
           const fui::InputSnapshot snap = touchSnapshotFrom(mappedInput);
@@ -665,6 +674,10 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
     state = BrowserState::BROWSING;
   } else if (result == HttpDownloader::ABORTED) {
     LOG_INF("OPDS", "Download cancelled");
+    if (goHomeAfterCancel) {
+      onGoHome();
+      return;
+    }
     mappedInput.suppressNextBackRelease();
     state = BrowserState::BROWSING;
   } else {

@@ -111,6 +111,7 @@ class DictionaryDefinitionActivity final : public Activity {
   uint32_t definitionOffset_ = 0;
   uint32_t definitionSize_ = 0;
   bool definitionIsHtml_ = false;
+  bool definitionHtmlNeedsPlainFallback_ = false;
   bool definitionReadFailed_ = false;
   // Kept per lookup so a failed SD-font prewarm can use the matching built-in
   // reader font without changing the user's selected font setting.

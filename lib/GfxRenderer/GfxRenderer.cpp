@@ -2263,6 +2263,50 @@ void GfxRenderer::invertScreen() const {
   }
 }
 
+void GfxRenderer::invertRect(const int x, const int y, const int width, const int height) const {
+  if (frameBuffer == nullptr || width <= 0 || height <= 0) return;
+
+  const int lx0 = std::max(0, x);
+  const int ly0 = std::max(0, y);
+  const int lx1 = std::min(getScreenWidth(), x + width);
+  const int ly1 = std::min(getScreenHeight(), y + height);
+  if (lx0 >= lx1 || ly0 >= ly1) return;
+
+  int paX, paY, pbX, pbY;
+  rotateCoordinates(orientation, lx0, ly0, &paX, &paY, panelWidth, panelHeight);
+  rotateCoordinates(orientation, lx1 - 1, ly1 - 1, &pbX, &pbY, panelWidth, panelHeight);
+
+  const int phyX0 = std::min(paX, pbX);
+  const int phyX1 = std::max(paX, pbX);
+  int phyY0 = std::min(paY, pbY);
+  int phyY1 = std::max(paY, pbY);
+
+  uint8_t* target = getWriteTarget();
+  const int originY = getWriteOriginY();
+  phyY0 = std::max(phyY0, originY);
+  phyY1 = std::min(phyY1, originY + getWriteRows() - 1);
+  if (phyY0 > phyY1) return;
+
+  const int byteStart = phyX0 >> 3;
+  const int byteEnd = phyX1 >> 3;
+  const uint8_t headMask = static_cast<uint8_t>(0xFFu >> (phyX0 & 7));
+  const uint8_t tailMask = static_cast<uint8_t>(0xFFu << (7 - (phyX1 & 7)));
+
+  for (int py = phyY0; py <= phyY1; ++py) {
+    uint8_t* row = target + static_cast<int32_t>(py - originY) * panelWidthBytes;
+    if (byteStart == byteEnd) {
+      row[byteStart] ^= headMask & tailMask;
+      continue;
+    }
+
+    row[byteStart] ^= headMask;
+    for (int byte = byteStart + 1; byte < byteEnd; ++byte) {
+      row[byte] ^= 0xFFu;
+    }
+    row[byteEnd] ^= tailMask;
+  }
+}
+
 void GfxRenderer::displayBuffer(const HalDisplay::RefreshMode refreshMode, const bool turnOffScreen) const {
   display.displayBuffer(refreshMode, fadingFix || turnOffScreen);
 }

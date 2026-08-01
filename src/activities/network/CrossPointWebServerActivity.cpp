@@ -439,7 +439,8 @@ void CrossPointWebServerActivity::loop() {
           // Force trigger an update of which buttons are being pressed so be have accurate state
           // for back button checking
           mappedInput.update();
-          // Check for exit button inside loop for responsiveness
+          // This local update can consume one-shot exit events before the
+          // ActivityManager sees them, so honor every exit route here.
           if (exitRequested()) {
             exitToOrigin();
             return;
@@ -481,7 +482,7 @@ void CrossPointWebServerActivity::renderHeader() const {
 
 bool CrossPointWebServerActivity::exitRequested() const {
   return TouchHeaderBackButton::wasTapped(mappedInput, renderer) ||
-         mappedInput.wasPressed(MappedInputManager::Button::Back);
+         mappedInput.wasPressed(MappedInputManager::Button::Back) || mappedInput.wasHomeGesture();
 }
 
 void CrossPointWebServerActivity::renderServerRunning() const {

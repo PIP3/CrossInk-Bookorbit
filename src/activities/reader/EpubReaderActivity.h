@@ -52,8 +52,18 @@ class EpubReaderActivity final : public Activity {
     char sdFontFamilyName[64] = "";
   };
 
+  struct BookReaderSettingsData {
+    bool hasAutoPageTurnInterval = false;
+    uint16_t autoPageTurnSeconds = 0;
+    bool hasCustomReaderSettings = false;
+    bool hasRenderModeOverride = false;
+    uint8_t renderMode = 0;
+    ReaderSettingsSnapshot readerSettings;
+  };
+
  private:
   std::shared_ptr<Epub> epub;
+  BookReaderSettingsData initialBookReaderSettings;
   std::unique_ptr<Section> section = nullptr;
   int currentSpineIndex = 0;
   int nextPageNumber = 0;
@@ -95,6 +105,7 @@ class EpubReaderActivity final : public Activity {
   unsigned long lastPageTurnTime = 0UL;
   unsigned long pageTurnDuration = 0UL;
   unsigned long pageShownAtMs = 0UL;
+  bool deferredXLocationLoadPending = true;
   unsigned long lastRenderCompleteMs = 0UL;
   int idlePrewarmSpine = -1;
   int idlePrewarmPage = -1;
@@ -339,6 +350,7 @@ class EpubReaderActivity final : public Activity {
   bool storeRenderModeToastRegion(const char* msg);
   void drawRenderModeToastBuffer(const char* msg);
   bool restoreRenderModeToastRegion();
+  bool loadDeferredXLocationsIfReady();
 
   // Footnote navigation
   void navigateToHref(const std::string& href, bool savePosition = false, bool preferFootnotePreview = false);
@@ -346,9 +358,10 @@ class EpubReaderActivity final : public Activity {
 
  public:
   explicit EpubReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Epub> epub,
-                              int initialRefreshCountdown)
+                              BookReaderSettingsData readerSettings, int initialRefreshCountdown)
       : Activity("EpubReader", renderer, mappedInput),
         epub(std::move(epub)),
+        initialBookReaderSettings(std::move(readerSettings)),
         pagesUntilFullRefresh(initialRefreshCountdown) {}
   void onEnter() override;
   void onExit() override;
@@ -389,7 +402,7 @@ class EpubReaderActivity final : public Activity {
   // Used by SleepActivity to prepare the background for the overlay sleep mode.
   // Returns false if the page cannot be loaded (missing cache / file error).
   static bool drawCurrentPageToBuffer(const std::string& filePath, GfxRenderer& renderer);
-  static uint8_t resolveBookEmbeddedStyle(const Epub& epub, uint8_t fallback);
+  static BookReaderSettingsData readBookReaderSettings(const Epub& epub);
   static uint8_t loadBookRenderMode(const std::string& filePath);
   static bool saveBookRenderMode(const std::string& filePath, uint8_t renderMode);
   static bool resetBookReaderSettings(const std::string& filePath);

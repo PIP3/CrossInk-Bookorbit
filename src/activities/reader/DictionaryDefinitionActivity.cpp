@@ -509,6 +509,7 @@ void DictionaryDefinitionActivity::wrapText() {
   definitionOffset_ = slice.offset;
   definitionSize_ = slice.size;
   definitionIsHtml_ = slice.isHtml;
+  definitionHtmlNeedsPlainFallback_ = false;
 
   prepareDefinitionFontAdvances();
   loadPage(currentPage);
@@ -618,8 +619,12 @@ void DictionaryDefinitionActivity::prepareDefinitionFontAdvances() {
   if (definitionIsHtml_) {
     const DictHtmlRenderer::SpanSink sink{this, &DictionaryDefinitionActivity::collectSpanForAdvances};
     if (!htmlRenderer_.renderFromFileStreaming(dictPath.c_str(), definitionOffset_, definitionSize_, sink)) {
-      LOG_ERR("DICT", "Failed to collect SD-font advances from HTML definition");
-      return;
+      definitionHtmlNeedsPlainFallback_ = true;
+      LOG_ERR("DICT", "Malformed HTML definition; collecting SD-font advances from plain text");
+      if (!htmlRenderer_.renderPlainTextFromFileStreaming(dictPath.c_str(), definitionOffset_, definitionSize_, sink)) {
+        LOG_ERR("DICT", "Failed to collect SD-font advances from definition fallback");
+        return;
+      }
     }
   } else {
     HalFile dictFile;
@@ -749,21 +754,40 @@ void DictionaryDefinitionActivity::wrapHtml() {
   // Wrapper emits completed lines to the page collector, and the collector keeps
   // only the current page. Neither the whole-definition span/textBuf (renderer)
   // nor all pages of lines (here) is ever materialized.
-  DictLayout::Measurer measure{this, &DictionaryDefinitionActivity::measureWidthAdapter};
-  DictLayout::LineSink lineSink{this, &DictionaryDefinitionActivity::collectLineSink};
-  DictLayout::Wrapper wrapper(DictLayout::WrapMetrics{maxWidth, indentStep, bulletWidth}, measure, lineSink);
-
-  // Renderer is a reused activity member (3.1-A): renderFromFileStreaming resets
-  // it each call (XML_ParserReset, not free+create), so no per-turn object/parser
-  // churn. Streaming means it never materializes the whole-definition buffers.
   const std::string dictPath = foundLocation.folderPath + ".dict";
-  DefinitionSpanFeedContext feedCtx{this, &wrapper};
-  const DictHtmlRenderer::SpanSink spanSink{&feedCtx, &DictionaryDefinitionActivity::feedSpanToWrapper};
-  if (!htmlRenderer_.renderFromFileStreaming(dictPath.c_str(), definitionOffset_, definitionSize_, spanSink)) {
-    LOG_ERR("DICT", "Failed to read HTML definition");
-    definitionReadFailed_ = true;
+  const auto streamIntoLayout = [&](const bool plainTextFallback) {
+    DictLayout::Measurer measure{this, &DictionaryDefinitionActivity::measureWidthAdapter};
+    DictLayout::LineSink lineSink{this, &DictionaryDefinitionActivity::collectLineSink};
+    DictLayout::Wrapper wrapper(DictLayout::WrapMetrics{maxWidth, indentStep, bulletWidth}, measure, lineSink);
+    DefinitionSpanFeedContext feedCtx{this, &wrapper};
+    const DictHtmlRenderer::SpanSink spanSink{&feedCtx, &DictionaryDefinitionActivity::feedSpanToWrapper};
+    const bool ok = plainTextFallback ? htmlRenderer_.renderPlainTextFromFileStreaming(
+                                            dictPath.c_str(), definitionOffset_, definitionSize_, spanSink)
+                                      : htmlRenderer_.renderFromFileStreaming(dictPath.c_str(), definitionOffset_,
+                                                                              definitionSize_, spanSink);
+    wrapper.finish();
+    return ok;
+  };
+
+  // Both paths reset and stream one span at a time, so recovery never
+  // materializes the full definition. Once strict parsing fails, page turns
+  // reuse the known-good fallback without repeating the failed parse.
+  if (!definitionHtmlNeedsPlainFallback_ && !streamIntoLayout(false)) {
+    definitionHtmlNeedsPlainFallback_ = true;
+    LOG_ERR("DICT", "Malformed HTML definition; displaying plain text");
   }
-  wrapper.finish();
+  if (definitionHtmlNeedsPlainFallback_) {
+    // The strict pass may already have emitted the valid prefix. Reset the page
+    // collector before replaying the complete definition as plain text.
+    layoutLines.clear();
+    layoutSegments.clear();
+    pagePool_.clear();
+    collectLineCount_ = 0;
+    if (!streamIntoLayout(true)) {
+      LOG_ERR("DICT", "Failed to read definition plain-text fallback");
+      definitionReadFailed_ = true;
+    }
+  }
   // Only the kept page's span text was ever copied into layoutLines.
 }
 

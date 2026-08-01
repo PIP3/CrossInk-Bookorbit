@@ -569,7 +569,7 @@ void CrossPointWebServer::handleStatus() const {
   server->send(200, "application/json", response);
 }
 
-void CrossPointWebServer::scanFiles(const char* path, const std::function<void(FileInfo)>& callback) const {
+void CrossPointWebServer::scanFiles(const char* path, const FileVisitor visitor, void* context) const {
   HalFile root = Storage.open(path);
   if (!root) {
     LOG_DBG("WEB", "Failed to open directory: %s", path);
@@ -615,7 +615,7 @@ void CrossPointWebServer::scanFiles(const char* path, const std::function<void(F
         info.isEpub = isEpubFile(info.name);
       }
 
-      callback(info);
+      visitor(info, context);
     }
 
     file.close();
@@ -652,56 +652,67 @@ void CrossPointWebServer::handleFileListData() const {
   // the old per-entry path as a low-memory fallback.
   constexpr size_t BATCH_CAPACITY = 1400;
   auto batch = makeUniqueNoThrow<char[]>(BATCH_CAPACITY);
-  size_t batchLen = 0;
-  const auto flushBatch = [&]() {
-    if (batchLen == 0) return;
-    server->sendContent(batch.get(), batchLen);
-    batchLen = 0;
-  };
-
   char output[512];
   constexpr size_t outputSize = sizeof(output);
-  bool seenFirst = false;
   JsonDocument doc;
 
+  struct FileListContext {
+    WebServer* server;
+    char* batch;
+    size_t batchLen;
+    char* output;
+    JsonDocument* doc;
+    bool seenFirst;
+  } context{server.get(), batch.get(), 0, output, &doc, false};
+
   if (batch) {
-    batch[batchLen++] = '[';
+    batch[context.batchLen++] = '[';
   } else {
     LOG_ERR("WEB", "OOM: file list batch buffer; falling back to per-entry sends");
     server->sendContent("[");
   }
 
-  scanFiles(currentPath.c_str(), [&](const FileInfo& info) {
-    doc.clear();
-    doc["name"] = info.name;
-    doc["size"] = info.size;
-    doc["isDirectory"] = info.isDirectory;
-    doc["isEpub"] = info.isEpub;
+  scanFiles(
+      currentPath.c_str(),
+      [](const FileInfo& info, void* rawContext) {
+        auto& context = *static_cast<FileListContext*>(rawContext);
+        context.doc->clear();
+        (*context.doc)["name"] = info.name;
+        (*context.doc)["size"] = info.size;
+        (*context.doc)["isDirectory"] = info.isDirectory;
+        (*context.doc)["isEpub"] = info.isEpub;
 
-    const size_t written = serializeJson(doc, output, outputSize);
-    if (written >= outputSize) {
-      // JSON output truncated; skip this entry to avoid sending malformed JSON
-      LOG_DBG("WEB", "Skipping file entry with oversized JSON for name: %s", info.name.c_str());
-      return;
-    }
+        const size_t written = serializeJson(*context.doc, context.output, outputSize);
+        if (written >= outputSize) {
+          // JSON output truncated; skip this entry to avoid sending malformed JSON
+          LOG_DBG("WEB", "Skipping file entry with oversized JSON for name: %s", info.name.c_str());
+          return;
+        }
 
-    const size_t required = written + (seenFirst ? 1 : 0);
-    if (batch) {
-      if (batchLen + required > BATCH_CAPACITY) flushBatch();
-      if (seenFirst) batch[batchLen++] = ',';
-      memcpy(batch.get() + batchLen, output, written);
-      batchLen += written;
-    } else {
-      if (seenFirst) server->sendContent(",");
-      server->sendContent(output);
-    }
-    seenFirst = true;
-  });
+        const size_t required = written + (context.seenFirst ? 1 : 0);
+        if (context.batch) {
+          if (context.batchLen + required > BATCH_CAPACITY) {
+            context.server->sendContent(context.batch, context.batchLen);
+            context.batchLen = 0;
+          }
+          if (context.seenFirst) context.batch[context.batchLen++] = ',';
+          memcpy(context.batch + context.batchLen, context.output, written);
+          context.batchLen += written;
+        } else {
+          if (context.seenFirst) context.server->sendContent(",");
+          context.server->sendContent(context.output);
+        }
+        context.seenFirst = true;
+      },
+      &context);
 
   if (batch) {
-    if (batchLen + 1 > BATCH_CAPACITY) flushBatch();
-    batch[batchLen++] = ']';
-    flushBatch();
+    if (context.batchLen + 1 > BATCH_CAPACITY) {
+      server->sendContent(batch.get(), context.batchLen);
+      context.batchLen = 0;
+    }
+    batch[context.batchLen++] = ']';
+    server->sendContent(batch.get(), context.batchLen);
   } else {
     server->sendContent("]");
   }

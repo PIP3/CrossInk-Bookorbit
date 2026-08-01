@@ -152,6 +152,11 @@ Built-in fonts keep the glyphs they contain and approximate only unsupported pro
 
 You can download CrossInk's SD card catalog of fonts with IPA glyphs built-in from [Inky](https://inky.crossink.dev/#downloads).
 
+Maintainers regenerating that catalog can use the
+[dictionary font builder](dictionary-development.md#generating-dictionary-fonts),
+which adds dictionary IPA and combining-mark coverage to the normal reader font
+families and packages the resulting SD-card fonts.
+
 ---
 
 ## Dictionary Tools

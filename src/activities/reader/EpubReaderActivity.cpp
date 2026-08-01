@@ -263,6 +263,45 @@ SectionBuildProfile safeModeBuildProfile() {
   return SectionBuildProfile{EpubRenderMode::Light, false, false, false, "safe", true};
 }
 
+struct SectionBuildAttempt {
+  bool succeeded;
+  bool lowMemory;
+};
+
+struct SectionFallbackResult {
+  bool succeeded = false;
+  bool lastAttemptLowMemory = false;
+  bool usedSafeMode = false;
+};
+
+template <typename BuildFn, typename BeforeRetryFn>
+SectionFallbackResult runSectionBuildFallbacks(const EpubRenderMode selectedMode, const bool allowSafeMode,
+                                               BuildFn& build, BeforeRetryFn& beforeRetry) {
+  SectionFallbackResult result;
+  uint8_t fallbackCount = 0;
+  const auto fallbackModes = fallbackModesForSelection(selectedMode, fallbackCount);
+  for (uint8_t i = 0; i < fallbackCount && !result.succeeded; ++i) {
+    const SectionBuildProfile profile = buildProfileForRenderMode(fallbackModes[i]);
+    if (i > 0) {
+      if (!result.lastAttemptLowMemory) break;
+      beforeRetry(profile);
+    }
+    const SectionBuildAttempt attempt = build(profile);
+    result.succeeded = attempt.succeeded;
+    result.lastAttemptLowMemory = attempt.lowMemory;
+  }
+
+  if (!result.succeeded && result.lastAttemptLowMemory && allowSafeMode) {
+    const SectionBuildProfile profile = safeModeBuildProfile();
+    beforeRetry(profile);
+    const SectionBuildAttempt attempt = build(profile);
+    result.succeeded = attempt.succeeded;
+    result.lastAttemptLowMemory = attempt.lowMemory;
+    result.usedSafeMode = attempt.succeeded;
+  }
+  return result;
+}
+
 ReaderRenderSpec readerRenderSpecForProfile(const int fontId, const uint16_t viewportWidth,
                                             const uint16_t viewportHeight, const SectionBuildProfile& profile) {
   ReaderRenderSpec spec = SETTINGS.readerRenderSpec(viewportWidth, viewportHeight, profile.renderMode);
@@ -1066,14 +1105,7 @@ void applyReaderSettings(const EpubReaderActivity::ReaderSettingsSnapshot& in) {
                                 : CrossPointSettings::INDEXING_FULL_SECTION;
 }
 
-struct BookReaderSettingsData {
-  bool hasAutoPageTurnInterval = false;
-  uint16_t autoPageTurnSeconds = DEFAULT_AUTO_PAGE_TURN_INTERVAL_S;
-  bool hasCustomReaderSettings = false;
-  bool hasRenderModeOverride = false;
-  uint8_t renderMode = static_cast<uint8_t>(EpubRenderMode::CrossInkDefault);
-  EpubReaderActivity::ReaderSettingsSnapshot readerSettings;
-};
+using BookReaderSettingsData = EpubReaderActivity::BookReaderSettingsData;
 
 bool readReaderSettingsSnapshot(FsFile& file, EpubReaderActivity::ReaderSettingsSnapshot& out,
                                 const bool includesWordSpacing, const bool includesIndexingMethod) {
@@ -1271,9 +1303,8 @@ void moveFinishedBookToReadFolder(const std::string& srcPath, const std::string&
 
 }  // namespace
 
-uint8_t EpubReaderActivity::resolveBookEmbeddedStyle(const Epub& epub, const uint8_t fallback) {
-  const BookReaderSettingsData data = loadBookReaderSettingsFile(epub.getCachePath());
-  return data.hasCustomReaderSettings ? (data.readerSettings.embeddedStyle ? 1 : 0) : (fallback ? 1 : 0);
+EpubReaderActivity::BookReaderSettingsData EpubReaderActivity::readBookReaderSettings(const Epub& epub) {
+  return loadBookReaderSettingsFile(epub.getCachePath());
 }
 
 uint8_t EpubReaderActivity::loadBookRenderMode(const std::string& filePath) {
@@ -1787,7 +1818,7 @@ void EpubReaderActivity::loadBookReaderSettings() {
     return;
   }
 
-  const auto data = loadBookReaderSettingsFile(epub->getCachePath());
+  const auto& data = initialBookReaderSettings;
   bookHasCustomReaderSettings = data.hasCustomReaderSettings;
   bookHasAutoPageTurnInterval = data.hasAutoPageTurnInterval;
   bookHasRenderModeOverride = data.hasRenderModeOverride;
@@ -2235,6 +2266,10 @@ void EpubReaderActivity::loop() {
     goHomeAfterBuildCancel.store(true, std::memory_order_relaxed);
     automaticPageTurnActive = false;
     LOG_DBG("ERS", "Back requested while EPUB indexing is busy; cancelling build");
+    return;
+  }
+
+  if (loadDeferredXLocationsIfReady()) {
     return;
   }
 
@@ -2733,6 +2768,32 @@ void EpubReaderActivity::loop() {
   } else {
     pageTurn(true, pageTurnSource);
   }
+}
+
+bool EpubReaderActivity::loadDeferredXLocationsIfReady() {
+  if (!deferredXLocationLoadPending || pageShownAtMs == 0UL || RenderLock::peek() || sectionBuildWantsTick()) {
+    return false;
+  }
+
+  RenderLock lock(*this);
+  // Once the initial lookahead is ready, persist it as a partial and release the
+  // parser/CSS build arena before allocating optional location metadata.
+  if (section && section->isBuilding()) {
+    section->suspendBuild();
+  }
+  deferredXLocationLoadPending = false;
+  GfxRenderer::FrameBufferLoan loan(renderer);
+  const bool loaded = epub->loadXLocations();
+  loan.end();
+
+  if (loaded) {
+    chapterGroupEstimate.valid = false;
+    initializeCompletionPromptTrigger();
+  }
+  // Lending the framebuffer discards its pixels. The panel still shows the page,
+  // so rebuild the buffer before the next interaction regardless of manifest availability.
+  requestUpdate();
+  return true;
 }
 
 // Translate an absolute percent into a spine index plus a normalized position
@@ -4642,32 +4703,25 @@ void EpubReaderActivity::render(RenderLock&& lock) {
         return buildSucceeded;
       };
 
-      uint8_t fallbackCount = 0;
-      const auto fallbackModes = fallbackModesForSelection(selectedRenderMode, fallbackCount);
-      for (uint8_t i = 0; i < fallbackCount && !fallbackBuildSucceeded; ++i) {
-        const EpubRenderMode attemptMode = fallbackModes[i];
-        if (i > 0) {
-          if (!layoutAbortedForLowMemory) {
-            break;
-          }
-          LOG_ERR("ERS", "EPUB section layout aborted for low heap; retrying mode %u",
-                  static_cast<unsigned>(attemptMode));
-          releaseReaderSdFontCachesForLowMemory(renderer, "ERS", "fallback section rebuild");
+      auto buildWithFallback = [&](const SectionBuildProfile& profile) {
+        layoutAbortedForLowMemory = false;
+        const bool succeeded = buildSectionWithProfile(readerFontId, profile);
+        return SectionBuildAttempt{succeeded, layoutAbortedForLowMemory};
+      };
+      auto beforeFallbackRetry = [&](const SectionBuildProfile& profile) {
+        if (profile.safeMode) {
+          LOG_ERR("ERS", "EPUB section layout aborted for low heap; retrying Safe Mode");
+          releaseReaderSdFontCachesForLowMemory(renderer, "ERS", "safe mode section rebuild");
+          return;
         }
-        layoutAbortedForLowMemory = false;
-        fallbackBuildSucceeded = buildSectionWithProfile(readerFontId, buildProfileForRenderMode(attemptMode));
-      }
-
-      if (buildCancelledForBack) {
-        return;
-      }
-
-      if (!fallbackBuildSucceeded && layoutAbortedForLowMemory && shouldAttemptSafeModeFallback()) {
-        LOG_ERR("ERS", "EPUB section layout aborted for low heap; retrying Safe Mode");
-        releaseReaderSdFontCachesForLowMemory(renderer, "ERS", "safe mode section rebuild");
-        layoutAbortedForLowMemory = false;
-        fallbackBuildSucceeded = buildSectionWithProfile(readerFontId, safeModeBuildProfile());
-      }
+        LOG_ERR("ERS", "EPUB section layout aborted for low heap; retrying mode %u",
+                static_cast<unsigned>(profile.renderMode));
+        releaseReaderSdFontCachesForLowMemory(renderer, "ERS", "fallback section rebuild");
+      };
+      const SectionFallbackResult fallbackResult = runSectionBuildFallbacks(
+          selectedRenderMode, shouldAttemptSafeModeFallback(), buildWithFallback, beforeFallbackRetry);
+      fallbackBuildSucceeded = fallbackResult.succeeded;
+      layoutAbortedForLowMemory = fallbackResult.lastAttemptLowMemory;
 
       if (buildCancelledForBack) {
         return;
@@ -5150,25 +5204,21 @@ void EpubReaderActivity::silentIndexNextChapterIfNeeded(const uint16_t viewportW
     return succeeded;
   };
 
-  uint8_t fallbackCount = 0;
-  const auto fallbackModes = fallbackModesForSelection(selectedRenderMode, fallbackCount);
-  for (uint8_t i = 0; i < fallbackCount && !buildSucceeded; ++i) {
-    if (i > 0) {
-      if (!layoutAbortedForLowMemory) {
-        break;
-      }
-      releaseReaderSdFontCachesForLowMemory(renderer, "ERS", "silent next-chapter fallback indexing");
-    }
+  auto buildWithFallback = [&](const SectionBuildProfile& profile) {
     layoutAbortedForLowMemory = false;
-    buildSucceeded = buildNextSection(buildProfileForRenderMode(fallbackModes[i]));
-  }
-
-  if (!buildSucceeded && layoutAbortedForLowMemory && shouldAttemptSafeModeFallback()) {
-    releaseReaderSdFontCachesForLowMemory(renderer, "ERS", "silent next-chapter safe mode indexing");
-    layoutAbortedForLowMemory = false;
-    buildSucceeded = buildNextSection(safeModeBuildProfile());
-    safeModeBuildSucceeded = buildSucceeded;
-  }
+    const bool succeeded = buildNextSection(profile);
+    return SectionBuildAttempt{succeeded, layoutAbortedForLowMemory};
+  };
+  auto beforeFallbackRetry = [&](const SectionBuildProfile& profile) {
+    releaseReaderSdFontCachesForLowMemory(
+        renderer, "ERS",
+        profile.safeMode ? "silent next-chapter safe mode indexing" : "silent next-chapter fallback indexing");
+  };
+  const SectionFallbackResult fallbackResult = runSectionBuildFallbacks(
+      selectedRenderMode, shouldAttemptSafeModeFallback(), buildWithFallback, beforeFallbackRetry);
+  buildSucceeded = fallbackResult.succeeded;
+  layoutAbortedForLowMemory = fallbackResult.lastAttemptLowMemory;
+  safeModeBuildSucceeded = fallbackResult.usedSafeMode;
 
   releaseReaderSdFontCachesForLowMemory(renderer, "ERS", "silent next-chapter indexing");
 
@@ -6013,24 +6063,31 @@ void EpubReaderActivity::restoreSavedPosition() {
   requestUpdate();
 }
 bool EpubReaderActivity::drawCurrentPageToBuffer(const std::string& filePath, GfxRenderer& renderer) {
-  auto epub = std::make_shared<Epub>(filePath, "/.crosspoint");
+  auto epub = makeUniqueNoThrow<Epub>(filePath, "/.crosspoint");
+  if (!epub) {
+    LOG_ERR("SLP", "EPUB: failed to allocate book for sleep-page rendering");
+    return false;
+  }
   epub->setupCacheDir();
 
   ScopedReaderSettingsRestore restoreReaderSettings;
-  const auto readerSettings = loadBookReaderSettingsFile(epub->getCachePath());
+  const auto readerSettings = readBookReaderSettings(*epub);
   if (readerSettings.hasCustomReaderSettings) {
     applyReaderSettings(readerSettings.readerSettings);
   }
   SETTINGS.epubRenderMode = readerSettings.hasRenderModeOverride
                                 ? normalizeRenderModeRaw(readerSettings.renderMode)
                                 : static_cast<uint8_t>(EpubRenderMode::CrossInkDefault);
-  ensureReaderSdFontLoaded(renderer);
 
   // Load CSS when embeddedStyle is enabled, as createSectionFile may need it to rebuild the cache.
-  if (!epub->load(true, SETTINGS.embeddedStyle == 0)) {
-    LOG_DBG("SLP", "EPUB: failed to load %s", filePath.c_str());
-    return false;
+  {
+    GfxRenderer::FrameBufferLoan loan(renderer);
+    if (!epub->load(true, SETTINGS.embeddedStyle == 0, Epub::XLocationLoadMode::Skip)) {
+      LOG_DBG("SLP", "EPUB: failed to load %s", filePath.c_str());
+      return false;
+    }
   }
+  ensureReaderSdFontLoaded(renderer);
 
   // Load saved spine index and page number
   int spineIndex = 0, pageNumber = 0;
@@ -6054,13 +6111,49 @@ bool EpubReaderActivity::drawCurrentPageToBuffer(const std::string& filePath, Gf
   int renderFontId = readerFontId;
   const EpubRenderMode selectedRenderMode = normalizeRenderMode(SETTINGS.epubRenderMode);
   auto section =
-      makeUniqueNoThrow<Section>(epub, spineIndex, renderer, sectionCacheSuffixForRenderMode(selectedRenderMode));
-  if (!section) {
+      makeUniqueNoThrow<Section>(*epub, spineIndex, renderer, sectionCacheSuffixForRenderMode(selectedRenderMode));
+  bool loadedSection = false;
+  if (section) {
+    loadedSection = section->loadSectionFile(readerRenderSpecForProfile(readerFontId, viewportWidth, viewportHeight,
+                                                                        buildProfileForRenderMode(selectedRenderMode)));
+  } else {
     LOG_ERR("SLP", "EPUB: failed to allocate section for spine %d", spineIndex);
-    return false;
   }
-  bool loadedSection = section->loadSectionFile(readerRenderSpecForProfile(
-      readerFontId, viewportWidth, viewportHeight, buildProfileForRenderMode(selectedRenderMode)));
+
+  bool sectionRebuilt = false;
+  bool safeModeBuildSucceeded = false;
+  EpubRenderMode usedRenderMode = selectedRenderMode;
+  const auto rebuildSectionWithFallback = [&]() {
+    bool layoutAbortedForLowMemory = false;
+    auto buildWithFallback = [&](const SectionBuildProfile& profile) {
+      layoutAbortedForLowMemory = false;
+      section =
+          makeUniqueNoThrow<Section>(*epub, spineIndex, renderer, sectionCacheSuffixForRenderMode(profile.renderMode));
+      if (!section) {
+        LOG_ERR("SLP", "EPUB: failed to allocate section builder for spine %d", spineIndex);
+        return SectionBuildAttempt{false, true};
+      }
+      const bool succeeded = section->createSectionFile(
+          readerRenderSpecForProfile(readerFontId, viewportWidth, viewportHeight, profile), []() {}, nullptr,
+          &layoutAbortedForLowMemory);
+      if (succeeded) usedRenderMode = profile.renderMode;
+      return SectionBuildAttempt{succeeded, layoutAbortedForLowMemory};
+    };
+    auto beforeFallbackRetry = [&](const SectionBuildProfile& profile) {
+      if (profile.safeMode) {
+        LOG_DBG("SLP", "EPUB: retrying sleep-page rebuild with Safe Mode for spine %d", spineIndex);
+        releaseReaderSdFontCachesForLowMemory(renderer, "SLP", "sleep-page safe mode rebuild");
+      } else {
+        LOG_DBG("SLP", "EPUB: retrying sleep-page rebuild with mode %u for spine %d",
+                static_cast<unsigned>(profile.renderMode), spineIndex);
+        releaseReaderSdFontCachesForLowMemory(renderer, "SLP", "sleep-page fallback rebuild");
+      }
+    };
+    const SectionFallbackResult result = runSectionBuildFallbacks(selectedRenderMode, shouldAttemptSafeModeFallback(),
+                                                                  buildWithFallback, beforeFallbackRetry);
+    safeModeBuildSucceeded = result.usedSafeMode;
+    return result.succeeded;
+  };
 
   if (!loadedSection) {
     if (!MemoryBudget::hasHeapForOptionalEpubRebuild("SLP", "EPUB sleep-page cache rebuild", spineIndex)) {
@@ -6069,60 +6162,32 @@ bool EpubReaderActivity::drawCurrentPageToBuffer(const std::string& filePath, Gf
 
     LOG_DBG("SLP", "EPUB: section cache not found for spine %d, rebuilding (free=%u, maxAlloc=%u)", spineIndex,
             ESP.getFreeHeap(), ESP.getMaxAllocHeap());
-    bool layoutAbortedForLowMemory = false;
-    bool buildSucceeded = false;
-    bool safeModeBuildSucceeded = false;
-    EpubRenderMode usedRenderMode = selectedRenderMode;
-    uint8_t fallbackCount = 0;
-    const auto fallbackModes = fallbackModesForSelection(selectedRenderMode, fallbackCount);
-    for (uint8_t i = 0; i < fallbackCount && !buildSucceeded; ++i) {
-      const EpubRenderMode attemptMode = fallbackModes[i];
-      if (i > 0) {
-        if (!layoutAbortedForLowMemory) {
-          break;
-        }
-        LOG_DBG("SLP", "EPUB: retrying sleep-page rebuild with mode %u for spine %d",
-                static_cast<unsigned>(attemptMode), spineIndex);
-        releaseReaderSdFontCachesForLowMemory(renderer, "SLP", "sleep-page fallback rebuild");
-      }
-      layoutAbortedForLowMemory = false;
-      const SectionBuildProfile profile = buildProfileForRenderMode(attemptMode);
-      section =
-          makeUniqueNoThrow<Section>(epub, spineIndex, renderer, sectionCacheSuffixForRenderMode(profile.renderMode));
-      if (!section) {
-        LOG_ERR("SLP", "EPUB: failed to allocate section builder for spine %d", spineIndex);
-        return false;
-      }
-      buildSucceeded = section->createSectionFile(
-          readerRenderSpecForProfile(readerFontId, viewportWidth, viewportHeight, profile), []() {}, nullptr,
-          &layoutAbortedForLowMemory);
-      if (buildSucceeded) {
-        usedRenderMode = profile.renderMode;
-      }
-    }
-    if (!buildSucceeded && layoutAbortedForLowMemory && shouldAttemptSafeModeFallback()) {
-      LOG_DBG("SLP", "EPUB: retrying sleep-page rebuild with Safe Mode for spine %d", spineIndex);
-      releaseReaderSdFontCachesForLowMemory(renderer, "SLP", "sleep-page safe mode rebuild");
-      layoutAbortedForLowMemory = false;
-      const SectionBuildProfile profile = safeModeBuildProfile();
-      section =
-          makeUniqueNoThrow<Section>(epub, spineIndex, renderer, sectionCacheSuffixForRenderMode(profile.renderMode));
-      if (!section) {
-        LOG_ERR("SLP", "EPUB: failed to allocate Safe Mode section builder for spine %d", spineIndex);
-        return false;
-      }
-      buildSucceeded = section->createSectionFile(
-          readerRenderSpecForProfile(readerFontId, viewportWidth, viewportHeight, profile), []() {}, nullptr,
-          &layoutAbortedForLowMemory);
-      if (buildSucceeded) {
-        safeModeBuildSucceeded = true;
-        usedRenderMode = profile.renderMode;
-      }
-    }
-    if (!buildSucceeded) {
+    if (!rebuildSectionWithFallback()) {
       LOG_ERR("SLP", "EPUB: failed to rebuild section cache for spine %d", spineIndex);
       return false;
     }
+    sectionRebuilt = true;
+  }
+
+  if (pageNumber >= section->pageCount && loadedSection && section->isPartial()) {
+    if (!MemoryBudget::hasHeapForOptionalEpubRebuild("SLP", "EPUB sleep-page partial catch-up", spineIndex)) {
+      return false;
+    }
+    bool catchUpSucceeded = section->startBuild(readerRenderSpecForProfile(
+        readerFontId, viewportWidth, viewportHeight, buildProfileForRenderMode(selectedRenderMode)));
+    while (catchUpSucceeded && !section->isBuildComplete() && pageNumber >= section->pageCount) {
+      catchUpSucceeded = section->buildSomeMore(BUILD_PAGES_PER_CHUNK);
+    }
+    if (!catchUpSucceeded) {
+      if (!section->lastBuildLayoutAbortedForLowMemory()) return false;
+      LOG_DBG("SLP", "EPUB: partial catch-up hit low heap; rebuilding with fallback modes");
+      releaseReaderSdFontCachesForLowMemory(renderer, "SLP", "sleep-page partial fallback rebuild");
+      section.reset();
+      if (!rebuildSectionWithFallback()) return false;
+      sectionRebuilt = true;
+    }
+  }
+  if (sectionRebuilt) {
     if (safeModeBuildSucceeded) {
       applySafeModeReaderSettings();
       if (!saveRuntimeReaderSettingsForCache(epub->getCachePath())) {
@@ -6136,22 +6201,6 @@ bool EpubReaderActivity::drawCurrentPageToBuffer(const std::string& filePath, Gf
     LOG_DBG("SLP", "EPUB: section cache rebuilt for spine %d (pages=%u, font=%d, mode=%u free=%u, maxAlloc=%u)",
             spineIndex, section->pageCount, renderFontId, static_cast<unsigned>(usedRenderMode), ESP.getFreeHeap(),
             ESP.getMaxAllocHeap());
-  }
-
-  if (pageNumber >= section->pageCount && loadedSection && section->isPartial()) {
-    if (!MemoryBudget::hasHeapForOptionalEpubRebuild("SLP", "EPUB sleep-page partial catch-up", spineIndex)) {
-      return false;
-    }
-    const bool started = section->startBuild(readerRenderSpecForProfile(readerFontId, viewportWidth, viewportHeight,
-                                                                        buildProfileForRenderMode(selectedRenderMode)));
-    if (!started) {
-      return false;
-    }
-    while (!section->isBuildComplete() && pageNumber >= section->pageCount) {
-      if (!section->buildSomeMore(BUILD_PAGES_PER_CHUNK)) {
-        return false;
-      }
-    }
   }
   if (pageNumber < 0 || pageNumber >= section->pageCount) return false;
   section->currentPage = pageNumber;

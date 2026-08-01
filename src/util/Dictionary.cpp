@@ -3,6 +3,7 @@
 #include <HalStorage.h>
 #include <Logging.h>
 #include <Memory.h>
+#include <Utf8.h>
 
 #include <algorithm>
 #include <cctype>
@@ -356,23 +357,7 @@ DictInfo Dictionary::readInfo(const char* folderPath) {
 // Word cleaning
 // ---------------------------------------------------------------------------
 
-std::string Dictionary::cleanWord(const std::string& word) {
-  if (word.empty()) return "";
-
-  size_t start = 0;
-  while (start < word.size() && !std::isalnum(static_cast<unsigned char>(word[start]))) {
-    start++;
-  }
-
-  size_t end = word.size();
-  while (end > start && !std::isalnum(static_cast<unsigned char>(word[end - 1]))) {
-    end--;
-  }
-
-  if (start >= end) return "";
-
-  return word.substr(start, end - start);
-}
+std::string Dictionary::cleanWord(const std::string& word) { return utf8CleanLookupWord(word); }
 
 // ---------------------------------------------------------------------------
 // Low-level file reading helpers
@@ -1101,6 +1086,11 @@ std::string Dictionary::resolveAltForm(const std::string& word, const char* cach
 // ---------------------------------------------------------------------------
 
 std::vector<std::string> Dictionary::getStemVariants(const std::string& word) {
+  // These are deliberately English morphology rules. Applying them to UTF-8
+  // text can manufacture meaningless variants from another language, so
+  // non-ASCII words use exact and StarDict synonym lookup only.
+  if (std::any_of(word.begin(), word.end(), [](const unsigned char c) { return c >= 0x80; })) return {};
+
   std::string normalized = word;
   std::transform(normalized.begin(), normalized.end(), normalized.begin(),
                  [](unsigned char c) { return std::tolower(c); });
