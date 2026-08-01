@@ -40,7 +40,8 @@
 
 ### Fixed
 
-- Screenshots taken while a dictionary definition is open are now saved with the current book's screenshots.
+- Screenshots taken while a dictionary definition is open are now saved with the current book's screenshots and show
+  the usual confirmation border.
 - EPUB clipping selection markers now remain visible in dark mode.
 - EPUB clipping highlights now re-match their saved text after font or layout changes, even when the page count stays the same.
 - EPUB low-memory rendering fallbacks now apply consistently when opening chapters, prefetching pages, and preparing the sleep screen.
