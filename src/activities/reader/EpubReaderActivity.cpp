@@ -5601,12 +5601,14 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int fo
     // Step 2: Re-render with images and display again (images appear clean)
     int16_t imgX, imgY, imgW, imgH;
     if (page->getImageBoundingBox(imgX, imgY, imgW, imgH)) {
+      // Blank the image before any panel update so a pending clean pass does
+      // not briefly show the decoded image before the final grayscale pass.
+      renderer.fillRect(imgX + orientedMarginLeft, imgY + orientedMarginTop, imgW, imgH, false);
       // Image pages intentionally bypass the regular refresh cadence. Preserve
       // a pending clean base before their double-FAST grayscale pipeline.
       if (cleanImageBasePending) {
         renderer.displayBuffer(HalDisplay::HALF_REFRESH);
       }
-      renderer.fillRect(imgX + orientedMarginLeft, imgY + orientedMarginTop, imgW, imgH, false);
       renderer.displayBuffer(HalDisplay::FAST_REFRESH);
 
       // Re-render page content to restore images into the blanked area
