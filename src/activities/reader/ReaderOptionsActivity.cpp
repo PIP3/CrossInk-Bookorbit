@@ -494,7 +494,7 @@ void ReaderOptionsActivity::onRowEvent(const fui::ActionEvent& event, void* user
 
 void ReaderOptionsActivity::buildOptionsScreen(UiApp::ScreenType& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+  const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, !mappedInput.hasTouchHardware(), false);
   screen.setContentMargin(fui::Insets{
       static_cast<int16_t>(safe.y + metrics.topPadding + TouchHeaderBackButton::height(metrics, mappedInput)),
       static_cast<int16_t>(renderer.getScreenWidth() - safe.x - safe.width),
@@ -566,7 +566,10 @@ void ReaderOptionsActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const Rect header = TouchHeaderBackButton::headerRect(renderer, mappedInput);
+  Rect header = TouchHeaderBackButton::headerRect(renderer, mappedInput);
+  const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, !mappedInput.hasTouchHardware(), false);
+  header.x = safe.x;
+  header.width = safe.width;
   if (mappedInput.hasTouchHardware()) {
     TouchHeaderBackButton::draw(renderer, uiTarget, header, tr(STR_READER_OPTIONS), true);
   } else {
