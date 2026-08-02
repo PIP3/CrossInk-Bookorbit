@@ -21,6 +21,7 @@
 #include <cstring>
 #include <iterator>
 
+#include "AppCapabilities.h"
 #include "AppVersion.h"
 #include "CrossPointSettings.h"
 #include "FontInstaller.h"
@@ -69,6 +70,38 @@ uint8_t enumRawValueForDisplayIndex(const SettingInfo& setting, uint8_t displayI
     return setting.enumRawValues.front();
   }
   return setting.enumRawValues[displayIndex];
+}
+
+bool isWebSettingAvailable(const SettingInfo& setting) {
+#if !CROSSINK_APP_CAP_TOUCH
+  if (setting.nameId == StrId::STR_TOUCH_READER_CONTROLS || setting.nameId == StrId::STR_DISABLE_TOUCHSCREEN) {
+    return false;
+  }
+#endif
+
+#if !FREEINK_CAP_FRONTLIGHT
+  if (setting.nameId == StrId::STR_BRIGHTNESS || setting.nameId == StrId::STR_WARMTH ||
+      setting.nameId == StrId::STR_FRONTLIGHT) {
+    return false;
+  }
+#endif
+
+  if (!halClock.isAvailable()) {
+    switch (setting.nameId) {
+      case StrId::STR_HIDE_CLOCK:
+      case StrId::STR_AUTO_BACKUP_STATS:
+      case StrId::STR_CLOCK_UTC_OFFSET:
+      case StrId::STR_CLOCK_FORMAT:
+      case StrId::STR_DATE_FORMAT:
+      case StrId::STR_DATE_SEPARATOR:
+      case StrId::STR_CLOCK_SYNCED:
+        return false;
+      default:
+        break;
+    }
+  }
+
+  return true;
 }
 
 // Streams a font-catalog JSON response in bounded pieces. This avoids holding
@@ -1274,7 +1307,7 @@ void CrossPointWebServer::handleGetSettings() const {
   JsonDocument doc;
 
   for (const auto& s : settings) {
-    if (!s.key) continue;  // Skip ACTION-only entries
+    if (!s.key || !isWebSettingAvailable(s)) continue;  // Skip ACTION-only and unavailable entries.
 
     doc.clear();
     doc["key"] = s.key;
@@ -1394,7 +1427,7 @@ void CrossPointWebServer::handlePostSettings() {
   int applied = 0;
 
   for (const auto& s : settings) {
-    if (!s.key) continue;
+    if (!s.key || !isWebSettingAvailable(s)) continue;
     if (!doc[s.key].is<JsonVariant>()) continue;
 
     switch (s.type) {

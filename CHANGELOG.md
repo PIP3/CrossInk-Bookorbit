@@ -40,6 +40,7 @@
 
 ### Fixed
 
+- The web settings page now hides touchscreen, clock, and lighting controls on devices that do not support them.
 - Syncing the clock on memory-constrained X3/X4 devices no longer risks a reboot while saving settings.
 - EPUB clipping selection markers now remain visible in dark mode.
 - EPUB clipping highlights now re-match their saved text after font or layout changes, even when the page count stays the same.
