@@ -19,13 +19,11 @@ class DictionaryWordSelectActivity final : public Activity {
   // height, per the caller's own layout formula. The skip-initial-render fast
   // path clears exactly that strip so the framebuffer matches the menu→lookup
   // path (no status bar, no auto-turn label visible during word-select).
-  explicit DictionaryWordSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                        std::unique_ptr<Page> page, int marginLeft, int marginTop,
-                                        const std::string& cachePath, const std::string& nextPageFirstWord = "",
-                                        bool framebufferContainsPage = false, int reservedBottomHeight = 0,
-                                        int initialTouchX = -1, int initialTouchY = -1,
-                                        bool autoLookupInitialWord = false,
-                                        const char* dictionaryFontFamilyName = nullptr)
+  explicit DictionaryWordSelectActivity(
+      GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Page> page, int marginLeft, int marginTop,
+      const std::string& cachePath, const std::string& nextPageFirstWord = "", bool framebufferContainsPage = false,
+      int reservedBottomHeight = 0, int initialTouchX = -1, int initialTouchY = -1, bool autoLookupInitialWord = false,
+      const char* dictionaryFontFamilyName = nullptr, uint8_t dictionaryFontPointSize = 0)
       : Activity("DictionaryWordSelect", renderer, mappedInput),
         page(std::move(page)),
         marginLeft(marginLeft),
@@ -37,7 +35,8 @@ class DictionaryWordSelectActivity final : public Activity {
         reservedBottomHeight_(reservedBottomHeight),
         initialTouchX_(initialTouchX),
         initialTouchY_(initialTouchY),
-        autoLookupInitialWord_(autoLookupInitialWord) {
+        autoLookupInitialWord_(autoLookupInitialWord),
+        dictionaryFontPointSize_(dictionaryFontPointSize) {
     if (dictionaryFontFamilyName) {
       std::strncpy(dictionaryFontFamilyName_, dictionaryFontFamilyName, sizeof(dictionaryFontFamilyName_) - 1);
     }
@@ -87,6 +86,7 @@ class DictionaryWordSelectActivity final : public Activity {
   // This child owns its fixed-size copy so the reader does not keep the
   // dictionary selection resident while laying out EPUB sections.
   char dictionaryFontFamilyName_[64] = "";
+  uint8_t dictionaryFontPointSize_ = 0;
   bool touchDragLookup_ = false;
 
   bool skipLoopDelay() override { return controller.skipLoopDelay(); }

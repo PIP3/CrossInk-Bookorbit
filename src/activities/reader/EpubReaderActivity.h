@@ -63,6 +63,8 @@ class EpubReaderActivity final : public Activity {
     // Fixed-size per-book state lives inside the already heap-owned reader
     // activity. It avoids a separate string allocation during dictionary use.
     char dictionarySdFontFamilyName[64] = "";
+    // Zero follows the reader's current physical point size.
+    uint8_t dictionaryFontPointSize = 0;
     ReaderSettingsSnapshot readerSettings;
   };
 
@@ -354,12 +356,12 @@ class EpubReaderActivity final : public Activity {
   void restoreGlobalReaderSettings();
   void loadBookReaderSettings();
   void saveCurrentBookReaderSettings();
-  void saveDictionaryFontForBook(const char* familyName);
+  void saveDictionaryFontForBook(const char* familyName, uint8_t pointSize);
   void saveGlobalSettingsPreservingBookOverrides();
   void beginGlobalSettingsEdit();
   void endGlobalSettingsEdit();
   static void saveReaderOptionsForBook(void* ctx);
-  static void saveDictionaryFontForBookReader(void* ctx, const char* familyName);
+  static void saveDictionaryFontForBookReader(void* ctx, const char* familyName, uint8_t pointSize);
   static void saveGlobalSettingsForBookReader(void* ctx);
   static void beginGlobalSettingsEditForBookReader(void* ctx);
   static void endGlobalSettingsEditForBookReader(void* ctx);

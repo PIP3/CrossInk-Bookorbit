@@ -14,7 +14,7 @@
 class LookedUpWordsActivity final : public Activity {
  public:
   explicit LookedUpWordsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string bookCachePath,
-                                 const char* dictionaryFontFamilyName = nullptr);
+                                 const char* dictionaryFontFamilyName = nullptr, uint8_t dictionaryFontPointSize = 0);
 
   void onEnter() override;
   void onExit() override;
@@ -32,6 +32,7 @@ class LookedUpWordsActivity final : public Activity {
 
   std::string cachePath;
   char dictionaryFontFamilyName[64] = "";
+  uint8_t dictionaryFontPointSize = 0;
   std::vector<LookupHistory::Entry> entries;
   std::vector<std::string> labels;
   std::vector<freeink::ui::ListItem> uiItems;

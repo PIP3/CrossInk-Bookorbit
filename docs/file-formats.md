@@ -107,7 +107,9 @@ Version 1 stored only:
 Version 2 stores flags before the full reader-settings snapshot. Version 3 adds
 the EPUB word-spacing level to that snapshot. Version 4 adds the EPUB indexing
 method (`0` = incremental, `1` = full section). Version 5 appends a per-book
-dictionary SD-font family name. This lets the
+dictionary SD-font family name. Version 6 stores reader font sizes as physical
+point sizes, and version 7 appends the dictionary font's selected point size.
+This lets the
 file preserve an auto-page-turn interval without forcing custom font/layout
 settings for the book. It also stores a per-book EPUB render mode override,
 which can be changed from book action menus before opening the book so a
@@ -118,7 +120,7 @@ fallback successfully opens a difficult book.
 
 ```c++
 struct ReaderSettingsBin {
-    u8 version; // 6
+    u8 version; // 7
     u8 flags;   // bit 0 = custom reader settings, bit 1 = custom auto-page-turn interval, bit 2 = render mode override, bit 3 = dictionary font override
     u16 autoPageTurnSeconds;
     u8 renderMode; // 0 = CrossInk Default, 1 = Balanced, 2 = Light
@@ -144,6 +146,7 @@ struct ReaderSettingsBin {
     u8 indexingMethod; // 0 = incremental, 1 = full section
     char sdFontFamilyName[64];
     char dictionarySdFontFamilyName[64]; // meaningful only when flag bit 3 is set
+    u8 dictionaryFontPointSize; // 0 = follow reader size
 };
 ```
 

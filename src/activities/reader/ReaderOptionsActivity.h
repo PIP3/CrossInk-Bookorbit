@@ -19,7 +19,7 @@ class ReaderOptionsActivity final : public Activity {
   using SaveSettingsCallback = void (*)(void* ctx);
   using SaveGlobalSettingsCallback = void (*)(void* ctx);
   using GlobalSettingsEditCallback = void (*)(void* ctx);
-  using DictionaryFontChangedCallback = void (*)(void* ctx, const char* familyName);
+  using DictionaryFontChangedCallback = void (*)(void* ctx, const char* familyName, uint8_t pointSize);
 
  private:
   ButtonNavigator buttonNavigator;
@@ -40,6 +40,7 @@ class ReaderOptionsActivity final : public Activity {
   GlobalSettingsEditCallback endGlobalSettingsEditCallback = nullptr;
   void* endGlobalSettingsEditContext = nullptr;
   char dictionaryFontFamilyName[64] = "";
+  uint8_t dictionaryFontPointSize = 0;
   DictionaryFontChangedCallback dictionaryFontChangedCallback = nullptr;
   void* dictionaryFontChangedContext = nullptr;
   bool settingsDirty = false;
@@ -62,6 +63,7 @@ class ReaderOptionsActivity final : public Activity {
   bool currentSettingUsesOptionMenu(const SettingInfo& setting) const;
   void openEnumOptionPicker(const SettingInfo& setting);
   void openDictionaryFontPicker(const SettingInfo& setting);
+  void openDictionaryFontSizePicker(const SettingInfo& setting);
   void openScreenMarginPicker(const SettingInfo& setting);
   void toggleCurrentSetting();
   void openLineHeightPicker();
@@ -81,7 +83,7 @@ class ReaderOptionsActivity final : public Activity {
       void* beginGlobalSettingsEditContext = nullptr,
       GlobalSettingsEditCallback endGlobalSettingsEditCallback = nullptr, void* endGlobalSettingsEditContext = nullptr,
       bool stablePageNumbersAvailable = false, const char* dictionaryFontFamilyName = nullptr,
-      DictionaryFontChangedCallback dictionaryFontChangedCallback = nullptr,
+      uint8_t dictionaryFontPointSize = 0, DictionaryFontChangedCallback dictionaryFontChangedCallback = nullptr,
       void* dictionaryFontChangedContext = nullptr)
       : Activity("ReaderOptions", renderer, mappedInput),
         saveSettingsCallback(saveSettingsCallback),
@@ -94,6 +96,7 @@ class ReaderOptionsActivity final : public Activity {
         endGlobalSettingsEditContext(endGlobalSettingsEditContext),
         dictionaryFontChangedCallback(dictionaryFontChangedCallback),
         dictionaryFontChangedContext(dictionaryFontChangedContext),
+        dictionaryFontPointSize(dictionaryFontPointSize),
         stablePageNumbersAvailable(stablePageNumbersAvailable),
         uiTarget(makeUiTarget(renderer)),
         app(uiTarget, uiTarget.deviceContext()) {

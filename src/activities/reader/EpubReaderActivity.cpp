@@ -76,7 +76,8 @@ constexpr uint8_t PRE_WORD_SPACING_READER_SETTINGS_FILE_VERSION = 2;
 constexpr uint8_t PRE_INDEXING_METHOD_READER_SETTINGS_FILE_VERSION = 3;
 constexpr uint8_t PRE_DICTIONARY_FONT_READER_SETTINGS_FILE_VERSION = 4;
 constexpr uint8_t PRE_POINT_SIZE_READER_SETTINGS_FILE_VERSION = 5;
-constexpr uint8_t READER_SETTINGS_FILE_VERSION = 6;
+constexpr uint8_t PRE_DICTIONARY_FONT_SIZE_READER_SETTINGS_FILE_VERSION = 6;
+constexpr uint8_t READER_SETTINGS_FILE_VERSION = 7;
 constexpr uint8_t READER_SETTINGS_FLAG_CUSTOM = 1 << 0;
 constexpr uint8_t READER_SETTINGS_FLAG_AUTO_PAGE_TURN = 1 << 1;
 constexpr uint8_t READER_SETTINGS_FLAG_RENDER_MODE = 1 << 2;
@@ -1177,7 +1178,8 @@ BookReaderSettingsData loadBookReaderSettingsFile(const std::string& cachePath) 
   if (version != PRE_WORD_SPACING_READER_SETTINGS_FILE_VERSION &&
       version != PRE_INDEXING_METHOD_READER_SETTINGS_FILE_VERSION &&
       version != PRE_DICTIONARY_FONT_READER_SETTINGS_FILE_VERSION &&
-      version != PRE_POINT_SIZE_READER_SETTINGS_FILE_VERSION && version != READER_SETTINGS_FILE_VERSION) {
+      version != PRE_POINT_SIZE_READER_SETTINGS_FILE_VERSION &&
+      version != PRE_DICTIONARY_FONT_SIZE_READER_SETTINGS_FILE_VERSION && version != READER_SETTINGS_FILE_VERSION) {
     file.close();
     LOG_DBG("ERS", "Reader settings version mismatch, using defaults");
     return data;
@@ -1200,6 +1202,9 @@ BookReaderSettingsData loadBookReaderSettingsFile(const std::string& cachePath) 
   }
   if (ok && version >= PRE_POINT_SIZE_READER_SETTINGS_FILE_VERSION) {
     ok = readExact(file, data.dictionarySdFontFamilyName, sizeof(data.dictionarySdFontFamilyName));
+  }
+  if (ok && version >= READER_SETTINGS_FILE_VERSION) {
+    ok = readU8(file, data.dictionaryFontPointSize);
   }
   file.close();
   if (!ok) {
@@ -1246,7 +1251,8 @@ bool saveBookReaderSettingsFile(const std::string& cachePath, const BookReaderSe
   const bool ok = writeU8(file, READER_SETTINGS_FILE_VERSION) && writeU8(file, flags) &&
                   writeU16(file, clampedSeconds) && writeU8(file, normalizeRenderModeRaw(data.renderMode)) &&
                   writeReaderSettingsSnapshot(file, normalizedReaderSettings) &&
-                  writeExact(file, data.dictionarySdFontFamilyName, sizeof(data.dictionarySdFontFamilyName));
+                  writeExact(file, data.dictionarySdFontFamilyName, sizeof(data.dictionarySdFontFamilyName)) &&
+                  writeU8(file, data.dictionaryFontPointSize);
   file.close();
   if (!ok) {
     LOG_ERR("ERS", "Short write saving reader settings");
@@ -1871,7 +1877,7 @@ void EpubReaderActivity::saveCurrentBookReaderSettings() {
   saveBookReaderSettingsFile(epub->getCachePath(), data);
 }
 
-void EpubReaderActivity::saveDictionaryFontForBook(const char* familyName) {
+void EpubReaderActivity::saveDictionaryFontForBook(const char* familyName, const uint8_t pointSize) {
   if (!epub) return;
 
   if (section && section->isBuilding()) {
@@ -1887,6 +1893,7 @@ void EpubReaderActivity::saveDictionaryFontForBook(const char* familyName) {
     data.dictionarySdFontFamilyName[0] = '\0';
     data.hasDictionaryFontOverride = false;
   }
+  data.dictionaryFontPointSize = pointSize;
   saveBookReaderSettingsFile(epub->getCachePath(), data);
 }
 
@@ -1927,9 +1934,9 @@ void EpubReaderActivity::saveReaderOptionsForBook(void* ctx) {
   static_cast<EpubReaderActivity*>(ctx)->saveCurrentBookReaderSettings();
 }
 
-void EpubReaderActivity::saveDictionaryFontForBookReader(void* ctx, const char* familyName) {
+void EpubReaderActivity::saveDictionaryFontForBookReader(void* ctx, const char* familyName, const uint8_t pointSize) {
   if (!ctx) return;
-  static_cast<EpubReaderActivity*>(ctx)->saveDictionaryFontForBook(familyName);
+  static_cast<EpubReaderActivity*>(ctx)->saveDictionaryFontForBook(familyName, pointSize);
 }
 
 void EpubReaderActivity::saveGlobalSettingsForBookReader(void* ctx) {
@@ -2197,7 +2204,8 @@ void EpubReaderActivity::openReaderMenu() {
           SETTINGS.statusBarTimeLeft != CrossPointSettings::STATUS_BAR_TIME_LEFT::TIME_LEFT_HIDE,
           saveReaderOptionsForBook, this, saveGlobalSettingsForBookReader, this, beginGlobalSettingsEditForBookReader,
           this, !previewActive && epub && epub->hasStablePageNumbers(), endGlobalSettingsEditForBookReader, this,
-          bookSettings.dictionarySdFontFamilyName, saveDictionaryFontForBookReader, this),
+          bookSettings.dictionarySdFontFamilyName, bookSettings.dictionaryFontPointSize,
+          saveDictionaryFontForBookReader, this),
       [this](const ActivityResult& result) {
         if (const auto* clipping = std::get_if<ClippingJumpResult>(&result.data)) {
           applyOrientation(clipping->orientation);
@@ -3003,7 +3011,7 @@ void EpubReaderActivity::openWordSelect(bool framebufferContainsPage, int initia
   auto wordSelect = makeUniqueNoThrow<DictionaryWordSelectActivity>(
       renderer, mappedInput, std::move(pageForLookup), layout.marginLeft, layout.marginTop, bookCachePath,
       nextPageFirstWord, framebufferContainsPage, layout.marginBottom, initialTouchX, initialTouchY,
-      autoLookupInitialWord, bookSettings.dictionarySdFontFamilyName);
+      autoLookupInitialWord, bookSettings.dictionarySdFontFamilyName, bookSettings.dictionaryFontPointSize);
   if (!wordSelect) {
     LOG_ERR("DICT", "OOM allocating DictionaryWordSelectActivity (%u bytes)",
             static_cast<unsigned>(sizeof(DictionaryWordSelectActivity)));
@@ -3147,7 +3155,8 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       pauseReadingPaceTimer("lookup_history");
       const BookReaderSettingsData bookSettings = loadBookReaderSettingsFile(epub->getCachePath());
       startActivityForResult(std::make_unique<LookedUpWordsActivity>(renderer, mappedInput, epub->getCachePath(),
-                                                                     bookSettings.dictionarySdFontFamilyName),
+                                                                     bookSettings.dictionarySdFontFamilyName,
+                                                                     bookSettings.dictionaryFontPointSize),
                              [this](const ActivityResult&) {
                                resumeReadingPaceTimer("lookup_history_return");
                                requestUpdate();

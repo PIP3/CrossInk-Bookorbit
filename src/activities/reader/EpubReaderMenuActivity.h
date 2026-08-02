@@ -63,6 +63,7 @@ class EpubReaderMenuActivity final : public Activity {
       void* beginGlobalSettingsEditContext = nullptr, bool stablePageNumbersAvailable = false,
       ReaderOptionsActivity::GlobalSettingsEditCallback endGlobalSettingsEditCallback = nullptr,
       void* endGlobalSettingsEditContext = nullptr, const char* dictionaryFontFamilyName = nullptr,
+      uint8_t dictionaryFontPointSize = 0,
       ReaderOptionsActivity::DictionaryFontChangedCallback dictionaryFontChangedCallback = nullptr,
       void* dictionaryFontChangedContext = nullptr);
 
@@ -102,6 +103,7 @@ class EpubReaderMenuActivity final : public Activity {
   bool activateSelectedItem();
   bool handleTouchInput();
   void drawIconTabBar(Rect rect, bool drawBottomBorder);
+  static void dictionaryFontChangedForMenu(void* ctx, const char* familyName, uint8_t pointSize);
 
   // FreeInkApp hosts the menu list (themed rows, touch routing); the header
   // stays on GUI.drawHeader for the battery indicator, and OptionPopup keeps
@@ -139,6 +141,7 @@ class EpubReaderMenuActivity final : public Activity {
   ReaderOptionsActivity::GlobalSettingsEditCallback endGlobalSettingsEditCallback = nullptr;
   void* endGlobalSettingsEditContext = nullptr;
   char dictionaryFontFamilyName[64] = "";
+  uint8_t dictionaryFontPointSize = 0;
   ReaderOptionsActivity::DictionaryFontChangedCallback dictionaryFontChangedCallback = nullptr;
   void* dictionaryFontChangedContext = nullptr;
   bool settingsChanged = false;

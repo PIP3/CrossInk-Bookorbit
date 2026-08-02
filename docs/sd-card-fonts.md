@@ -63,9 +63,11 @@ There are three ways to install fonts:
 
 EPUB books can use a different installed SD-card family for dictionary definitions.
 Open **Reader Options > Font Options > Dictionary Font** while reading and choose
-an installed family, or leave it on **Use Reader Font**. The choice is saved per
-book and uses the reader's current physical point size; if that exact size is not
-available, CrossInk chooses the closest file from the dictionary family.
+an installed family, or leave it on **Use Reader Font**. Use the following
+**Dictionary Font Size** setting to select one of that family's installed point
+sizes, or leave it on **Use Reader Size**. Both choices are saved per book. If a
+saved point size is no longer available, CrossInk chooses the closest file from
+the dictionary family.
 
 CrossInk keeps only one SD-card font family resident. It unloads the reader
 family before loading the dictionary font and restores the reader family after

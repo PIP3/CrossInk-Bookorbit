@@ -333,7 +333,8 @@ uint8_t SdCardFontSystem::resolveLegacySizeStep(const char* familyName, const ui
   return CrossPointSettings::getSdFontRangePointSize(SETTINGS.sdFontSizeRange, sizeStep);
 }
 
-DictionaryFontActivation SdCardFontSystem::activateDictionaryFont(GfxRenderer& renderer, const char* familyName) {
+DictionaryFontActivation SdCardFontSystem::activateDictionaryFont(GfxRenderer& renderer, const char* familyName,
+                                                                  uint8_t targetPointSize) {
   if (!familyName || familyName[0] == '\0') {
     return {restoreReaderFont(renderer), false};
   }
@@ -343,10 +344,11 @@ DictionaryFontActivation SdCardFontSystem::activateDictionaryFont(GfxRenderer& r
   uint8_t selectedPointSize = 0;
   // Prefer the actual loaded reader-file size. Built-in readers have no SD
   // file, so use their effective physical point size instead.
-  const uint8_t targetPointSize =
-      manager_.currentPointSize() != 0
-          ? manager_.currentPointSize()
-          : CrossPointSettings::getReaderFontPointSize(SETTINGS.getEffectiveReaderFontSize());
+  if (targetPointSize == 0) {
+    targetPointSize = manager_.currentPointSize() != 0
+                          ? manager_.currentPointSize()
+                          : CrossPointSettings::getReaderFontPointSize(SETTINGS.getEffectiveReaderFontSize());
+  }
   if (!findInstalledFontFile(familyName, targetPointSize, FontFileSelection::Closest, path, sizeof(path),
                              selectedPointSize)) {
     LOG_DBG("SDFS", "Dictionary font not found on card: %s", familyName);

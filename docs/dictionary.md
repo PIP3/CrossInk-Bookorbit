@@ -167,7 +167,7 @@ The history screen shows the 50 most recent entries. The on-disk history is appe
 
 ## IPA Phonetic Characters
 
-Dictionary definitions use the active reader font by default. In an EPUB, open **Reader Options > Font Options > Dictionary Font** to choose a different installed SD-card font for that book. The dictionary uses the reader's current physical point size and picks the closest available size from its own family.
+Dictionary definitions use the active reader font and size by default. In an EPUB, open **Reader Options > Font Options > Dictionary Font** to choose a different installed SD-card font for that book, then use **Dictionary Font Size** to choose one of its installed point sizes. **Use Reader Size** follows the active reader size. A saved size with no matching file uses the closest available size from the dictionary family.
 
 Only one SD-card font family is loaded at a time: CrossInk temporarily swaps to the dictionary font while a definition is open, then restores the reader font when you close it. If the selected dictionary font is missing, the definition falls back to the reader font but keeps the selection, so it resumes automatically if you reinstall the family.
 

@@ -32,7 +32,8 @@ class DictionaryDefinitionActivity final : public Activity {
       bool showLookupButton = false, std::string bookCachePath = "", bool recordHistory = false,
       std::string historyWord = "", LookupHistory::Status historyStatus = LookupHistory::Status::NotFound,
       void* backgroundContext = nullptr, BackgroundRenderFn backgroundRender = nullptr,
-      const char* dictionaryFontFamilyName = nullptr, bool modalBackgroundAlreadyPrepared = false)
+      const char* dictionaryFontFamilyName = nullptr, uint8_t dictionaryFontPointSize = 0,
+      bool modalBackgroundAlreadyPrepared = false)
       : Activity("DictionaryDefinition", renderer, mappedInput),
         headword(headword),
         foundLocation(location),
@@ -44,6 +45,7 @@ class DictionaryDefinitionActivity final : public Activity {
         backgroundContext_(backgroundContext),
         backgroundRender_(backgroundRender),
         dictionaryFontFamilyName_(dictionaryFontFamilyName),
+        dictionaryFontPointSize_(dictionaryFontPointSize),
         skipInitialModalBackgroundRedraw_(modalBackgroundAlreadyPrepared),
         controller(renderer, mappedInput, *this, cachePath) {}
 
@@ -75,6 +77,8 @@ class DictionaryDefinitionActivity final : public Activity {
   BackgroundRenderFn backgroundRender_ = nullptr;
   // Non-owning pointer to EpubReaderActivity's fixed per-book settings.
   const char* dictionaryFontFamilyName_ = nullptr;
+  // Zero keeps the dictionary at the reader's active physical point size.
+  uint8_t dictionaryFontPointSize_ = 0;
   bool skipInitialModalBackgroundRedraw_ = false;
   // The framebuffer retains the book pixels outside the opaque modal. Normal
   // page turns keep this false and redraw only the modal; screens and overlays

@@ -21,12 +21,14 @@
 namespace fui = freeink::ui;
 
 LookedUpWordsActivity::LookedUpWordsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                             std::string bookCachePath, const char* dictionaryFontFamilyName)
+                                             std::string bookCachePath, const char* dictionaryFontFamilyName,
+                                             const uint8_t dictionaryFontPointSize)
     : Activity("LookedUpWords", renderer, mappedInput),
       cachePath(std::move(bookCachePath)),
       controller(renderer, mappedInput, *this, cachePath),
       uiTarget(makeUiTarget(renderer)),
       app(uiTarget, uiTarget.deviceContext()) {
+  this->dictionaryFontPointSize = dictionaryFontPointSize;
   if (dictionaryFontFamilyName) {
     std::strncpy(this->dictionaryFontFamilyName, dictionaryFontFamilyName, sizeof(this->dictionaryFontFamilyName) - 1);
   }
@@ -148,7 +150,7 @@ void LookedUpWordsActivity::loop() {
                                    renderer, mappedInput, controller.getFoundWord(), controller.getFoundLocation(),
                                    true, cachePath, controller.getRecordHistory(), controller.getLookupWord(),
                                    DictionaryLookupController::toHistStatus(controller.getFoundStatus()), nullptr,
-                                   nullptr, dictionaryFontFamilyName),
+                                   nullptr, dictionaryFontFamilyName, dictionaryFontPointSize),
                                [this](const ActivityResult& result) {
                                  reloadEntries();
                                  if (!result.isCancelled) {

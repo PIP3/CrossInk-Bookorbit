@@ -57,7 +57,11 @@ class SdCardFontSystem {
   // Temporarily replace the reader SD font with a per-book dictionary font.
   // At most one SD font family remains resident. Missing or failed dictionary
   // fonts leave the reader font active and retain the saved selection.
-  DictionaryFontActivation activateDictionaryFont(GfxRenderer& renderer, const char* familyName);
+  // targetPointSize of zero follows the active reader size. The selected file
+  // still uses the closest installed size, so a removed font file degrades
+  // safely without retaining another family or size cache in RAM.
+  DictionaryFontActivation activateDictionaryFont(GfxRenderer& renderer, const char* familyName,
+                                                  uint8_t targetPointSize = 0);
 
   // Restore the saved reader font after a dictionary lookup and return its ID.
   int restoreReaderFont(GfxRenderer& renderer);

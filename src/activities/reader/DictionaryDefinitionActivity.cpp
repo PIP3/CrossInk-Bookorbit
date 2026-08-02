@@ -338,7 +338,8 @@ static EpdFontFamily::Style styleForSpan(const StyledSpan& span) {
 
 void DictionaryDefinitionActivity::onEnter() {
   Activity::onEnter();
-  const DictionaryFontActivation activation = sdFontSystem.activateDictionaryFont(renderer, dictionaryFontFamilyName_);
+  const DictionaryFontActivation activation =
+      sdFontSystem.activateDictionaryFont(renderer, dictionaryFontFamilyName_, dictionaryFontPointSize_);
   definitionFontId_ = activation.fontId;
   definitionFontSource_ =
       activation.usingDictionaryFont ? DefinitionFontSource::Dictionary : DefinitionFontSource::Reader;
@@ -399,7 +400,7 @@ void DictionaryDefinitionActivity::redrawModalBackground() {
     sdFontSystem.restoreReaderFont(renderer);
     backgroundRender_(backgroundContext_);
     const DictionaryFontActivation activation =
-        sdFontSystem.activateDictionaryFont(renderer, dictionaryFontFamilyName_);
+        sdFontSystem.activateDictionaryFont(renderer, dictionaryFontFamilyName_, dictionaryFontPointSize_);
     definitionFontId_ = activation.fontId;
     definitionFontSource_ =
         activation.usingDictionaryFont ? DefinitionFontSource::Dictionary : DefinitionFontSource::Reader;

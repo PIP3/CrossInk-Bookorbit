@@ -170,7 +170,7 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(
     void* saveGlobalSettingsContext, ReaderOptionsActivity::GlobalSettingsEditCallback beginGlobalSettingsEditCallback,
     void* beginGlobalSettingsEditContext, const bool stablePageNumbersAvailable,
     ReaderOptionsActivity::GlobalSettingsEditCallback endGlobalSettingsEditCallback, void* endGlobalSettingsEditContext,
-    const char* dictionaryFontFamilyName,
+    const char* dictionaryFontFamilyName, const uint8_t dictionaryFontPointSize,
     ReaderOptionsActivity::DictionaryFontChangedCallback dictionaryFontChangedCallback,
     void* dictionaryFontChangedContext)
     : Activity("EpubReaderMenu", renderer, mappedInput),
@@ -192,6 +192,7 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(
       stablePageNumbersAvailable(stablePageNumbersAvailable),
       endGlobalSettingsEditCallback(endGlobalSettingsEditCallback),
       endGlobalSettingsEditContext(endGlobalSettingsEditContext),
+      dictionaryFontPointSize(dictionaryFontPointSize),
       dictionaryFontChangedCallback(dictionaryFontChangedCallback),
       dictionaryFontChangedContext(dictionaryFontChangedContext),
       uiTarget(makeUiTarget(renderer)),
@@ -253,6 +254,24 @@ EpubReaderMenuActivity::TabMenuItems EpubReaderMenuActivity::buildMenuItems(
   return items;
 }
 
+void EpubReaderMenuActivity::dictionaryFontChangedForMenu(void* ctx, const char* familyName, const uint8_t pointSize) {
+  auto* self = static_cast<EpubReaderMenuActivity*>(ctx);
+  if (!self) return;
+
+  if (familyName && familyName[0] != '\0') {
+    std::strncpy(self->dictionaryFontFamilyName, familyName, sizeof(self->dictionaryFontFamilyName) - 1);
+    self->dictionaryFontFamilyName[sizeof(self->dictionaryFontFamilyName) - 1] = '\0';
+  } else {
+    self->dictionaryFontFamilyName[0] = '\0';
+  }
+  self->dictionaryFontPointSize = pointSize;
+  if (self->dictionaryFontChangedCallback) {
+    self->dictionaryFontChangedCallback(
+        self->dictionaryFontChangedContext,
+        self->dictionaryFontFamilyName[0] != '\0' ? self->dictionaryFontFamilyName : nullptr, pointSize);
+  }
+}
+
 const std::vector<EpubReaderMenuActivity::MenuItem>& EpubReaderMenuActivity::activeMenuItems() const {
   return menuItems[activeTabIndex()];
 }
@@ -312,7 +331,7 @@ bool EpubReaderMenuActivity::activateSelectedItem() {
             renderer, mappedInput, saveReaderSettingsCallback, saveReaderSettingsContext, saveGlobalSettingsCallback,
             saveGlobalSettingsContext, beginGlobalSettingsEditCallback, beginGlobalSettingsEditContext,
             endGlobalSettingsEditCallback, endGlobalSettingsEditContext, stablePageNumbersAvailable,
-            dictionaryFontFamilyName, dictionaryFontChangedCallback, dictionaryFontChangedContext),
+            dictionaryFontFamilyName, dictionaryFontPointSize, dictionaryFontChangedForMenu, this),
         [this, before](const ActivityResult& result) {
           settingsChanged = settingsChanged || haveReaderLayoutSettingsChanged(before);
           pendingOrientation = SETTINGS.orientation;  // sync in case orientation changed

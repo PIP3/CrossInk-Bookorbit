@@ -480,7 +480,8 @@ void DictionaryWordSelectActivity::loop() {
             renderer, mappedInput, controller.getFoundWord(), controller.getFoundLocation(), true, cachePath,
             controller.getRecordHistory(), controller.getLookupWord(),
             DictionaryLookupController::toHistStatus(controller.getFoundStatus()), this,
-            &DictionaryWordSelectActivity::renderDefinitionBackgroundCallback, dictionaryFontFamilyName_, true);
+            &DictionaryWordSelectActivity::renderDefinitionBackgroundCallback, dictionaryFontFamilyName_,
+            dictionaryFontPointSize_, true);
         if (!definition) {
           LOG_ERR("DICT", "OOM allocating DictionaryDefinitionActivity (%u bytes)",
                   static_cast<unsigned>(sizeof(DictionaryDefinitionActivity)));
