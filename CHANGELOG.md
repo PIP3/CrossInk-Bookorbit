@@ -49,6 +49,7 @@
 - EPUB background indexing now yields to button and touch input, and changing reader settings during indexing no longer risks reading from a closed SD file.
 - EPUB clipping selection can now advance through dense one- and two-page chapter endings instead of stopping mid-page.
 - SD-card font preparation now consolidates temporary glyph, kerning, and layout-metric work into one short-lived allocation, preserving more contiguous memory when returning Home after reading or dictionary use.
+- SD-card font layout metric tables now reuse their existing storage during normal updates instead of reallocating the persistent table each time.
 - EPUB reflow and KOReader Sync now return to the same text after font, orientation, or indexing-method changes instead of relying only on page percentages.
 - Bionic Reading no longer lets letters overlap at the bold-to-regular split in EPUB words.
 - The web settings page now hides settings on devices that don't support it.
