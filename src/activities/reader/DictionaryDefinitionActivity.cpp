@@ -382,6 +382,13 @@ void DictionaryDefinitionActivity::useBuiltInDefinitionFontFallback() {
     return;
   }
   reflowForDefinitionFontChange();
+  // The failed font was the active owner of the definition bitmap cache. Its
+  // family may also have replaced the reader family while the modal background
+  // was prepared, so redraw the page with the restored reader font before the
+  // fallback definition is rendered. This reuses the existing framebuffer;
+  // retaining the old pixels produces replacement diamonds behind a blank
+  // modal after a large dictionary-font prewarm fails.
+  if (hasModalBackground()) modalBackgroundNeedsRedraw_ = true;
 }
 
 void DictionaryDefinitionActivity::reflowForDefinitionFontChange() {
