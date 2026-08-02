@@ -99,6 +99,10 @@ class DictionaryDefinitionActivity final : public Activity {
   // modal pixels covered avoids a reader-background redraw and the associated
   // reader/dictionary SD-font swap for ordinary lookup chaining.
   int modalSessionHeight_ = 0;
+  // Erasing a prior black modal border with FAST_REFRESH can leave that border
+  // visible on e-ink. Consume this on the next complete modal paint; it costs
+  // one byte of activity state and does not allocate another framebuffer.
+  bool modalCleanRefreshNeeded_ = false;
   std::string dictionaryName_;
 
   // Resident page representation (Stage 2b-pool). Segments reference text by
@@ -223,5 +227,6 @@ class DictionaryDefinitionActivity final : public Activity {
   void useBuiltInDefinitionFontFallback();
   void reflowForDefinitionFontChange();
   void redrawModalBackground();
+  void displayModalBuffer();
   int getLineHeight() const;
 };

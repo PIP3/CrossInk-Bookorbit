@@ -298,6 +298,18 @@ bool DictionaryLookupController::render() {
   return false;
 }
 
+const char* DictionaryLookupController::getFailureMessage() const {
+  if (state == LookupState::ReadError) return tr(STR_DICT_READ_FAILED);
+  if (state == LookupState::NotFound) return tr(STR_DICT_NOT_FOUND);
+  return "";
+}
+
+bool DictionaryLookupController::dismissFailureForDictionarySwitch() {
+  if (!hasFailureFeedback()) return false;
+  state = LookupState::Idle;
+  return true;
+}
+
 bool DictionaryLookupController::handleMultiSelect(WordSelectNavigator& navigator) {
   std::string msPhrase;
   const auto msAction = navigator.handleMultiSelectInput(mappedInput, msPhrase);

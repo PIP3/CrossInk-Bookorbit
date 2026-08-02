@@ -95,6 +95,9 @@ class DictionaryLookupController {
   // Definition modals render lookup progress inside their existing frame so a
   // chained lookup does not dirty reader pixels outside the modal.
   void setLookupToastEnabled(bool enabled) { lookupToastEnabled_ = enabled; }
+  bool hasFailureFeedback() const { return state == LookupState::NotFound || state == LookupState::ReadError; }
+  const char* getFailureMessage() const;
+  bool dismissFailureForDictionarySwitch();
   bool requiresBackgroundRedrawAfterOverlay() const { return state == LookupState::AltFormPrompt; }
   bool consumeFullScreenChildDisturbance() {
     const bool disturbed = fullScreenChildWasShown_;

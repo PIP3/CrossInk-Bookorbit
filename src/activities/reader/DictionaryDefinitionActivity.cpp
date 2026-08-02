@@ -394,7 +394,10 @@ void DictionaryDefinitionActivity::useBuiltInDefinitionFontFallback() {
   // fallback definition is rendered. This reuses the existing framebuffer;
   // retaining the old pixels produces replacement diamonds behind a blank
   // modal after a large dictionary-font prewarm fails.
-  if (hasModalBackground()) modalBackgroundNeedsRedraw_ = true;
+  if (hasModalBackground()) {
+    modalBackgroundNeedsRedraw_ = true;
+    modalCleanRefreshNeeded_ = true;
+  }
 }
 
 void DictionaryDefinitionActivity::reflowForDefinitionFontChange() {
@@ -427,6 +430,11 @@ void DictionaryDefinitionActivity::redrawModalBackground() {
     backgroundRender_(backgroundContext_);
   }
   modalBackgroundNeedsRedraw_ = false;
+}
+
+void DictionaryDefinitionActivity::displayModalBuffer() {
+  renderer.displayBuffer(modalCleanRefreshNeeded_ ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);
+  modalCleanRefreshNeeded_ = false;
 }
 
 bool DictionaryDefinitionActivity::shouldApproximateDefinitionCodepoint(const uint32_t cp) const {
@@ -746,10 +754,17 @@ void DictionaryDefinitionActivity::sizeModalForCurrentPage() {
                             visibleLines * getLineHeight() + footerHeight;
 
   const int desiredHeight = std::min(maxHeight, contentHeight);
-  modalSessionHeight_ = std::max(modalSessionHeight_, desiredHeight);
+  const int retainedHeight = modalSessionHeight_;
+  if (retainedHeight > 0 && desiredHeight > retainedHeight) {
+    // The new outer frame erases the old black border. A clean waveform keeps
+    // that erased border from appearing as a second modal on the physical panel.
+    modalCleanRefreshNeeded_ = true;
+  }
+  modalSessionHeight_ = std::max(retainedHeight, desiredHeight);
   modalHeight_ = modalSessionHeight_;
   modalY_ = (renderer.getScreenHeight() - modalHeight_) / 2;
   bodyStartY = modalY_ + metrics.optionPopupInnerPadding + titleLineHeight + metrics.optionPopupTitleGap;
+  LOG_DBG("DICT", "Modal height desired=%d retained=%d final=%d", desiredHeight, retainedHeight, modalHeight_);
 }
 
 void DictionaryDefinitionActivity::collectLineSink(void* ctx, const DictLayout::LayoutLineView& line) {
@@ -1027,6 +1042,13 @@ void DictionaryDefinitionActivity::extractWordsFromLayout() {
 }
 
 void DictionaryDefinitionActivity::openDictionarySwitch() {
+  if (hasModalBackground()) {
+    // Capture the exact frame currently on the panel before the picker covers
+    // it. This is the hard lower bound for every replacement definition, even
+    // if its content or active font would naturally produce a shorter dialog.
+    modalSessionHeight_ = std::max(modalSessionHeight_, modalHeight_);
+    LOG_DBG("DICT", "Dictionary switch retaining modal height=%d", modalSessionHeight_);
+  }
   auto picker = makeUniqueNoThrow<DictionarySelectActivity>(renderer, mappedInput, cachePath, true, true);
   if (!picker) {
     LOG_ERR("DICT", "OOM: DictionarySelectActivity");
@@ -1038,6 +1060,7 @@ void DictionaryDefinitionActivity::openDictionarySwitch() {
     // this activity is queued for repaint, so restore the reader background on
     // that next frame whether the selection changed or was cancelled.
     modalBackgroundNeedsRedraw_ = true;
+    modalCleanRefreshNeeded_ = true;
     if (result.isCancelled) {
       requestUpdate();
       return;
@@ -1049,6 +1072,7 @@ void DictionaryDefinitionActivity::openDictionarySwitch() {
       return;
     }
     Dictionary::setLookupDictPathOverride(selection->path.c_str());
+    dictionaryName_ = dictionaryNameFromPath(selection->path);
     dictionarySwitchLookupInProgress = true;
     controller.startLookup(headword, false);
   });
@@ -1083,6 +1107,17 @@ void DictionaryDefinitionActivity::loop() {
 
   // --- Controller active (LookingUp / AltFormPrompt / NotFound) ---
   if (controller.isActive()) {
+#if CROSSINK_APP_CAP_TOUCH
+    int failureTouchX = 0;
+    int failureTouchY = 0;
+    if (hasModalBackground() && controller.hasFailureFeedback() && showTouchDictionarySwitch() &&
+        mappedInput.wasScreenTapped(failureTouchX, failureTouchY) &&
+        dictionarySwitchButtonContains(failureTouchX, failureTouchY) &&
+        controller.dismissFailureForDictionarySwitch()) {
+      openDictionarySwitch();
+      return;
+    }
+#endif
     switch (controller.handleInput()) {
       case DictionaryLookupController::LookupEvent::FoundDefinition: {
         const bool wasBackNav = chainBackNavInProgress;
@@ -1278,6 +1313,7 @@ void DictionaryDefinitionActivity::loop() {
 void DictionaryDefinitionActivity::render(RenderLock&&) {
   if (hasModalBackground() && controller.consumeFullScreenChildDisturbance()) {
     modalBackgroundNeedsRedraw_ = true;
+    modalCleanRefreshNeeded_ = true;
   }
   // Differential fast path: only when we're already in word-select mode AND
   // we set it up on the previous frame AND the controller has nothing pending.
@@ -1311,6 +1347,7 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
   if (hasModalBackground() && controller.requiresBackgroundRedrawAfterOverlay()) {
     controller.render();
     modalBackgroundNeedsRedraw_ = true;
+    modalCleanRefreshNeeded_ = true;
     nextRenderMode_ = RenderMode::FullPage;
     prevHighlightIdx_ = -1;
     return;
@@ -1333,7 +1370,7 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
       drawModalFrame();
       const int messageY = modalY_ + (modalHeight_ - renderer.getLineHeight(UI_10_FONT_ID)) / 2;
       renderer.drawCenteredText(UI_10_FONT_ID, messageY, tr(STR_DICT_LOOKING_UP));
-      renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+      displayModalBuffer();
     } else {
       GUI.drawPopup(renderer, tr(STR_DICT_LOOKING_UP));
     }
@@ -1341,7 +1378,8 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
     prevHighlightIdx_ = -1;
     return;
   }
-  if (controller.render()) {
+  const bool inlineFailureFeedback = hasModalBackground() && controller.hasFailureFeedback();
+  if (!inlineFailureFeedback && controller.render()) {
     // Controller drew an overlay; framebuffer state is unknown.
     if (hasModalBackground() && controller.requiresBackgroundRedrawAfterOverlay()) {
       modalBackgroundNeedsRedraw_ = true;
@@ -1464,15 +1502,23 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
     renderBody();
   }
 
+  const char* inlineStatusMessage = nullptr;
   if (hasModalBackground() && controller.isLookingUp()) {
+    inlineStatusMessage = tr(STR_DICT_LOOKING_UP);
+  } else if (inlineFailureFeedback) {
+    inlineStatusMessage = controller.getFailureMessage();
+  } else if (hasModalBackground() && definitionReadFailed_) {
+    inlineStatusMessage = tr(STR_DICT_READ_FAILED);
+  }
+  if (inlineStatusMessage) {
     const int messageHeight = renderer.getLineHeight(UI_10_FONT_ID) + metrics.optionPopupInnerPadding * 2;
     const int messageY = modalY_ + (modalHeight_ - messageHeight) / 2;
     renderer.fillRect(modalX_ + metrics.optionPopupInnerPadding, messageY,
                       modalWidth_ - metrics.optionPopupInnerPadding * 2, messageHeight, false);
-    renderer.drawCenteredText(UI_10_FONT_ID, messageY + metrics.optionPopupInnerPadding, tr(STR_DICT_LOOKING_UP));
+    renderer.drawCenteredText(UI_10_FONT_ID, messageY + metrics.optionPopupInnerPadding, inlineStatusMessage);
   }
 
-  if (definitionReadFailed_) GUI.drawPopup(renderer, tr(STR_DICT_READ_FAILED));
+  if (!hasModalBackground() && definitionReadFailed_) GUI.drawPopup(renderer, tr(STR_DICT_READ_FAILED));
 
   if (hasModalBackground() && !dictionaryName_.empty()) {
     const int innerPadding = metrics.optionPopupInnerPadding;
@@ -1523,7 +1569,7 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
     }
 
     DictUtils::drawWordSelectButtonHints(renderer, mappedInput, navigator);
-    renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+    displayModalBuffer();
 
     prevHighlightIdx_ = currIdx;
     nextRenderMode_ = snapshotPrimed ? RenderMode::Differential : RenderMode::FullPage;
@@ -1536,13 +1582,17 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
   prevHighlightIdx_ = -1;
 
   // Button hints
-  const char* btn2 = showLookupButton ? tr(STR_LOOKUP_SHORT) : "";
+  const char* btn2 = inlineFailureFeedback ? tr(STR_DONE) : (showLookupButton ? tr(STR_LOOKUP_SHORT) : "");
   const char* btn3 = showLookupButton ? tr(STR_DICT_SWITCH) : "";
   const char* btn4 = "";
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), btn2, btn3, btn4);
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
-  renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+  if (hasModalBackground()) {
+    displayModalBuffer();
+  } else {
+    renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+  }
 
   // Skip the full-screen grayscale anti-aliasing overlay here. This modal is
   // short-lived, and the 48KB BW backup it needs can fragment the heap enough
