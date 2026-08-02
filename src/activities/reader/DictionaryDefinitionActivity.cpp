@@ -20,6 +20,7 @@
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "Memory.h"
+#include "SdCardFontSystem.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/Dictionary.h"
@@ -337,7 +338,10 @@ static EpdFontFamily::Style styleForSpan(const StyledSpan& span) {
 
 void DictionaryDefinitionActivity::onEnter() {
   Activity::onEnter();
-  definitionFontId_ = SETTINGS.getReaderFontId();
+  const DictionaryFontActivation activation = sdFontSystem.activateDictionaryFont(renderer, dictionaryFontFamilyName_);
+  definitionFontId_ = activation.fontId;
+  definitionFontSource_ =
+      activation.usingDictionaryFont ? DefinitionFontSource::Dictionary : DefinitionFontSource::Reader;
   wrapText();
   requestUpdate();
   // SD write overlaps the e-ink refresh kicked by requestUpdate() on the render task.
@@ -353,6 +357,7 @@ void DictionaryDefinitionActivity::onEnter() {
 void DictionaryDefinitionActivity::onExit() {
   controller.onExit();
   Dictionary::clearLookupDictPathOverride();
+  sdFontSystem.restoreReaderFont(renderer);
   Activity::onExit();
 }
 
@@ -361,21 +366,50 @@ int DictionaryDefinitionActivity::getDefinitionFontId(bool) const {
 }
 
 void DictionaryDefinitionActivity::useBuiltInDefinitionFontFallback() {
-  if (usingBuiltInDefinitionFontFallback_) return;
-
   const int failedFontId = getDefinitionFontId();
-  definitionFontId_ = SETTINGS.getBuiltInReaderFontId();
-  usingBuiltInDefinitionFontFallback_ = true;
-  LOG_ERR("DICT", "SD font %d failed to prepare dictionary glyphs; using built-in font %d", failedFontId,
-          definitionFontId_);
+  if (definitionFontSource_ == DefinitionFontSource::Dictionary) {
+    definitionFontId_ = sdFontSystem.restoreReaderFont(renderer);
+    definitionFontSource_ = DefinitionFontSource::Reader;
+    LOG_ERR("DICT", "Dictionary SD font %d failed to prepare; retrying with reader font %d", failedFontId,
+            definitionFontId_);
+  } else if (definitionFontSource_ == DefinitionFontSource::Reader) {
+    definitionFontId_ = SETTINGS.getBuiltInReaderFontId();
+    definitionFontSource_ = DefinitionFontSource::BuiltIn;
+    LOG_ERR("DICT", "Reader SD font %d failed to prepare dictionary glyphs; using built-in font %d", failedFontId,
+            definitionFontId_);
+  } else {
+    return;
+  }
+  reflowForDefinitionFontChange();
+}
 
-  // The fallback font has different metrics. Reflow before the next frame so
-  // line breaks, hit targets, and rendered glyphs all use the same font.
+void DictionaryDefinitionActivity::reflowForDefinitionFontChange() {
   const int requestedPage = currentPage;
   wrapText();
   currentPage = std::min(requestedPage, std::max(0, totalPages - 1));
   if (currentPage > 0) loadPage(currentPage);
   if (hasModalBackground()) sizeModalForCurrentPage();
+}
+
+void DictionaryDefinitionActivity::redrawModalBackground() {
+  if (!hasModalBackground() || !modalBackgroundNeedsRedraw_) return;
+
+  const int previousFontId = definitionFontId_;
+  if (definitionFontSource_ == DefinitionFontSource::Dictionary) {
+    sdFontSystem.restoreReaderFont(renderer);
+    backgroundRender_(backgroundContext_);
+    const DictionaryFontActivation activation =
+        sdFontSystem.activateDictionaryFont(renderer, dictionaryFontFamilyName_);
+    definitionFontId_ = activation.fontId;
+    definitionFontSource_ =
+        activation.usingDictionaryFont ? DefinitionFontSource::Dictionary : DefinitionFontSource::Reader;
+    if (definitionFontId_ != previousFontId) {
+      reflowForDefinitionFontChange();
+    }
+  } else {
+    backgroundRender_(backgroundContext_);
+  }
+  modalBackgroundNeedsRedraw_ = false;
 }
 
 bool DictionaryDefinitionActivity::shouldApproximateDefinitionCodepoint(const uint32_t cp) const {
@@ -457,7 +491,10 @@ void DictionaryDefinitionActivity::wrapText() {
   currentPage = 0;  // new definition always starts at page 0
   // A new definition can have different modal geometry. Rebuild the book once
   // so a smaller modal cannot leave pixels from the prior definition behind.
-  if (hasModalBackground()) modalBackgroundNeedsRedraw_ = true;
+  if (hasModalBackground()) {
+    modalBackgroundNeedsRedraw_ = !skipInitialModalBackgroundRedraw_;
+    skipInitialModalBackgroundRedraw_ = false;
+  }
 
   // Match the folder-name label shown by DictionarySelectActivity.
   dictionaryName_ = dictionaryNameFromPath(foundLocation.folderPath);
@@ -824,40 +861,16 @@ void DictionaryDefinitionActivity::feedSpanToWrapper(void* ctx, const StyledSpan
 // ---------------------------------------------------------------------------
 
 void DictionaryDefinitionActivity::wrapPlain() {
-  std::vector<IpaTextSpan> ipaRuns;
-  ipaRuns.reserve(4);
   const int screenWidth = renderer.getScreenWidth();
   const int maxWidth = screenWidth - leftPadding - rightPadding;
-  const int spaceWidth = renderer.getSpaceWidth(getDefinitionFontId(), EpdFontFamily::REGULAR);
-
   std::string currentWord;
-  std::string currentLineText;
-  std::string lineTextPool;
-  std::vector<DictLayout::LayoutSegmentRef> lineSegments;
   currentWord.reserve(64);
-  currentLineText.reserve(128);
-  lineTextPool.reserve(128);
-  lineSegments.reserve(4);
-  int currentLineWidth = 0;
 
+  DictLayout::Measurer measure{this, &DictionaryDefinitionActivity::measureWidthAdapter};
   DictLayout::LineSink sink{this, &DictionaryDefinitionActivity::collectLineSink};
-  auto flushLine = [&]() {
-    if (currentLineText.empty()) return;
-    lineTextPool.clear();
-    lineSegments.clear();
-    ipaRuns.clear();
-    splitIpaRuns(currentLineText.c_str(), ipaRuns);
-    for (const auto& run : ipaRuns) {
-      lineSegments.push_back({static_cast<uint16_t>(lineTextPool.size()), static_cast<uint16_t>(run.text.size()),
-                              EpdFontFamily::REGULAR, run.isIpa});
-      lineTextPool += run.text;
-    }
-    sink({lineTextPool.c_str(), lineSegments.data(), static_cast<uint16_t>(lineSegments.size()), 0, false});
-    currentLineText.clear();
-    currentLineWidth = 0;
-  };
+  DictLayout::Wrapper wrapper(DictLayout::WrapMetrics{maxWidth, 0, 0}, measure, sink);
 
-  auto tryAppendWord = [&]() {
+  auto feedWord = [&]() {
     if (currentWord.empty()) return;
     std::string word = (definitionTextNeedsApproximation(currentWord.c_str()) ||
                         definitionTextHasEtymologySpacingArtifact(currentWord.c_str(), false))
@@ -866,23 +879,11 @@ void DictionaryDefinitionActivity::wrapPlain() {
     currentWord.clear();
     if (word.empty()) return;
 
-    const int wordWidth = getMixedWidth(ipaRuns, word.c_str(), EpdFontFamily::REGULAR);
-    if (currentLineText.empty()) {
-      currentLineText = word;
-      currentLineWidth = wordWidth;
-    } else {
-      const int testWidth = currentLineWidth + spaceWidth + wordWidth;
-      if (testWidth <= maxWidth) {
-        currentLineText += ' ';
-        currentLineText += word;
-        currentLineWidth = testWidth;
-      } else {
-        flushLine();
-        currentLineText = word;
-        currentLineWidth = wordWidth;
-      }
-    }
+    const StyledSpan span{.text = word.c_str()};
+    wrapper.onSpan(span);
   };
+
+  const StyledSpan space{.text = " "};
 
   // Stream from .dict file — the full definition is never held in RAM.
   const std::string dictPath = foundLocation.folderPath + ".dict";
@@ -915,20 +916,22 @@ void DictionaryDefinitionActivity::wrapPlain() {
     for (int ci = 0; ci < n; ci++) {
       char c = chunk[ci];
       if (c == '\0') {
-        tryAppendWord();
+        feedWord();
+        wrapper.onSpan(space);
       } else if (c == '\n') {
-        tryAppendWord();
-        flushLine();
+        feedWord();
+        wrapper.lineBreak();
       } else if (c == ' ') {
-        tryAppendWord();
+        feedWord();
+        wrapper.onSpan(space);
       } else {
         currentWord += c;
       }
     }
   }
 
-  tryAppendWord();
-  flushLine();
+  feedWord();
+  wrapper.finish();
   dictFile.close();
 }
 
@@ -1269,10 +1272,7 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
   // opaque, stable modal, so ordinary definition page turns only repaint the
   // modal. Rebuild the book after another screen or overlay disturbed it.
   if (hasModalBackground()) {
-    if (modalBackgroundNeedsRedraw_) {
-      backgroundRender_(backgroundContext_);
-      modalBackgroundNeedsRedraw_ = false;
-    }
+    redrawModalBackground();
   } else {
     renderer.clearScreen();
   }

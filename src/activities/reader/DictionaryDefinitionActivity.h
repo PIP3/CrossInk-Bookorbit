@@ -27,13 +27,12 @@ class DictionaryDefinitionActivity final : public Activity {
   //   Back (long press, >= LONG_PRESS_MS) = Done — exit to reader (isCancelled=false).
   // showLookupButton=false:
   //   Back/Confirm both return to caller (isCancelled=true). Unchanged from old behaviour.
-  explicit DictionaryDefinitionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                        const std::string& headword, const DictLocation& location,
-                                        bool showLookupButton = false, std::string bookCachePath = "",
-                                        bool recordHistory = false, std::string historyWord = "",
-                                        LookupHistory::Status historyStatus = LookupHistory::Status::NotFound,
-                                        void* backgroundContext = nullptr,
-                                        BackgroundRenderFn backgroundRender = nullptr)
+  explicit DictionaryDefinitionActivity(
+      GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& headword, const DictLocation& location,
+      bool showLookupButton = false, std::string bookCachePath = "", bool recordHistory = false,
+      std::string historyWord = "", LookupHistory::Status historyStatus = LookupHistory::Status::NotFound,
+      void* backgroundContext = nullptr, BackgroundRenderFn backgroundRender = nullptr,
+      const char* dictionaryFontFamilyName = nullptr, bool modalBackgroundAlreadyPrepared = false)
       : Activity("DictionaryDefinition", renderer, mappedInput),
         headword(headword),
         foundLocation(location),
@@ -44,6 +43,8 @@ class DictionaryDefinitionActivity final : public Activity {
         historyStatus(historyStatus),
         backgroundContext_(backgroundContext),
         backgroundRender_(backgroundRender),
+        dictionaryFontFamilyName_(dictionaryFontFamilyName),
+        skipInitialModalBackgroundRedraw_(modalBackgroundAlreadyPrepared),
         controller(renderer, mappedInput, *this, cachePath) {}
 
   void onEnter() override;
@@ -72,6 +73,9 @@ class DictionaryDefinitionActivity final : public Activity {
   // framebuffer while dictionary parsing is active.
   void* backgroundContext_ = nullptr;
   BackgroundRenderFn backgroundRender_ = nullptr;
+  // Non-owning pointer to EpubReaderActivity's fixed per-book settings.
+  const char* dictionaryFontFamilyName_ = nullptr;
+  bool skipInitialModalBackgroundRedraw_ = false;
   // The framebuffer retains the book pixels outside the opaque modal. Normal
   // page turns keep this false and redraw only the modal; screens and overlays
   // that replace unrelated pixels set it true to rebuild the book.
@@ -116,7 +120,8 @@ class DictionaryDefinitionActivity final : public Activity {
   // Kept per lookup so a failed SD-font prewarm can use the matching built-in
   // reader font without changing the user's selected font setting.
   int definitionFontId_ = 0;
-  bool usingBuiltInDefinitionFontFallback_ = false;
+  enum class DefinitionFontSource { Dictionary, Reader, BuiltIn };
+  DefinitionFontSource definitionFontSource_ = DefinitionFontSource::Reader;
 
   // SD-font layout needs advance widths before the .dict stream is opened for
   // wrapping. This fixed 1 KB buffer lives inside the heap-owned activity (not
@@ -198,5 +203,7 @@ class DictionaryDefinitionActivity final : public Activity {
   bool handleLongPressExitAll(bool enabled);
   int getDefinitionFontId(bool isIpa = false) const;
   void useBuiltInDefinitionFontFallback();
+  void reflowForDefinitionFontChange();
+  void redrawModalBackground();
   int getLineHeight() const;
 };

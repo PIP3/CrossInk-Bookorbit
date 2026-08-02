@@ -58,13 +58,39 @@ class EpubReaderActivity final : public Activity {
     uint16_t autoPageTurnSeconds = 0;
     bool hasCustomReaderSettings = false;
     bool hasRenderModeOverride = false;
+    bool hasDictionaryFontOverride = false;
     uint8_t renderMode = 0;
+    // Fixed-size per-book state lives inside the already heap-owned reader
+    // activity. It avoids a separate string allocation during dictionary use.
+    char dictionarySdFontFamilyName[64] = "";
     ReaderSettingsSnapshot readerSettings;
   };
 
  private:
+  // The on-disk settings record also carries the dictionary family. Keeping it
+  // out of the long-lived reader object matters on the C3: this activity is
+  // allocated immediately before an EPUB section needs its largest block.
+  // Dictionary children load and own the fixed name only while they are open.
+  struct ActiveBookReaderSettingsData {
+    bool hasAutoPageTurnInterval = false;
+    uint16_t autoPageTurnSeconds = 0;
+    bool hasCustomReaderSettings = false;
+    bool hasRenderModeOverride = false;
+    uint8_t renderMode = 0;
+    ReaderSettingsSnapshot readerSettings;
+
+    ActiveBookReaderSettingsData() = default;
+    explicit ActiveBookReaderSettingsData(const BookReaderSettingsData& source)
+        : hasAutoPageTurnInterval(source.hasAutoPageTurnInterval),
+          autoPageTurnSeconds(source.autoPageTurnSeconds),
+          hasCustomReaderSettings(source.hasCustomReaderSettings),
+          hasRenderModeOverride(source.hasRenderModeOverride),
+          renderMode(source.renderMode),
+          readerSettings(source.readerSettings) {}
+  };
+
   std::shared_ptr<Epub> epub;
-  BookReaderSettingsData initialBookReaderSettings;
+  ActiveBookReaderSettingsData initialBookReaderSettings;
   std::unique_ptr<Section> section = nullptr;
   int currentSpineIndex = 0;
   int nextPageNumber = 0;
@@ -328,10 +354,12 @@ class EpubReaderActivity final : public Activity {
   void restoreGlobalReaderSettings();
   void loadBookReaderSettings();
   void saveCurrentBookReaderSettings();
+  void saveDictionaryFontForBook(const char* familyName);
   void saveGlobalSettingsPreservingBookOverrides();
   void beginGlobalSettingsEdit();
   void endGlobalSettingsEdit();
   static void saveReaderOptionsForBook(void* ctx);
+  static void saveDictionaryFontForBookReader(void* ctx, const char* familyName);
   static void saveGlobalSettingsForBookReader(void* ctx);
   static void beginGlobalSettingsEditForBookReader(void* ctx);
   static void endGlobalSettingsEditForBookReader(void* ctx);
@@ -386,7 +414,7 @@ class EpubReaderActivity final : public Activity {
                               bool cleanImageBaseOnEntry = false)
       : Activity("EpubReader", renderer, mappedInput),
         epub(std::move(epub)),
-        initialBookReaderSettings(std::move(readerSettings)),
+        initialBookReaderSettings(readerSettings),
         pagesUntilFullRefresh(initialRefreshCountdown),
         cleanImageBasePending(cleanImageBaseOnEntry) {}
   void onEnter() override;

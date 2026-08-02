@@ -3,6 +3,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
+#include <cstring>
 #include <memory>
 #include <string>
 #include <vector>
@@ -23,7 +24,8 @@ class DictionaryWordSelectActivity final : public Activity {
                                         const std::string& cachePath, const std::string& nextPageFirstWord = "",
                                         bool framebufferContainsPage = false, int reservedBottomHeight = 0,
                                         int initialTouchX = -1, int initialTouchY = -1,
-                                        bool autoLookupInitialWord = false)
+                                        bool autoLookupInitialWord = false,
+                                        const char* dictionaryFontFamilyName = nullptr)
       : Activity("DictionaryWordSelect", renderer, mappedInput),
         page(std::move(page)),
         marginLeft(marginLeft),
@@ -35,7 +37,11 @@ class DictionaryWordSelectActivity final : public Activity {
         reservedBottomHeight_(reservedBottomHeight),
         initialTouchX_(initialTouchX),
         initialTouchY_(initialTouchY),
-        autoLookupInitialWord_(autoLookupInitialWord) {}
+        autoLookupInitialWord_(autoLookupInitialWord) {
+    if (dictionaryFontFamilyName) {
+      std::strncpy(dictionaryFontFamilyName_, dictionaryFontFamilyName, sizeof(dictionaryFontFamilyName_) - 1);
+    }
+  }
 
   void onEnter() override;
   void onExit() override;
@@ -78,6 +84,9 @@ class DictionaryWordSelectActivity final : public Activity {
   int initialTouchX_ = -1;
   int initialTouchY_ = -1;
   bool autoLookupInitialWord_ = false;
+  // This child owns its fixed-size copy so the reader does not keep the
+  // dictionary selection resident while laying out EPUB sections.
+  char dictionaryFontFamilyName_[64] = "";
   bool touchDragLookup_ = false;
 
   bool skipLoopDelay() override { return controller.skipLoopDelay(); }

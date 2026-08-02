@@ -181,7 +181,10 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(
     void* saveReaderSettingsContext, ReaderOptionsActivity::SaveGlobalSettingsCallback saveGlobalSettingsCallback,
     void* saveGlobalSettingsContext, ReaderOptionsActivity::GlobalSettingsEditCallback beginGlobalSettingsEditCallback,
     void* beginGlobalSettingsEditContext, const bool stablePageNumbersAvailable,
-    ReaderOptionsActivity::GlobalSettingsEditCallback endGlobalSettingsEditCallback, void* endGlobalSettingsEditContext)
+    ReaderOptionsActivity::GlobalSettingsEditCallback endGlobalSettingsEditCallback, void* endGlobalSettingsEditContext,
+    const char* dictionaryFontFamilyName,
+    ReaderOptionsActivity::DictionaryFontChangedCallback dictionaryFontChangedCallback,
+    void* dictionaryFontChangedContext)
     : Activity("EpubReaderMenu", renderer, mappedInput),
       menuItems(buildMenuItems(hasFootnotes, hasBookmarks, hasClippings, isCurrentPageBookmarked, isBookCompleted,
                                showReadingPaceReset, hasDictionary)),
@@ -201,8 +204,14 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(
       stablePageNumbersAvailable(stablePageNumbersAvailable),
       endGlobalSettingsEditCallback(endGlobalSettingsEditCallback),
       endGlobalSettingsEditContext(endGlobalSettingsEditContext),
+      dictionaryFontChangedCallback(dictionaryFontChangedCallback),
+      dictionaryFontChangedContext(dictionaryFontChangedContext),
       uiTarget(makeUiTarget(renderer)),
-      app(uiTarget, uiTarget.deviceContext()) {}
+      app(uiTarget, uiTarget.deviceContext()) {
+  if (dictionaryFontFamilyName) {
+    std::strncpy(this->dictionaryFontFamilyName, dictionaryFontFamilyName, sizeof(this->dictionaryFontFamilyName) - 1);
+  }
+}
 
 EpubReaderMenuActivity::TabMenuItems EpubReaderMenuActivity::buildMenuItems(
     bool hasFootnotes, bool hasBookmarks, bool hasClippings, bool isCurrentPageBookmarked, bool isBookCompleted,
@@ -314,7 +323,8 @@ bool EpubReaderMenuActivity::activateSelectedItem() {
         std::make_unique<ReaderOptionsActivity>(
             renderer, mappedInput, saveReaderSettingsCallback, saveReaderSettingsContext, saveGlobalSettingsCallback,
             saveGlobalSettingsContext, beginGlobalSettingsEditCallback, beginGlobalSettingsEditContext,
-            endGlobalSettingsEditCallback, endGlobalSettingsEditContext, stablePageNumbersAvailable),
+            endGlobalSettingsEditCallback, endGlobalSettingsEditContext, stablePageNumbersAvailable,
+            dictionaryFontFamilyName, dictionaryFontChangedCallback, dictionaryFontChangedContext),
         [this, before](const ActivityResult& result) {
           settingsChanged = settingsChanged || haveReaderLayoutSettingsChanged(before);
           pendingOrientation = SETTINGS.orientation;  // sync in case orientation changed

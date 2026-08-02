@@ -1,7 +1,11 @@
 #include "SdCardFontSystem.h"
 
 #include <GfxRenderer.h>
+#include <HalStorage.h>
 #include <Logging.h>
+#include <MemoryBudget.h>
+
+#include <cstdio>
 
 #include "CrossPointSettings.h"
 #include "fontIds.h"
@@ -18,6 +22,107 @@ constexpr UiFontSize kUiFontSizes[] = {
     {UI_10_FONT_ID, 10},
     {UI_12_FONT_ID, 12},
 };
+
+enum class FontFileSelection : uint8_t { Closest, ReaderSizeStep, Exact };
+
+// This is a cold setup path, not a render loop. The 320-byte stack footprint
+// (path, filename, and size list) replaces a heap-allocated whole-font catalog
+// during every dictionary swap, avoiding persistent fragmentation on the C3.
+bool findInstalledFontFile(const char* familyName, const uint8_t targetPointSize, const uint8_t sizeStep,
+                           const FontFileSelection selection, char* path, const size_t pathSize,
+                           uint8_t& selectedPointSize) {
+  if (!familyName || familyName[0] == '\0' || !path || pathSize == 0) return false;
+
+  const char* root = SdCardFontRegistry::findFamilyRoot(familyName);
+  if (!root) return false;
+  const int directoryLength = std::snprintf(path, pathSize, "%s/%s", root, familyName);
+  if (directoryLength <= 0 || static_cast<size_t>(directoryLength) >= pathSize) return false;
+
+  HalFile dir = Storage.open(path);
+  if (!dir || !dir.isDirectory()) return false;
+
+  constexpr size_t kMaxFontSizes = 32;
+  uint8_t sizes[kMaxFontSizes] = {};
+  size_t sizeCount = 0;
+  uint8_t closestSize = 0;
+  uint8_t closestDiff = UINT8_MAX;
+  char filename[128] = {};
+  while (true) {
+    HalFile entry = dir.openNextFile();
+    if (!entry) break;
+    const bool isDirectory = entry.isDirectory();
+    if (!isDirectory) entry.getName(filename, sizeof(filename));
+    entry.close();
+    if (isDirectory) continue;
+
+    uint8_t pointSize = 0;
+    uint8_t style = 0;
+    if (!SdCardFontRegistry::parseFilename(filename, pointSize, style) || style != 0) continue;
+
+    if (selection == FontFileSelection::Closest) {
+      const uint8_t diff = pointSize > targetPointSize ? pointSize - targetPointSize : targetPointSize - pointSize;
+      if (closestDiff == UINT8_MAX || diff < closestDiff || (diff == closestDiff && pointSize < closestSize)) {
+        closestSize = pointSize;
+        closestDiff = diff;
+      }
+    }
+
+    if (selection == FontFileSelection::ReaderSizeStep) {
+      bool alreadyPresent = false;
+      for (size_t i = 0; i < sizeCount; ++i) {
+        if (sizes[i] == pointSize) {
+          alreadyPresent = true;
+          break;
+        }
+      }
+      if (!alreadyPresent && sizeCount < kMaxFontSizes) {
+        size_t insertAt = sizeCount;
+        while (insertAt > 0 && sizes[insertAt - 1] > pointSize) {
+          sizes[insertAt] = sizes[insertAt - 1];
+          --insertAt;
+        }
+        sizes[insertAt] = pointSize;
+        ++sizeCount;
+      }
+    }
+  }
+  dir.close();
+
+  if (selection == FontFileSelection::Closest) {
+    selectedPointSize = closestSize;
+  } else if (selection == FontFileSelection::Exact) {
+    selectedPointSize = targetPointSize;
+  } else {
+    if (sizeCount == 0) return false;
+    selectedPointSize = sizes[std::min<size_t>(sizeStep, sizeCount - 1)];
+  }
+
+  if (selectedPointSize == 0) return false;
+  // Scan once more to preserve the exact file name rather than assuming the
+  // file base name matches the directory name.
+  dir = Storage.open(path);
+  if (!dir || !dir.isDirectory()) return false;
+  while (true) {
+    HalFile entry = dir.openNextFile();
+    if (!entry) break;
+    const bool isDirectory = entry.isDirectory();
+    if (!isDirectory) entry.getName(filename, sizeof(filename));
+    entry.close();
+    if (isDirectory) continue;
+
+    uint8_t pointSize = 0;
+    uint8_t style = 0;
+    if (!SdCardFontRegistry::parseFilename(filename, pointSize, style) || style != 0 ||
+        pointSize != selectedPointSize) {
+      continue;
+    }
+    const int pathLength = std::snprintf(path, pathSize, "%s/%s/%s", root, familyName, filename);
+    dir.close();
+    return pathLength > 0 && static_cast<size_t>(pathLength) < pathSize;
+  }
+  dir.close();
+  return false;
+}
 
 }  // namespace
 
@@ -171,6 +276,33 @@ void SdCardFontSystem::setupUiFallbacks(GfxRenderer& renderer) {
   }
 }
 
+void SdCardFontSystem::setupUiFallbacksDirect(GfxRenderer& renderer, const char* familyName) {
+  if (!familyName || familyName[0] == '\0') return;
+
+  const auto readerIt = renderer.getFontMap().find(manager_.getFontId(manager_.currentFamilyName()));
+  if (readerIt == renderer.getFontMap().end()) return;
+
+  static constexpr uint32_t kCjkProbes[] = {0x4E00, 0x3042, 0x30A2, 0xAC00};
+  bool hasCjk = false;
+  for (const uint32_t cp : kCjkProbes) {
+    if (readerIt->second.hasCodepoint(cp)) {
+      hasCjk = true;
+      break;
+    }
+  }
+  if (!hasCjk) return;
+
+  for (const auto& ui : kUiFontSizes) {
+    char path[160] = {};
+    uint8_t pointSize = 0;
+    if (!findInstalledFontFile(familyName, ui.pointSize, 0, FontFileSelection::Exact, path, sizeof(path), pointSize)) {
+      continue;
+    }
+    const int sdFontId = manager_.loadFamilyExtraFile(path, familyName, pointSize, renderer);
+    if (sdFontId != 0) renderer.setFallbackFont(ui.fontId, sdFontId);
+  }
+}
+
 int SdCardFontSystem::resolveFontId(const char* familyName, uint8_t /*fontSizeEnum*/) const {
   // The manager loads exactly one size (closest to SETTINGS.fontSize), so the
   // enum is implicit — always return the single loaded font ID for this family.
@@ -199,4 +331,88 @@ bool SdCardFontSystem::changeReaderFontSize(const bool larger) {
   }
 
   return SETTINGS.changeReaderFontSize(larger);
+}
+
+DictionaryFontActivation SdCardFontSystem::activateDictionaryFont(GfxRenderer& renderer, const char* familyName) {
+  if (!familyName || familyName[0] == '\0') {
+    return {restoreReaderFont(renderer), false};
+  }
+
+  MemoryBudget::logHeapShape("dict.font_before_activate");
+  char path[160] = {};
+  uint8_t selectedPointSize = 0;
+  // Prefer the actual loaded reader-file size. Built-in readers have no SD
+  // file, so use their effective physical point size instead.
+  const uint8_t targetPointSize =
+      manager_.currentPointSize() != 0
+          ? manager_.currentPointSize()
+          : CrossPointSettings::getReaderFontPointSize(SETTINGS.getEffectiveReaderFontSize());
+  if (!findInstalledFontFile(familyName, targetPointSize, 0, FontFileSelection::Closest, path, sizeof(path),
+                             selectedPointSize)) {
+    LOG_DBG("SDFS", "Dictionary font not found on card: %s", familyName);
+    const int readerFontId = restoreReaderFont(renderer);
+    MemoryBudget::logHeapShape("dict.font_reader_fallback");
+    return {readerFontId, false};
+  }
+
+  if (manager_.currentFamilyName() == familyName && manager_.currentPointSize() == selectedPointSize) {
+    const int fontId = manager_.getFontId(manager_.currentFamilyName());
+    MemoryBudget::logHeapShape("dict.font_reused_reader");
+    return {fontId, true};
+  }
+
+  // unloadAll() also drops optional CJK UI sizes before the dictionary file is
+  // allocated, so both families are never resident at once.
+  if (!manager_.currentFamilyName().empty()) {
+    manager_.unloadAll(renderer);
+  }
+  loadedFontSizeStep_ = UINT8_MAX;
+
+  if (manager_.loadFamilyFile(path, familyName, selectedPointSize, renderer)) {
+    const int fontId = manager_.getFontId(manager_.currentFamilyName());
+    LOG_DBG("SDFS", "Activated dictionary font %s at %u pt", familyName, manager_.currentPointSize());
+    MemoryBudget::logHeapShape("dict.font_after_activate");
+    return {fontId, true};
+  }
+
+  LOG_ERR("SDFS", "Failed to load dictionary font %s; restoring reader font", familyName);
+  const int readerFontId = restoreReaderFont(renderer);
+  MemoryBudget::logHeapShape("dict.font_reader_fallback");
+  return {readerFontId, false};
+}
+
+int SdCardFontSystem::restoreReaderFont(GfxRenderer& renderer) {
+  const char* familyName = SETTINGS.sdFontFamilyName;
+  if (!familyName || familyName[0] == '\0') {
+    if (!manager_.currentFamilyName().empty()) manager_.unloadAll(renderer);
+    loadedFontSizeStep_ = UINT8_MAX;
+    MemoryBudget::logHeapShape("dict.font_after_restore");
+    return SETTINGS.getBuiltInReaderFontId();
+  }
+
+  char path[160] = {};
+  uint8_t selectedPointSize = 0;
+  if (!findInstalledFontFile(familyName, SETTINGS.getSdFontTargetPointSize(), SETTINGS.fontSize,
+                             FontFileSelection::ReaderSizeStep, path, sizeof(path), selectedPointSize)) {
+    LOG_ERR("SDFS", "Reader font unavailable while restoring: %s", familyName);
+    if (!manager_.currentFamilyName().empty()) manager_.unloadAll(renderer);
+    loadedFontSizeStep_ = UINT8_MAX;
+    MemoryBudget::logHeapShape("dict.font_after_restore");
+    return SETTINGS.getBuiltInReaderFontId();
+  }
+
+  if (manager_.currentFamilyName() != familyName || manager_.currentPointSize() != selectedPointSize) {
+    if (!manager_.currentFamilyName().empty()) manager_.unloadAll(renderer);
+    if (!manager_.loadFamilyFile(path, familyName, selectedPointSize, renderer)) {
+      LOG_ERR("SDFS", "Failed to restore reader font: %s", familyName);
+      MemoryBudget::logHeapShape("dict.font_after_restore");
+      return SETTINGS.getBuiltInReaderFontId();
+    }
+    loadedFontSizeStep_ = SETTINGS.fontSize;
+    setupUiFallbacksDirect(renderer, familyName);
+  }
+
+  const int fontId = manager_.getFontId(manager_.currentFamilyName());
+  MemoryBudget::logHeapShape("dict.font_after_restore");
+  return fontId != 0 ? fontId : SETTINGS.getBuiltInReaderFontId();
 }

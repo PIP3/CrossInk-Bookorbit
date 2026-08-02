@@ -469,20 +469,34 @@ void DictionaryWordSelectActivity::loop() {
   if (controller.isActive()) {
     switch (controller.handleInput()) {
       case DictionaryLookupController::LookupEvent::FoundDefinition: {
-        startActivityForResult(std::make_unique<DictionaryDefinitionActivity>(
-                                   renderer, mappedInput, controller.getFoundWord(), controller.getFoundLocation(),
-                                   true, cachePath, controller.getRecordHistory(), controller.getLookupWord(),
-                                   DictionaryLookupController::toHistStatus(controller.getFoundStatus()), this,
-                                   &DictionaryWordSelectActivity::renderDefinitionBackgroundCallback),
-                               [this](const ActivityResult& result) {
-                                 if (!result.isCancelled) {
-                                   setResult(ActivityResult{});
-                                   finish();
-                                 } else {
-                                   forceFullRepaintOnNextRender();
-                                   requestUpdate();
-                                 }
-                               });
+        // Rebuild the reader page while its font is still resident. The child
+        // then overlays the modal after swapping to the dictionary font, so we
+        // never need a second framebuffer or two live SD-font families.
+        {
+          RenderLock lock(*this);
+          renderDefinitionBackground();
+        }
+        auto definition = makeUniqueNoThrow<DictionaryDefinitionActivity>(
+            renderer, mappedInput, controller.getFoundWord(), controller.getFoundLocation(), true, cachePath,
+            controller.getRecordHistory(), controller.getLookupWord(),
+            DictionaryLookupController::toHistStatus(controller.getFoundStatus()), this,
+            &DictionaryWordSelectActivity::renderDefinitionBackgroundCallback, dictionaryFontFamilyName_, true);
+        if (!definition) {
+          LOG_ERR("DICT", "OOM allocating DictionaryDefinitionActivity (%u bytes)",
+                  static_cast<unsigned>(sizeof(DictionaryDefinitionActivity)));
+          forceFullRepaintOnNextRender();
+          requestUpdate();
+          break;
+        }
+        startActivityForResult(std::move(definition), [this](const ActivityResult& result) {
+          if (!result.isCancelled) {
+            setResult(ActivityResult{});
+            finish();
+          } else {
+            forceFullRepaintOnNextRender();
+            requestUpdate();
+          }
+        });
         break;
       }
       case DictionaryLookupController::LookupEvent::NotFoundDismissedBack:

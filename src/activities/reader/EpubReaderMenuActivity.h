@@ -62,7 +62,9 @@ class EpubReaderMenuActivity final : public Activity {
       ReaderOptionsActivity::GlobalSettingsEditCallback beginGlobalSettingsEditCallback = nullptr,
       void* beginGlobalSettingsEditContext = nullptr, bool stablePageNumbersAvailable = false,
       ReaderOptionsActivity::GlobalSettingsEditCallback endGlobalSettingsEditCallback = nullptr,
-      void* endGlobalSettingsEditContext = nullptr);
+      void* endGlobalSettingsEditContext = nullptr, const char* dictionaryFontFamilyName = nullptr,
+      ReaderOptionsActivity::DictionaryFontChangedCallback dictionaryFontChangedCallback = nullptr,
+      void* dictionaryFontChangedContext = nullptr);
 
   void onEnter() override;
   void onExit() override;
@@ -136,6 +138,9 @@ class EpubReaderMenuActivity final : public Activity {
   bool stablePageNumbersAvailable = false;
   ReaderOptionsActivity::GlobalSettingsEditCallback endGlobalSettingsEditCallback = nullptr;
   void* endGlobalSettingsEditContext = nullptr;
+  char dictionaryFontFamilyName[64] = "";
+  ReaderOptionsActivity::DictionaryFontChangedCallback dictionaryFontChangedCallback = nullptr;
+  void* dictionaryFontChangedContext = nullptr;
   bool settingsChanged = false;
 
   freeink::ui::GfxRendererTarget uiTarget;  // must precede `app`: the app holds a reference to it

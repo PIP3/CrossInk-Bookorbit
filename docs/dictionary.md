@@ -167,7 +167,9 @@ The history screen shows the 50 most recent entries. The on-disk history is appe
 
 ## IPA Phonetic Characters
 
-Dictionary definitions use the same font as the active reader. If you use an SD-card font with the needed glyphs, pronunciation symbols and other non-Latin dictionary text are passed through unchanged.
+Dictionary definitions use the active reader font by default. In an EPUB, open **Reader Options > Font Options > Dictionary Font** to choose a different installed SD-card font for that book. The dictionary uses the reader's current physical point size and picks the closest available size from its own family.
+
+Only one SD-card font family is loaded at a time: CrossInk temporarily swaps to the dictionary font while a definition is open, then restores the reader font when you close it. If the selected dictionary font is missing, the definition falls back to the reader font but keeps the selection, so it resumes automatically if you reinstall the family.
 
 Built-in fonts keep the glyphs they contain and approximate only unsupported pronunciation symbols. If you see a filled diamond, choose an SD-card font that includes that character.
 

@@ -59,6 +59,19 @@ There are three ways to install fonts:
 
 3.  Insert the SD card and power on your CrossInk device
 
+## Dictionary Fonts
+
+EPUB books can use a different installed SD-card family for dictionary definitions.
+Open **Reader Options > Font Options > Dictionary Font** while reading and choose
+an installed family, or leave it on **Use Reader Font**. The choice is saved per
+book and uses the reader's current physical point size; if that exact size is not
+available, CrossInk chooses the closest file from the dictionary family.
+
+CrossInk keeps only one SD-card font family resident. It unloads the reader
+family before loading the dictionary font and restores the reader family after
+the lookup. A missing dictionary selection falls back to the reader font without
+being erased, so reinstalling the family restores it automatically.
+
 ## CJK in the User Interface
 
 The built-in UI fonts are Latin-only, so by default the interface (book titles

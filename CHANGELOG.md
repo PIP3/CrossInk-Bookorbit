@@ -7,6 +7,7 @@
 - Nearby File Transfer can send EPUB, TXT, XTC, XTCH, PNG, and BMP files directly between two CrossInk devices without a Wi-Fi network.
 - Recent Books and image-file long-press actions can send files directly to a nearby CrossInk device.
 - Dictionary lookup and lookup history
+- EPUB books can use a dedicated SD-card dictionary font while keeping a different reader font.
 - Reusable dictionary SD-font builder with IPA coverage and per-family ZIP packaging
 - RTC-enabled devices can now choose the date format and numeric separator shown in headers from Settings > System > Device.
 - The web EPUB optimizer now splits oversized chapters into memory-friendlier sections before sending them to the reader.

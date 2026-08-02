@@ -119,6 +119,30 @@ void ReaderOptionsActivity::rebuildSettingsList() {
                                     }),
                      fontSettings.end());
 
+  SettingInfo dictionaryFont;
+  dictionaryFont.nameId = StrId::STR_DICTIONARY_FONT;
+  dictionaryFont.type = SettingType::ENUM;
+  dictionaryFont.key = "dictionaryFont";
+  dictionaryFont.category = StrId::STR_CAT_READER;
+  const auto& families = sdFontSystem.registry().getFamilies();
+  dictionaryFont.enumStringValues.reserve(families.size() + 2);
+  dictionaryFont.enumStringValues.push_back(tr(STR_USE_READER_FONT));
+  bool selectedFamilyIsInstalled = false;
+  for (const auto& family : families) {
+    dictionaryFont.enumStringValues.push_back(family.name);
+    if (dictionaryFontFamilyName && family.name == dictionaryFontFamilyName) {
+      selectedFamilyIsInstalled = true;
+    }
+  }
+  if (dictionaryFontFamilyName && dictionaryFontFamilyName[0] != '\0' && !selectedFamilyIsInstalled) {
+    dictionaryFont.enumStringValues.push_back(std::string(dictionaryFontFamilyName) + " (" + tr(STR_UNAVAILABLE) + ")");
+  }
+  const auto fontFamily = std::find_if(fontSettings.begin(), fontSettings.end(), [](const SettingInfo& setting) {
+    return setting.nameId == StrId::STR_FONT_FAMILY;
+  });
+  fontSettings.insert(fontFamily == fontSettings.end() ? fontSettings.begin() : fontFamily + 1,
+                      std::move(dictionaryFont));
+
   setCurrentSettings();
   selectedIndex = 0;
 }
@@ -248,6 +272,53 @@ void ReaderOptionsActivity::openEnumOptionPicker(const SettingInfo& setting) {
   requestUpdate();
 }
 
+void ReaderOptionsActivity::openDictionaryFontPicker(const SettingInfo& setting) {
+  const size_t optionCount = setting.enumStringValues.size();
+  if (optionCount == 0) return;
+
+  uint8_t currentIndex = 0;
+  if (dictionaryFontFamilyName && dictionaryFontFamilyName[0] != '\0') {
+    for (size_t i = 1; i < optionCount; ++i) {
+      if (setting.enumStringValues[i] == dictionaryFontFamilyName) {
+        currentIndex = static_cast<uint8_t>(i);
+        break;
+      }
+    }
+    if (currentIndex == 0) currentIndex = static_cast<uint8_t>(optionCount - 1);
+  }
+
+  const SettingInfo selectedSetting = setting;
+  optionPopup.show(setting.nameId, selectedSetting.enumStringValues, currentIndex, [this, selectedSetting](int index) {
+    const char* familyName = nullptr;
+    if (index > 0 && index < static_cast<int>(selectedSetting.enumStringValues.size())) {
+      const std::string& candidate = selectedSetting.enumStringValues[static_cast<size_t>(index)];
+      // An unavailable entry is only the retained current value. Keep it rather
+      // than saving its decorated display label.
+      familyName = sdFontSystem.registry().findFamily(candidate.c_str()) ? candidate.c_str() : dictionaryFontFamilyName;
+    }
+
+    // ReaderOptions owns this name so the EPUB reader does not retain the
+    // extra 64 bytes during section layout. Update that owned copy before
+    // rebuilding the screen; otherwise it redraws the previously selected
+    // family even though the new value was persisted successfully.
+    if (familyName && familyName[0] != '\0') {
+      if (familyName != dictionaryFontFamilyName) {
+        std::strncpy(dictionaryFontFamilyName, familyName, sizeof(dictionaryFontFamilyName) - 1);
+        dictionaryFontFamilyName[sizeof(dictionaryFontFamilyName) - 1] = '\0';
+      }
+    } else {
+      dictionaryFontFamilyName[0] = '\0';
+    }
+    if (dictionaryFontChangedCallback) {
+      dictionaryFontChangedCallback(dictionaryFontChangedContext,
+                                    dictionaryFontFamilyName[0] != '\0' ? dictionaryFontFamilyName : nullptr);
+    }
+    rebuildSettingsList();
+    requestUpdate();
+  });
+  requestUpdate();
+}
+
 void ReaderOptionsActivity::openScreenMarginPicker(const SettingInfo& setting) {
   const uint8_t optionCount = valueOptionCount(setting);
   if (optionCount == 0 || setting.valuePtr == nullptr) return;
@@ -294,6 +365,11 @@ void ReaderOptionsActivity::toggleCurrentSetting() {
                              rebuildSettingsList();
                              requestUpdate();
                            });
+    return;
+  }
+
+  if (setting.nameId == StrId::STR_DICTIONARY_FONT && setting.type == SettingType::ENUM) {
+    openDictionaryFontPicker(setting);
     return;
   }
 
@@ -529,6 +605,17 @@ void ReaderOptionsActivity::buildOptionsScreen(UiApp::ScreenType& screen) {
       values[i] = settingEnumOptionLabel(setting, displayValue < settingEnumOptionCount(setting) ? displayValue : 0);
     } else if (setting.type == SettingType::ENUM && setting.valueGetter) {
       values[i] = settingEnumOptionLabel(setting, setting.valueGetter());
+    } else if (setting.nameId == StrId::STR_DICTIONARY_FONT) {
+      if (dictionaryFontFamilyName && dictionaryFontFamilyName[0] != '\0') {
+        values[i] = dictionaryFontFamilyName;
+        if (!sdFontSystem.registry().findFamily(dictionaryFontFamilyName)) {
+          values[i] += " (";
+          values[i] += tr(STR_UNAVAILABLE);
+          values[i] += ')';
+        }
+      } else {
+        values[i] = tr(STR_USE_READER_FONT);
+      }
     } else if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
       values[i] = formatSettingValue(setting);
     }
@@ -584,6 +671,7 @@ void ReaderOptionsActivity::render(RenderLock&&) {
                                ((*currentSettings)[selectedIndex].type == SettingType::ACTION ||
                                 (*currentSettings)[selectedIndex].type == SettingType::SUBMENU ||
                                 (*currentSettings)[selectedIndex].nameId == StrId::STR_FONT_FAMILY ||
+                                (*currentSettings)[selectedIndex].nameId == StrId::STR_DICTIONARY_FONT ||
                                 currentSettingUsesOptionMenu((*currentSettings)[selectedIndex]));
   const bool selectedLineHeight = selectedIndex >= 0 && selectedIndex < settingsCount &&
                                   (*currentSettings)[selectedIndex].valuePtr == &CrossPointSettings::lineHeightPercent;
