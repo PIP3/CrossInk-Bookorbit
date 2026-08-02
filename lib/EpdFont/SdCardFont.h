@@ -8,6 +8,8 @@
 #include "EpdFont.h"
 #include "EpdFontData.h"
 
+struct Arena;
+
 // On-disk binary format version for .cpfont files. Defined as a preprocessor
 // macro (rather than a constexpr) so it can be stringified into the SD-fonts
 // release URL — see FONT_MANIFEST_URL in FontDownloadActivity.h. No integer
@@ -275,10 +277,15 @@ class SdCardFont {
   static constexpr uint32_t ADVANCE_CACHE_LIMIT = 256;
   AdvanceEntry* advanceTable_[MAX_STYLES] = {};
   uint32_t advanceTableSize_[MAX_STYLES] = {};
+  uint32_t advanceTableCapacity_[MAX_STYLES] = {};
   bool advanceTableLookup(uint8_t styleIdx, uint32_t codepoint, uint16_t* outAdvance) const;
+  // Grow geometrically so normal layout batches reuse the persistent table
+  // instead of repeatedly replacing it. New storage is allocated before the
+  // old table is released, preserving the working cache on OOM.
+  bool ensureAdvanceTableCapacity(uint8_t styleIdx, uint32_t needed);
   // Merge sortedNew (sorted by codepoint, no overlap with existing) into the
   // advance table for styleIdx, preserving sort order; cap-truncates the tail.
-  void mergeIntoAdvanceTable(uint8_t styleIdx, const AdvanceEntry* sortedNew, uint32_t newCount);
+  void mergeIntoAdvanceTable(uint8_t styleIdx, const AdvanceEntry* sortedNew, uint32_t newCount, Arena& scratch);
 
   Stats stats_;
   uint32_t contentHash_ = 0;
@@ -292,16 +299,16 @@ class SdCardFont {
   void freeStyleKernLigatureData(PerStyle& s);
   void freeStyleMiniKern(PerStyle& s);
   bool loadStyleKernLigatureData(PerStyle& s);
-  bool buildMiniKernMatrix(PerStyle& s, const uint32_t* codepoints, uint32_t cpCount);
+  bool buildMiniKernMatrix(PerStyle& s, const uint32_t* codepoints, uint32_t cpCount, Arena& scratch);
   void applyKernLigaturePointers(PerStyle& s, EpdFontData& data) const;
   void applyGlyphMissCallback(uint8_t styleIdx);
   int32_t findGlobalGlyphIndex(const PerStyle& s, uint32_t codepoint) const;
-  int fetchAdvancesForCodepoints(uint32_t* codepoints, uint32_t cpCount, uint8_t styleMask);
+  int fetchAdvancesForCodepoints(uint32_t* codepoints, uint32_t cpCount, uint8_t styleMask, Arena& scratch);
   int failPrewarm(int missed);
   template <typename Iter>
   int buildAdvanceTableRange(Iter begin, Iter end, bool includeSpace, bool includeHyphen, uint8_t styleMask,
                              const char* extraText = nullptr);
-  int prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint32_t cpCount, bool metadataOnly);
+  int prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint32_t cpCount, bool metadataOnly, Arena& scratch);
 
   // Global helpers
   void freeAll();
