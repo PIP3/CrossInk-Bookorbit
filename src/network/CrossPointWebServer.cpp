@@ -363,13 +363,10 @@ void CrossPointWebServer::begin() {
   udpActive = udp.begin(LOCAL_UDP_PORT);
   LOG_DBG("WEB", "Discovery UDP %s on port %d", udpActive ? "enabled" : "failed", LOCAL_UDP_PORT);
 
-  // Request handlers run on the activity loop task. Register it before any
-  // handler calls esp_task_wdt_reset(); otherwise those resets are no-ops.
-  const esp_err_t watchdogResult = esp_task_wdt_add(nullptr);
-  watchdogTaskRegistered = watchdogResult == ESP_OK;
-  if (!watchdogTaskRegistered) {
-    LOG_ERR("WEB", "Failed to register web server task with watchdog: %s", esp_err_to_name(watchdogResult));
-  }
+  // Do not subscribe the serving task to the task watchdog. Arduino WebServer
+  // permits five-second client and ACK waits, which can consume the entire
+  // default watchdog window on a weak connection even while the CPU idle task
+  // is healthy. The system idle-task watchdog still detects real CPU stalls.
 
   running = true;
 
@@ -397,10 +394,6 @@ void CrossPointWebServer::abortWsUpload(const char* tag) {
 void CrossPointWebServer::stop() {
   if (!running || !server) {
     LOG_DBG("WEB", "stop() called but already stopped (running=%d, server=%p)", running, server.get());
-    if (watchdogTaskRegistered) {
-      esp_task_wdt_delete(nullptr);
-      watchdogTaskRegistered = false;
-    }
     return;
   }
 
@@ -434,11 +427,6 @@ void CrossPointWebServer::stop() {
   delay(10);
 
   server.reset();
-
-  if (watchdogTaskRegistered) {
-    esp_task_wdt_delete(nullptr);
-    watchdogTaskRegistered = false;
-  }
 
   // Note: Static upload variables (uploadFileName, uploadPath, uploadError) are declared
   // later in the file and will be cleared when they go out of scope or on next upload

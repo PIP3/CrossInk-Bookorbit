@@ -73,7 +73,7 @@
 - Low-memory EPUB layout now fails cleanly when page or image elements cannot be allocated instead of risking a reboot.
 - EPUB background indexing now waits for sufficient contiguous memory instead of starting a layout pass that is likely to fail.
 - KOReader Sync now uses a smaller TLS footprint and can start safely when reader heap is fragmented.
-- Web file transfers now keep the active request task registered with the watchdog, and low-memory EPUB grayscale falls back without leaving a stale display baseline.
+- Web file transfers no longer reboot when clients stall at the network timeout, and low-memory EPUB grayscale falls back without leaving a stale display baseline.
 - KOReader authentication and progress sync now reconnect through WiFi selection when the saved WiFi state has no active station address.
 - File Transfer now loads web settings with less memory and exits promptly when browser connections stall.
 - Manual screen refreshes now preserve text anti-aliasing while reading EPUB and TXT books.
