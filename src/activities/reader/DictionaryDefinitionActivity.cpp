@@ -1123,24 +1123,31 @@ void DictionaryDefinitionActivity::loop() {
         const bool wasBackNav = chainBackNavInProgress;
         const bool wasDictionarySwitch = dictionarySwitchLookupInProgress;
         const bool willLog = !wasBackNav && controller.getRecordHistory();
-        if (!wasBackNav && !wasDictionarySwitch) {
-          // Forward: push a back-entry for the word being left (current headword,
-          // on currentPage), referencing its history position.
-          chain_.onForward(static_cast<uint16_t>(currentPage), willLog);
+        {
+          // A dictionary-picker return queues a background repaint while the
+          // lookup worker can finish immediately. Serialize reflow with that
+          // repaint: it temporarily unloads the dictionary font, and measuring
+          // against the missing font otherwise collapses pagination to one line.
+          RenderLock lock(*this);
+          if (!wasBackNav && !wasDictionarySwitch) {
+            // Forward: push a back-entry for the word being left (current headword,
+            // on currentPage), referencing its history position.
+            chain_.onForward(static_cast<uint16_t>(currentPage), willLog);
+          }
+          chainBackNavInProgress = false;
+          dictionarySwitchLookupInProgress = false;
+          headword = controller.getFoundWord();
+          foundLocation = controller.getFoundLocation();
+          wrapText();  // resets currentPage to 0 and loads page 0
+          if (wasBackNav) {
+            // Re-derive the now-current word's history position and restore its page.
+            chain_.setCurrentHistIndex(pendingBack_.histIndex);
+            currentPage = (pendingBack_.page < totalPages) ? pendingBack_.page : (totalPages - 1);
+            if (currentPage < 0) currentPage = 0;
+            if (currentPage > 0) loadPage(currentPage);
+          }
+          isWordSelectMode = false;
         }
-        chainBackNavInProgress = false;
-        dictionarySwitchLookupInProgress = false;
-        headword = controller.getFoundWord();
-        foundLocation = controller.getFoundLocation();
-        wrapText();  // resets currentPage to 0 and loads page 0
-        if (wasBackNav) {
-          // Re-derive the now-current word's history position and restore its page.
-          chain_.setCurrentHistIndex(pendingBack_.histIndex);
-          currentPage = (pendingBack_.page < totalPages) ? pendingBack_.page : (totalPages - 1);
-          if (currentPage < 0) currentPage = 0;
-          if (currentPage > 0) loadPage(currentPage);
-        }
-        isWordSelectMode = false;
         requestUpdate();
         // Chain-forward records; chain-back-nav does not.
         LookupHistory::addWordIf(cachePath, controller.getLookupWord(),
