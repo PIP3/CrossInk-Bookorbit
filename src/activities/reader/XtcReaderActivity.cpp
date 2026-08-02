@@ -90,6 +90,10 @@ void XtcReaderActivity::onExit() {
 
   mappedInput.setReaderMode(false);
 
+  if (!flushQueuedProgress()) {
+    LOG_ERR("XTR", "Failed to flush debounced reader progress on exit");
+  }
+
   APP_STATE.readerActivityLoadCount = 0;
   APP_STATE.saveToFile();
 
@@ -659,7 +663,7 @@ void XtcReaderActivity::onReaderMenuConfirm(const int action) {
       deleteBookCache();
       break;
     case XtcReaderMenuActivity::MenuAction::SEND_NEARBY_BOOK:
-      saveProgress();
+      saveProgress(currentPage);
       activityManager.goToNearbyBookSend(xtc ? xtc->getPath() : std::string{}, true);
       return;
     case XtcReaderMenuActivity::MenuAction::DISABLE_TOUCHSCREEN:
@@ -716,7 +720,9 @@ void XtcReaderActivity::render(RenderLock&&) {
 
   renderPage();
   pageShownAtMs = millis();
-  saveProgress();
+  if (!queueProgressSave()) {
+    LOG_ERR("XTR", "Failed to save debounced reader progress");
+  }
 }
 
 XtcReaderActivity::StatusBarInfo XtcReaderActivity::getStatusBarInfo() const {
@@ -972,17 +978,38 @@ void XtcReaderActivity::renderPage() {
   ReaderUtils::displayWithRefreshCycle(renderer, pagesUntilFullRefresh);
 }
 
-void XtcReaderActivity::saveProgress() const {
-  HalFile f;
-  if (Storage.openFileForWrite("XTR", xtc->getCachePath() + "/progress.bin", f)) {
-    uint8_t data[4];
-    data[0] = currentPage & 0xFF;
-    data[1] = (currentPage >> 8) & 0xFF;
-    data[2] = (currentPage >> 16) & 0xFF;
-    data[3] = (currentPage >> 24) & 0xFF;
-    f.write(data, 4);
-    f.close();
+bool XtcReaderActivity::saveProgress(const uint32_t page) {
+  if (!xtc) {
+    return false;
   }
+  HalFile f;
+  if (!Storage.openFileForWrite("XTR", xtc->getCachePath() + "/progress.bin", f)) {
+    return false;
+  }
+  uint8_t data[4];
+  data[0] = page & 0xFF;
+  data[1] = (page >> 8) & 0xFF;
+  data[2] = (page >> 16) & 0xFF;
+  data[3] = (page >> 24) & 0xFF;
+  const bool written = f.write(data, sizeof(data)) == sizeof(data);
+  f.close();
+  if (!written) {
+    LOG_ERR("XTR", "Short write saving reader progress");
+    return false;
+  }
+  progressSaveDebouncer.markPersisted(page);
+  return true;
+}
+
+bool XtcReaderActivity::queueProgressSave() {
+  if (!progressSaveDebouncer.observe(currentPage)) {
+    return true;
+  }
+  return saveProgress(currentPage);
+}
+
+bool XtcReaderActivity::flushQueuedProgress() {
+  return !progressSaveDebouncer.hasPending() || saveProgress(progressSaveDebouncer.lastObservedPosition());
 }
 
 void XtcReaderActivity::loadProgress() {

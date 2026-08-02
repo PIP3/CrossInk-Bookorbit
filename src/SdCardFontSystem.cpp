@@ -22,9 +22,6 @@ constexpr UiFontSize kUiFontSizes[] = {
 }  // namespace
 
 void SdCardFontSystem::begin(GfxRenderer& renderer) {
-  registry_.discover();
-  registryLoaded_ = true;
-
   // Register this system as the SD font ID resolver in settings.
   // Uses a static trampoline since CrossPointSettings stores a plain function pointer.
   SETTINGS.sdFontIdResolver = [](void* ctx, const char* familyName, uint8_t fontSizeEnum) -> int {
@@ -32,27 +29,12 @@ void SdCardFontSystem::begin(GfxRenderer& renderer) {
   };
   SETTINGS.sdFontResolverCtx = this;
 
-  // If user has a saved SD font selection, load it
-  if (SETTINGS.sdFontFamilyName[0] != '\0') {
-    const auto* family = registry_.findFamily(SETTINGS.sdFontFamilyName);
-    if (family) {
-      if (manager_.loadFamily(*family, renderer, SETTINGS.getSdFontTargetPointSize(), SETTINGS.fontSize)) {
-        loadedFontSizeStep_ = SETTINGS.fontSize;
-        setupUiFallbacks(renderer);
-        LOG_DBG("SDFS", "Loaded SD card font family: %s", SETTINGS.sdFontFamilyName);
-      } else {
-        LOG_ERR("SDFS", "Failed to load SD font family: %s (clearing)", SETTINGS.sdFontFamilyName);
-        SETTINGS.sdFontFamilyName[0] = '\0';
-        SETTINGS.saveToFile();
-      }
-    } else {
-      LOG_DBG("SDFS", "SD font family not found on card: %s (clearing)", SETTINGS.sdFontFamilyName);
-      SETTINGS.sdFontFamilyName[0] = '\0';
-      SETTINGS.saveToFile();
-    }
+  if (SETTINGS.sdFontFamilyName[0] == '\0') {
+    LOG_DBG("SDFS", "SD font resolver ready; discovery deferred until requested");
+    return;
   }
 
-  LOG_DBG("SDFS", "SD font system ready (%d families discovered)", registry_.getFamilyCount());
+  ensureLoaded(renderer);
   releaseRegistry();
 }
 

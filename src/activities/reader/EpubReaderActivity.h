@@ -16,6 +16,7 @@
 #include "EndOfBookOptions.h"
 #include "EpubReaderMenuActivity.h"
 #include "GlobalReadingStats.h"
+#include "ReaderProgressSaveDebouncer.h"
 #include "activities/Activity.h"
 
 struct ToastRect {
@@ -228,9 +229,23 @@ class EpubReaderActivity final : public Activity {
   int lastSavedSpineIndex = -1;
   int lastSavedPage = -1;
   int lastSavedPageCount = -1;
+  ReaderProgressSaveDebouncer progressSaveDebouncer;
+  bool progressSaveRequiredAfterRelayout = false;
+  // Adapted from Sichroteph/YACP commit 3f3c5fc42e794c021edb9832856ef98c2d2065b9
+  // (MIT): retain one render-only strip instead of reallocating it on every
+  // grayscale page. Released before section/index work that needs heap headroom.
+  std::unique_ptr<uint8_t[]> grayscaleStripScratch;
+  size_t grayscaleStripScratchSize = 0;
+  // Trigger/memoization concept adapted from Sichroteph/YACP commit
+  // 3f3c5fc42e794c021edb9832856ef98c2d2065b9 (MIT).
+  int preparedNextSpineIndex = -1;
+  uint16_t preparedNextViewportWidth = 0;
+  uint16_t preparedNextViewportHeight = 0;
 
   void renderContents(std::unique_ptr<Page> page, int fontId, int orientedMarginTop, int orientedMarginRight,
-                      int orientedMarginBottom, int orientedMarginLeft);
+                      int orientedMarginBottom, int orientedMarginLeft, bool updatePanel);
+  bool ensureGrayscaleStripScratch();
+  void releaseGrayscaleStripScratch();
   void drawClippingHighlights(const Page& page, int fontId, int orientedMarginTop, int orientedMarginLeft) const;
   void renderStatusBar() const;
   void refreshChapterGroupEstimate(uint16_t viewportWidth, uint16_t viewportHeight);
@@ -276,6 +291,8 @@ class EpubReaderActivity final : public Activity {
   bool isRelayoutCatchUpComplete() const;
   bool applyDeferredReposition();
   bool saveProgress(int spineIndex, int currentPage, int pageCount);
+  bool queueProgressSave(int spineIndex, int currentPage, int pageCount, bool forceSave = false);
+  bool flushQueuedProgress();
   void cacheCurrentSectionPosition();
   void pauseReadingPaceTimer(const char* reason = "unknown");
   void resumeReadingPaceTimer(const char* reason = "unknown");
