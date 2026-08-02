@@ -178,7 +178,7 @@ void KOReaderSyncActivity::saveProgressAndReturn(const CrossPointPosition& posit
   returnToReader();
 }
 
-void KOReaderSyncActivity::returnToReader() { activityManager.goToReader(epubPath); }
+void KOReaderSyncActivity::returnToReader() { activityManager.goToReader(epubPath, false, false, true); }
 
 bool KOReaderSyncActivity::consumeInitialConfirmRelease() {
   if (!lockInitialConfirmRelease) {

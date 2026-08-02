@@ -77,6 +77,10 @@ class EpubReaderActivity final : public Activity {
   std::string pendingFootnotePreviewAnchor;
   bool activeFootnotePreview = false;
   int pagesUntilFullRefresh = 0;
+  // A Sync Progress return can leave non-reader UI on the panel. This is a
+  // one-shot clean base for its first image page; normal image-page cleanup
+  // uses pagesUntilFullRefresh independently.
+  bool cleanImageBasePending = false;
   int cachedSpineIndex = 0;
   int cachedChapterPageNumber = 0;
   int cachedChapterTotalPageCount = 0;
@@ -374,17 +378,20 @@ class EpubReaderActivity final : public Activity {
 
  public:
   explicit EpubReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Epub> epub,
-                              BookReaderSettingsData readerSettings, int initialRefreshCountdown)
+                              BookReaderSettingsData readerSettings, int initialRefreshCountdown,
+                              bool cleanImageBaseOnEntry = false)
       : Activity("EpubReader", renderer, mappedInput),
         epub(std::move(epub)),
         initialBookReaderSettings(std::move(readerSettings)),
-        pagesUntilFullRefresh(initialRefreshCountdown) {}
+        pagesUntilFullRefresh(initialRefreshCountdown),
+        cleanImageBasePending(cleanImageBaseOnEntry) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;
   void render(RenderLock&& lock) override;
   bool prepareManualRefresh() override {
     pagesUntilFullRefresh = 1;
+    cleanImageBasePending = true;
     return true;
   }
   bool preventAutoSleep() override { return automaticPageTurnActive; }

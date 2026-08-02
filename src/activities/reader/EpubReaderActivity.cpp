@@ -3831,7 +3831,7 @@ void EpubReaderActivity::executeReaderQuickAction(CrossPointSettings::LONG_PRESS
       onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction::BOOKMARK_TOGGLE);
       break;
     case CrossPointSettings::LONG_MENU_REFRESH_SCREEN:
-      pagesUntilFullRefresh = 1;  // Forces HALF_REFRESH on next render
+      prepareManualRefresh();
       requestUpdate();
       break;
     case CrossPointSettings::LONG_MENU_SYNC_PROGRESS:
@@ -5523,7 +5523,6 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int fo
   // image pages: their double-FAST path otherwise runs directly over the
   // retained frame after a silent restart (for example, when returning from
   // KOReader sync), leaving the old UI mixed with the image.
-  const bool cleanImageBasePending = pagesUntilFullRefresh <= 1;
   const bool tiledGrayscale = needsAnyGrayscale && renderer.supportsStripGrayscale();
   const bool overlapRefresh =
       tiledGrayscale && !pageHasImages && pagesUntilFullRefresh > 1 && renderer.supportsAsyncGrayscaleBase();
@@ -5608,6 +5607,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int fo
       // a pending clean base before their double-FAST grayscale pipeline.
       if (cleanImageBasePending) {
         renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+        cleanImageBasePending = false;
       }
       renderer.displayBuffer(HalDisplay::FAST_REFRESH);
 
