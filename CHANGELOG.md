@@ -44,7 +44,7 @@
 
 ### Fixed
 
-- Reader menu headings no longer overlap navigation hints in Landscape CW, and touchscreen menus no longer reserve an unused hint gutter.
+- Bionic Reading no longer lets letters overlap at the bold-to-regular split in EPUB words.
 - The web settings page now hides settings on devices that don't support it.
 - Changing an SD-card reader font no longer leaves preview font caches consuming the contiguous memory needed to rebuild an existing book's layout.
 - Syncing the clock on memory-constrained X3/X4 devices no longer risks a reboot while saving settings.

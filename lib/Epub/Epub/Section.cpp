@@ -16,9 +16,9 @@
 
 namespace {
 constexpr uint32_t SECTION_CACHE_MAGIC = 0x535843FF;  // bytes: 0xFF, "CXS"
-// v57: CJK gap suppression now applies only to source-glued tokens, preserving
-// explicit spaces between Hangul words. Cached page positions must rebuild.
-constexpr uint8_t SECTION_FILE_VERSION = 57;
+// v58: Bionic split-run offsets use drawText's combined advance and cross-run
+// kerning rounding, so cached page positions must rebuild.
+constexpr uint8_t SECTION_FILE_VERSION = 58;
 // Suspended incremental build: valid pages plus LUTs and a parse-watermark trailer.
 // Change this with layout or payload changes so stale partial pages cannot resume
 // under a different layout contract.

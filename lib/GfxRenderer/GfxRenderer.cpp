@@ -2642,7 +2642,8 @@ int GfxRenderer::getKerning(const int fontId, const uint32_t leftCp, const uint3
   return fp4::toPixel(kernFP);                                           // snap 4.4 fixed-point to nearest pixel
 }
 
-int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFamily::Style style) const {
+int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, const EpdFontFamily::Style style,
+                                 const uint32_t followingCp) const {
   // Match the font drawText would use for CJK-bearing strings (see resolveTextFontId).
   const int resolvedFontId = resolveTextFontId(fontId, text, style);
   // Measure the exact codepoint stream drawText renders: bidi-reordered and
@@ -2668,6 +2669,8 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
       return 0;
     }
     const auto& font = fontIt->second;
+    uint32_t lastCp = 0;
+    bool lastScaledSmallCap = false;
     while (uint32_t cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text))) {
       if (BidiUtils::isTransparentMark(cp)) {
         continue;
@@ -2684,6 +2687,20 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
       } else {
         widthFP += advFP;
       }
+      lastCp = cp;
+      lastScaledSmallCap = scaledSmallCap;
+    }
+    if (followingCp != 0 && lastCp != 0) {
+      uint32_t adjustedFollowingCp = followingCp;
+      const bool followingScaledSmallCap = isSmallCapsLowercase(style, adjustedFollowingCp);
+      if (followingScaledSmallCap) {
+        adjustedFollowingCp = smallCapsUppercaseCodepoint(adjustedFollowingCp);
+      }
+      int32_t kernFP = font.getKerning(lastCp, adjustedFollowingCp, style);
+      if (lastScaledSmallCap || followingScaledSmallCap) {
+        kernFP = smallCapsAdvanceFP(kernFP);
+      }
+      widthFP += kernFP;
     }
     return fp4::toPixel(widthFP);
   }
@@ -2765,7 +2782,21 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
     prevCp = cp;
     prevScaledSmallCap = scaledSmallCap;
   }
-  widthPx += fp4::toPixel(prevAdvanceFP);  // final glyph's advance
+  if (followingCp != 0 && prevCp != 0) {
+    uint32_t adjustedFollowingCp = followingCp;
+    const bool followingScaledSmallCap = isSmallCapsLowercase(style, adjustedFollowingCp);
+    if (followingScaledSmallCap) {
+      adjustedFollowingCp = smallCapsUppercaseCodepoint(adjustedFollowingCp);
+    }
+    adjustedFollowingCp = font.getFallbackCodepoint(adjustedFollowingCp, style);
+    int32_t kernFP = font.getKerning(prevCp, adjustedFollowingCp, style);  // 4.4 fixed-point kern
+    if (prevScaledSmallCap || followingScaledSmallCap) {
+      kernFP = smallCapsAdvanceFP(kernFP);
+    }
+    widthPx += fp4::toPixel(prevAdvanceFP + kernFP);
+  } else {
+    widthPx += fp4::toPixel(prevAdvanceFP);  // final glyph's advance
+  }
   return widthPx;
 }
 

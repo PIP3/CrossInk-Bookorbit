@@ -320,11 +320,17 @@ int measureBionicRunOffset(const GfxRenderer& renderer, const int fontId, const 
   memcpy(prefixBuf, word.c_str(), prefixLen);
   prefixBuf[prefixLen] = '\0';
 
-  const int firstVisualRunWidth = rtl ? renderer.getTextAdvanceX(fontId, word.c_str() + boundary, style)
-                                      : renderer.getTextAdvanceX(fontId, prefixBuf, boldStyle);
-  const int kern = renderer.getKerning(fontId, lastCodepointBeforeByteOffset(word, boundary),
-                                       firstCodepointAtByteOffset(word, boundary), boldStyle);
-  return firstVisualRunWidth + kern;
+  const uint32_t firstSuffixCp = firstCodepointAtByteOffset(word, boundary);
+  if (!rtl) {
+    // The suffix starts in a separate drawText() call. Keep the final bold
+    // glyph's advance and cross-run kerning in one fixed-point rounding step,
+    // matching drawText() and preventing one-pixel collisions at the split.
+    return renderer.getTextAdvanceX(fontId, prefixBuf, boldStyle, firstSuffixCp);
+  }
+
+  const int suffixWidth = renderer.getTextAdvanceX(fontId, word.c_str() + boundary, style);
+  const int kern = renderer.getKerning(fontId, lastCodepointBeforeByteOffset(word, boundary), firstSuffixCp, boldStyle);
+  return suffixWidth + kern;
 }
 
 uint16_t measureTokenWidth(const GfxRenderer& renderer, const int fontId, const std::string& word,

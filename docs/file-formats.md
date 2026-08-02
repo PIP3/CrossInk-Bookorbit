@@ -255,7 +255,9 @@ current reader settings, the section is discarded and rebuilt.
 Version 57 is binary-identical to version 56. The version was bumped because
 word-gap suppression now applies only to tokens glued together in the source.
 Older caches could collapse explicit spaces between Hangul words, so full and
-suspended partial section caches rebuild together.
+suspended partial section caches rebuild together. Version 58 recalculates
+Bionic Reading split-run offsets with the renderer's combined advance and
+kerning rounding, so old cached page positions rebuild.
 
 Version 56 changes `<br>` layout: a line break after text no longer reapplies
 the containing block's top or bottom spacing, while an empty `<br>` block keeps
