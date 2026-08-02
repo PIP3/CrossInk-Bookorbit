@@ -2274,10 +2274,6 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  if (loadDeferredXLocationsIfReady()) {
-    return;
-  }
-
 #if CROSSINK_APP_CAP_TOUCH
   if (activeFootnotePreview && touch.tapped && !RenderLock::peek() &&
       TouchHeaderBackButton::wasTapped(mappedInput, renderer)) {
@@ -2778,44 +2774,6 @@ void EpubReaderActivity::loop() {
   } else {
     pageTurn(true, pageTurnSource);
   }
-}
-
-bool EpubReaderActivity::loadDeferredXLocationsIfReady() {
-  if (!deferredXLocationLoadPending || pageShownAtMs == 0UL || RenderLock::peek() || sectionBuildWantsTick()) {
-    return false;
-  }
-
-  RenderLock lock(*this);
-  // Once the initial lookahead is ready, persist it as a partial and release the
-  // parser/CSS build arena before allocating optional location metadata.
-  if (section && section->isBuilding()) {
-    section->suspendBuild();
-  }
-  deferredXLocationLoadPending = false;
-  GfxRenderer::FrameBufferLoan loan(renderer);
-  const bool loaded = epub->loadXLocations();
-  loan.end();
-
-  if (loaded) {
-    chapterGroupEstimate.valid = false;
-    initializeCompletionPromptTrigger();
-  }
-  // Lending the framebuffer discards its pixels. The panel still shows the page,
-  // so rebuild only the in-memory buffer before the next interaction. Sending it
-  // to the panel would visibly repeat the image/grayscale sequence on uncached books.
-  auto page = section ? section->loadPage(section->currentPage) : nullptr;
-  if (page) {
-    const ReaderViewportLayout layout = computeReaderViewportLayout(
-        renderer, automaticPageTurnActive, activeFootnotePreview || !pendingFootnotePreviewAnchor.empty());
-    renderer.clearScreen(ReaderUtils::readerBackgroundColor());
-    const int renderFontId = activeSectionFontId != 0 ? activeSectionFontId : SETTINGS.getReaderFontId();
-    renderContents(std::move(page), renderFontId, layout.marginTop, layout.marginRight, layout.marginBottom,
-                   layout.marginLeft, /*updatePanel=*/false);
-  } else {
-    LOG_ERR("ERS", "Failed to restore framebuffer after loading EPUB locations; requesting full redraw");
-    requestUpdate();
-  }
-  return true;
 }
 
 // Translate an absolute percent into a spine index plus a normalized position

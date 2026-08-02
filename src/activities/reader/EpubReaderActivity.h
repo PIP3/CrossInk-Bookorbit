@@ -106,7 +106,6 @@ class EpubReaderActivity final : public Activity {
   unsigned long lastPageTurnTime = 0UL;
   unsigned long pageTurnDuration = 0UL;
   unsigned long pageShownAtMs = 0UL;
-  bool deferredXLocationLoadPending = true;
   unsigned long lastRenderCompleteMs = 0UL;
   int idlePrewarmSpine = -1;
   int idlePrewarmPage = -1;
@@ -367,7 +366,6 @@ class EpubReaderActivity final : public Activity {
   bool storeRenderModeToastRegion(const char* msg);
   void drawRenderModeToastBuffer(const char* msg);
   bool restoreRenderModeToastRegion();
-  bool loadDeferredXLocationsIfReady();
 
   // Footnote navigation
   void navigateToHref(const std::string& href, bool savePosition = false, bool preferFootnotePreview = false);
