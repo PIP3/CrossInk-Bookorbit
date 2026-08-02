@@ -44,8 +44,8 @@
 
 ### Fixed
 
-- Missing-word lookups in large unprepared dictionaries no longer freeze the reader while searching for spelling suggestions.
-- The web settings page now hides touchscreen, clock, and lighting controls on devices that do not support them.
+- The web settings page now hides settings on devices that don't support it.
+- Changing an SD-card reader font no longer leaves preview font caches consuming the contiguous memory needed to rebuild an existing book's layout.
 - Syncing the clock on memory-constrained X3/X4 devices no longer risks a reboot while saving settings.
 - EPUB clipping selection markers now remain visible in dark mode.
 - EPUB clipping highlights now re-match their saved text after font or layout changes, even when the page count stays the same.
