@@ -62,7 +62,7 @@ bool rectContains(const Rect& rect, const int x, const int y) {
 
 struct ReaderLayoutSettingsSnapshot {
   uint8_t fontFamily;
-  uint8_t fontSize;
+  uint8_t readerFontPointSize;
   uint8_t lineHeightPercent;
   uint8_t wordSpacing;
   uint8_t orientation;
@@ -84,7 +84,7 @@ struct ReaderLayoutSettingsSnapshot {
   char sdFontFamilyName[sizeof(SETTINGS.sdFontFamilyName)] = {};
 
   bool operator==(const ReaderLayoutSettingsSnapshot& other) const {
-    return fontFamily == other.fontFamily && fontSize == other.fontSize &&
+    return fontFamily == other.fontFamily && readerFontPointSize == other.readerFontPointSize &&
            lineHeightPercent == other.lineHeightPercent && wordSpacing == other.wordSpacing &&
            orientation == other.orientation && screenMargin == other.screenMargin &&
            publisherPageNumbers == other.publisherPageNumbers && paragraphAlignment == other.paragraphAlignment &&
@@ -100,24 +100,12 @@ struct ReaderLayoutSettingsSnapshot {
 
 ReaderLayoutSettingsSnapshot captureReaderLayoutSettings() {
   ReaderLayoutSettingsSnapshot snapshot{
-      SETTINGS.fontFamily,
-      SETTINGS.fontSize,
-      SETTINGS.lineHeightPercent,
-      SETTINGS.wordSpacing,
-      SETTINGS.orientation,
-      SETTINGS.screenMargin,
-      SETTINGS.publisherPageNumbers,
-      SETTINGS.paragraphAlignment,
-      SETTINGS.embeddedStyle,
-      SETTINGS.hyphenationEnabled,
-      SETTINGS.textAntiAliasing,
-      SETTINGS.readerDarkMode,
-      SETTINGS.imageRendering,
-      SETTINGS.extraParagraphSpacing,
-      SETTINGS.forceParagraphIndents,
-      SETTINGS.bionicReadingEnabled,
-      SETTINGS.guideReadingEnabled,
-      SETTINGS.epubRenderMode,
+      SETTINGS.fontFamily,           SETTINGS.readerFontPointSize,   SETTINGS.lineHeightPercent,
+      SETTINGS.wordSpacing,          SETTINGS.orientation,           SETTINGS.screenMargin,
+      SETTINGS.publisherPageNumbers, SETTINGS.paragraphAlignment,    SETTINGS.embeddedStyle,
+      SETTINGS.hyphenationEnabled,   SETTINGS.textAntiAliasing,      SETTINGS.readerDarkMode,
+      SETTINGS.imageRendering,       SETTINGS.extraParagraphSpacing, SETTINGS.forceParagraphIndents,
+      SETTINGS.bionicReadingEnabled, SETTINGS.guideReadingEnabled,   SETTINGS.epubRenderMode,
   };
   std::strncpy(snapshot.sdFontFamilyName, SETTINGS.sdFontFamilyName, sizeof(snapshot.sdFontFamilyName) - 1);
   snapshot.sdFontFamilyName[sizeof(snapshot.sdFontFamilyName) - 1] = '\0';

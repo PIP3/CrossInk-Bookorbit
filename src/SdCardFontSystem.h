@@ -43,12 +43,16 @@ class SdCardFontSystem {
   /// Release catalog names and paths without unloading the active reader font.
   void releaseRegistry();
 
-  /// Resolve an SD card font ID from family name + fontSize enum.
+  /// Resolve an SD card font ID from family name + selected point size.
   /// Returns 0 if not found. Used by CrossPointSettings::getReaderFontId().
-  int resolveFontId(const char* familyName, uint8_t fontSizeEnum) const;
+  int resolveFontId(const char* familyName, uint8_t pointSize) const;
 
   /// Change the reader font size using the active SD family when one is selected.
   bool changeReaderFontSize(bool larger);
+
+  /// Convert a pre-point-size SD font slot into the exact installed size.
+  /// Used while reading legacy per-book reader settings.
+  uint8_t resolveLegacySizeStep(const char* familyName, uint8_t sizeStep);
 
   // Temporarily replace the reader SD font with a per-book dictionary font.
   // At most one SD font family remains resident. Missing or failed dictionary
@@ -86,7 +90,7 @@ class SdCardFontSystem {
   SdCardFontManager manager_;
   std::atomic<bool> registryDirty_{false};
   bool registryLoaded_ = false;
-  uint8_t loadedFontSizeStep_ = UINT8_MAX;
+  uint8_t loadedFontPointSize_ = 0;
 };
 
 // Global SD card font system instance (defined in main.cpp).

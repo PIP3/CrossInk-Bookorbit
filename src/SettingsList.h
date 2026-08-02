@@ -22,18 +22,16 @@
 inline std::string fontSizePointLabel(const uint8_t pointSize) { return std::to_string(pointSize) + " pt"; }
 
 inline void appendBuiltinFontSizeOption(SettingInfo& setting, const CrossPointSettings::FONT_SIZE size) {
-  const uint8_t stored = CrossPointSettings::getStoredReaderFontSize(size);
-  if (stored == UINT8_MAX) return;
-
-  setting.enumStringValues.push_back(fontSizePointLabel(CrossPointSettings::getReaderFontPointSize(size)));
-  setting.enumRawValues.push_back(stored);
+  const uint8_t pointSize = CrossPointSettings::getReaderFontPointSize(size);
+  setting.enumStringValues.push_back(fontSizePointLabel(pointSize));
+  setting.enumRawValues.push_back(pointSize);
 }
 
 inline SettingInfo buildBuiltinFontSizeSetting() {
   SettingInfo s;
   s.nameId = StrId::STR_FONT_SIZE;
   s.type = SettingType::ENUM;
-  s.valuePtr = &CrossPointSettings::fontSize;
+  s.valuePtr = &CrossPointSettings::readerFontPointSize;
   s.key = "fontSize";
   s.category = StrId::STR_CAT_READER;
   s.enumStringValues.reserve(CrossPointSettings::FONT_SIZE_COUNT);
@@ -51,7 +49,7 @@ inline SettingInfo buildSdFontSizeSetting(const SdCardFontFamilyInfo& family) {
   SettingInfo s;
   s.nameId = StrId::STR_FONT_SIZE;
   s.type = SettingType::ENUM;
-  s.valuePtr = &CrossPointSettings::fontSize;
+  s.valuePtr = &CrossPointSettings::readerFontPointSize;
   s.key = "fontSize";
   s.category = StrId::STR_CAT_READER;
 
@@ -60,7 +58,7 @@ inline SettingInfo buildSdFontSizeSetting(const SdCardFontFamilyInfo& family) {
   s.enumRawValues.reserve(sizes.size());
   for (size_t i = 0; i < sizes.size(); i++) {
     s.enumStringValues.push_back(fontSizePointLabel(sizes[i]));
-    s.enumRawValues.push_back(static_cast<uint8_t>(i));
+    s.enumRawValues.push_back(sizes[i]);
   }
   return s;
 }
@@ -205,24 +203,18 @@ inline SettingInfo buildFontFamilySetting(const SdCardFontRegistry* registry) {
   };
 
   s.valueSetter = [sdFamilyNames, sdFamilySizes](uint8_t v) {
-    uint8_t targetPointSize = CrossPointSettings::getReaderFontPointSize(SETTINGS.getEffectiveReaderFontSize());
-    if (SETTINGS.sdFontFamilyName[0] != '\0') {
-      for (size_t i = 0; i < sdFamilyNames.size(); i++) {
-        if (sdFamilyNames[i] == SETTINGS.sdFontFamilyName && SETTINGS.fontSize < sdFamilySizes[i].size()) {
-          targetPointSize = sdFamilySizes[i][SETTINGS.fontSize];
-          break;
-        }
-      }
-    }
+    const uint8_t targetPointSize = SETTINGS.readerFontPointSize;
 
     if (v < CrossPointSettings::BUILTIN_FONT_COUNT) {
       SETTINGS.fontFamily = v;
       SETTINGS.sdFontFamilyName[0] = '\0';
-      SETTINGS.fontSize = closestBuiltinFontSizeIndex(targetPointSize);
+      SETTINGS.readerFontPointSize = CrossPointSettings::getReaderFontPointSize(
+          static_cast<CrossPointSettings::FONT_SIZE>(closestBuiltinFontSizeIndex(targetPointSize)));
     } else {
       int sdIdx = v - CrossPointSettings::BUILTIN_FONT_COUNT;
       if (sdIdx < static_cast<int>(sdFamilyNames.size())) {
-        SETTINGS.fontSize = closestPointSizeIndex(sdFamilySizes[sdIdx], targetPointSize);
+        SETTINGS.readerFontPointSize =
+            sdFamilySizes[sdIdx][closestPointSizeIndex(sdFamilySizes[sdIdx], targetPointSize)];
         strncpy(SETTINGS.sdFontFamilyName, sdFamilyNames[sdIdx].c_str(), sizeof(SETTINGS.sdFontFamilyName) - 1);
         SETTINGS.sdFontFamilyName[sizeof(SETTINGS.sdFontFamilyName) - 1] = '\0';
       }

@@ -64,28 +64,6 @@ int SdCardFontManager::loadFilePath(const char* path, const char* familyName, ui
   return fontId;
 }
 
-bool SdCardFontManager::loadFamily(const SdCardFontFamilyInfo& family, GfxRenderer& renderer, uint8_t targetPointSize,
-                                   uint8_t sizeStep) {
-  // Unload any previously loaded family first
-  if (!loadedFamilyName_.empty()) {
-    unloadAll(renderer);
-  }
-
-  const SdCardFontFileInfo* selected = family.selectFile(targetPointSize, sizeStep);
-  if (!selected) {
-    LOG_ERR("SDMGR", "Family %s has no files to load", family.name.c_str());
-    return false;
-  }
-
-  if (loadFile(*selected, family.name.c_str(), renderer) == 0) {
-    return false;
-  }
-
-  loadedFamilyName_ = family.name;
-  loadedPointSize_ = selected->pointSize;
-  return true;
-}
-
 bool SdCardFontManager::loadFamilyClosest(const SdCardFontFamilyInfo& family, GfxRenderer& renderer,
                                           uint8_t targetPointSize) {
   if (!loadedFamilyName_.empty()) {

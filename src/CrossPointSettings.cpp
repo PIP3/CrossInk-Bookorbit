@@ -468,13 +468,19 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
       this->*(info.valuePtr) = value;
       continue;
     }
-    if (info.type == SettingType::ENUM) {
-      const bool isSdFontSize = strcmp(info.key, "fontSize") == 0 && doc["sdFontFamilyName"].is<const char*>() &&
-                                doc["sdFontFamilyName"].as<const char*>()[0] != '\0';
-      if (!(isSdFontSize && value < SD_FONT_MAX_SIZE_STEPS) && !isEnumRawValueAllowed(info, value)) {
-        value = defaultEnumRawValue(info, fieldDefault);
+    if (strcmp(info.key, "fontSize") == 0 && !doc["fontSize"].isNull() && value < MIN_READER_FONT_POINT_SIZE) {
+      if (doc["sdFontFamilyName"].is<const char*>() && doc["sdFontFamilyName"].as<const char*>()[0] != '\0') {
+        legacySdFontSizeStep = value;
+      } else {
+        value = getReaderFontPointSize(static_cast<FONT_SIZE>(value));
         needsResave = true;
       }
+    } else if (info.type == SettingType::ENUM &&
+               !(strcmp(info.key, "fontSize") == 0 && doc["sdFontFamilyName"].is<const char*>() &&
+                 doc["sdFontFamilyName"].as<const char*>()[0] != '\0' && value >= MIN_READER_FONT_POINT_SIZE) &&
+               !isEnumRawValueAllowed(info, value)) {
+      value = defaultEnumRawValue(info, fieldDefault);
+      needsResave = true;
     } else if (info.type == SettingType::TOGGLE) {
       value = clamp(value, 2, fieldDefault);
     } else if (info.type == SettingType::VALUE) {
@@ -701,7 +707,9 @@ bool CrossPointSettings::loadFromBinaryFile() {
       }
     }
     if (++settingsRead >= fileSettingsCount) break;
-    readAndValidate(inputFile, fontSize, getActiveReaderFontSizeCount());
+    uint8_t legacyFontSize = MEDIUM;
+    readAndValidate(inputFile, legacyFontSize, getActiveReaderFontSizeCount());
+    readerFontPointSize = getReaderFontPointSize(static_cast<FONT_SIZE>(legacyFontSize));
     if (++settingsRead >= fileSettingsCount) break;
     readAndValidate(inputFile, lineSpacing, LINE_COMPRESSION_COUNT);
     if (++settingsRead >= fileSettingsCount) break;
@@ -914,18 +922,22 @@ bool CrossPointSettings::isSdFontPointSizeAllowedForRange(const uint8_t pointSiz
 }
 
 CrossPointSettings::FONT_SIZE CrossPointSettings::getEffectiveReaderFontSize() const {
-  uint8_t stored = 0;
+  FONT_SIZE best = firstAvailableReaderFontSize();
+  uint8_t bestDiff = UINT8_MAX;
   for (const FONT_SIZE size : READER_FONT_SIZE_STORAGE_ORDER) {
     if (!isReaderFontSizeAvailable(size)) continue;
-    if (fontSize == stored) return size;
-    stored++;
+    const uint8_t pointSize = getReaderFontPointSize(size);
+    const uint8_t diff =
+        pointSize > readerFontPointSize ? pointSize - readerFontPointSize : readerFontPointSize - pointSize;
+    if (diff < bestDiff || (diff == bestDiff && pointSize < getReaderFontPointSize(best))) {
+      best = size;
+      bestDiff = diff;
+    }
   }
-  return firstAvailableReaderFontSize();
+  return best;
 }
 
-uint8_t CrossPointSettings::getSdFontTargetPointSize() const {
-  return getSdFontRangePointSize(sdFontSizeRange, fontSize);
-}
+uint8_t CrossPointSettings::getSdFontTargetPointSize() const { return readerFontPointSize; }
 
 bool CrossPointSettings::changeReaderFontSize(const bool larger) {
   const FONT_SIZE currentSize = getEffectiveReaderFontSize();
@@ -944,7 +956,7 @@ bool CrossPointSettings::changeReaderFontSize(const bool larger) {
         (currentIndex + direction * static_cast<int>(step) + static_cast<int>(sizeCount)) % sizeCount;
     const uint8_t stored = getStoredReaderFontSize(READER_FONT_SIZE_CYCLE_ORDER[nextIndex]);
     if (stored != INVALID_READER_FONT_SIZE) {
-      fontSize = stored;
+      readerFontPointSize = getReaderFontPointSize(READER_FONT_SIZE_CYCLE_ORDER[nextIndex]);
       return true;
     }
   }
@@ -954,7 +966,7 @@ bool CrossPointSettings::changeReaderFontSize(const bool larger) {
 int CrossPointSettings::getReaderFontId() const {
   // Check SD card font first
   if (sdFontFamilyName[0] != '\0' && sdFontIdResolver) {
-    int id = sdFontIdResolver(sdFontResolverCtx, sdFontFamilyName, fontSize);
+    int id = sdFontIdResolver(sdFontResolverCtx, sdFontFamilyName, readerFontPointSize);
     if (id != 0) return id;
     // Fall through to built-in if SD font not found
   }

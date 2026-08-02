@@ -16,16 +16,9 @@ class SdCardFontManager {
   SdCardFontManager(const SdCardFontManager&) = delete;
   SdCardFontManager& operator=(const SdCardFontManager&) = delete;
 
-  // Load the selected font file. Four-size families map the reader size step
-  // onto the sorted file list; other counts fall back to closest point size.
-  // Only one .cpfont file is loaded; other sizes remain on disk. This keeps
-  // resident interval + kern/ligature tables to one size's worth of memory.
-  // Returns true on success.
-  bool loadFamily(const SdCardFontFamilyInfo& family, GfxRenderer& renderer, uint8_t targetPointSize, uint8_t sizeStep);
-
-  // Load the file physically closest to targetPointSize. Unlike loadFamily(),
-  // this deliberately ignores the reader-size slot: a dictionary family can
-  // offer a different set of point sizes from the reader family.
+  // Load the file physically closest to targetPointSize. Only one .cpfont
+  // file is loaded; other sizes remain on disk. This keeps resident interval
+  // + kern/ligature tables to one size's worth of memory.
   bool loadFamilyClosest(const SdCardFontFamilyInfo& family, GfxRenderer& renderer, uint8_t targetPointSize);
 
   // Load a known file path without constructing a registry family. Used by

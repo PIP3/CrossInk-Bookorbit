@@ -32,7 +32,7 @@ class EpubReaderActivity final : public Activity {
 
   struct ReaderSettingsSnapshot {
     uint8_t fontFamily = 0;
-    uint8_t fontSize = 0;
+    uint8_t readerFontPointSize = 14;
     uint8_t lineHeightPercent = 100;
     uint8_t wordSpacing = 0;
     uint8_t orientation = 0;
