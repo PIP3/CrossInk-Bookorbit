@@ -45,6 +45,7 @@
 
 ### Fixed
 
+- Power-button wake hold timing no longer varies with SD-card initialization time.
 - EPUB reflows no longer reject a chapter before parsing when heap fragmentation leaves the general background-build threshold only slightly short; genuinely large table, font-prewarm, and image allocations remain protected by their own memory checks.
 - EPUB background indexing now yields to button and touch input, and changing reader settings during indexing no longer risks reading from a closed SD file.
 - EPUB clipping selection can now advance through dense one- and two-page chapter endings instead of stopping mid-page.
