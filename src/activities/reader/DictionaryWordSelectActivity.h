@@ -14,6 +14,9 @@
 
 class DictionaryWordSelectActivity final : public Activity {
  public:
+  using ReaderBackgroundRenderFn = void (*)(void* context);
+  using ReaderPageReloadFn = std::unique_ptr<Page> (*)(void* context);
+
   // reservedBottomHeight is the post-bezel reserved space the caller (EpubReader)
   // left below the page text — status-bar height OR auto-page-turn indicator
   // height, per the caller's own layout formula. The skip-initial-render fast
@@ -23,7 +26,9 @@ class DictionaryWordSelectActivity final : public Activity {
       GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Page> page, int marginLeft, int marginTop,
       const std::string& cachePath, const std::string& nextPageFirstWord = "", bool framebufferContainsPage = false,
       int reservedBottomHeight = 0, int initialTouchX = -1, int initialTouchY = -1, bool autoLookupInitialWord = false,
-      const char* dictionaryFontFamilyName = nullptr, uint8_t dictionaryFontPointSize = 0)
+      const char* dictionaryFontFamilyName = nullptr, uint8_t dictionaryFontPointSize = 0,
+      void* readerContext = nullptr, ReaderBackgroundRenderFn readerBackgroundRender = nullptr,
+      ReaderPageReloadFn readerPageReload = nullptr)
       : Activity("DictionaryWordSelect", renderer, mappedInput),
         page(std::move(page)),
         marginLeft(marginLeft),
@@ -36,10 +41,14 @@ class DictionaryWordSelectActivity final : public Activity {
         initialTouchX_(initialTouchX),
         initialTouchY_(initialTouchY),
         autoLookupInitialWord_(autoLookupInitialWord),
-        dictionaryFontPointSize_(dictionaryFontPointSize) {
+        dictionaryFontPointSize_(dictionaryFontPointSize),
+        readerContext_(readerContext),
+        readerBackgroundRender_(readerBackgroundRender),
+        readerPageReload_(readerPageReload) {
     if (dictionaryFontFamilyName) {
       std::strncpy(dictionaryFontFamilyName_, dictionaryFontFamilyName, sizeof(dictionaryFontFamilyName_) - 1);
     }
+    navigator.setHighlightSnapshotStorage(&highlightSnapshotStorage_);
   }
 
   void onEnter() override;
@@ -55,6 +64,10 @@ class DictionaryWordSelectActivity final : public Activity {
   std::string nextPageFirstWord;
 
   WordSelectNavigator navigator;
+  // Shared with the stacked definition activity. It is fixed storage inside
+  // this activity, so it adds no allocator churn and replaces two simultaneous
+  // 4 KB snapshots with one.
+  WordSelectNavigator::HighlightSnapshotStorage highlightSnapshotStorage_;
   DictionaryLookupController controller;
 
   // Differential repaint state. The first render in a session always goes through
@@ -88,6 +101,12 @@ class DictionaryWordSelectActivity final : public Activity {
   char dictionaryFontFamilyName_[64] = "";
   uint8_t dictionaryFontPointSize_ = 0;
   bool touchDragLookup_ = false;
+  void* readerContext_ = nullptr;
+  ReaderBackgroundRenderFn readerBackgroundRender_ = nullptr;
+  ReaderPageReloadFn readerPageReload_ = nullptr;
+  bool workingSetSuspended_ = false;
+  int suspendedSelectionX_ = -1;
+  int suspendedSelectionY_ = -1;
 
   bool skipLoopDelay() override { return controller.skipLoopDelay(); }
 
@@ -118,6 +137,9 @@ class DictionaryWordSelectActivity final : public Activity {
   void openDictionarySwitch();
   void renderDefinitionBackground();
   static void renderDefinitionBackgroundCallback(void* context);
+  bool buildWorkingSet(bool consumeInitialConfirm);
+  void suspendWorkingSet();
+  bool restoreWorkingSet();
 
   void extractWords(std::vector<WordSelectNavigator::WordInfo>& words, std::vector<WordSelectNavigator::Row>& rows,
                     std::string& textPool);

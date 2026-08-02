@@ -387,6 +387,10 @@ class EpubReaderActivity final : public Activity {
   bool handleTouchDictionaryLookup();
   void openWordSelect(bool framebufferContainsPage, int initialTouchX = -1, int initialTouchY = -1,
                       bool autoLookupInitialWord = false);
+  std::unique_ptr<Page> reloadDictionaryLookupPage();
+  void renderDictionaryLookupBackground();
+  static std::unique_ptr<Page> reloadDictionaryLookupPageCallback(void* context);
+  static void renderDictionaryLookupBackgroundCallback(void* context);
   void onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action);
   // Opens the reader menu for the current position (short-press Confirm)
   void openReaderMenu();

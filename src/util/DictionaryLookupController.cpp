@@ -68,7 +68,7 @@ void DictionaryLookupController::startLookup(const std::string& word, bool recor
   recordHistory_ = recordHistory;
   state = LookupState::LookingUp;
   // CLEANUP: on Auto-only commit, delete only this line (gate below stays — it's the Auto check)
-  if (shouldShowPopup()) {
+  if (lookupToastEnabled_ && shouldShowPopup()) {
     // Toast overlay: draw popup directly over whatever the user is currently viewing.
     // RenderLock serializes against the render task — without it, a prior requestUpdate()
     // (e.g. from navigation) may still be mid-refresh, and concurrent framebuffer / SPI
@@ -76,6 +76,8 @@ void DictionaryLookupController::startLookup(const std::string& word, bool recor
     RenderLock lock;
     GUI.drawPopup(renderer, tr(STR_DICT_LOOKING_UP));
     renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+  } else if (!lookupToastEnabled_) {
+    owner.requestUpdate();
   }
   if (!DictionaryLookupWorker::instance().start(*this)) {
     showMemoryErrorAndReset();
@@ -362,6 +364,7 @@ void DictionaryLookupController::handleLookupFailed() {
       showMemoryErrorAndReset();
       return;
     }
+    fullScreenChildWasShown_ = true;
     owner.startActivityForResult(std::move(sugActivity), [this](const ActivityResult& result) {
       if (result.isCancelled) {
         setNotFound();

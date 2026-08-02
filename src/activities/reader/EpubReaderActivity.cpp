@@ -2963,6 +2963,43 @@ bool EpubReaderActivity::handleTouchDictionaryLookup() {
   return true;
 }
 
+std::unique_ptr<Page> EpubReaderActivity::reloadDictionaryLookupPage() {
+  if (!section) return nullptr;
+  // A Page is variable-sized and can reach tens of KB, so it must remain a
+  // fallible heap object. It exists only while rebuilding the parent selection
+  // or a rare full-screen modal background, then is released immediately.
+  return section->loadPageFromSectionFile();
+}
+
+std::unique_ptr<Page> EpubReaderActivity::reloadDictionaryLookupPageCallback(void* context) {
+  return static_cast<EpubReaderActivity*>(context)->reloadDictionaryLookupPage();
+}
+
+void EpubReaderActivity::renderDictionaryLookupBackground() {
+  auto backgroundPage = reloadDictionaryLookupPage();
+  if (!backgroundPage) {
+    LOG_ERR("DICT", "Failed to reload reader page for dictionary modal background");
+    renderer.clearScreen();
+    return;
+  }
+
+  const ReaderViewportLayout layout = computeReaderViewportLayout(renderer, automaticPageTurnActive);
+  renderer.clearScreen();
+  auto* fcm = renderer.getFontCacheManager();
+  if (!fcm) {
+    backgroundPage->render(renderer, SETTINGS.getReaderFontId(), layout.marginLeft, layout.marginTop);
+    return;
+  }
+  auto scope = fcm->createPrewarmScope();
+  backgroundPage->render(renderer, SETTINGS.getReaderFontId(), layout.marginLeft, layout.marginTop);
+  scope.endScanAndPrewarm();
+  backgroundPage->render(renderer, SETTINGS.getReaderFontId(), layout.marginLeft, layout.marginTop);
+}
+
+void EpubReaderActivity::renderDictionaryLookupBackgroundCallback(void* context) {
+  static_cast<EpubReaderActivity*>(context)->renderDictionaryLookupBackground();
+}
+
 void EpubReaderActivity::openWordSelect(bool framebufferContainsPage, int initialTouchX, int initialTouchY,
                                         bool autoLookupInitialWord) {
   std::unique_ptr<Page> pageForLookup;
@@ -3011,7 +3048,9 @@ void EpubReaderActivity::openWordSelect(bool framebufferContainsPage, int initia
   auto wordSelect = makeUniqueNoThrow<DictionaryWordSelectActivity>(
       renderer, mappedInput, std::move(pageForLookup), layout.marginLeft, layout.marginTop, bookCachePath,
       nextPageFirstWord, framebufferContainsPage, layout.marginBottom, initialTouchX, initialTouchY,
-      autoLookupInitialWord, bookSettings.dictionarySdFontFamilyName, bookSettings.dictionaryFontPointSize);
+      autoLookupInitialWord, bookSettings.dictionarySdFontFamilyName, bookSettings.dictionaryFontPointSize, this,
+      &EpubReaderActivity::renderDictionaryLookupBackgroundCallback,
+      &EpubReaderActivity::reloadDictionaryLookupPageCallback);
   if (!wordSelect) {
     LOG_ERR("DICT", "OOM allocating DictionaryWordSelectActivity (%u bytes)",
             static_cast<unsigned>(sizeof(DictionaryWordSelectActivity)));

@@ -363,6 +363,16 @@ DictionaryFontActivation SdCardFontSystem::activateDictionaryFont(GfxRenderer& r
     return {fontId, true};
   }
 
+  const auto heap = MemoryBudget::snapshot();
+  if (!MemoryBudget::hasHeapForDictionarySdFont(heap)) {
+    LOG_ERR("SDFS", "Low heap for dictionary font swap (%u free, %u max alloc, need %u/%u); using reader font",
+            heap.freeHeap, heap.maxAllocHeap, MemoryBudget::DICTIONARY_SD_FONT_MIN_FREE,
+            MemoryBudget::DICTIONARY_SD_FONT_MIN_MAX_ALLOC);
+    const int readerFontId = restoreReaderFont(renderer);
+    MemoryBudget::logHeapShape("dict.font_heap_fallback");
+    return {readerFontId, false};
+  }
+
   // unloadAll() also drops optional CJK UI sizes before the dictionary file is
   // allocated, so both families are never resident at once.
   if (!manager_.currentFamilyName().empty()) {

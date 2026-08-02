@@ -92,6 +92,16 @@ class DictionaryLookupController {
   // dictionary lookup is resolving in the background.
   bool isLookingUp() const { return state == LookupState::LookingUp; }
 
+  // Definition modals render lookup progress inside their existing frame so a
+  // chained lookup does not dirty reader pixels outside the modal.
+  void setLookupToastEnabled(bool enabled) { lookupToastEnabled_ = enabled; }
+  bool requiresBackgroundRedrawAfterOverlay() const { return state == LookupState::AltFormPrompt; }
+  bool consumeFullScreenChildDisturbance() {
+    const bool disturbed = fullScreenChildWasShown_;
+    fullScreenChildWasShown_ = false;
+    return disturbed;
+  }
+
   // Show the "no word" popup with a 1-second delay, then request update.
   void showNoWordPopup();
 
@@ -138,6 +148,8 @@ class DictionaryLookupController {
   bool nextIsSuggestion = false;
   bool lookupMatchedStem = false;
   bool recordHistory_ = true;
+  bool lookupToastEnabled_ = true;
+  bool fullScreenChildWasShown_ = false;
   std::string preparedQuickIndexPath;
 
   std::string lookupWord;

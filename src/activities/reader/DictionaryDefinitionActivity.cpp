@@ -343,6 +343,12 @@ void DictionaryDefinitionActivity::onEnter() {
   definitionFontId_ = activation.fontId;
   definitionFontSource_ =
       activation.usingDictionaryFont ? DefinitionFontSource::Dictionary : DefinitionFontSource::Reader;
+  if (renderer.isSdCardFont(definitionFontId_)) {
+    // Dictionary preparation retains advances but deliberately starts without
+    // reader kerning/page caches; the lean policy below reloads ligatures and
+    // exact visible glyph/style data only.
+    renderer.releaseSdCardFontForLowMemory(definitionFontId_, /*preserveAdvanceTable=*/true);
+  }
   wrapText();
   requestUpdate();
   // SD write overlaps the e-ink refresh kicked by requestUpdate() on the render task.
@@ -411,6 +417,9 @@ void DictionaryDefinitionActivity::redrawModalBackground() {
     definitionFontId_ = activation.fontId;
     definitionFontSource_ =
         activation.usingDictionaryFont ? DefinitionFontSource::Dictionary : DefinitionFontSource::Reader;
+    if (renderer.isSdCardFont(definitionFontId_)) {
+      renderer.releaseSdCardFontForLowMemory(definitionFontId_, /*preserveAdvanceTable=*/true);
+    }
     if (definitionFontId_ != previousFontId) {
       reflowForDefinitionFontChange();
     }
@@ -497,11 +506,14 @@ void DictionaryDefinitionActivity::wrapText() {
   isWordSelectMode = false;
   navigator.reset();
   currentPage = 0;  // new definition always starts at page 0
-  // A new definition can have different modal geometry. Rebuild the book once
-  // so a smaller modal cannot leave pixels from the prior definition behind.
+  // The initial reader page is already present when opened from word-select.
+  // Chained definitions keep the existing modal covered by growing its frame,
+  // so they do not need to swap back to the reader font for a background draw.
   if (hasModalBackground()) {
-    modalBackgroundNeedsRedraw_ = !skipInitialModalBackgroundRedraw_;
-    skipInitialModalBackgroundRedraw_ = false;
+    if (skipInitialModalBackgroundRedraw_) {
+      modalBackgroundNeedsRedraw_ = false;
+      skipInitialModalBackgroundRedraw_ = false;
+    }
   }
 
   // Match the folder-name label shown by DictionarySelectActivity.
@@ -733,7 +745,9 @@ void DictionaryDefinitionActivity::sizeModalForCurrentPage() {
   const int contentHeight = metrics.optionPopupInnerPadding * 2 + titleLineHeight + metrics.optionPopupTitleGap +
                             visibleLines * getLineHeight() + footerHeight;
 
-  modalHeight_ = std::min(maxHeight, contentHeight);
+  const int desiredHeight = std::min(maxHeight, contentHeight);
+  modalSessionHeight_ = std::max(modalSessionHeight_, desiredHeight);
+  modalHeight_ = modalSessionHeight_;
   modalY_ = (renderer.getScreenHeight() - modalHeight_) / 2;
   bodyStartY = modalY_ + metrics.optionPopupInnerPadding + titleLineHeight + metrics.optionPopupTitleGap;
 }
@@ -1217,6 +1231,17 @@ void DictionaryDefinitionActivity::loop() {
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (showLookupButton) {
+      if (!hasSharedHighlightSnapshotStorage_ && !ownedHighlightSnapshotStorage_) {
+        // Fixed 4 KB activity-lifetime buffer: too large for the task stack and
+        // only needed when history-launched definitions enter word selection.
+        ownedHighlightSnapshotStorage_ = makeUniqueNoThrow<WordSelectNavigator::HighlightSnapshotStorage>();
+        if (!ownedHighlightSnapshotStorage_) {
+          LOG_ERR("DICT", "OOM allocating definition highlight snapshot (%u bytes)",
+                  static_cast<unsigned>(sizeof(WordSelectNavigator::HighlightSnapshotStorage)));
+        } else {
+          navigator.setHighlightSnapshotStorage(ownedHighlightSnapshotStorage_.get());
+        }
+      }
       extractWordsFromLayout();
       if (!navigator.isEmpty()) {
         isWordSelectMode = true;
@@ -1251,6 +1276,9 @@ void DictionaryDefinitionActivity::loop() {
 // ---------------------------------------------------------------------------
 
 void DictionaryDefinitionActivity::render(RenderLock&&) {
+  if (hasModalBackground() && controller.consumeFullScreenChildDisturbance()) {
+    modalBackgroundNeedsRedraw_ = true;
+  }
   // Differential fast path: only when we're already in word-select mode AND
   // we set it up on the previous frame AND the controller has nothing pending.
   if (isWordSelectMode && nextRenderMode_ == RenderMode::Differential && !controller.isActive()) {
@@ -1259,7 +1287,8 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
       if (const auto* word = navigator.getWordAt(currIdx); word && renderer.isSdCardFont(word->fontId)) {
         if (auto* fcm = renderer.getFontCacheManager()) {
           const uint8_t styleMask = static_cast<uint8_t>(1u << (static_cast<uint8_t>(word->style) & 0x03));
-          fcm->prewarmCache(word->fontId, navigator.getDisplay(*word), styleMask);
+          fcm->prewarmCache(word->fontId, navigator.getDisplay(*word), styleMask,
+                            FontCacheManager::PreparationPolicy::DictionaryLean);
         }
       }
       const int lineHeight = getLineHeight();
@@ -1276,6 +1305,17 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
     }
   }
 
+  // Alt-form confirmation intentionally owns the full screen. Leave the reader
+  // font unloaded while it is visible, then rebuild the background once after
+  // the controller returns to the modal flow.
+  if (hasModalBackground() && controller.requiresBackgroundRedrawAfterOverlay()) {
+    controller.render();
+    modalBackgroundNeedsRedraw_ = true;
+    nextRenderMode_ = RenderMode::FullPage;
+    prevHighlightIdx_ = -1;
+    return;
+  }
+
   // Full repaint path. The framebuffer retains the book pixels outside the
   // opaque, stable modal, so ordinary definition page turns only repaint the
   // modal. Rebuild the book after another screen or overlay disturbed it.
@@ -1285,23 +1325,27 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
     renderer.clearScreen();
   }
 
-  // After the picker closes, ActivityManager queues a repaint before the
-  // replacement lookup finishes. Repainting the previous definition here
-  // pushes stale glyph pixels through e-ink's fast-refresh waveform, which
-  // briefly distorts the old page. Keep the restored reader background and
-  // show the existing lookup popup until the new definition is ready.
+  // After the picker closes, rebuild the reader once but do not redraw stale
+  // definition glyphs. Keep lookup feedback inside the modal; the successful
+  // replacement can then reuse this background without another font swap.
   if (dictionarySwitchLookupInProgress && controller.isLookingUp()) {
-    GUI.drawPopup(renderer, tr(STR_DICT_LOOKING_UP));
-    // The popup sits outside the definition modal, so rebuild the reader
-    // background before rendering either the new definition or a failure UI.
-    if (hasModalBackground()) modalBackgroundNeedsRedraw_ = true;
+    if (hasModalBackground()) {
+      drawModalFrame();
+      const int messageY = modalY_ + (modalHeight_ - renderer.getLineHeight(UI_10_FONT_ID)) / 2;
+      renderer.drawCenteredText(UI_10_FONT_ID, messageY, tr(STR_DICT_LOOKING_UP));
+      renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+    } else {
+      GUI.drawPopup(renderer, tr(STR_DICT_LOOKING_UP));
+    }
     nextRenderMode_ = RenderMode::FullPage;
     prevHighlightIdx_ = -1;
     return;
   }
   if (controller.render()) {
     // Controller drew an overlay; framebuffer state is unknown.
-    if (hasModalBackground()) modalBackgroundNeedsRedraw_ = true;
+    if (hasModalBackground() && controller.requiresBackgroundRedrawAfterOverlay()) {
+      modalBackgroundNeedsRedraw_ = true;
+    }
     nextRenderMode_ = RenderMode::FullPage;
     prevHighlightIdx_ = -1;
     return;
@@ -1390,7 +1434,7 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
   if (renderer.isSdCardFont(bodyFontId)) {
     if (auto* fcm = renderer.getFontCacheManager()) {
       const auto prewarmAndRender = [&]() {
-        auto scope = fcm->createPrewarmScope();
+        auto scope = fcm->createPrewarmScope(FontCacheManager::PreparationPolicy::DictionaryLean);
         renderTitle();
         renderBody();  // scan pass
         if (!scope.endScanAndPrewarm()) return false;
@@ -1418,6 +1462,14 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
   if (!definitionTextRendered) {
     renderTitle();
     renderBody();
+  }
+
+  if (hasModalBackground() && controller.isLookingUp()) {
+    const int messageHeight = renderer.getLineHeight(UI_10_FONT_ID) + metrics.optionPopupInnerPadding * 2;
+    const int messageY = modalY_ + (modalHeight_ - messageHeight) / 2;
+    renderer.fillRect(modalX_ + metrics.optionPopupInnerPadding, messageY,
+                      modalWidth_ - metrics.optionPopupInnerPadding * 2, messageHeight, false);
+    renderer.drawCenteredText(UI_10_FONT_ID, messageY + metrics.optionPopupInnerPadding, tr(STR_DICT_LOOKING_UP));
   }
 
   if (definitionReadFailed_) GUI.drawPopup(renderer, tr(STR_DICT_READ_FAILED));
