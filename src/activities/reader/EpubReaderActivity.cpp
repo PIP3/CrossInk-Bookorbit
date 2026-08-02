@@ -1967,6 +1967,12 @@ void EpubReaderActivity::onEnter() {
         cachedChapterPageNumber = progress.pageNumber;
         cachedChapterTotalPageCount = progress.pageCount;
       }
+      if (progress.hasVisibleTextOffset) {
+        cachedVisibleTextOffset = progress.visibleTextOffset;
+        // A content position may come from another device whose page count does not
+        // match this layout.  Let the section builder resolve it before showing a page.
+        pendingRelayoutReposition = true;
+      }
     }
   }
   // We may want a better condition to detect if we are opening for the first time.
@@ -3272,6 +3278,12 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       }
 
       CrossPointPosition localPos = {currentSpineIndex, currentPage, totalPages};
+      if (section && currentPage >= 0 && currentPage < section->pageCount) {
+        if (const auto offset = section->getVisibleTextOffsetForPage(static_cast<uint16_t>(currentPage))) {
+          localPos.visibleTextOffset = *offset;
+          localPos.hasVisibleTextOffset = true;
+        }
+      }
       if (paragraphIndex.has_value()) {
         localPos.paragraphIndex = *paragraphIndex;
         localPos.hasParagraphIndex = true;
@@ -5254,7 +5266,9 @@ bool EpubReaderActivity::isRelayoutCatchUpComplete() const {
 
   const bool watermarkReached = static_cast<int>(section->pageCount) >= std::max(1, cachedChapterPageWatermark);
   bool positionResolved = static_cast<int>(section->pageCount) > cachedChapterPageNumber;
-  if (cachedPageParagraphIndex != UINT16_MAX) {
+  if (cachedVisibleTextOffset) {
+    positionResolved = section->getPageForVisibleTextOffset(*cachedVisibleTextOffset).has_value();
+  } else if (cachedPageParagraphIndex != UINT16_MAX) {
     positionResolved = section->isBuilding() ? section->findParagraphDuringBuild(cachedPageParagraphIndex).has_value()
                                              : section->getPageForParagraphIndex(cachedPageParagraphIndex).has_value();
   }
@@ -5262,7 +5276,7 @@ bool EpubReaderActivity::isRelayoutCatchUpComplete() const {
 }
 
 bool EpubReaderActivity::applyDeferredReposition() {
-  if (cachedChapterTotalPageCount == 0 || !section) {
+  if ((!cachedVisibleTextOffset && cachedChapterTotalPageCount == 0) || !section) {
     return false;
   }
 
@@ -5273,8 +5287,19 @@ bool EpubReaderActivity::applyDeferredReposition() {
   const bool completedRelayout = pendingRelayoutReposition;
   bool changed = false;
   if (currentSpineIndex == cachedSpineIndex) {
+    bool restoredFromContent = false;
+    if (cachedVisibleTextOffset) {
+      if (const auto contentPage = section->getPageForVisibleTextOffset(*cachedVisibleTextOffset, true)) {
+        section->currentPage = *contentPage;
+        restoredFromContent = true;
+        changed = true;
+        LOG_DBG("ERS", "Resolved visible text offset %lu to page %d",
+                static_cast<unsigned long>(*cachedVisibleTextOffset), section->currentPage);
+      }
+    }
+
     bool restoredFromParagraph = false;
-    if (cachedPageParagraphIndex != UINT16_MAX) {
+    if (!restoredFromContent && cachedPageParagraphIndex != UINT16_MAX) {
       if (const auto paragraphPage = section->getPageForParagraphIndex(cachedPageParagraphIndex)) {
         uint16_t newStartPage = *paragraphPage;
         if (newStartPage >= section->pageCount) {
@@ -5307,7 +5332,8 @@ bool EpubReaderActivity::applyDeferredReposition() {
       }
     }
 
-    if (!restoredFromParagraph && !section->isBuilding() && section->pageCount != cachedChapterTotalPageCount) {
+    if (!restoredFromContent && !restoredFromParagraph && !section->isBuilding() &&
+        section->pageCount != cachedChapterTotalPageCount) {
       const float progress =
           static_cast<float>(cachedChapterPageNumber) / static_cast<float>(cachedChapterTotalPageCount);
       int newPage = static_cast<int>(progress * static_cast<float>(section->pageCount));
@@ -5325,6 +5351,7 @@ bool EpubReaderActivity::applyDeferredReposition() {
   cachedChapterPageNumber = 0;
   cachedChapterTotalPageCount = 0;
   cachedChapterPageWatermark = 0;
+  cachedVisibleTextOffset.reset();
   pendingRelayoutReposition = false;
   cachedPageParagraphIndex = UINT16_MAX;
   cachedPageParagraphOffset = 0;
@@ -5342,12 +5369,16 @@ bool EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageC
   if (!epub) {
     return false;
   }
+  std::optional<uint32_t> visibleTextOffset;
+  if (section && spineIndex == currentSpineIndex && currentPage >= 0 && currentPage < section->pageCount) {
+    visibleTextOffset = section->getVisibleTextOffsetForPage(static_cast<uint16_t>(currentPage));
+  }
   if (section && section->isBuilding() && spineIndex == currentSpineIndex) {
     // Free lazy-build cache files before opening progress.bin; X4/SdFat can reject
     // another file open while a still-building EPUB section keeps files open.
     section->releaseBuildFile();
   }
-  const bool saved = EpubReaderUtils::saveProgress(*epub, spineIndex, currentPage, pageCount);
+  const bool saved = EpubReaderUtils::saveProgress(*epub, spineIndex, currentPage, pageCount, visibleTextOffset);
   if (saved) {
     lastSavedSpineIndex = spineIndex;
     lastSavedPage = currentPage;
@@ -5423,6 +5454,7 @@ void EpubReaderActivity::cacheCurrentSectionPosition() {
   cachedChapterPageNumber = section->currentPage;
   cachedChapterTotalPageCount = section->estimatedTotalPages();
   cachedChapterPageWatermark = section->pageCount;
+  cachedVisibleTextOffset.reset();
   pendingRelayoutReposition = true;
   cachedPageParagraphIndex = UINT16_MAX;
   cachedPageParagraphOffset = 0;
@@ -5431,6 +5463,7 @@ void EpubReaderActivity::cacheCurrentSectionPosition() {
 
   if (section->currentPage >= 0 && section->currentPage < section->pageCount) {
     const uint16_t currentPage = static_cast<uint16_t>(section->currentPage);
+    cachedVisibleTextOffset = section->getVisibleTextOffsetForPage(currentPage);
     if (const auto pIdx = section->getParagraphIndexForPage(currentPage)) {
       cachedPageParagraphIndex = *pIdx;
 

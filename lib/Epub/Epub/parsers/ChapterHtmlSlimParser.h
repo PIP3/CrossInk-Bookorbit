@@ -40,7 +40,7 @@ class ChapterHtmlSlimParser {
   Epub* epub;
   const std::string& filepath;
   GfxRenderer& renderer;
-  std::function<void(std::unique_ptr<Page>, uint16_t, uint16_t)> completePageFn;
+  std::function<void(std::unique_ptr<Page>, uint16_t, uint16_t, uint32_t)> completePageFn;
   std::function<void()> popupFn;  // Popup callback
   int depth = 0;
   int skipUntilDepth = INT_MAX;
@@ -55,6 +55,8 @@ class ChapterHtmlSlimParser {
   // leave one char at end for null pointer
   char partWordBuffer[MAX_WORD_SIZE + 1] = {};
   int partWordBufferIndex = 0;
+  uint32_t partWordVisibleOffset = 0;
+  uint32_t visibleTextOffset = 0;
   uint16_t currentTextRunBytes = 0;
   bool nextWordContinues = false;  // true when next flushed word attaches to previous (inline element boundary)
   std::unique_ptr<ParsedText> currentTextBlock = nullptr;
@@ -65,6 +67,8 @@ class ChapterHtmlSlimParser {
   std::string rubyTextBuffer;
   std::unique_ptr<Page> currentPage = nullptr;
   int16_t currentPageNextY = 0;
+  uint32_t currentPageVisibleOffset = 0;
+  bool currentPageVisibleOffsetSet = false;
   int fontId;
   float lineCompression;
   bool extraParagraphSpacing;
@@ -95,6 +99,7 @@ class ChapterHtmlSlimParser {
   uint32_t previewStartOrdinal = 0;
   uint32_t previewElementOrdinal = 0;
   bool malformedMarkupTruncated = false;
+  bool syntheticCharacterData = false;
   XML_Parser activeParser = nullptr;
   FsFile parseFile_;
   size_t parseFileOffset_ = 0;
@@ -152,6 +157,7 @@ class ChapterHtmlSlimParser {
   struct BufferedTableCell {
     std::unique_ptr<ParsedText> text;
     std::vector<std::pair<int, FootnoteEntry>> footnotes;
+    uint32_t visibleTextOffset = 0;
     bool isHeader = false;
     uint8_t colSpan = 1;
   };
@@ -177,6 +183,7 @@ class ChapterHtmlSlimParser {
   int pendingListMarkerDepth = -1;
   bool currentTableCellIsHeader = false;
   uint8_t currentTableCellColSpan = 1;
+  uint32_t currentTableCellVisibleOffset = 0;
   std::unique_ptr<BufferedTable> currentTableBuffer = nullptr;
   std::vector<CssAncestorEntry> ancestorStack_;
 
@@ -223,6 +230,7 @@ class ChapterHtmlSlimParser {
   uint16_t textRunBytesBeforeLayoutLimit() const;
   void markCurrentPageFromCurrentTextBlock();
   void markCurrentPageFromCurrentElement();
+  void setCurrentPageVisibleOffset(uint32_t offset);
   void completeCurrentPage();
   void makePages();
   int effectiveLineHeight() const;
@@ -266,11 +274,12 @@ class ChapterHtmlSlimParser {
       const bool extraParagraphSpacing, const bool forceParagraphIndents, const uint8_t paragraphAlignment,
       const uint16_t viewportWidth, const uint16_t viewportHeight, const bool hyphenationEnabled,
       const bool bionicReadingEnabled, const bool guideReadingEnabled, const uint8_t wordSpacing,
-      const std::function<void(std::unique_ptr<Page>, uint16_t, uint16_t)>& completePageFn, const bool embeddedStyle,
-      const std::string& contentBase, const std::string& imageBasePath, const uint8_t imageRendering = 0,
-      std::vector<std::string> tocAnchors = {}, const std::function<void()>& popupFn = nullptr,
-      CssParser* cssParser = nullptr, const EpubRenderMode renderMode = EpubRenderMode::CrossInkDefault,
-      std::string previewAnchor = {}, const uint16_t previewMaxPages = 0)
+      const std::function<void(std::unique_ptr<Page>, uint16_t, uint16_t, uint32_t)>& completePageFn,
+      const bool embeddedStyle, const std::string& contentBase, const std::string& imageBasePath,
+      const uint8_t imageRendering = 0, std::vector<std::string> tocAnchors = {},
+      const std::function<void()>& popupFn = nullptr, CssParser* cssParser = nullptr,
+      const EpubRenderMode renderMode = EpubRenderMode::CrossInkDefault, std::string previewAnchor = {},
+      const uint16_t previewMaxPages = 0)
 
       : epub(&epub),
         filepath(filepath),
@@ -306,7 +315,7 @@ class ChapterHtmlSlimParser {
   void abortParse();   // tear down without flushing (error / abandon)
   void releaseInputFile();
 
-  void addLineToPage(std::shared_ptr<TextBlock> line);
+  void addLineToPage(std::shared_ptr<TextBlock> line, uint32_t visibleOffset);
   const std::vector<std::pair<std::string, uint16_t>>& getAnchors() const { return anchorData; }
   bool wasLowMemoryFallbackTriggered() const { return lowMemoryImageFallback; }
   bool wasLowMemoryAbortTriggered() const { return lowMemoryAbort; }

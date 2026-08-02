@@ -44,6 +44,7 @@
 
 ### Fixed
 
+- EPUB reflow and KOReader Sync now return to the same text after font, orientation, or indexing-method changes instead of relying only on page percentages.
 - Bionic Reading no longer lets letters overlap at the bold-to-regular split in EPUB words.
 - The web settings page now hides settings on devices that don't support it.
 - Changing an SD-card reader font no longer leaves preview font caches consuming the contiguous memory needed to rebuild an existing book's layout.

@@ -246,11 +246,18 @@ Binary layout:
 
 ## `section.bin`
 
-### Version 57
+### Version 59
 
 Each file in `sections/*.bin` stores one laid-out spine section. The header is
 also the cache-busting key: if any layout-affecting setting differs from the
 current reader settings, the section is discarded and rebuilt.
+
+Version 59 adds a compact page-start visible-text-offset lookup table. The
+offset is a Unicode codepoint coordinate in the spine XHTML, so reader progress
+and KOReader sync can return to the same content after a font, orientation, or
+indexing-method change instead of relying on a page percentage. Suspended
+incremental caches store the same table for their readable prefix; a target
+beyond that prefix must continue indexing before it can be resolved.
 
 Version 57 is binary-identical to version 56. The version was bumped because
 word-gap suppression now applies only to tokens glued together in the source.
@@ -293,6 +300,7 @@ anchor behavior introduced in version 45. It includes:
 - page offset LUT
 - anchor-to-page map for fragment and footnote navigation
 - paragraph and list-item LUTs used by KOReader sync page refinement
+- visible-text-offset LUT used to resolve page positions across reflow and sync
 - optional per-word Bionic Reading split metadata
 - optional per-word Guide Dot x-offset metadata
 - optional per-word text flags for CSS backgrounds, layout-inserted hyphens,
@@ -316,7 +324,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 55
+#define EXPECTED_VERSION 59
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
 #define FOOTNOTE_HREF_LEN 96
