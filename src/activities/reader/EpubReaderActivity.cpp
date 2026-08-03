@@ -3540,12 +3540,12 @@ void EpubReaderActivity::startClipSelection() {
     const int lineHeight = renderer.getLineHeight(readerFontId);
     const int pagesToLoad = std::min(3, section->pageCount - startPage);
     std::array<uint16_t, 3> pageWordCounts{};
-    static constexpr size_t CLIP_SELECTION_WORDS_PER_PAGE = 80;
     static constexpr size_t MAX_CLIP_SELECTION_WORDS = 240;
     static constexpr uint32_t CLIP_SELECTION_WORD_RESERVE_HEADROOM = 16U * 1024U;
     static constexpr size_t CLIP_SELECTION_INITIAL_TEXT_RESERVE = 4U * 1024U;
-    const size_t maxSelectableWords =
-        std::min(MAX_CLIP_SELECTION_WORDS, static_cast<size_t>(pagesToLoad) * CLIP_SELECTION_WORDS_PER_PAGE);
+    // Page density varies with font size and layout. Keep the fixed memory cap,
+    // but do not mistake the old 80-words-per-page reserve estimate for a limit.
+    const size_t maxSelectableWords = pagesToLoad > 0 ? MAX_CLIP_SELECTION_WORDS : 0;
     const uint32_t wordReserveBytes = static_cast<uint32_t>(maxSelectableWords * sizeof(WordRef));
     const auto heapBeforeWords = MemoryBudget::snapshot();
     if (heapBeforeWords.maxAllocHeap < wordReserveBytes + CLIP_SELECTION_WORD_RESERVE_HEADROOM) {
