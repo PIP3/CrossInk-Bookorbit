@@ -2,6 +2,7 @@
 #include <Epub.h>
 #include <Epub/FootnoteEntry.h>
 #include <Epub/Section.h>
+#include <Memory.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
@@ -268,9 +269,11 @@ class EpubReaderActivity final : public Activity {
   bool progressSaveRequiredAfterRelayout = false;
   // Adapted from Sichroteph/YACP commit 3f3c5fc42e794c021edb9832856ef98c2d2065b9
   // (MIT): retain one render-only strip instead of reallocating it on every
-  // grayscale page. Released before section/index work that needs heap headroom.
-  std::unique_ptr<uint8_t[]> grayscaleStripScratch;
+  // grayscale page. Internal-heap storage is released before section/index work;
+  // PSRAM storage remains reusable for the reader activity lifetime.
+  HeapByteBuffer grayscaleStripScratch;
   size_t grayscaleStripScratchSize = 0;
+  bool grayscaleStripScratchInPsram = false;
   // Trigger/memoization concept adapted from Sichroteph/YACP commit
   // 3f3c5fc42e794c021edb9832856ef98c2d2065b9 (MIT).
   int preparedNextSpineIndex = -1;
@@ -280,7 +283,7 @@ class EpubReaderActivity final : public Activity {
   void renderContents(std::unique_ptr<Page> page, int fontId, int orientedMarginTop, int orientedMarginRight,
                       int orientedMarginBottom, int orientedMarginLeft, bool updatePanel);
   bool ensureGrayscaleStripScratch();
-  void releaseGrayscaleStripScratch();
+  void releaseGrayscaleStripScratch(bool force = false);
   void drawClippingHighlights(const Page& page, int fontId, int orientedMarginTop, int orientedMarginLeft) const;
   void renderStatusBar() const;
   void refreshChapterGroupEstimate(uint16_t viewportWidth, uint16_t viewportHeight);

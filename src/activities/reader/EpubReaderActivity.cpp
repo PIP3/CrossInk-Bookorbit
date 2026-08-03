@@ -746,14 +746,27 @@ bool runTiledGrayscalePass(GfxRenderer& renderer, const Page& page, const int fo
   // leave enough total and contiguous heap for the next render allocations.
   constexpr size_t PLANE_BUFFER_FREE_HEAP_RESERVE = 60000;
   constexpr size_t PLANE_BUFFER_MAX_ALLOC_RESERVE = 16 * 1024;
-  const auto planeBufferFits = [planeBytes] {
+  const bool usePsramPlanes = psramHeapAvailable();
+  const auto planeBufferFits = [planeBytes, usePsramPlanes] {
+    if (usePsramPlanes) {
+      constexpr size_t PSRAM_PLANE_RESERVE = 128 * 1024;
+      const auto psram = MemoryBudget::psramSnapshot();
+      return psram.freeHeap >= planeBytes + PSRAM_PLANE_RESERVE && psram.maxAllocHeap >= planeBytes;
+    }
     return ESP.getFreeHeap() >= planeBytes + PLANE_BUFFER_FREE_HEAP_RESERVE &&
            ESP.getMaxAllocHeap() >= planeBytes + PLANE_BUFFER_MAX_ALLOC_RESERVE;
   };
-  auto lsbPlaneBuf = (asyncRefreshPending && planeBufferFits()) ? makeUniqueNoThrow<uint8_t[]>(planeBytes) : nullptr;
-  auto msbPlaneBuf = (lsbPlaneBuf && planeBufferFits()) ? makeUniqueNoThrow<uint8_t[]>(planeBytes) : nullptr;
+  const auto allocatePlane = [planeBytes, usePsramPlanes] {
+    return usePsramPlanes ? makePsramByteBufferNoThrow(planeBytes) : makeHeapByteBufferNoThrow(planeBytes);
+  };
+  auto lsbPlaneBuf = (asyncRefreshPending && planeBufferFits()) ? allocatePlane() : HeapByteBuffer{};
+  auto msbPlaneBuf = (lsbPlaneBuf && planeBufferFits()) ? allocatePlane() : HeapByteBuffer{};
 
   if (lsbPlaneBuf) {
+    if (usePsramPlanes) {
+      LOG_INF("EPS", "Using PSRAM grayscale planes: bytes=%u count=%u", static_cast<unsigned>(planeBytes),
+              msbPlaneBuf ? 2U : 1U);
+    }
     renderPlaneToBuffer(GfxRenderer::GRAYSCALE_LSB, lsbPlaneBuf.get());
     if (msbPlaneBuf) {
       renderPlaneToBuffer(GfxRenderer::GRAYSCALE_MSB, msbPlaneBuf.get());
@@ -1971,6 +1984,8 @@ void EpubReaderActivity::onEnter() {
   Activity::onEnter();
   pageLoadRetryCount = 0;
 
+  MemoryBudget::logEpubHeapPools("reader enter");
+
   if (!epub) {
     return;
   }
@@ -2098,11 +2113,13 @@ void EpubReaderActivity::onEnter() {
 void EpubReaderActivity::onExit() {
   // The extraction callback holds the Epub as a raw context pointer.
   ImageBlock::setExtractor(nullptr, nullptr);
-  releaseGrayscaleStripScratch();
+  releaseGrayscaleStripScratch(true);
+  ImageBlock::releaseSessionPixelCache();
 
   // SD-font caches live in the renderer singleton, so leaving them resident after
   // the reader exits can fragment the contiguous heap needed for Home cover images.
   releaseReaderSdFontCachesForLowMemory(renderer, "ERS", "reader exit");
+  MemoryBudget::logEpubHeapPools("reader exit after caches");
   Activity::onExit();
 
   // Deactivate reader-specific front button mapping.
@@ -5603,19 +5620,33 @@ bool EpubReaderActivity::ensureGrayscaleStripScratch() {
   releaseGrayscaleStripScratch();
   // About 8 KB at 800-pixel width: too large for the render task stack and
   // runtime-sized, so allocate fallibly once and reuse it while the section is stable.
-  grayscaleStripScratch = makeUniqueNoThrow<uint8_t[]>(requiredSize);
+  grayscaleStripScratchInPsram = psramHeapAvailable();
+  grayscaleStripScratch =
+      grayscaleStripScratchInPsram ? makePsramByteBufferNoThrow(requiredSize) : makeHeapByteBufferNoThrow(requiredSize);
+  if (!grayscaleStripScratch && grayscaleStripScratchInPsram) {
+    LOG_ERR("ERS", "OOM: PSRAM grayscale strip scratch (%u bytes); trying default heap",
+            static_cast<unsigned>(requiredSize));
+    grayscaleStripScratchInPsram = false;
+    grayscaleStripScratch = makeHeapByteBufferNoThrow(requiredSize);
+  }
   if (!grayscaleStripScratch) {
     LOG_ERR("ERS", "OOM: grayscale strip scratch (%u bytes); falling back to BW snapshot",
             static_cast<unsigned>(requiredSize));
     return false;
   }
   grayscaleStripScratchSize = requiredSize;
+  LOG_INF("EPS", "Grayscale strip scratch: bytes=%u pool=%s", static_cast<unsigned>(requiredSize),
+          grayscaleStripScratchInPsram ? "psram" : "default");
   return true;
 }
 
-void EpubReaderActivity::releaseGrayscaleStripScratch() {
+void EpubReaderActivity::releaseGrayscaleStripScratch(const bool force) {
+  // Indexing needs internal DRAM headroom. A PSRAM-backed strip does not consume
+  // that pool, so retain it for the activity lifetime and avoid external churn.
+  if (!force && grayscaleStripScratch && grayscaleStripScratchInPsram) return;
   grayscaleStripScratch.reset();
   grayscaleStripScratchSize = 0;
+  grayscaleStripScratchInPsram = false;
 }
 
 void EpubReaderActivity::cacheCurrentSectionPosition() {

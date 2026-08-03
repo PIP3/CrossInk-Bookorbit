@@ -439,6 +439,7 @@ bool Section::createSectionFile(const ReaderRenderSpec& spec, const std::functio
           spineIndex, static_cast<unsigned>(renderMode), buildOptions.isPreview() ? 1U : 0U, viewportWidth,
           viewportHeight, imageRendering, effectiveBionicReadingEnabled, effectiveGuideReadingEnabled,
           ESP.getFreeHeap(), ESP.getMaxAllocHeap());
+  MemoryBudget::logEpubHeapPools("section build start");
 
   // Create cache directory if it doesn't exist
   {
