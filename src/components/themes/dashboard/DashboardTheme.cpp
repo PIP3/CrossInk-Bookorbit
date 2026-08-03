@@ -279,7 +279,7 @@ void drawDashboardStats(const GfxRenderer& renderer, const Rect& coverRect, cons
   } else {
     snprintf(value, sizeof(value), "-");
   }
-  drawStatsRow(renderer, rightX, rowY, value, tr(STR_TIME_LEFT), black);
+  drawStatsRow(renderer, rightX, rowY, value, tr(STR_TIME_LEFT_SHORT), black);
 
   rowY = statsBlockTop(coverRect, ++rowIndex, blockH, rowCount);
   if (progressPercent >= 0.0f) {
@@ -494,7 +494,7 @@ void drawFooterStats(const GfxRenderer& renderer, const Rect& coverRect, const G
     const int halfW = renderer.getScreenWidth() / 2;
     const int maxTextW = std::max(1, halfW - inset * 2);
     drawLeftAnchoredFooterStat(renderer, coverRect.x, centerY, maxTextW, totalTime,
-                               tr(STR_STATS_TOTAL_READING_TIME_LBL), inverted);
+                               tr(STR_STATS_TOTAL_READING_TIME_LBL_SHORT), inverted);
     const int rightX = renderer.getScreenWidth() - inset;
     drawRightAnchoredFooterStat(renderer, rightX, centerY, maxTextW, booksRead, tr(STR_STATS_COMPLETED_LBL), inverted);
     return;
