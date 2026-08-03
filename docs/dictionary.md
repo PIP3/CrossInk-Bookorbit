@@ -43,11 +43,26 @@ Desktop preparation remains recommended for large dictionaries. `*.idx.oft.cspt`
 
 The **Look Up Word** option in the reader menu is only visible when a dictionary is active.
 
+### Buttons
+
 1. Open the reader menu and choose **Look Up Word**.
 2. The page becomes a word-select overlay - one word is highlighted, initially near the centre of the page.
 3. Use **Up/Down** to move between rows, **Left/Right** to move between words on the same row.
 4. Press **Confirm** to look up the highlighted word.
 5. Press **Back** to exit word-select without looking anything up.
+
+### Touchscreen
+
+In an EPUB reader with **Touch Reader Controls** enabled, touch and hold a
+word for about one second. CrossInk opens word selection on that word; lift
+your finger to look it up. To look up a phrase, keep holding after the
+selection opens, drag to the last word, then lift your finger. This is a
+direct shortcut from the reading page, so you do not need to open the reader
+menu first.
+
+When word selection is already open, including selection opened from a
+definition, touch a word to start a selection and drag before releasing to
+look up a phrase. Releasing without dragging looks up the single touched word.
 
 ### Quick Lookup
 
@@ -107,6 +122,12 @@ In word-select mode, you can select a sequence of words to look up as a phrase.
 5. Press **Back** to cancel and return to single-word select mode.
 
 Multi-word select works in both the reader word-select and the definition word-select (chained lookup).
+
+On a touchscreen, use a press-and-drag selection instead of the button
+sequence: touch the first word, drag to the last word, and lift your finger to
+look up the selected phrase. The first long hold on the reading page is only
+needed to enter lookup; once word selection is open, touching a word starts
+the range immediately.
 
 **Limitation:** Multi-word selection cannot span a page boundary. If a phrase crosses from one page to the next, only the words on the current page are available for selection. As a workaround, reduce the reader font size so more words fit on a single page, perform the lookup, then restore the original font size.
 
