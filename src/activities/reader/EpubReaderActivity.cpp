@@ -2263,6 +2263,13 @@ void EpubReaderActivity::loop() {
   }
 
   const auto touch = ReaderUtils::detectTouchPageTurn(renderer, mappedInput);
+  const bool userInputPending = mappedInput.wasAnyPressed() || mappedInput.wasAnyReleased() || touch.tapped ||
+                                touch.prev || touch.next || mappedInput.wasScreenTouchReleased();
+  if (userInputPending) {
+    // Do not tear down the parser: suspending here would write a partial cache and
+    // make the next build replay from page 0. Yield until the requested render starts.
+    backgroundBuildYieldForInput.store(true, std::memory_order_relaxed);
+  }
 
   if (goHomeAfterBuildCancel.load(std::memory_order_relaxed) && !RenderLock::peek()) {
     goHomeAfterBuildCancel.store(false, std::memory_order_relaxed);
@@ -2290,8 +2297,9 @@ void EpubReaderActivity::loop() {
 
   // Lazily resume a partial's extension build once the reader nears its watermark. Far from it the
   // rebuild is all cost (whole-chapter re-layout from page 0) and no benefit this session.
-  if (section && !section->isBuilding() && section->isPartial() && !RenderLock::peek() && buildViewportWidth > 0 &&
-      !partialRebuildStartFailed && !partialRebuildAbortedForLowMemory &&
+  if (!backgroundBuildYieldForInput.load(std::memory_order_relaxed) && section && !section->isBuilding() &&
+      section->isPartial() && !RenderLock::peek() && buildViewportWidth > 0 && !partialRebuildStartFailed &&
+      !partialRebuildAbortedForLowMemory &&
       section->currentPage + PARTIAL_REBUILD_START_MARGIN >= static_cast<int>(section->pageCount)) {
     RenderLock lock(*this);
     releaseGrayscaleStripScratch();
@@ -2322,7 +2330,7 @@ void EpubReaderActivity::loop() {
   // rebuilt its whole chapter in one hot-loop burst instead of following the reader.
   // sectionBuildWantsTick() holds the catch-up/window logic and is shared with
   // skipLoopDelay(), so the loop only runs hot while a tick can actually happen.
-  if (sectionBuildWantsTick() && !RenderLock::peek() &&
+  if (!backgroundBuildYieldForInput.load(std::memory_order_relaxed) && sectionBuildWantsTick() && !RenderLock::peek() &&
       (section->isPartial() || section->activeBuildHasCaughtReadablePages())) {
     RenderLock lock(*this);
     releaseGrayscaleStripScratch();
@@ -3446,22 +3454,27 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
 }
 
 void EpubReaderActivity::reindexCurrentSection() {
-  saveCurrentBookReaderSettings();
-  ensureReaderSdFontLoaded(renderer);
-  if (activeFootnotePreview) {
-    restoreSavedPosition();
-    return;
-  }
+  const bool restorePreviewPosition = activeFootnotePreview;
   {
     RenderLock lock(*this);
-    GUI.drawPopup(renderer, tr(STR_INDEXING));
-    prepareCurrentSectionForRelayout();
-    section.reset();
-    // The newly selected SD font can still hold glyph and advance-table caches from
-    // the previous page. Release them before the relayout so the parser gets a
-    // contiguous allocation window instead of reporting a memory failure as an
-    // invalid book. The renderer reloads the active font lazily while parsing.
-    releaseReaderSdFontCachesForLowMemory(renderer, "ERS", "reader setting reindex");
+    // Saving releases the incremental parser's SD handle. Serialize that close
+    // with parseStep() so the render task cannot read a just-closed HalFile.
+    saveCurrentBookReaderSettings();
+    ensureReaderSdFontLoaded(renderer);
+    if (!restorePreviewPosition) {
+      GUI.drawPopup(renderer, tr(STR_INDEXING));
+      prepareCurrentSectionForRelayout();
+      section.reset();
+      // The newly selected SD font can still hold glyph and advance-table caches from
+      // the previous page. Release them before the relayout so the parser gets a
+      // contiguous allocation window instead of reporting a memory failure as an
+      // invalid book. The renderer reloads the active font lazily while parsing.
+      releaseReaderSdFontCachesForLowMemory(renderer, "ERS", "reader setting reindex");
+    }
+  }
+  if (restorePreviewPosition) {
+    restoreSavedPosition();
+    return;
   }
   requestUpdate();
 }
@@ -3884,11 +3897,15 @@ void EpubReaderActivity::executeReaderQuickAction(CrossPointSettings::LONG_PRESS
         requestUpdate();
       }
       break;
-    case CrossPointSettings::LONG_MENU_TOGGLE_DARK_MODE:
-      SETTINGS.readerDarkMode = !SETTINGS.readerDarkMode;
-      saveCurrentBookReaderSettings();
+    case CrossPointSettings::LONG_MENU_TOGGLE_DARK_MODE: {
+      {
+        RenderLock lock(*this);
+        SETTINGS.readerDarkMode = !SETTINGS.readerDarkMode;
+        saveCurrentBookReaderSettings();
+      }
       requestUpdate();
       break;
+    }
     case CrossPointSettings::LONG_MENU_FOOTNOTES:
       executeFootnoteQuickAction();
       break;
@@ -4411,6 +4428,9 @@ void EpubReaderActivity::pageTurn(bool isForwardTurn, const char* source) {
 
 // TODO: Failure handling
 void EpubReaderActivity::render(RenderLock&& lock) {
+  // The render task now owns the mutex requested by the input action. Background
+  // indexing may resume only after this render releases it.
+  backgroundBuildYieldForInput.store(false, std::memory_order_relaxed);
   if (!epub) {
     return;
   }
@@ -4646,7 +4666,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
                 if (buildPopupPending && millis() - buildStartMs >= BUILD_POPUP_DEADLINE_MS) {
                   showBuildPopup();
                 }
-                if (!section->buildSomeMore(BUILD_PAGES_PER_CHUNK)) {
+                if (!section->buildSomeMore(INTERACTIVE_BUILD_PAGES_PER_CHUNK)) {
                   LOG_ERR("ERS", "Failed during incremental section build");
                   buildFailed = true;
                   break;
@@ -4970,7 +4990,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
           catchUpCancelled = true;
           return;
         }
-        if (!section->buildSomeMore(BUILD_PAGES_PER_CHUNK)) {
+        if (!section->buildSomeMore(INTERACTIVE_BUILD_PAGES_PER_CHUNK)) {
           LOG_ERR("ERS", "Failed during incremental section build");
           catchUpFailed = true;
           return;
@@ -4984,7 +5004,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
           catchUpCancelled = true;
           return;
         }
-        if (!section->buildSomeMore(BUILD_PAGES_PER_CHUNK)) {
+        if (!section->buildSomeMore(INTERACTIVE_BUILD_PAGES_PER_CHUNK)) {
           LOG_ERR("ERS", "Failed during incremental section build");
           catchUpFailed = true;
           return;

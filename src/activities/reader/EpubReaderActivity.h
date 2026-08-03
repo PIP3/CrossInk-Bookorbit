@@ -225,6 +225,9 @@ class EpubReaderActivity final : public Activity {
   // unbuilt page after a confirmed low-memory partial-build abort.
   bool lowMemoryPartialRestartAttempted = false;
   bool backgroundBuildPausedForLowMemory = false;
+  // Input should win the next RenderLock race. Keep the incremental parser alive,
+  // but do not start another background chunk until the requested render begins.
+  std::atomic<bool> backgroundBuildYieldForInput{false};
   std::atomic<bool> sectionBuildCancelRequested{false};
   std::atomic<bool> goHomeAfterBuildCancel{false};
 
@@ -259,11 +262,12 @@ class EpubReaderActivity final : public Activity {
   std::string footnotePreviewCacheSuffix(EpubRenderMode renderMode, const std::string& anchor) const;
   void clearFootnotePreviewState();
   void silentIndexNextChapterIfNeeded(uint16_t viewportWidth, uint16_t viewportHeight);
-  // Pages laid out per incremental-build pump: on the render path (catching up to the page
-  // being shown) and per loop() tick (background build of a large chapter). Kept small so a
-  // background build chunk never noticeably delays input or a pending render.
+  // Larger batches are reserved for non-interactive work such as sleep-page preparation.
   static constexpr int BUILD_PAGES_PER_CHUNK = 8;
-  static constexpr int BACKGROUND_BUILD_PAGES_PER_TICK = 2;
+  // Interactive builds stop as soon as the requested page is ready and give the
+  // main loop a chance to observe input between pages.
+  static constexpr int INTERACTIVE_BUILD_PAGES_PER_CHUNK = 1;
+  static constexpr int BACKGROUND_BUILD_PAGES_PER_TICK = 1;
   // How many pages to keep laid out ahead of the reader for a still-building section. A page
   // turn is ~1s on e-ink and a page builds in ~30ms, so the reader can't out-click the builder
   // -- a tiny buffer is enough. The background build stops once the watermark is this far
@@ -406,7 +410,10 @@ class EpubReaderActivity final : public Activity {
   }
   bool backgroundSectionBuildHasHeap();
   void idlePrewarmNextPage();
-  bool skipLoopDelay() override { return sectionBuildWantsTick() && !backgroundBuildPausedForLowMemory; }
+  bool skipLoopDelay() override {
+    return sectionBuildWantsTick() && !backgroundBuildPausedForLowMemory &&
+           !backgroundBuildYieldForInput.load(std::memory_order_relaxed);
+  }
   bool isReaderActivity() const override { return true; }
   bool canSnapshotForSleepOverlay() const override { return true; }
   bool handlesReaderPowerSettingsOverride() const override { return true; }
