@@ -14,13 +14,13 @@
 
 #include "Epub/EpubRenderMode.h"
 #include "Epub/FootnoteEntry.h"
+#include "Epub/Page.h"
 #include "Epub/ParsedText.h"
 #include "Epub/blocks/ImageBlock.h"
 #include "Epub/blocks/TextBlock.h"
 #include "Epub/css/CssParser.h"
 #include "Epub/css/CssStyle.h"
 
-class Page;
 class GfxRenderer;
 class Epub;
 #define MAX_WORD_SIZE 200
@@ -31,7 +31,6 @@ class ChapterHtmlSlimParser {
 
  private:
   static constexpr uint8_t MAX_SIMPLE_TABLE_COLUMNS = 8;
-  static constexpr uint16_t MAX_SIMPLE_TABLE_CELLS = 64;
   static constexpr uint16_t MAX_SIMPLE_TABLE_CELL_WORDS = 160;
   static constexpr uint8_t TABLE_CELL_PADDING = 6;
   static constexpr size_t MAX_INLINE_STYLE_DEPTH = 64;
@@ -175,6 +174,17 @@ class ChapterHtmlSlimParser {
     uint16_t maxCols = 0;
     uint16_t totalCells = 0;
     bool unsupported = false;
+    // When the whole-table reservation is unavailable, retain only the current
+    // source row plus the render-ready rows that fit on the active page.
+    bool streaming = false;
+    bool streamingFlattened = false;
+    bool streamingTopSpacingApplied = false;
+    uint8_t streamingColumnCount = 0;
+    uint8_t streamingFragmentColumnCount = 0;
+    uint16_t streamingFragmentHeight = 1;
+    uint32_t streamingFragmentVisibleOffset = 0;
+    std::vector<TableFragmentRow> streamingFragmentRows;
+    std::vector<FootnoteEntry> streamingFragmentFootnotes;
   };
 
   int tableDepth = 0;
@@ -251,9 +261,13 @@ class ChapterHtmlSlimParser {
   void finalizeCurrentTableCell();
   void emitBufferedTableAsParagraphs(BufferedTable& table);
   void emitBufferedTableAsFragments(BufferedTable& table);
+  bool streamCurrentTableRow();
+  bool flushStreamingTableFragment(BufferedTable& table);
+  void emitStreamingTableRowsAsParagraphs(BufferedTable& table);
+  void finishStreamingTable(BufferedTable& table);
+  void fallbackStreamingTableToParagraphs(const char* reason);
   void emitCurrentTableBuffer();
   void fallbackCurrentTableBufferToParagraphs(const char* reason);
-  void fallbackCurrentTableBufferIfNeeded(const char* stage);
   void flushMalformedPartialContent();
   bool appendMalformedMarkupWarningPage();
   void prewarmSectionAdvanceTable(FsFile& file) const;

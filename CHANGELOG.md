@@ -2,6 +2,7 @@
 
 ### Added
 
+- EPUB tables now lay out a row at a time in both Incremental and Full Section indexing, keeping regular tables readable without whole-table buffering.
 - Touch support for Seeed Studio Sticky
 - Nearby File Transfer can send EPUB, TXT, XTC, XTCH, PNG, and BMP files directly between two CrossInk devices without a Wi-Fi network.
 - Recent Books and image-file long-press actions can send files directly to a nearby CrossInk device.
@@ -44,6 +45,7 @@
 
 ### Fixed
 
+- EPUB reflows no longer reject a chapter before parsing when heap fragmentation leaves the general background-build threshold only slightly short; genuinely large table, font-prewarm, and image allocations remain protected by their own memory checks.
 - EPUB clipping selection can now advance through dense one- and two-page chapter endings instead of stopping mid-page.
 - EPUB reflow and KOReader Sync now return to the same text after font, orientation, or indexing-method changes instead of relying only on page percentages.
 - Bionic Reading no longer lets letters overlap at the bold-to-regular split in EPUB words.

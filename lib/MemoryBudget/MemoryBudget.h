@@ -72,6 +72,15 @@ inline bool hasHeap(const HeapSnapshot heap, const uint32_t minFree, const uint3
   return heap.freeHeap >= minFree && heap.maxAllocHeap >= minMaxAlloc;
 }
 
+// Text layout starts with small, fallible allocations: a 4 KB scratch arena and
+// a ParsedText object. The operations which really need a large contiguous block
+// (table buffering, advance prewarming, and image decoding) each have their own
+// max-allocation gate. Do not reject a whole chapter merely because fragmentation
+// leaves the general 32 KB background-build threshold a few bytes short.
+inline bool hasHeapForEpubTextLayoutStart(const HeapSnapshot heap) {
+  return heap.freeHeap >= EPUB_TEXT_LAYOUT_MIN_FREE;
+}
+
 inline char asciiLower(const char c) { return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c; }
 
 inline bool endsWithIgnoreCase(const char* value, const char* suffix) {
