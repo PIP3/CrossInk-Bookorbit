@@ -281,11 +281,18 @@ struct SectionFallbackResult {
 
 template <typename BuildFn, typename BeforeRetryFn>
 SectionFallbackResult runSectionBuildFallbacks(const EpubRenderMode selectedMode, const bool allowSafeMode,
-                                               BuildFn& build, BeforeRetryFn& beforeRetry) {
+                                               BuildFn& build, BeforeRetryFn& beforeRetry,
+                                               const SectionBuildAttempt* initialAttempt = nullptr) {
   SectionFallbackResult result;
   uint8_t fallbackCount = 0;
   const auto fallbackModes = fallbackModesForSelection(selectedMode, fallbackCount);
-  for (uint8_t i = 0; i < fallbackCount && !result.succeeded; ++i) {
+  uint8_t firstModeIndex = 0;
+  if (initialAttempt) {
+    result.succeeded = initialAttempt->succeeded;
+    result.lastAttemptLowMemory = initialAttempt->lowMemory;
+    firstModeIndex = 1;
+  }
+  for (uint8_t i = firstModeIndex; i < fallbackCount && !result.succeeded; ++i) {
     const SectionBuildProfile profile = buildProfileForRenderMode(fallbackModes[i]);
     if (i > 0) {
       if (!result.lastAttemptLowMemory) break;
@@ -4588,6 +4595,28 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     return true;
   };
 
+  // A freshly restarted reader has a less fragmented heap than one that has just
+  // built and displayed several pages. Try that once before changing layout modes;
+  // the RTC token marks the resumed attempt so it proceeds through the fallbacks.
+  const auto restartForLowMemoryLayout = [this](const int targetPage, const int savedPage, const int pageCount,
+                                                const char* stage) {
+    if (lowMemoryPartialRestartAttempted || targetPage < 0 || targetPage >= std::numeric_limits<uint16_t>::max() ||
+        currentSpineIndex < 0 || currentSpineIndex > std::numeric_limits<uint16_t>::max()) {
+      return false;
+    }
+    LOG_ERR("ERS", "Low heap during %s; silent restarting to retry page %d (spine=%d)", stage, targetPage,
+            currentSpineIndex);
+    if (!saveProgress(currentSpineIndex, std::max(0, savedPage), std::max(0, pageCount))) {
+      LOG_ERR("ERS", "Skipping silent restart because progress save failed");
+      return false;
+    }
+    armSilentRestartReaderPageBuild(epub->getPath(), static_cast<uint16_t>(currentSpineIndex),
+                                    static_cast<uint16_t>(targetPage), automaticPageTurnActive);
+    lowMemoryPartialRestartAttempted = true;
+    silentRestartToReader();
+    return true;
+  };
+
   // edge case handling for sub-zero spine index
   if (currentSpineIndex < 0) {
     currentSpineIndex = 0;
@@ -4845,8 +4874,20 @@ void EpubReaderActivity::render(RenderLock&& lock) {
                 static_cast<unsigned>(profile.renderMode));
         releaseReaderSdFontCachesForLowMemory(renderer, "ERS", "fallback section rebuild");
       };
+      const SectionBuildAttempt initialAttempt = buildWithFallback(buildProfileForRenderMode(selectedRenderMode));
+      const bool canRestartInitialLayout = !buildingFootnotePreview && !pendingPercentJump && pendingAnchor.empty() &&
+                                           pendingClippingIndex == UINT16_MAX && pendingParagraphIndex == UINT16_MAX;
+      if (!initialAttempt.succeeded && initialAttempt.lowMemory && canRestartInitialLayout) {
+        const int target = pendingPageJump.has_value() ? *pendingPageJump : std::max(0, nextPageNumber);
+        const int savedPage =
+            section && section->pageCount > 0 ? std::min(target, static_cast<int>(section->pageCount) - 1) : target;
+        const int estimatedPages = section ? section->estimatedTotalPages() : 0;
+        if (restartForLowMemoryLayout(target, savedPage, estimatedPages, "initial EPUB layout")) {
+          return;
+        }
+      }
       const SectionFallbackResult fallbackResult = runSectionBuildFallbacks(
-          selectedRenderMode, shouldAttemptSafeModeFallback(), buildWithFallback, beforeFallbackRetry);
+          selectedRenderMode, shouldAttemptSafeModeFallback(), buildWithFallback, beforeFallbackRetry, &initialAttempt);
       fallbackBuildSucceeded = fallbackResult.succeeded;
       layoutAbortedForLowMemory = fallbackResult.lastAttemptLowMemory;
 
@@ -5051,6 +5092,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
 
   // Extend the build to the requested page if needed. This covers a partial cache that is
   // already loaded but not actively building; pages already available do no work here.
+  const int requestedPageBeforeCatchUp = section->currentPage;
   if (!activeFootnotePreview && partialRebuildAbortedForLowMemory && section->pageCount > 0 &&
       section->currentPage >= static_cast<int>(section->pageCount)) {
     const bool shouldSilentRestartForPartialLowMemory =
@@ -5062,16 +5104,9 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       const uint16_t lastReadablePage = section->pageCount - 1;
       const uint16_t targetPage = section->pageCount;
       const int estimatedPages = section->estimatedTotalPages();
-      LOG_ERR("ERS", "Low heap at partial watermark; silent restarting to retry page %u (spine=%d)", targetPage,
-              currentSpineIndex);
-      if (saveProgress(currentSpineIndex, lastReadablePage, estimatedPages)) {
-        armSilentRestartReaderPageBuild(epub->getPath(), static_cast<uint16_t>(currentSpineIndex), targetPage,
-                                        automaticPageTurnActive);
-        lowMemoryPartialRestartAttempted = true;
-        silentRestartToReader();
+      if (restartForLowMemoryLayout(targetPage, lastReadablePage, estimatedPages, "partial EPUB layout")) {
         return;
       }
-      LOG_ERR("ERS", "Skipping silent restart because progress save failed");
     }
     LOG_ERR("ERS", "Requested page %d exceeds low-memory partial watermark %u; showing last readable page",
             section->currentPage, section->pageCount);
@@ -5137,6 +5172,12 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   if (catchUpFailed) {
     if (section->lastBuildLayoutAbortedForLowMemory() && section->pageCount > 0) {
       partialRebuildAbortedForLowMemory = true;
+      const int partialWatermark = static_cast<int>(section->pageCount);
+      if (requestedPageBeforeCatchUp == partialWatermark &&
+          restartForLowMemoryLayout(partialWatermark, partialWatermark - 1, section->estimatedTotalPages(),
+                                    "partial EPUB catch-up")) {
+        return;
+      }
       section->currentPage = std::min(section->currentPage, static_cast<int>(section->pageCount) - 1);
       LOG_ERR("ERS", "Blocking build stopped for low heap; retaining %u readable partial pages", section->pageCount);
       queueLowMemoryLayoutAlert(false);

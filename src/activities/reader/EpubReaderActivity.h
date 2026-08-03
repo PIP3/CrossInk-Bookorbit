@@ -249,8 +249,8 @@ class EpubReaderActivity final : public Activity {
   // hold the loop at full speed while it did. The reader keeps the pages already laid out; a
   // build is only re-attempted from render() if the reader actually pages past the watermark.
   bool partialRebuildAbortedForLowMemory = false;
-  // One-shot guard for the silent restart used only when a forward page turn reaches the first
-  // unbuilt page after a confirmed low-memory partial-build abort.
+  // One-shot guard for the silent restart used before EPUB layout fallback modes. The restart token
+  // restores this guard after boot so the resumed attempt can fall through to those modes.
   bool lowMemoryPartialRestartAttempted = false;
   bool backgroundBuildPausedForLowMemory = false;
   // Input should win the next RenderLock race. Keep the incremental parser alive,
