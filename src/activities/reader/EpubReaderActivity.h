@@ -32,7 +32,7 @@ class EpubReaderActivity final : public Activity {
 
   struct ReaderSettingsSnapshot {
     uint8_t fontFamily = 0;
-    uint8_t fontSize = 0;
+    uint8_t readerFontPointSize = 14;
     uint8_t lineHeightPercent = 100;
     uint8_t wordSpacing = 0;
     uint8_t orientation = 0;
@@ -58,13 +58,41 @@ class EpubReaderActivity final : public Activity {
     uint16_t autoPageTurnSeconds = 0;
     bool hasCustomReaderSettings = false;
     bool hasRenderModeOverride = false;
+    bool hasDictionaryFontOverride = false;
     uint8_t renderMode = 0;
+    // Fixed-size per-book state lives inside the already heap-owned reader
+    // activity. It avoids a separate string allocation during dictionary use.
+    char dictionarySdFontFamilyName[64] = "";
+    // Zero follows the reader's current physical point size.
+    uint8_t dictionaryFontPointSize = 0;
     ReaderSettingsSnapshot readerSettings;
   };
 
  private:
+  // The on-disk settings record also carries the dictionary family. Keeping it
+  // out of the long-lived reader object matters on the C3: this activity is
+  // allocated immediately before an EPUB section needs its largest block.
+  // Dictionary children load and own the fixed name only while they are open.
+  struct ActiveBookReaderSettingsData {
+    bool hasAutoPageTurnInterval = false;
+    uint16_t autoPageTurnSeconds = 0;
+    bool hasCustomReaderSettings = false;
+    bool hasRenderModeOverride = false;
+    uint8_t renderMode = 0;
+    ReaderSettingsSnapshot readerSettings;
+
+    ActiveBookReaderSettingsData() = default;
+    explicit ActiveBookReaderSettingsData(const BookReaderSettingsData& source)
+        : hasAutoPageTurnInterval(source.hasAutoPageTurnInterval),
+          autoPageTurnSeconds(source.autoPageTurnSeconds),
+          hasCustomReaderSettings(source.hasCustomReaderSettings),
+          hasRenderModeOverride(source.hasRenderModeOverride),
+          renderMode(source.renderMode),
+          readerSettings(source.readerSettings) {}
+  };
+
   std::shared_ptr<Epub> epub;
-  BookReaderSettingsData initialBookReaderSettings;
+  ActiveBookReaderSettingsData initialBookReaderSettings;
   std::unique_ptr<Section> section = nullptr;
   int currentSpineIndex = 0;
   int nextPageNumber = 0;
@@ -221,8 +249,8 @@ class EpubReaderActivity final : public Activity {
   // hold the loop at full speed while it did. The reader keeps the pages already laid out; a
   // build is only re-attempted from render() if the reader actually pages past the watermark.
   bool partialRebuildAbortedForLowMemory = false;
-  // One-shot guard for the silent restart used only when a forward page turn reaches the first
-  // unbuilt page after a confirmed low-memory partial-build abort.
+  // One-shot guard for the silent restart used before EPUB layout fallback modes. The restart token
+  // restores this guard after boot so the resumed attempt can fall through to those modes.
   bool lowMemoryPartialRestartAttempted = false;
   bool backgroundBuildPausedForLowMemory = false;
   // Input should win the next RenderLock race. Keep the incremental parser alive,
@@ -328,10 +356,12 @@ class EpubReaderActivity final : public Activity {
   void restoreGlobalReaderSettings();
   void loadBookReaderSettings();
   void saveCurrentBookReaderSettings();
+  void saveDictionaryFontForBook(const char* familyName, uint8_t pointSize);
   void saveGlobalSettingsPreservingBookOverrides();
   void beginGlobalSettingsEdit();
   void endGlobalSettingsEdit();
   static void saveReaderOptionsForBook(void* ctx);
+  static void saveDictionaryFontForBookReader(void* ctx, const char* familyName, uint8_t pointSize);
   static void saveGlobalSettingsForBookReader(void* ctx);
   static void beginGlobalSettingsEditForBookReader(void* ctx);
   static void endGlobalSettingsEditForBookReader(void* ctx);
@@ -357,6 +387,10 @@ class EpubReaderActivity final : public Activity {
   bool handleTouchDictionaryLookup();
   void openWordSelect(bool framebufferContainsPage, int initialTouchX = -1, int initialTouchY = -1,
                       bool autoLookupInitialWord = false);
+  std::unique_ptr<Page> reloadDictionaryLookupPage();
+  void renderDictionaryLookupBackground();
+  static std::unique_ptr<Page> reloadDictionaryLookupPageCallback(void* context);
+  static void renderDictionaryLookupBackgroundCallback(void* context);
   void onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action);
   // Opens the reader menu for the current position (short-press Confirm)
   void openReaderMenu();
@@ -386,7 +420,7 @@ class EpubReaderActivity final : public Activity {
                               bool cleanImageBaseOnEntry = false)
       : Activity("EpubReader", renderer, mappedInput),
         epub(std::move(epub)),
-        initialBookReaderSettings(std::move(readerSettings)),
+        initialBookReaderSettings(readerSettings),
         pagesUntilFullRefresh(initialRefreshCountdown),
         cleanImageBasePending(cleanImageBaseOnEntry) {}
   void onEnter() override;

@@ -1398,7 +1398,7 @@ std::vector<std::string> Dictionary::findSimilar(const std::string& word, int ma
       } else {
         scanEnd = centerEnd;
       }
-    } else if (qidxSample + 2 >= qidxHeader.sampleCount) {
+    } else {
       scanEnd = idxFileSize;
     }
     qidx.close();

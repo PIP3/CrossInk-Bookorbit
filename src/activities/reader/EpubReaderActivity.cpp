@@ -74,10 +74,14 @@ constexpr int MAX_PAGE_LOAD_RETRIES = 3;
 constexpr uint8_t LEGACY_READER_SETTINGS_FILE_VERSION = 1;
 constexpr uint8_t PRE_WORD_SPACING_READER_SETTINGS_FILE_VERSION = 2;
 constexpr uint8_t PRE_INDEXING_METHOD_READER_SETTINGS_FILE_VERSION = 3;
-constexpr uint8_t READER_SETTINGS_FILE_VERSION = 4;
+constexpr uint8_t PRE_DICTIONARY_FONT_READER_SETTINGS_FILE_VERSION = 4;
+constexpr uint8_t PRE_POINT_SIZE_READER_SETTINGS_FILE_VERSION = 5;
+constexpr uint8_t PRE_DICTIONARY_FONT_SIZE_READER_SETTINGS_FILE_VERSION = 6;
+constexpr uint8_t READER_SETTINGS_FILE_VERSION = 7;
 constexpr uint8_t READER_SETTINGS_FLAG_CUSTOM = 1 << 0;
 constexpr uint8_t READER_SETTINGS_FLAG_AUTO_PAGE_TURN = 1 << 1;
 constexpr uint8_t READER_SETTINGS_FLAG_RENDER_MODE = 1 << 2;
+constexpr uint8_t READER_SETTINGS_FLAG_DICTIONARY_FONT = 1 << 3;
 constexpr char READER_SETTINGS_FILE_NAME[] = "/reader_settings.bin";
 constexpr char BALANCED_SECTION_CACHE_SUFFIX[] = "_balanced";
 constexpr char LIGHT_SECTION_CACHE_SUFFIX[] = "_light";
@@ -277,11 +281,18 @@ struct SectionFallbackResult {
 
 template <typename BuildFn, typename BeforeRetryFn>
 SectionFallbackResult runSectionBuildFallbacks(const EpubRenderMode selectedMode, const bool allowSafeMode,
-                                               BuildFn& build, BeforeRetryFn& beforeRetry) {
+                                               BuildFn& build, BeforeRetryFn& beforeRetry,
+                                               const SectionBuildAttempt* initialAttempt = nullptr) {
   SectionFallbackResult result;
   uint8_t fallbackCount = 0;
   const auto fallbackModes = fallbackModesForSelection(selectedMode, fallbackCount);
-  for (uint8_t i = 0; i < fallbackCount && !result.succeeded; ++i) {
+  uint8_t firstModeIndex = 0;
+  if (initialAttempt) {
+    result.succeeded = initialAttempt->succeeded;
+    result.lastAttemptLowMemory = initialAttempt->lowMemory;
+    firstModeIndex = 1;
+  }
+  for (uint8_t i = firstModeIndex; i < fallbackCount && !result.succeeded; ++i) {
     const SectionBuildProfile profile = buildProfileForRenderMode(fallbackModes[i]);
     if (i > 0) {
       if (!result.lastAttemptLowMemory) break;
@@ -1045,7 +1056,7 @@ bool writeU16(FsFile& file, const uint16_t value) {
 
 void captureReaderSettings(EpubReaderActivity::ReaderSettingsSnapshot& out) {
   out.fontFamily = SETTINGS.fontFamily;
-  out.fontSize = SETTINGS.fontSize;
+  out.readerFontPointSize = SETTINGS.readerFontPointSize;
   out.lineHeightPercent = SETTINGS.lineHeightPercent;
   out.wordSpacing = SETTINGS.wordSpacing;
   out.orientation = SETTINGS.orientation;
@@ -1067,19 +1078,20 @@ void captureReaderSettings(EpubReaderActivity::ReaderSettingsSnapshot& out) {
   out.sdFontFamilyName[sizeof(out.sdFontFamilyName) - 1] = '\0';
 }
 
-uint8_t clampedStoredReaderFontSize(const EpubReaderActivity::ReaderSettingsSnapshot& in) {
-  if (in.sdFontFamilyName[0] != '\0') {
-    return std::min<uint8_t>(in.fontSize, CrossPointSettings::SD_FONT_MAX_SIZE_STEPS - 1);
-  }
-  const uint8_t builtinSizeCount = CrossPointSettings::getActiveReaderFontSizeCount();
-  return in.fontSize < builtinSizeCount ? in.fontSize : SETTINGS.fontSize;
-}
-
 void applyReaderSettings(const EpubReaderActivity::ReaderSettingsSnapshot& in) {
   SETTINGS.fontFamily = in.fontFamily < CrossPointSettings::BUILTIN_FONT_COUNT ? in.fontFamily : SETTINGS.fontFamily;
   std::strncpy(SETTINGS.sdFontFamilyName, in.sdFontFamilyName, sizeof(SETTINGS.sdFontFamilyName) - 1);
   SETTINGS.sdFontFamilyName[sizeof(SETTINGS.sdFontFamilyName) - 1] = '\0';
-  SETTINGS.fontSize = clampedStoredReaderFontSize(in);
+  if (in.readerFontPointSize < CrossPointSettings::MIN_READER_FONT_POINT_SIZE) {
+    if (in.sdFontFamilyName[0] != '\0') {
+      SETTINGS.readerFontPointSize = sdFontSystem.resolveLegacySizeStep(in.sdFontFamilyName, in.readerFontPointSize);
+    } else {
+      SETTINGS.readerFontPointSize = CrossPointSettings::getReaderFontPointSize(
+          static_cast<CrossPointSettings::FONT_SIZE>(in.readerFontPointSize));
+    }
+  } else {
+    SETTINGS.readerFontPointSize = in.readerFontPointSize;
+  }
   SETTINGS.lineHeightPercent = CrossPointSettings::clampedLineHeightPercent(in.lineHeightPercent);
   SETTINGS.wordSpacing = std::min<uint8_t>(in.wordSpacing, CrossPointSettings::MAX_WORD_SPACING);
   SETTINGS.orientation = in.orientation < CrossPointSettings::ORIENTATION_COUNT ? in.orientation : SETTINGS.orientation;
@@ -1108,7 +1120,7 @@ using BookReaderSettingsData = EpubReaderActivity::BookReaderSettingsData;
 
 bool readReaderSettingsSnapshot(FsFile& file, EpubReaderActivity::ReaderSettingsSnapshot& out,
                                 const bool includesWordSpacing, const bool includesIndexingMethod) {
-  if (!(readU8(file, out.fontFamily) && readU8(file, out.fontSize) && readU8(file, out.lineHeightPercent) &&
+  if (!(readU8(file, out.fontFamily) && readU8(file, out.readerFontPointSize) && readU8(file, out.lineHeightPercent) &&
         (!includesWordSpacing || readU8(file, out.wordSpacing)) && readU8(file, out.orientation) &&
         readU8(file, out.screenMargin) && readU8(file, out.publisherPageNumbers) &&
         readU8(file, out.paragraphAlignment) && readU8(file, out.embeddedStyle) &&
@@ -1129,7 +1141,7 @@ bool readReaderSettingsSnapshot(FsFile& file, EpubReaderActivity::ReaderSettings
 }
 
 bool writeReaderSettingsSnapshot(FsFile& file, const EpubReaderActivity::ReaderSettingsSnapshot& in) {
-  return writeU8(file, in.fontFamily) && writeU8(file, in.fontSize) && writeU8(file, in.lineHeightPercent) &&
+  return writeU8(file, in.fontFamily) && writeU8(file, in.readerFontPointSize) && writeU8(file, in.lineHeightPercent) &&
          writeU8(file, std::min<uint8_t>(in.wordSpacing, CrossPointSettings::MAX_WORD_SPACING)) &&
          writeU8(file, in.orientation) && writeU8(file, in.screenMargin) && writeU8(file, in.publisherPageNumbers) &&
          writeU8(file, in.paragraphAlignment) && writeU8(file, in.embeddedStyle) &&
@@ -1171,7 +1183,10 @@ BookReaderSettingsData loadBookReaderSettingsFile(const std::string& cachePath) 
   }
 
   if (version != PRE_WORD_SPACING_READER_SETTINGS_FILE_VERSION &&
-      version != PRE_INDEXING_METHOD_READER_SETTINGS_FILE_VERSION && version != READER_SETTINGS_FILE_VERSION) {
+      version != PRE_INDEXING_METHOD_READER_SETTINGS_FILE_VERSION &&
+      version != PRE_DICTIONARY_FONT_READER_SETTINGS_FILE_VERSION &&
+      version != PRE_POINT_SIZE_READER_SETTINGS_FILE_VERSION &&
+      version != PRE_DICTIONARY_FONT_SIZE_READER_SETTINGS_FILE_VERSION && version != READER_SETTINGS_FILE_VERSION) {
     file.close();
     LOG_DBG("ERS", "Reader settings version mismatch, using defaults");
     return data;
@@ -1190,7 +1205,13 @@ BookReaderSettingsData loadBookReaderSettingsFile(const std::string& cachePath) 
   }
   if (ok) {
     ok = readReaderSettingsSnapshot(file, snapshot, version >= PRE_INDEXING_METHOD_READER_SETTINGS_FILE_VERSION,
-                                    version >= READER_SETTINGS_FILE_VERSION);
+                                    version >= PRE_DICTIONARY_FONT_READER_SETTINGS_FILE_VERSION);
+  }
+  if (ok && version >= PRE_POINT_SIZE_READER_SETTINGS_FILE_VERSION) {
+    ok = readExact(file, data.dictionarySdFontFamilyName, sizeof(data.dictionarySdFontFamilyName));
+  }
+  if (ok && version >= READER_SETTINGS_FILE_VERSION) {
+    ok = readU8(file, data.dictionaryFontPointSize);
   }
   file.close();
   if (!ok) {
@@ -1210,13 +1231,14 @@ BookReaderSettingsData loadBookReaderSettingsFile(const std::string& cachePath) 
     data.hasRenderModeOverride = true;
     data.renderMode = normalizeRenderModeRaw(renderMode);
   }
+  if (flags & READER_SETTINGS_FLAG_DICTIONARY_FONT) {
+    data.dictionarySdFontFamilyName[sizeof(data.dictionarySdFontFamilyName) - 1] = '\0';
+    data.hasDictionaryFontOverride = data.dictionarySdFontFamilyName[0] != '\0';
+  }
   return data;
 }
 
-bool saveBookReaderSettingsFile(const std::string& cachePath, const bool hasAutoPageTurnInterval,
-                                const uint16_t autoPageTurnSeconds, const bool hasCustomReaderSettings,
-                                const bool hasRenderModeOverride, const uint8_t renderMode,
-                                const EpubReaderActivity::ReaderSettingsSnapshot& readerSettings) {
+bool saveBookReaderSettingsFile(const std::string& cachePath, const BookReaderSettingsData& data) {
   FsFile file;
   if (!Storage.openFileForWrite("ERS", cachePath + READER_SETTINGS_FILE_NAME, file)) {
     LOG_ERR("ERS", "Could not open reader settings file for write");
@@ -1224,15 +1246,20 @@ bool saveBookReaderSettingsFile(const std::string& cachePath, const bool hasAuto
   }
 
   uint8_t flags = 0;
-  if (hasCustomReaderSettings) flags |= READER_SETTINGS_FLAG_CUSTOM;
-  if (hasAutoPageTurnInterval) flags |= READER_SETTINGS_FLAG_AUTO_PAGE_TURN;
-  if (hasRenderModeOverride) flags |= READER_SETTINGS_FLAG_RENDER_MODE;
-  const uint16_t clampedSeconds = clampAutoPageTurnIntervalSeconds(autoPageTurnSeconds);
-  EpubReaderActivity::ReaderSettingsSnapshot normalizedReaderSettings = readerSettings;
-  normalizedReaderSettings.epubRenderMode = normalizeRenderModeRaw(renderMode);
+  if (data.hasCustomReaderSettings) flags |= READER_SETTINGS_FLAG_CUSTOM;
+  if (data.hasAutoPageTurnInterval) flags |= READER_SETTINGS_FLAG_AUTO_PAGE_TURN;
+  if (data.hasRenderModeOverride) flags |= READER_SETTINGS_FLAG_RENDER_MODE;
+  if (data.hasDictionaryFontOverride && data.dictionarySdFontFamilyName[0] != '\0') {
+    flags |= READER_SETTINGS_FLAG_DICTIONARY_FONT;
+  }
+  const uint16_t clampedSeconds = clampAutoPageTurnIntervalSeconds(data.autoPageTurnSeconds);
+  EpubReaderActivity::ReaderSettingsSnapshot normalizedReaderSettings = data.readerSettings;
+  normalizedReaderSettings.epubRenderMode = normalizeRenderModeRaw(data.renderMode);
   const bool ok = writeU8(file, READER_SETTINGS_FILE_VERSION) && writeU8(file, flags) &&
-                  writeU16(file, clampedSeconds) && writeU8(file, normalizeRenderModeRaw(renderMode)) &&
-                  writeReaderSettingsSnapshot(file, normalizedReaderSettings);
+                  writeU16(file, clampedSeconds) && writeU8(file, normalizeRenderModeRaw(data.renderMode)) &&
+                  writeReaderSettingsSnapshot(file, normalizedReaderSettings) &&
+                  writeExact(file, data.dictionarySdFontFamilyName, sizeof(data.dictionarySdFontFamilyName)) &&
+                  writeU8(file, data.dictionaryFontPointSize);
   file.close();
   if (!ok) {
     LOG_ERR("ERS", "Short write saving reader settings");
@@ -1245,9 +1272,7 @@ bool saveBookRenderModeForCache(const std::string& cachePath, const uint8_t rend
   data.hasRenderModeOverride = true;
   data.renderMode = normalizeRenderModeRaw(renderMode);
   data.readerSettings.epubRenderMode = data.renderMode;
-  return saveBookReaderSettingsFile(cachePath, data.hasAutoPageTurnInterval, data.autoPageTurnSeconds,
-                                    data.hasCustomReaderSettings, data.hasRenderModeOverride, data.renderMode,
-                                    data.readerSettings);
+  return saveBookReaderSettingsFile(cachePath, data);
 }
 
 bool saveRuntimeReaderSettingsForCache(const std::string& cachePath) {
@@ -1257,9 +1282,8 @@ bool saveRuntimeReaderSettingsForCache(const std::string& cachePath) {
   data.hasCustomReaderSettings = true;
   data.hasRenderModeOverride = true;
   data.renderMode = normalizeRenderModeRaw(SETTINGS.epubRenderMode);
-  return saveBookReaderSettingsFile(cachePath, data.hasAutoPageTurnInterval, data.autoPageTurnSeconds,
-                                    data.hasCustomReaderSettings, data.hasRenderModeOverride, data.renderMode,
-                                    snapshot);
+  data.readerSettings = snapshot;
+  return saveBookReaderSettingsFile(cachePath, data);
 }
 
 class ScopedReaderSettingsRestore {
@@ -1843,12 +1867,41 @@ void EpubReaderActivity::saveCurrentBookReaderSettings() {
     section->releaseBuildFile();
   }
 
-  ReaderSettingsSnapshot snapshot;
-  captureReaderSettings(snapshot);
+  BookReaderSettingsData data = loadBookReaderSettingsFile(epub->getCachePath());
+  captureReaderSettings(data.readerSettings);
   bookHasCustomReaderSettings = true;
   bookHasRenderModeOverride = true;
-  saveBookReaderSettingsFile(epub->getCachePath(), bookHasAutoPageTurnInterval, lastAutoPageTurnIntervalSeconds,
-                             bookHasCustomReaderSettings, bookHasRenderModeOverride, SETTINGS.epubRenderMode, snapshot);
+  initialBookReaderSettings.hasCustomReaderSettings = true;
+  initialBookReaderSettings.hasAutoPageTurnInterval = bookHasAutoPageTurnInterval;
+  initialBookReaderSettings.autoPageTurnSeconds = lastAutoPageTurnIntervalSeconds;
+  initialBookReaderSettings.hasRenderModeOverride = true;
+  initialBookReaderSettings.renderMode = SETTINGS.epubRenderMode;
+  data.hasCustomReaderSettings = true;
+  data.hasAutoPageTurnInterval = bookHasAutoPageTurnInterval;
+  data.autoPageTurnSeconds = lastAutoPageTurnIntervalSeconds;
+  data.hasRenderModeOverride = true;
+  data.renderMode = SETTINGS.epubRenderMode;
+  saveBookReaderSettingsFile(epub->getCachePath(), data);
+}
+
+void EpubReaderActivity::saveDictionaryFontForBook(const char* familyName, const uint8_t pointSize) {
+  if (!epub) return;
+
+  if (section && section->isBuilding()) {
+    section->releaseBuildFile();
+  }
+
+  BookReaderSettingsData data = loadBookReaderSettingsFile(epub->getCachePath());
+  if (familyName && familyName[0] != '\0') {
+    std::strncpy(data.dictionarySdFontFamilyName, familyName, sizeof(data.dictionarySdFontFamilyName) - 1);
+    data.dictionarySdFontFamilyName[sizeof(data.dictionarySdFontFamilyName) - 1] = '\0';
+    data.hasDictionaryFontOverride = true;
+  } else {
+    data.dictionarySdFontFamilyName[0] = '\0';
+    data.hasDictionaryFontOverride = false;
+  }
+  data.dictionaryFontPointSize = pointSize;
+  saveBookReaderSettingsFile(epub->getCachePath(), data);
 }
 
 void EpubReaderActivity::saveGlobalSettingsPreservingBookOverrides() {
@@ -1886,6 +1939,11 @@ void EpubReaderActivity::saveReaderOptionsForBook(void* ctx) {
     return;
   }
   static_cast<EpubReaderActivity*>(ctx)->saveCurrentBookReaderSettings();
+}
+
+void EpubReaderActivity::saveDictionaryFontForBookReader(void* ctx, const char* familyName, const uint8_t pointSize) {
+  if (!ctx) return;
+  static_cast<EpubReaderActivity*>(ctx)->saveDictionaryFontForBook(familyName, pointSize);
 }
 
 void EpubReaderActivity::saveGlobalSettingsForBookReader(void* ctx) {
@@ -2141,6 +2199,7 @@ void EpubReaderActivity::openReaderMenu() {
   const int bookProgressPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
 
   pauseReadingPaceTimer("reader_menu");
+  const BookReaderSettingsData bookSettings = loadBookReaderSettingsFile(epub->getCachePath());
   startActivityForResult(
       std::make_unique<EpubReaderMenuActivity>(
           renderer, mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent, SETTINGS.orientation,
@@ -2151,7 +2210,9 @@ void EpubReaderActivity::openReaderMenu() {
           automaticPageTurnActive, getAutoPageTurnIntervalSeconds(),
           SETTINGS.statusBarTimeLeft != CrossPointSettings::STATUS_BAR_TIME_LEFT::TIME_LEFT_HIDE,
           saveReaderOptionsForBook, this, saveGlobalSettingsForBookReader, this, beginGlobalSettingsEditForBookReader,
-          this, !previewActive && epub && epub->hasStablePageNumbers(), endGlobalSettingsEditForBookReader, this),
+          this, !previewActive && epub && epub->hasStablePageNumbers(), endGlobalSettingsEditForBookReader, this,
+          bookSettings.dictionarySdFontFamilyName, bookSettings.dictionaryFontPointSize,
+          saveDictionaryFontForBookReader, this),
       [this](const ActivityResult& result) {
         if (const auto* clipping = std::get_if<ClippingJumpResult>(&result.data)) {
           applyOrientation(clipping->orientation);
@@ -2909,6 +2970,43 @@ bool EpubReaderActivity::handleTouchDictionaryLookup() {
   return true;
 }
 
+std::unique_ptr<Page> EpubReaderActivity::reloadDictionaryLookupPage() {
+  if (!section) return nullptr;
+  // A Page is variable-sized and can reach tens of KB, so it must remain a
+  // fallible heap object. It exists only while rebuilding the parent selection
+  // or a rare full-screen modal background, then is released immediately.
+  return section->loadPageFromSectionFile();
+}
+
+std::unique_ptr<Page> EpubReaderActivity::reloadDictionaryLookupPageCallback(void* context) {
+  return static_cast<EpubReaderActivity*>(context)->reloadDictionaryLookupPage();
+}
+
+void EpubReaderActivity::renderDictionaryLookupBackground() {
+  auto backgroundPage = reloadDictionaryLookupPage();
+  if (!backgroundPage) {
+    LOG_ERR("DICT", "Failed to reload reader page for dictionary modal background");
+    renderer.clearScreen();
+    return;
+  }
+
+  const ReaderViewportLayout layout = computeReaderViewportLayout(renderer, automaticPageTurnActive);
+  renderer.clearScreen();
+  auto* fcm = renderer.getFontCacheManager();
+  if (!fcm) {
+    backgroundPage->render(renderer, SETTINGS.getReaderFontId(), layout.marginLeft, layout.marginTop);
+    return;
+  }
+  auto scope = fcm->createPrewarmScope();
+  backgroundPage->render(renderer, SETTINGS.getReaderFontId(), layout.marginLeft, layout.marginTop);
+  scope.endScanAndPrewarm();
+  backgroundPage->render(renderer, SETTINGS.getReaderFontId(), layout.marginLeft, layout.marginTop);
+}
+
+void EpubReaderActivity::renderDictionaryLookupBackgroundCallback(void* context) {
+  static_cast<EpubReaderActivity*>(context)->renderDictionaryLookupBackground();
+}
+
 void EpubReaderActivity::openWordSelect(bool framebufferContainsPage, int initialTouchX, int initialTouchY,
                                         bool autoLookupInitialWord) {
   std::unique_ptr<Page> pageForLookup;
@@ -2951,12 +3049,15 @@ void EpubReaderActivity::openWordSelect(bool framebufferContainsPage, int initia
   }
 
   pauseReadingPaceTimer("dictionary_lookup");
+  const BookReaderSettingsData bookSettings = loadBookReaderSettingsFile(bookCachePath);
   // The activity outlives this call, so it must be heap-owned; make the fixed-size
   // object allocation fallible instead of aborting the firmware when memory is tight.
   auto wordSelect = makeUniqueNoThrow<DictionaryWordSelectActivity>(
       renderer, mappedInput, std::move(pageForLookup), layout.marginLeft, layout.marginTop, bookCachePath,
       nextPageFirstWord, framebufferContainsPage, layout.marginBottom, initialTouchX, initialTouchY,
-      autoLookupInitialWord);
+      autoLookupInitialWord, bookSettings.dictionarySdFontFamilyName, bookSettings.dictionaryFontPointSize, this,
+      &EpubReaderActivity::renderDictionaryLookupBackgroundCallback,
+      &EpubReaderActivity::reloadDictionaryLookupPageCallback);
   if (!wordSelect) {
     LOG_ERR("DICT", "OOM allocating DictionaryWordSelectActivity (%u bytes)",
             static_cast<unsigned>(sizeof(DictionaryWordSelectActivity)));
@@ -3098,7 +3199,10 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
     }
     case EpubReaderMenuActivity::MenuAction::LOOKUP_HISTORY: {
       pauseReadingPaceTimer("lookup_history");
-      startActivityForResult(std::make_unique<LookedUpWordsActivity>(renderer, mappedInput, epub->getCachePath()),
+      const BookReaderSettingsData bookSettings = loadBookReaderSettingsFile(epub->getCachePath());
+      startActivityForResult(std::make_unique<LookedUpWordsActivity>(renderer, mappedInput, epub->getCachePath(),
+                                                                     bookSettings.dictionarySdFontFamilyName,
+                                                                     bookSettings.dictionaryFontPointSize),
                              [this](const ActivityResult&) {
                                resumeReadingPaceTimer("lookup_history_return");
                                requestUpdate();
@@ -4332,10 +4436,19 @@ void EpubReaderActivity::setAutoPageTurnIntervalSeconds(uint16_t seconds) {
   lastAutoPageTurnIntervalSeconds = seconds;
   bookHasAutoPageTurnInterval = true;
   if (epub) {
-    ReaderSettingsSnapshot snapshot;
-    captureReaderSettings(snapshot);
-    saveBookReaderSettingsFile(epub->getCachePath(), bookHasAutoPageTurnInterval, seconds, bookHasCustomReaderSettings,
-                               bookHasRenderModeOverride, SETTINGS.epubRenderMode, snapshot);
+    BookReaderSettingsData data = loadBookReaderSettingsFile(epub->getCachePath());
+    captureReaderSettings(data.readerSettings);
+    initialBookReaderSettings.hasAutoPageTurnInterval = true;
+    initialBookReaderSettings.autoPageTurnSeconds = seconds;
+    initialBookReaderSettings.hasCustomReaderSettings = bookHasCustomReaderSettings;
+    initialBookReaderSettings.hasRenderModeOverride = bookHasRenderModeOverride;
+    initialBookReaderSettings.renderMode = SETTINGS.epubRenderMode;
+    data.hasAutoPageTurnInterval = true;
+    data.autoPageTurnSeconds = seconds;
+    data.hasCustomReaderSettings = bookHasCustomReaderSettings;
+    data.hasRenderModeOverride = bookHasRenderModeOverride;
+    data.renderMode = SETTINGS.epubRenderMode;
+    saveBookReaderSettingsFile(epub->getCachePath(), data);
   }
   lastPageTurnTime = millis();
   pageTurnDuration = static_cast<unsigned long>(seconds) * 1000UL;
@@ -4482,6 +4595,28 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     return true;
   };
 
+  // A freshly restarted reader has a less fragmented heap than one that has just
+  // built and displayed several pages. Try that once before changing layout modes;
+  // the RTC token marks the resumed attempt so it proceeds through the fallbacks.
+  const auto restartForLowMemoryLayout = [this](const int targetPage, const int savedPage, const int pageCount,
+                                                const char* stage) {
+    if (lowMemoryPartialRestartAttempted || targetPage < 0 || targetPage >= std::numeric_limits<uint16_t>::max() ||
+        currentSpineIndex < 0 || currentSpineIndex > std::numeric_limits<uint16_t>::max()) {
+      return false;
+    }
+    LOG_ERR("ERS", "Low heap during %s; silent restarting to retry page %d (spine=%d)", stage, targetPage,
+            currentSpineIndex);
+    if (!saveProgress(currentSpineIndex, std::max(0, savedPage), std::max(0, pageCount))) {
+      LOG_ERR("ERS", "Skipping silent restart because progress save failed");
+      return false;
+    }
+    armSilentRestartReaderPageBuild(epub->getPath(), static_cast<uint16_t>(currentSpineIndex),
+                                    static_cast<uint16_t>(targetPage), automaticPageTurnActive);
+    lowMemoryPartialRestartAttempted = true;
+    silentRestartToReader();
+    return true;
+  };
+
   // edge case handling for sub-zero spine index
   if (currentSpineIndex < 0) {
     currentSpineIndex = 0;
@@ -4557,6 +4692,11 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     const bool partialCacheLoaded = loadedSection && section && section->isPartial();
 
     if (!loadedSection || partialCacheLoaded) {
+      if (!loadedSection) {
+        // Font selection previews can leave glyph and advance-table caches resident.
+        // Drop them before allocating a replacement layout after a render-spec mismatch.
+        releaseReaderSdFontCachesForLowMemory(renderer, "ERS", "uncached section build");
+      }
       if (partialCacheLoaded) {
         LOG_DBG("ERS", "Partial cache found (%u pages), resuming build... (free=%u, maxAlloc=%u)", section->pageCount,
                 ESP.getFreeHeap(), ESP.getMaxAllocHeap());
@@ -4734,8 +4874,20 @@ void EpubReaderActivity::render(RenderLock&& lock) {
                 static_cast<unsigned>(profile.renderMode));
         releaseReaderSdFontCachesForLowMemory(renderer, "ERS", "fallback section rebuild");
       };
+      const SectionBuildAttempt initialAttempt = buildWithFallback(buildProfileForRenderMode(selectedRenderMode));
+      const bool canRestartInitialLayout = !buildingFootnotePreview && !pendingPercentJump && pendingAnchor.empty() &&
+                                           pendingClippingIndex == UINT16_MAX && pendingParagraphIndex == UINT16_MAX;
+      if (!initialAttempt.succeeded && initialAttempt.lowMemory && canRestartInitialLayout) {
+        const int target = pendingPageJump.has_value() ? *pendingPageJump : std::max(0, nextPageNumber);
+        const int savedPage =
+            section && section->pageCount > 0 ? std::min(target, static_cast<int>(section->pageCount) - 1) : target;
+        const int estimatedPages = section ? section->estimatedTotalPages() : 0;
+        if (restartForLowMemoryLayout(target, savedPage, estimatedPages, "initial EPUB layout")) {
+          return;
+        }
+      }
       const SectionFallbackResult fallbackResult = runSectionBuildFallbacks(
-          selectedRenderMode, shouldAttemptSafeModeFallback(), buildWithFallback, beforeFallbackRetry);
+          selectedRenderMode, shouldAttemptSafeModeFallback(), buildWithFallback, beforeFallbackRetry, &initialAttempt);
       fallbackBuildSucceeded = fallbackResult.succeeded;
       layoutAbortedForLowMemory = fallbackResult.lastAttemptLowMemory;
 
@@ -4940,6 +5092,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
 
   // Extend the build to the requested page if needed. This covers a partial cache that is
   // already loaded but not actively building; pages already available do no work here.
+  const int requestedPageBeforeCatchUp = section->currentPage;
   if (!activeFootnotePreview && partialRebuildAbortedForLowMemory && section->pageCount > 0 &&
       section->currentPage >= static_cast<int>(section->pageCount)) {
     const bool shouldSilentRestartForPartialLowMemory =
@@ -4951,16 +5104,9 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       const uint16_t lastReadablePage = section->pageCount - 1;
       const uint16_t targetPage = section->pageCount;
       const int estimatedPages = section->estimatedTotalPages();
-      LOG_ERR("ERS", "Low heap at partial watermark; silent restarting to retry page %u (spine=%d)", targetPage,
-              currentSpineIndex);
-      if (saveProgress(currentSpineIndex, lastReadablePage, estimatedPages)) {
-        armSilentRestartReaderPageBuild(epub->getPath(), static_cast<uint16_t>(currentSpineIndex), targetPage,
-                                        automaticPageTurnActive);
-        lowMemoryPartialRestartAttempted = true;
-        silentRestartToReader();
+      if (restartForLowMemoryLayout(targetPage, lastReadablePage, estimatedPages, "partial EPUB layout")) {
         return;
       }
-      LOG_ERR("ERS", "Skipping silent restart because progress save failed");
     }
     LOG_ERR("ERS", "Requested page %d exceeds low-memory partial watermark %u; showing last readable page",
             section->currentPage, section->pageCount);
@@ -5026,6 +5172,12 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   if (catchUpFailed) {
     if (section->lastBuildLayoutAbortedForLowMemory() && section->pageCount > 0) {
       partialRebuildAbortedForLowMemory = true;
+      const int partialWatermark = static_cast<int>(section->pageCount);
+      if (requestedPageBeforeCatchUp == partialWatermark &&
+          restartForLowMemoryLayout(partialWatermark, partialWatermark - 1, section->estimatedTotalPages(),
+                                    "partial EPUB catch-up")) {
+        return;
+      }
       section->currentPage = std::min(section->currentPage, static_cast<int>(section->pageCount) - 1);
       LOG_ERR("ERS", "Blocking build stopped for low heap; retaining %u readable partial pages", section->pageCount);
       queueLowMemoryLayoutAlert(false);
@@ -5538,11 +5690,6 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int fo
   const bool needsImageGrayscale = pageHasImages;
   const bool needsTextGrayscale = SETTINGS.textAntiAliasing && foregroundBlack;
   const bool needsAnyGrayscale = needsTextGrayscale || needsImageGrayscale;
-  // The reader starts with zero here, which means the normal refresh cycle
-  // would use a HALF refresh for its first page. Keep that same clean base for
-  // image pages: their double-FAST path otherwise runs directly over the
-  // retained frame after a silent restart (for example, when returning from
-  // KOReader sync), leaving the old UI mixed with the image.
   const bool tiledGrayscale = needsAnyGrayscale && renderer.supportsStripGrayscale();
   const bool overlapRefresh =
       tiledGrayscale && !pageHasImages && pagesUntilFullRefresh > 1 && renderer.supportsAsyncGrayscaleBase();

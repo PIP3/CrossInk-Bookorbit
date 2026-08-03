@@ -7,6 +7,8 @@
 - Nearby File Transfer can send EPUB, TXT, XTC, XTCH, PNG, and BMP files directly between two CrossInk devices without a Wi-Fi network.
 - Recent Books and image-file long-press actions can send files directly to a nearby CrossInk device.
 - Dictionary lookup and lookup history
+- EPUB books can use a dedicated SD-card dictionary font while keeping a different reader font.
+- EPUB books can set a dedicated dictionary font size independently of the reader font size.
 - Reusable dictionary SD-font builder with IPA coverage and per-family ZIP packaging
 - RTC-enabled devices can now choose the date format and numeric separator shown in headers from Settings > System > Device.
 - The web EPUB optimizer now splits oversized chapters into memory-friendlier sections before sending them to the reader.
@@ -19,6 +21,7 @@
 
 ### Changed
 
+- Reader font sizes now persist as actual point sizes, keeping the closest matching size when font families or installed files change.
 - SD-card fonts now include the built-in reader fallback stack for common symbols, emoji, and selected CJK glyphs while retaining Noto Sans fallback coverage.
 - Downloadable SD-card fonts are now rendered with the same darker anti-aliasing as the built-in reading fonts.
 - Full-section EPUB indexing now prepares one-page chapters and direct jumps to a chapter's last page, while avoiding repeated checks after the next chapter is ready.
@@ -47,8 +50,11 @@
 
 - Power-button wake hold timing no longer varies with SD-card initialization time.
 - EPUB reflows no longer reject a chapter before parsing when heap fragmentation leaves the general background-build threshold only slightly short; genuinely large table, font-prewarm, and image allocations remain protected by their own memory checks.
+- EPUB layout now silently retries once with a fresh heap before showing a chapter-memory error or moving through fallback rendering modes.
 - EPUB background indexing now yields to button and touch input, and changing reader settings during indexing no longer risks reading from a closed SD file.
 - EPUB clipping selection can now advance through dense one- and two-page chapter endings instead of stopping mid-page.
+- SD-card font preparation now consolidates temporary glyph, kerning, and layout-metric work into one short-lived allocation, preserving more contiguous memory when returning Home after reading or dictionary use.
+- SD-card font layout metric tables now reuse their existing storage during normal updates instead of reallocating the persistent table each time.
 - EPUB reflow and KOReader Sync now return to the same text after font, orientation, or indexing-method changes instead of relying only on page percentages.
 - Bionic Reading no longer lets letters overlap at the bold-to-regular split in EPUB words.
 - The web settings page now hides settings on devices that don't support it.

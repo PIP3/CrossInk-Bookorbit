@@ -1324,8 +1324,6 @@ void CrossPointWebServer::handleGetSettings() const {
             }
           }
           doc["value"] = selected;
-        } else if (s.nameId == StrId::STR_FONT_SIZE && selectedSdFamily) {
-          doc["value"] = SETTINGS.fontSize;
         } else if (s.valuePtr) {
           doc["value"] = static_cast<int>(enumDisplayIndexForRawValue(s, SETTINGS.*(s.valuePtr)));
         } else if (s.valueGetter) {
