@@ -5998,7 +5998,6 @@ void EpubReaderActivity::drawClippingHighlights(const Page& page, const int font
     return;
   }
 
-  const bool foregroundBlack = ReaderUtils::readerForegroundBlack();
   const auto isHighlightedWord = [&matches, matchCount](const uint16_t pageWordIndex) {
     for (uint16_t matchIndex = 0; matchIndex < matchCount; ++matchIndex) {
       if (pageWordIndex >= matches[matchIndex].startWord && pageWordIndex <= matches[matchIndex].endWord) {
@@ -6044,7 +6043,10 @@ void EpubReaderActivity::drawClippingHighlights(const Page& page, const int font
     }
     if (wordW > 0) {
       renderer.fillRectDither(wordX, wordY, wordW, wordH, Color::LightGray);
-      renderer.drawText(fontId, wordX, wordY, visibleText, foregroundBlack, textStyle);
+      // A saved clipping always uses black text on its light-gray marker.
+      // The ordinary reader foreground is white in dark mode, which makes the
+      // text fade into this marker.
+      renderer.drawText(fontId, wordX, wordY, visibleText, true, textStyle);
     }
     return true;
   });
