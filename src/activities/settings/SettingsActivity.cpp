@@ -60,39 +60,18 @@ constexpr size_t controlsPowerMinCount = 2;
 constexpr size_t controlsPowerMaxCount = 3;
 constexpr size_t controlsFrontButtonCount = 6;
 constexpr size_t controlsSideButtonCount = 3;
-constexpr int touchSettingsRowHeightScale = 2;
-constexpr int touchSettingsTabBarHeightScale = 2;
 
 int settingsTabBarTop(const ThemeMetrics& metrics) { return CompactHeader::headerBottomY(metrics); }
-
-int settingsRowHeightScale(const bool hasTouch) { return hasTouch ? touchSettingsRowHeightScale : 1; }
-
-int settingsTabBarHeight(const ThemeMetrics& metrics, const bool hasTouch) {
-  return metrics.tabBarHeight * (hasTouch ? touchSettingsTabBarHeightScale : 1);
-}
-
-int settingsSubmenuHeaderOffset(const GfxRenderer& renderer, const ThemeMetrics& metrics, const bool hasSubmenuTitle) {
-  if (!hasSubmenuTitle) return 0;
-  return renderer.getLineHeight(UI_10_FONT_ID) + metrics.verticalSpacing;
-}
-
-Rect settingsListRect(const ThemeMetrics& metrics, const int pageWidth, const int pageHeight, const bool hasTouch) {
-  const int tabBarTop = settingsTabBarTop(metrics);
-  const int listTop = tabBarTop + settingsTabBarHeight(metrics, hasTouch) + metrics.verticalSpacing;
-  return Rect{0, listTop, pageWidth, pageHeight - listTop - metrics.buttonHintsHeight - metrics.verticalSpacing};
-}
 
 Rect settingsHeaderRect(const ThemeMetrics& metrics, const int pageWidth) {
   return Rect{0, metrics.topPadding, pageWidth, CompactHeader::headerBottomY(metrics) - metrics.topPadding};
 }
 
-Rect settingsRowsRect(const GfxRenderer& renderer, const ThemeMetrics& metrics, const int pageWidth,
-                      const int pageHeight, const bool hasTouch, const bool hasSubmenuTitle) {
-  Rect rect = settingsListRect(metrics, pageWidth, pageHeight, hasTouch);
-  const int headerOffset = settingsSubmenuHeaderOffset(renderer, metrics, hasSubmenuTitle);
-  rect.y += headerOffset;
-  rect.height = std::max(0, rect.height - headerOffset);
-  return rect;
+bool useLandscapeTouchLayout(const GfxRenderer& renderer, const MappedInputManager& mappedInput) {
+  if (!mappedInput.hasTouchHardware()) return false;
+  const auto orientation = renderer.getOrientation();
+  return orientation == GfxRenderer::Orientation::LandscapeClockwise ||
+         orientation == GfxRenderer::Orientation::LandscapeCounterClockwise;
 }
 
 uint8_t enumDisplayIndexForRawValue(const SettingInfo& setting, uint8_t rawValue) {
@@ -758,7 +737,8 @@ void SettingsActivity::loop() {
   // Swipes scroll the viewport; the selection stays put (it may scroll
   // off-screen) and button navigation pulls the view back to it.
   const auto swipe = mappedInput.wasSwipe();
-  if (dismissOnUpSwipe && swipe == MappedInputManager::SwipeDir::Up) {
+  if (dismissOnUpSwipe && !useLandscapeTouchLayout(renderer, mappedInput) &&
+      swipe == MappedInputManager::SwipeDir::Up) {
     SETTINGS.saveToFile();
     finish();
     return;
@@ -1108,6 +1088,7 @@ void SettingsActivity::settingsScreen(UiApp::ScreenType& screen, void* user) {
 
 void SettingsActivity::buildSettingsScreen(UiApp::ScreenType& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
+  const bool landscapeTouch = useLandscapeTouchLayout(renderer, mappedInput);
   // Content starts directly below the compact header divider.
   screen.setContentMargin(fui::Insets{static_cast<int16_t>(settingsTabBarTop(metrics)), 0,
                                       static_cast<int16_t>(metrics.buttonHintsHeight), 0});
@@ -1175,12 +1156,36 @@ void SettingsActivity::buildSettingsScreen(UiApp::ScreenType& screen) {
     tabStyles.active = tabStyles.selected;
     tabProps.tabStyles = tabStyles;
   }
-  const fui::Rect tabRect = screen.takeTop(tabBand);
-  if (!roundedRaffTabs && !borderedTabs && tabsFocused) {
-    screen.target().fill(tabRect, fui::Paint::dither(fui::Color::LightGray));
+  if (landscapeTouch) {
+    // Landscape has width to spare but little vertical room. Keep categories
+    // in a left rail so the settings list can use the full remaining height.
+    const fui::Rect body = screen.body();
+    const int16_t railWidth = static_cast<int16_t>(body.width / 4);
+    int16_t tabY = body.y;
+    for (int i = 0; i < categoryCount; ++i) {
+      const int16_t tabHeight =
+          static_cast<int16_t>(i == categoryCount - 1 ? body.bottom() - tabY : body.height / categoryCount);
+      const fui::Rect tabRect{body.x, tabY, railWidth, tabHeight};
+      fui::TabBarProps railProps = tabProps;
+      railProps.tabs = &tabs[i];
+      railProps.count = 1;
+      if (!roundedRaffTabs && !borderedTabs && tabsFocused) {
+        screen.target().fill(tabRect, fui::Paint::dither(fui::Color::LightGray));
+      }
+      drawUiTabBar(screen, railProps, tabRect, metrics.tabBarAppearance);
+      tabY = static_cast<int16_t>(tabY + tabHeight);
+    }
+    screen.target().fill(fui::Rect{static_cast<int16_t>(body.x + railWidth - 1), body.y, 1, body.height},
+                         fui::Paint::solid(fui::Color::Black));
+    screen.insetContent(fui::Insets{0, 0, 0, static_cast<int16_t>(railWidth + metrics.verticalSpacing)});
+  } else {
+    const fui::Rect tabRect = screen.takeTop(tabBand);
+    if (!roundedRaffTabs && !borderedTabs && tabsFocused) {
+      screen.target().fill(tabRect, fui::Paint::dither(fui::Color::LightGray));
+    }
+    drawUiTabBar(screen, tabProps, tabRect, metrics.tabBarAppearance);
+    screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
   }
-  drawUiTabBar(screen, tabProps, tabRect, metrics.tabBarAppearance);
-  screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
 
   const StrId submenuTitle = activeSubmenuTitleId();
   if (submenuTitle != StrId::STR_NONE_OPT) {

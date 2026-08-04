@@ -49,6 +49,8 @@
 
 ### Fixed
 
+- The X4 Pro capacitive Home button now returns directly Home while reading a book; inside reader menus it continues to dismiss the current menu.
+- Settings opened from the X4 Pro frontlight panel now use a landscape layout that keeps categories and options within the viewport.
 - Home and Recent Books no longer repeatedly try to generate a cover thumbnail for EPUBs that do not include a cover.
 - Manage Fonts now reports an installed-font scan memory error instead of restarting when a fragmented X3/X4 heap cannot enumerate a font directory.
 - Saved Wi-Fi networks now remain available when managing them from the File Transfer web page after a restart.
