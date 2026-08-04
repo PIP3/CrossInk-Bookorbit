@@ -446,6 +446,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t epubRenderMode = 0;
   // SD card font family name, including optional range suffix (empty = use built-in fontFamily)
   char sdFontFamilyName[64] = "";
+  // Global dictionary SD-card font (empty = use the reader font).
+  char dictionarySdFontFamilyName[64] = "";
+  // Zero follows the active reader size.
+  uint8_t dictionaryFontPointSize = 0;
   // Show hidden files/directories (starting with '.') in the file browser (0 = hidden, 1 = show)
   uint8_t showHiddenFiles = 0;
   // Hide file extensions in the file browser right-side value column (0 = show, 1 = hide)

@@ -1,4 +1,4 @@
-## [Unreleased]
+## [v1.5.0] - 2026-08-04
 
 ### Added
 
@@ -9,6 +9,7 @@
 - Dictionary lookup and lookup history
 - EPUB books can use a dedicated SD-card dictionary font while keeping a different reader font.
 - EPUB books can set a dedicated dictionary font size independently of the reader font size.
+- Dictionary font and size defaults can be set globally from Settings > Reader > Font Options, with per-book choices still taking precedence.
 - Reusable dictionary SD-font builder with IPA coverage and per-family ZIP packaging
 - RTC-enabled devices can now choose the date format and numeric separator shown in headers from Settings > System > Device.
 - The web EPUB optimizer now splits oversized chapters into memory-friendlier sections before sending them to the reader.
@@ -49,6 +50,7 @@
 
 ### Fixed
 
+- KOReader Sync now resolves saved text offsets from completed EPUB caches instead of falling back to less precise page estimates.
 - Power-button wake hold timing no longer varies with SD-card initialization time.
 - EPUB reflows no longer reject a chapter before parsing when heap fragmentation leaves the general background-build threshold only slightly short; genuinely large table, font-prewarm, and image allocations remain protected by their own memory checks.
 - EPUB layout now silently retries once with a fresh heap before showing a chapter-memory error or moving through fallback rendering modes.
@@ -75,6 +77,7 @@
 - EPUBs that use `<br>` between flowing paragraphs no longer add extra vertical spacing after every line break; consecutive breaks still create a scene break.
 - Lyra Home headers now keep the battery icon and percentage aligned with safer clearance below the top bezel.
 - Dictionary lookups that miss can now switch dictionaries without returning to the reader.
+- Dictionary file read failures now show an error instead of incorrectly reporting that the word was not found.
 - Reading Stats button hints now follow customized front-button assignments.
 - Short physical button presses now register reliably after the device enters low-power mode.
 - Improved reliability when re-indexing EPUB chapters after changing reader font settings.
@@ -102,6 +105,7 @@
 - Bionic Reading now keeps Hebrew and other right-to-left EPUB text in the correct reading order.
 - EPUB clipping selection no longer replaces selected text with corrupted glyphs as the selection grows.
 - EPUB clipping selection now preserves SD-card fonts and Bionic Reading layout on memory-tight pages.
+- Custom SD-card fonts now preserve their standard ligature glyphs.
 - Popup option menus now show a scrollbar when more choices are available than can fit on screen.
 - Backing out of Manage Fonts without changing fonts now returns to Font Options instead of Home.
 - The “Entering sleep” message now follows the reader's current orientation, including book-specific orientation overrides.
@@ -112,6 +116,7 @@
 - Unsupported EPUB chapter image formats no longer trigger the low-memory image warning.
 - Returning to Home after reading with an SD card font now releases the reader's font caches so covers and thumbnails retain enough contiguous memory to render.
 - EPUB footnote and cross-reference previews now show the whole note. Previews of notes whose link target sits in the middle of a paragraph no longer start mid-sentence with the opening text missing.
+- XTCH books no longer show a memory error after opening or changing reader settings on X3/X4 devices.
 
 ## [v1.4.0.1] - 2026-07-28
 

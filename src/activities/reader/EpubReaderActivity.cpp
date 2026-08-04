@@ -1172,6 +1172,10 @@ bool writeReaderSettingsSnapshot(FsFile& file, const EpubReaderActivity::ReaderS
 BookReaderSettingsData loadBookReaderSettingsFile(const std::string& cachePath) {
   BookReaderSettingsData data;
   captureReaderSettings(data.readerSettings);
+  std::strncpy(data.dictionarySdFontFamilyName, SETTINGS.dictionarySdFontFamilyName,
+               sizeof(data.dictionarySdFontFamilyName) - 1);
+  data.dictionarySdFontFamilyName[sizeof(data.dictionarySdFontFamilyName) - 1] = '\0';
+  data.dictionaryFontPointSize = SETTINGS.dictionaryFontPointSize;
 
   FsFile file;
   if (!Storage.openFileForRead("ERS", cachePath + READER_SETTINGS_FILE_NAME, file)) {
@@ -1209,7 +1213,7 @@ BookReaderSettingsData loadBookReaderSettingsFile(const std::string& cachePath) 
   uint16_t seconds = 0;
   uint8_t renderMode = static_cast<uint8_t>(EpubRenderMode::CrossInkDefault);
   EpubReaderActivity::ReaderSettingsSnapshot snapshot;
-  // Version 2/3 books inherit the current global indexing method instead of
+  // Version 2 books inherit the current global indexing method instead of
   // silently changing modes when their older custom settings are loaded.
   snapshot.indexingMethod = data.readerSettings.indexingMethod;
   bool ok = readU8(file, flags) && readU16(file, seconds);
@@ -1247,6 +1251,12 @@ BookReaderSettingsData loadBookReaderSettingsFile(const std::string& cachePath) 
   if (flags & READER_SETTINGS_FLAG_DICTIONARY_FONT) {
     data.dictionarySdFontFamilyName[sizeof(data.dictionarySdFontFamilyName) - 1] = '\0';
     data.hasDictionaryFontOverride = data.dictionarySdFontFamilyName[0] != '\0';
+  }
+  if (!data.hasDictionaryFontOverride) {
+    std::strncpy(data.dictionarySdFontFamilyName, SETTINGS.dictionarySdFontFamilyName,
+                 sizeof(data.dictionarySdFontFamilyName) - 1);
+    data.dictionarySdFontFamilyName[sizeof(data.dictionarySdFontFamilyName) - 1] = '\0';
+    data.dictionaryFontPointSize = SETTINGS.dictionaryFontPointSize;
   }
   return data;
 }
@@ -1912,8 +1922,9 @@ void EpubReaderActivity::saveDictionaryFontForBook(const char* familyName, const
   } else {
     data.dictionarySdFontFamilyName[0] = '\0';
     data.hasDictionaryFontOverride = false;
+    data.dictionaryFontPointSize = 0;
   }
-  data.dictionaryFontPointSize = pointSize;
+  if (data.hasDictionaryFontOverride) data.dictionaryFontPointSize = pointSize;
   saveBookReaderSettingsFile(epub->getCachePath(), data);
 }
 
@@ -2229,6 +2240,7 @@ void EpubReaderActivity::openReaderMenu() {
           saveReaderOptionsForBook, this, saveGlobalSettingsForBookReader, this, beginGlobalSettingsEditForBookReader,
           this, !previewActive && epub && epub->hasStablePageNumbers(), endGlobalSettingsEditForBookReader, this,
           bookSettings.dictionarySdFontFamilyName, bookSettings.dictionaryFontPointSize,
+          bookSettings.hasDictionaryFontOverride,
           saveDictionaryFontForBookReader, this),
       [this](const ActivityResult& result) {
         if (const auto* clipping = std::get_if<ClippingJumpResult>(&result.data)) {
@@ -6029,7 +6041,6 @@ void EpubReaderActivity::drawClippingHighlights(const Page& page, const int font
     return;
   }
 
-  const bool foregroundBlack = ReaderUtils::readerForegroundBlack();
   const auto isHighlightedWord = [&matches, matchCount](const uint16_t pageWordIndex) {
     for (uint16_t matchIndex = 0; matchIndex < matchCount; ++matchIndex) {
       if (pageWordIndex >= matches[matchIndex].startWord && pageWordIndex <= matches[matchIndex].endWord) {
@@ -6075,7 +6086,10 @@ void EpubReaderActivity::drawClippingHighlights(const Page& page, const int font
     }
     if (wordW > 0) {
       renderer.fillRectDither(wordX, wordY, wordW, wordH, Color::LightGray);
-      renderer.drawText(fontId, wordX, wordY, visibleText, foregroundBlack, textStyle);
+      // A saved clipping always uses black text on its light-gray marker.
+      // The ordinary reader foreground is white in dark mode, which makes the
+      // text fade into this marker.
+      renderer.drawText(fontId, wordX, wordY, visibleText, true, textStyle);
     }
     return true;
   });

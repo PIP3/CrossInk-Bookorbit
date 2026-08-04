@@ -19,13 +19,14 @@ Minimum requirement: one `.dict` and one `.idx` file in the same folder. Their f
 
 ## Setting Up a Dictionary
 
+Example folder structure: `SDCARD/.dictionaries/Cambridge/*.dict`. Make sure the dictionary folder is **NOT** nested like `/Cambridge/Cambridge/*.dict`
+
 1. Copy your dictionary folder(s) to one of these directories on the SD card:
    - `/.dictionaries/` (checked first)
    - `/dictionaries/`
 2. If no dictionary has been selected before, the first dictionary in the alphabetical device list is selected automatically.
-3. To choose between multiple dictionaries, open **Settings -> Dictionary** on the device and select one from the list.
-
-To deselect the current dictionary, select **None** from the list.
+3. To choose between multiple dictionaries, open **Settings -> Reader -> Dictionary** on the device and select one from the list.
+4. Per book dictionaries can be set from within the in-reader menu `Book Options -> Settings Gear tab -> Book Dictionary`
 
 ### Preparing Compressed or Large Dictionaries
 
@@ -167,13 +168,15 @@ The history screen shows the 50 most recent entries. The on-disk history is appe
 
 ## IPA Phonetic Characters
 
-Dictionary definitions use the active reader font and size by default. In an EPUB, open **Reader Options > Font Options > Dictionary Font** to choose a different installed SD-card font for that book, then use **Dictionary Font Size** to choose one of its installed point sizes. **Use Reader Size** follows the active reader size. A saved size with no matching file uses the closest available size from the dictionary family.
+Dictionary definitions use the active reader font and size by default. If at least one dictionary is installed, you can set the default dictionary font and size in **Settings > Reader > Font Options**. Books inherit those defaults unless you choose a different font or size in **Book Options > Font Options**. Choose **Use Global** in Book Options to return a book to the global defaults. If no custom dictionary font is selected, definitions use the active reader font and size. A saved size with no matching file uses the closest available size from the dictionary family.
 
 Only one SD-card font family is loaded at a time: CrossInk temporarily swaps to the dictionary font while a definition is open, then restores the reader font when you close it. If the selected dictionary font is missing, the definition falls back to the reader font but keeps the selection, so it resumes automatically if you reinstall the family.
 
 Built-in fonts keep the glyphs they contain and approximate only unsupported pronunciation symbols. If you see a filled diamond, choose an SD-card font that includes that character.
 
 You can download CrossInk's SD card catalog of fonts with IPA glyphs built-in from [Inky](https://inky.crossink.dev/#downloads).
+
+See the [dictionary font builder](dictionary-development.md#generating-dictionary-fonts) if you want to build your own dictionary fonts via the CLI.
 
 ---
 

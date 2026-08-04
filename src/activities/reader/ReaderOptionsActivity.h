@@ -41,6 +41,7 @@ class ReaderOptionsActivity final : public Activity {
   void* endGlobalSettingsEditContext = nullptr;
   char dictionaryFontFamilyName[64] = "";
   uint8_t dictionaryFontPointSize = 0;
+  bool hasDictionaryFontOverride = false;
   DictionaryFontChangedCallback dictionaryFontChangedCallback = nullptr;
   void* dictionaryFontChangedContext = nullptr;
   bool settingsDirty = false;
@@ -83,7 +84,8 @@ class ReaderOptionsActivity final : public Activity {
       void* beginGlobalSettingsEditContext = nullptr,
       GlobalSettingsEditCallback endGlobalSettingsEditCallback = nullptr, void* endGlobalSettingsEditContext = nullptr,
       bool stablePageNumbersAvailable = false, const char* dictionaryFontFamilyName = nullptr,
-      uint8_t dictionaryFontPointSize = 0, DictionaryFontChangedCallback dictionaryFontChangedCallback = nullptr,
+      uint8_t dictionaryFontPointSize = 0, bool hasDictionaryFontOverride = false,
+      DictionaryFontChangedCallback dictionaryFontChangedCallback = nullptr,
       void* dictionaryFontChangedContext = nullptr)
       : Activity("ReaderOptions", renderer, mappedInput),
         saveSettingsCallback(saveSettingsCallback),
@@ -97,6 +99,7 @@ class ReaderOptionsActivity final : public Activity {
         dictionaryFontChangedCallback(dictionaryFontChangedCallback),
         dictionaryFontChangedContext(dictionaryFontChangedContext),
         dictionaryFontPointSize(dictionaryFontPointSize),
+        hasDictionaryFontOverride(hasDictionaryFontOverride),
         stablePageNumbersAvailable(stablePageNumbersAvailable),
         uiTarget(makeUiTarget(renderer)),
         app(uiTarget, uiTarget.deviceContext()) {

@@ -67,6 +67,57 @@ python3 scripts/dictionary_tools.py merge \
 
 `lookup` and `merge` require an uncompressed `.dict`. `merge` writes a prepared output including applicable `.oft` and `.cspt` files.
 
+## Generating Dictionary Fonts
+
+Dictionary definitions use the active reader font, so the SD-card font catalog
+also has a dictionary-specific build. The
+`lib/EpdFont/scripts/build-dictionary-fonts.py` wrapper uses the family, style,
+and size catalog in `lib/EpdFont/scripts/sd-fonts.yaml`, then adds the broad
+IPA, combining-mark, and reader ranges needed by dictionary definitions before
+delegating to `build-sd-fonts.py`. It packages each generated family as a ZIP.
+
+Install the font-builder dependencies and run it from the CrossInk repository
+root:
+
+```bash
+python3 -m pip install -r lib/EpdFont/scripts/requirements.txt
+python3 lib/EpdFont/scripts/build-dictionary-fonts.py --clean --jobs 2
+```
+
+If you are generating your own dictionary fonts, change the output directory so
+your files do not mix with the shared catalog output. For example:
+
+```bash
+python3 lib/EpdFont/scripts/build-dictionary-fonts.py \
+  --output-dir ./generated-dictionary-fonts
+```
+
+The `--clean` option removes the selected output directory before building, so
+do not use it with the default location unless you intend to rebuild that
+catalog.
+
+By default, the generated family folders and ZIPs are written to
+`../crossink-fonts/dictionary-fonts`. Unzip a family archive into `/.fonts/` or
+`/fonts/` on the SD card, or copy the output to the sibling `crossink-fonts`
+repository when publishing the catalog. Use `--output-dir` to choose another
+destination.
+
+Useful options:
+
+| Option | Purpose |
+|--------|---------|
+| `--only FamilyA,FamilyB` | Build only the named families from `sd-fonts.yaml` |
+| `--config path/to/catalog.yaml` | Use a different family catalog |
+| `--output-dir path` | Write family folders and ZIPs somewhere other than the default |
+| `--clean` | Remove the output directory before building, avoiding stale `.cpfont` files |
+| `--jobs N` / `-j N` | Limit parallel family builds |
+| `--timeout SECONDS` | Set the per-family converter timeout (default: 600) |
+| `--verbose` / `-v` | Stream converter output while debugging a build |
+
+The wrapper does not change `sd-fonts.yaml`; it creates a temporary transformed
+catalog for the shared builder. If a family is changed or removed, use
+`--clean` so stale files cannot be mistaken for current output.
+
 ## CrossInk Prefix Index (`.cspt`)
 
 Both `.idx.oft.cspt` and `.syn.oft.cspt` use the same format:
