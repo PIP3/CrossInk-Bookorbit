@@ -19,6 +19,8 @@ Minimum requirement: one `.dict` and one `.idx` file in the same folder. Their f
 
 ## Setting Up a Dictionary
 
+Example folder structure: `SDCARD/.dictionaries/Cambridge/*.dict`. Make sure the dictionary folder is **NOT** nested like `/Cambridge/Cambridge/*.dict`
+
 1. Copy your dictionary folder(s) to one of these directories on the SD card:
    - `/.dictionaries/` (checked first)
    - `/dictionaries/`
@@ -35,7 +37,7 @@ An uncompressed dictionary with only `.dict` and `.idx` files is usable without 
 
 `.qidx` is a disposable device cache: it is rebuilt when it is missing, invalid, or belongs to a differently sized `.idx` file, and it can be deleted safely. If the lookup is cancelled or the SD card cannot create the cache, the lookup still works by scanning the full `.idx`; CrossInk will try to create the quick index again on a later lookup.
 
-Desktop preparation remains recommended for large dictionaries. `*.idx.oft.cspt` is the preferred direct-lookup accelerator, with `*.idx.oft` as its fallback; either one prevents CrossInk from creating `.qidx`. The desktop files also speed up synonym resolution, suggestions, and ordinal lookups, whereas `.qidx` accelerates the main `.idx` word search only.
+Desktop preparation remains recommended for large dictionaries. `*.idx.oft.cspt` is the preferred direct-lookup accelerator, with `*.idx.oft` as its fallback; either one prevents CrossInk from creating `.qidx`. The desktop files also speed up synonym resolution and ordinal lookups. The smaller `.qidx` accelerates direct lookup and bounds spelling-suggestion searches, but it does not accelerate synonyms or ordinal lookups.
 
 ---
 
@@ -43,11 +45,26 @@ Desktop preparation remains recommended for large dictionaries. `*.idx.oft.cspt`
 
 The **Look Up Word** option in the reader menu is only visible when a dictionary is active.
 
+### Buttons
+
 1. Open the reader menu and choose **Look Up Word**.
 2. The page becomes a word-select overlay - one word is highlighted, initially near the centre of the page.
 3. Use **Up/Down** to move between rows, **Left/Right** to move between words on the same row.
 4. Press **Confirm** to look up the highlighted word.
 5. Press **Back** to exit word-select without looking anything up.
+
+### Touchscreen
+
+In an EPUB reader with **Touch Reader Controls** enabled, touch and hold a
+word for about one second. CrossInk opens word selection on that word; lift
+your finger to look it up. To look up a phrase, keep holding after the
+selection opens, drag to the last word, then lift your finger. This is a
+direct shortcut from the reading page, so you do not need to open the reader
+menu first.
+
+When word selection is already open, including selection opened from a
+definition, touch a word to start a selection and drag before releasing to
+look up a phrase. Releasing without dragging looks up the single touched word.
 
 ### Quick Lookup
 
@@ -108,6 +125,12 @@ In word-select mode, you can select a sequence of words to look up as a phrase.
 
 Multi-word select works in both the reader word-select and the definition word-select (chained lookup).
 
+On a touchscreen, use a press-and-drag selection instead of the button
+sequence: touch the first word, drag to the last word, and lift your finger to
+look up the selected phrase. The first long hold on the reading page is only
+needed to enter lookup; once word selection is open, touching a word starts
+the range immediately.
+
 **Limitation:** Multi-word selection cannot span a page boundary. If a phrase crosses from one page to the next, only the words on the current page are available for selection. As a workaround, reduce the reader font size so more words fit on a single page, perform the lookup, then restore the original font size.
 
 ---
@@ -146,7 +169,9 @@ The history screen shows the 50 most recent entries. The on-disk history is appe
 
 ## IPA Phonetic Characters
 
-Dictionary definitions use the same font as the active reader. If you use an SD-card font with the needed glyphs, pronunciation symbols and other non-Latin dictionary text are passed through unchanged.
+Dictionary definitions use the active reader font and size by default. In an EPUB, open **Reader Options > Font Options > Dictionary Font** to choose a different installed SD-card font for that book, then use **Dictionary Font Size** to choose one of its installed point sizes. **Use Reader Size** follows the active reader size. A saved size with no matching file uses the closest available size from the dictionary family.
+
+Only one SD-card font family is loaded at a time: CrossInk temporarily swaps to the dictionary font while a definition is open, then restores the reader font when you close it. If the selected dictionary font is missing, the definition falls back to the reader font but keeps the selection, so it resumes automatically if you reinstall the family.
 
 Built-in fonts keep the glyphs they contain and approximate only unsupported pronunciation symbols. If you see a filled diamond, choose an SD-card font that includes that character.
 

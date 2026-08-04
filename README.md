@@ -1,5 +1,11 @@
 > **This is a personal fork of [CrossPoint Reader](https://github.com/crosspoint-reader/crosspoint-reader)** with a focus on improved fonts and minimal reading stats.
 
+### Supported Devices
+
+- Xteink X3
+- Xteink X4
+- Seeed Studio Sticky
+
 ## What's different in this fork
 
 My goal with this fork was to maintain the core Crosspoint firmware while integrating my preferred typography and some lightweight reading statistics. I’ve focused on keeping the underlying system stable while layering in a few "nice-to-have" features and UI refinements along the way.
@@ -16,10 +22,6 @@ My goal with this fork was to maintain the core Crosspoint firmware while integr
     </td>
   </tr>
 </table>
-
----
-
-**Note**: This firmware is confirmed working on both the X3 and X4.
 
 ### Highlights
 
@@ -107,6 +109,8 @@ See [Simulator](./docs/simulator.md) for setup, platform notes, keyboard control
 ---
 
 ## Installation
+
+The fastest way to install Crossink is by using Inky, Crossink's web companion app: https://inky.crossink.dev/#flash-tools
 
 Download a `firmware-*.bin` from the [releases page](https://github.com/uxjulia/CrossInk/releases), then flash it with the web installer or command line.
 

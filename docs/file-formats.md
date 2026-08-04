@@ -94,7 +94,7 @@ if (parsedSize != fileSize) {
 
 ## `reader_settings.bin`
 
-### Version 3
+### Version 5
 
 Each EPUB cache directory may contain `reader_settings.bin`. Missing files mean
 the book uses global Reader settings and the default auto-page-turn interval.
@@ -105,8 +105,11 @@ Version 1 stored only:
 - `u16 autoPageTurnSeconds`
 
 Version 2 stores flags before the full reader-settings snapshot. Version 3 adds
-the EPUB word-spacing level and indexing method (`0` = incremental, `1` = full
-section) to that snapshot. This lets the
+the EPUB word-spacing level to that snapshot. Version 4 adds the EPUB indexing
+method (`0` = incremental, `1` = full section). Version 5 appends a per-book
+dictionary SD-font family name. Version 6 stores reader font sizes as physical
+point sizes, and version 7 appends the dictionary font's selected point size.
+This lets the
 file preserve an auto-page-turn interval without forcing custom font/layout
 settings for the book. It also stores a per-book EPUB render mode override,
 which can be changed from book action menus before opening the book so a
@@ -117,13 +120,13 @@ fallback successfully opens a difficult book.
 
 ```c++
 struct ReaderSettingsBin {
-    u8 version; // 3
-    u8 flags;   // bit 0 = custom reader settings, bit 1 = custom auto-page-turn interval, bit 2 = render mode override
+    u8 version; // 7
+    u8 flags;   // bit 0 = custom reader settings, bit 1 = custom auto-page-turn interval, bit 2 = render mode override, bit 3 = dictionary font override
     u16 autoPageTurnSeconds;
     u8 renderMode; // 0 = CrossInk Default, 1 = Balanced, 2 = Light
 
     u8 fontFamily;
-    u8 fontSize;
+    u8 readerFontPointSize; // physical point size; versions 2-5 stored a size slot
     u8 lineHeightPercent;
     u8 wordSpacing; // 0 = natural font spacing; 1-4 widen each gap by ~75% per level
     u8 orientation;
@@ -142,6 +145,8 @@ struct ReaderSettingsBin {
     u8 snapshotRenderMode;
     u8 indexingMethod; // 0 = incremental, 1 = full section
     char sdFontFamilyName[64];
+    char dictionarySdFontFamilyName[64]; // meaningful only when flag bit 3 is set
+    u8 dictionaryFontPointSize; // 0 = follow reader size
 };
 ```
 
@@ -246,18 +251,52 @@ Binary layout:
 
 ## `section.bin`
 
-### Version 45
+### Version 59
 
 Each file in `sections/*.bin` stores one laid-out spine section. The header is
 also the cache-busting key: if any layout-affecting setting differs from the
 current reader settings, the section is discarded and rebuilt.
 
-Version 45 consolidates the v1.5 layout and payload changes. It adds word
-spacing to the cache-busting header; stores deferred-image source paths, ruby
-annotations, and compact internal-link IDs; and updates cached layout for RTL
-Bionic Reading, Arabic shaping, Guide Dots, oversized CJK fragments, heading
-images, `<br>` spacing, and explicit Hangul word gaps. Older full and suspended
-partial section caches rebuild together. It includes:
+Version 59 adds a compact page-start visible-text-offset lookup table. The
+offset is a Unicode codepoint coordinate in the spine XHTML, so reader progress
+and KOReader sync can return to the same content after a font, orientation, or
+indexing-method change instead of relying on a page percentage. Suspended
+incremental caches store the same table for their readable prefix; a target
+beyond that prefix must continue indexing before it can be resolved.
+
+Version 57 is binary-identical to version 56. The version was bumped because
+word-gap suppression now applies only to tokens glued together in the source.
+Older caches could collapse explicit spaces between Hangul words, so full and
+suspended partial section caches rebuild together. Version 58 recalculates
+Bionic Reading split-run offsets with the renderer's combined advance and
+kerning rounding, so old cached page positions rebuild.
+
+Version 56 changes `<br>` layout: a line break after text no longer reapplies
+the containing block's top or bottom spacing, while an empty `<br>` block keeps
+the existing scene-break gap. Full and suspended partial section caches rebuild
+together. Version 55 assigns compact IDs to internal EPUB links. The ID is
+stored in the existing per-word flags byte and in each page's footnote entry so
+touch devices can map tapped text to the existing fragment-navigation path
+without retaining another per-word data structure. Version 54 adds compact
+ruby-text annotations to serialized text blocks. Only words that begin a ruby
+group store annotation text; continuation words use a dedicated style bit. This
+keeps books without ruby markup unchanged apart from the cache version while
+avoiding an empty string allocation for every word.
+Version 53 stores each image's EPUB-internal source path so section indexing can
+read only its header and defer full extraction until the page is shown. Version
+52 keeps Guide Dots centered when extra word spacing is enabled. Version 51
+preserves continuation state for oversized CJK word fragments. Version 50
+paginates chapter-heading image runs within the reader viewport so they do not
+overflow into the reserved status-bar area. Version 49 stores Bionic Reading
+split-run offsets in visual order so RTL word prefixes render on the right.
+Version 48 changed Arabic contextual shaping and text measurement, so cached
+word positions from version 47 no longer match what `drawText` renders.
+
+Version 48 makes the EPUB word-spacing level widen the natural inter-word gap
+(each level adds 10 pixels), which changes laid-out word positions, so
+older sections must rebuild. Version 46 added the EPUB word-spacing level to the
+cache-busting header. It retains the flat `TextBlock` arena and chapter-opener
+anchor behavior introduced in version 45. It includes:
 
 - cache-busting fields for font, line compression, extra paragraph spacing,
   forced paragraph indents, paragraph alignment, viewport size, hyphenation,
@@ -266,6 +305,7 @@ partial section caches rebuild together. It includes:
 - page offset LUT
 - anchor-to-page map for fragment and footnote navigation
 - paragraph and list-item LUTs used by KOReader sync page refinement
+- visible-text-offset LUT used to resolve page positions across reflow and sync
 - optional per-word Bionic Reading split metadata
 - optional per-word Guide Dot x-offset metadata
 - optional per-word text flags for CSS backgrounds, layout-inserted hyphens,
@@ -289,7 +329,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 45
+#define EXPECTED_VERSION 59
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
 #define FOOTNOTE_HREF_LEN 96

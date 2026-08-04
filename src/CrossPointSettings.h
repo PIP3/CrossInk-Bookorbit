@@ -390,7 +390,13 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t readerFrontButtonRight = FRONT_HW_RIGHT;
   // Reader font settings
   uint8_t fontFamily = LEXENDDECA;
-  uint8_t fontSize = MEDIUM;
+  // The physical reader size selected by the user. Built-in and SD-card font
+  // families resolve this to their closest available file.
+  uint8_t readerFontPointSize = 14;
+  // Transient compatibility state for JSON settings written before fontSize
+  // stored a point size. SdCardFontSystem resolves it once the family catalog
+  // is available, then persists readerFontPointSize.
+  uint8_t legacySdFontSizeStep = UINT8_MAX;
   uint8_t sdFontSizeRange = SD_FONT_RANGE_TINY;
   uint8_t lineSpacing = NORMAL;  // migration only; new saves use lineHeightPercent
   uint8_t lineHeightPercent = 100;
@@ -494,6 +500,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   static constexpr uint8_t SLEEP_TIMEOUT_NEVER_MINUTES = 31;
   static constexpr uint8_t MAX_SLEEP_TIMEOUT_MINUTES = SLEEP_TIMEOUT_NEVER_MINUTES;
   static constexpr uint8_t SD_FONT_MAX_SIZE_STEPS = 8;
+  static constexpr uint8_t MIN_READER_FONT_POINT_SIZE = 8;
   static constexpr uint8_t MIN_LINE_HEIGHT_PERCENT = 70;
   static constexpr uint8_t MAX_LINE_HEIGHT_PERCENT = 200;
   static constexpr uint8_t LINE_HEIGHT_PERCENT_STEP = 1;
@@ -531,7 +538,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
 
   // Callback to resolve SD card font IDs. Set by SdCardFontSystem::begin().
   // Returns font ID or 0 if not found.
-  using SdFontIdResolver = int (*)(void* ctx, const char* familyName, uint8_t fontSize);
+  using SdFontIdResolver = int (*)(void* ctx, const char* familyName, uint8_t pointSize);
   SdFontIdResolver sdFontIdResolver = nullptr;
   void* sdFontResolverCtx = nullptr;
 
