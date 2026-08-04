@@ -2100,7 +2100,12 @@ void EpubReaderActivity::onEnter() {
   // Save current epub as last opened epub and add to recent books
   APP_STATE.openEpubPath = epub->getPath();
   APP_STATE.saveToFile();
-  RECENT_BOOKS.addOrUpdateBook(epub->getPath(), epub->getTitle(), epub->getAuthor(), epub->getThumbBmpPath());
+  const auto existingBook = std::find_if(RECENT_BOOKS.getBooks().begin(), RECENT_BOOKS.getBooks().end(),
+                                         [this](const RecentBook& book) { return book.path == epub->getPath(); });
+  const bool knownMissingCover =
+      existingBook != RECENT_BOOKS.getBooks().end() && existingBook->coverBmpPath.empty() && !epub->hasCoverImage();
+  RECENT_BOOKS.addOrUpdateBook(epub->getPath(), epub->getTitle(), epub->getAuthor(),
+                               knownMissingCover ? "" : epub->getThumbBmpPath());
 
   // Trigger first update
   requestUpdate();

@@ -232,7 +232,8 @@ std::string getReusableCoverPath(const RecentBook& book) {
 }
 
 bool ensureReusableCoverPath(RecentBook& book) {
-  if (hasThumbnailPlaceholder(book.coverBmpPath)) {
+  // Keep the persisted no-cover result instead of reconstructing a thumbnail placeholder.
+  if (book.coverBmpPath.empty() || hasThumbnailPlaceholder(book.coverBmpPath)) {
     return false;
   }
 

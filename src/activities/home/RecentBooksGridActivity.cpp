@@ -194,7 +194,8 @@ std::string getReusableCoverPath(const RecentBook& book) {
 }
 
 void ensureReusableCoverPath(RecentBook& book) {
-  if (hasThumbnailPlaceholder(book.coverBmpPath)) {
+  // Keep the persisted no-cover result instead of reconstructing a thumbnail placeholder.
+  if (book.coverBmpPath.empty() || hasThumbnailPlaceholder(book.coverBmpPath)) {
     return;
   }
 
@@ -238,8 +239,7 @@ void RecentBooksGridActivity::loadPageCovers(int pageStart) {
     RecentBook& book = recentBooks[i].book;
     ensureReusableCoverPath(book);
     if (book.coverBmpPath.empty()) {
-      needsGeneration = true;
-      break;
+      continue;
     }
     const std::string thumbPath = UITheme::getCoverThumbPath(book.coverBmpPath, COVER_WIDTH, COVER_HEIGHT);
     if (needsCoverThumbGeneration(book, thumbPath)) {
@@ -259,8 +259,11 @@ void RecentBooksGridActivity::loadPageCovers(int pageStart) {
 
   for (int i = pageStart; i < pageEnd; ++i) {
     RecentBook& book = recentBooks[i].book;
-    const std::string coverPath =
-        book.coverBmpPath.empty() ? "" : UITheme::getCoverThumbPath(book.coverBmpPath, COVER_WIDTH, COVER_HEIGHT);
+    if (book.coverBmpPath.empty()) {
+      processedCount++;
+      continue;
+    }
+    const std::string coverPath = UITheme::getCoverThumbPath(book.coverBmpPath, COVER_WIDTH, COVER_HEIGHT);
     if (needsCoverThumbGeneration(book, coverPath)) {
       if (FsHelpers::hasEpubExtension(book.path)) {
         Epub epub(book.path, "/.crosspoint");
