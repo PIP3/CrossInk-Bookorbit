@@ -61,7 +61,7 @@
 - The web settings page now hides settings on devices that don't support it.
 - Changing an SD-card reader font no longer leaves preview font caches consuming the contiguous memory needed to rebuild an existing book's layout.
 - Syncing the clock on memory-constrained X3/X4 devices no longer risks a reboot while saving settings.
-- EPUB clipping selection markers now remain visible in dark mode.
+- EPUB clipping cursors and selected text now use a high-contrast gray marker with black text in dark mode.
 - EPUB clipping highlights now re-match their saved text after font or layout changes, even when the page count stays the same.
 - EPUB low-memory rendering fallbacks now apply consistently when opening chapters, prefetching pages, and preparing the sleep screen.
 - When Embedded Style is off, EPUB opening now consistently skips unused stylesheet discovery; optional location metadata is deferred until the first page is ready.
