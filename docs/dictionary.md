@@ -19,6 +19,8 @@ Minimum requirement: one `.dict` and one `.idx` file in the same folder. Their f
 
 ## Setting Up a Dictionary
 
+Example folder structure: `SDCARD/.dictionaries/Cambridge/*.dict`. Make sure the dictionary folder is **NOT** nested like `/Cambridge/Cambridge/*.dict`
+
 1. Copy your dictionary folder(s) to one of these directories on the SD card:
    - `/.dictionaries/` (checked first)
    - `/dictionaries/`
