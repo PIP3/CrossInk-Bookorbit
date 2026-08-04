@@ -25,9 +25,8 @@ Example folder structure: `SDCARD/.dictionaries/Cambridge/*.dict`. Make sure the
    - `/.dictionaries/` (checked first)
    - `/dictionaries/`
 2. If no dictionary has been selected before, the first dictionary in the alphabetical device list is selected automatically.
-3. To choose between multiple dictionaries, open **Settings -> Dictionary** on the device and select one from the list.
-
-To deselect the current dictionary, select **None** from the list.
+3. To choose between multiple dictionaries, open **Settings -> Reader -> Dictionary** on the device and select one from the list.
+4. Per book dictionaries can be set from within the in-reader menu `Book Options -> Settings Gear tab -> Book Dictionary`
 
 ### Preparing Compressed or Large Dictionaries
 
@@ -169,7 +168,7 @@ The history screen shows the 50 most recent entries. The on-disk history is appe
 
 ## IPA Phonetic Characters
 
-Dictionary definitions use the active reader font and size by default. In an EPUB, open **Reader Options > Font Options > Dictionary Font** to choose a different installed SD-card font for that book, then use **Dictionary Font Size** to choose one of its installed point sizes. **Use Reader Size** follows the active reader size. A saved size with no matching file uses the closest available size from the dictionary family.
+Dictionary definitions use the active reader font and size by default. In an EPUB, open **Book Options > Font Options > Dictionary Font** to choose a different installed SD-card font for that book, then use **Dictionary Font Size** to choose one of its installed point sizes. **Use Reader Size** follows the active reader size. A saved size with no matching file uses the closest available size from the dictionary family.
 
 Only one SD-card font family is loaded at a time: CrossInk temporarily swaps to the dictionary font while a definition is open, then restores the reader font when you close it. If the selected dictionary font is missing, the definition falls back to the reader font but keeps the selection, so it resumes automatically if you reinstall the family.
 

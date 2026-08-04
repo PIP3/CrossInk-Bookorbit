@@ -18,6 +18,7 @@
 #include "activities/util/OptionSelectionActivity.h"
 #include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
+#include "util/DictionaryRegistry.h"
 
 namespace fui = freeink::ui;
 
@@ -119,6 +120,16 @@ void ReaderOptionsActivity::rebuildSettingsList() {
                                     }),
                      fontSettings.end());
 
+  // Dictionary-specific font controls are useful only when an installed dictionary can use them.
+  DictionaryRegistry installedDictionaryRegistry;
+  const bool hasInstalledDictionaries = installedDictionaryRegistry.discover();
+  installedDictionaryRegistry.clear();
+  if (!hasInstalledDictionaries) {
+    setCurrentSettings();
+    selectedIndex = 0;
+    return;
+  }
+
   SettingInfo dictionaryFont;
   dictionaryFont.nameId = StrId::STR_DICTIONARY_FONT;
   dictionaryFont.type = SettingType::ENUM;
@@ -137,11 +148,11 @@ void ReaderOptionsActivity::rebuildSettingsList() {
   if (dictionaryFontFamilyName && dictionaryFontFamilyName[0] != '\0' && !selectedFamilyIsInstalled) {
     dictionaryFont.enumStringValues.push_back(std::string(dictionaryFontFamilyName) + " (" + tr(STR_UNAVAILABLE) + ")");
   }
-  const auto fontFamily = std::find_if(fontSettings.begin(), fontSettings.end(), [](const SettingInfo& setting) {
-    return setting.nameId == StrId::STR_FONT_FAMILY;
+  const auto fontSize = std::find_if(fontSettings.begin(), fontSettings.end(), [](const SettingInfo& setting) {
+    return setting.nameId == StrId::STR_FONT_SIZE;
   });
   const size_t dictionaryFontIndex =
-      fontFamily == fontSettings.end() ? 0 : static_cast<size_t>(std::distance(fontSettings.begin(), fontFamily) + 1);
+      fontSize == fontSettings.end() ? 0 : static_cast<size_t>(std::distance(fontSettings.begin(), fontSize) + 1);
   fontSettings.insert(fontSettings.begin() + dictionaryFontIndex, std::move(dictionaryFont));
 
   SettingInfo dictionaryFontSize;
