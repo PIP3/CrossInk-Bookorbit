@@ -4,6 +4,7 @@
 #include <FreeInkUIGfxRenderer.h>
 
 #include <atomic>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -84,6 +85,12 @@ class FontDownloadActivity : public Activity {
   // Manifest data
   std::string baseUrl_;
   std::vector<ManifestFamily> families_;
+  // Built once after each manifest load. The renderer borrows these pointers,
+  // so keeping them activity-owned avoids heap growth on every redraw.
+  std::unique_ptr<freeink::ui::ListItem[]> listItems_;
+  size_t listItemCapacity_ = 0;
+  size_t listItemCount_ = 0;
+  char updateAllLabel_[96] = {};
   int selectedIndex_ = 0;
   ManifestFamily retryFamily_;
   bool hasRetryFamily_ = false;
@@ -124,6 +131,7 @@ class FontDownloadActivity : public Activity {
 
   void onWifiSelectionComplete(bool success);
   bool fetchAndParseManifest();
+  bool rebuildListItems();
   const SdCardFontFamilyInfo* findInstalledFamilyCandidate(const char* familyName) const;
   bool installedFilesMatch(const char* familyName, const std::vector<ManifestFile>& files, bool& hasUpdate,
                            std::string* resolvedFamilyName = nullptr) const;
@@ -143,7 +151,7 @@ class FontDownloadActivity : public Activity {
   int familyIndexFromList(int listIndex) const { return listIndex - specialRowCount(); }
   int listItemCount() const;
   size_t totalUpdateSize() const;
-  static std::string formatSize(size_t bytes);
+  static void formatSize(size_t bytes, char* buffer, size_t bufferSize);
   int fontListPageItems() const;
   void drawFontList(Rect rect);
 };

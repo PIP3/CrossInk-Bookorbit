@@ -211,6 +211,12 @@ void SdCardFontSystem::ensureRegistry() {
   if (registryLoaded_ && !dirty) return;
   if (dirty) LOG_DBG("SDFS", "Registry dirty — re-discovering fonts");
   registry_.discover();
+  if (registry_.lastDiscoveryFailed()) {
+    LOG_ERR("SDFS", "SD font registry scan ran out of memory (free=%u maxAlloc=%u)", ESP.getFreeHeap(),
+            ESP.getMaxAllocHeap());
+    registryDirty_.store(true, std::memory_order_release);
+    return;
+  }
   registryLoaded_ = true;
 }
 
