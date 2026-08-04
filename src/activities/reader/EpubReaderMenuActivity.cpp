@@ -170,7 +170,7 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(
     void* saveGlobalSettingsContext, ReaderOptionsActivity::GlobalSettingsEditCallback beginGlobalSettingsEditCallback,
     void* beginGlobalSettingsEditContext, const bool stablePageNumbersAvailable,
     ReaderOptionsActivity::GlobalSettingsEditCallback endGlobalSettingsEditCallback, void* endGlobalSettingsEditContext,
-    const char* dictionaryFontFamilyName, const uint8_t dictionaryFontPointSize,
+    const char* dictionaryFontFamilyName, const uint8_t dictionaryFontPointSize, const bool hasDictionaryFontOverride,
     ReaderOptionsActivity::DictionaryFontChangedCallback dictionaryFontChangedCallback,
     void* dictionaryFontChangedContext)
     : Activity("EpubReaderMenu", renderer, mappedInput),
@@ -193,6 +193,7 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(
       endGlobalSettingsEditCallback(endGlobalSettingsEditCallback),
       endGlobalSettingsEditContext(endGlobalSettingsEditContext),
       dictionaryFontPointSize(dictionaryFontPointSize),
+      hasDictionaryFontOverride(hasDictionaryFontOverride),
       dictionaryFontChangedCallback(dictionaryFontChangedCallback),
       dictionaryFontChangedContext(dictionaryFontChangedContext),
       uiTarget(makeUiTarget(renderer)),
@@ -259,16 +260,23 @@ void EpubReaderMenuActivity::dictionaryFontChangedForMenu(void* ctx, const char*
   if (!self) return;
 
   if (familyName && familyName[0] != '\0') {
+    self->hasDictionaryFontOverride = true;
     std::strncpy(self->dictionaryFontFamilyName, familyName, sizeof(self->dictionaryFontFamilyName) - 1);
     self->dictionaryFontFamilyName[sizeof(self->dictionaryFontFamilyName) - 1] = '\0';
   } else {
-    self->dictionaryFontFamilyName[0] = '\0';
+    self->hasDictionaryFontOverride = false;
+    std::strncpy(self->dictionaryFontFamilyName, SETTINGS.dictionarySdFontFamilyName,
+                 sizeof(self->dictionaryFontFamilyName) - 1);
+    self->dictionaryFontFamilyName[sizeof(self->dictionaryFontFamilyName) - 1] = '\0';
+    self->dictionaryFontPointSize = SETTINGS.dictionaryFontPointSize;
   }
-  self->dictionaryFontPointSize = pointSize;
+  if (self->hasDictionaryFontOverride) {
+    self->dictionaryFontPointSize = pointSize;
+  }
   if (self->dictionaryFontChangedCallback) {
     self->dictionaryFontChangedCallback(
         self->dictionaryFontChangedContext,
-        self->dictionaryFontFamilyName[0] != '\0' ? self->dictionaryFontFamilyName : nullptr, pointSize);
+        self->hasDictionaryFontOverride ? self->dictionaryFontFamilyName : nullptr, self->dictionaryFontPointSize);
   }
 }
 
@@ -331,7 +339,8 @@ bool EpubReaderMenuActivity::activateSelectedItem() {
             renderer, mappedInput, saveReaderSettingsCallback, saveReaderSettingsContext, saveGlobalSettingsCallback,
             saveGlobalSettingsContext, beginGlobalSettingsEditCallback, beginGlobalSettingsEditContext,
             endGlobalSettingsEditCallback, endGlobalSettingsEditContext, stablePageNumbersAvailable,
-            dictionaryFontFamilyName, dictionaryFontPointSize, dictionaryFontChangedForMenu, this),
+            dictionaryFontFamilyName, dictionaryFontPointSize, hasDictionaryFontOverride, dictionaryFontChangedForMenu,
+            this),
         [this, before](const ActivityResult& result) {
           settingsChanged = settingsChanged || haveReaderLayoutSettingsChanged(before);
           pendingOrientation = SETTINGS.orientation;  // sync in case orientation changed

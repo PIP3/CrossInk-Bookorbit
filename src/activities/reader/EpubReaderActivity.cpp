@@ -1159,6 +1159,10 @@ bool writeReaderSettingsSnapshot(FsFile& file, const EpubReaderActivity::ReaderS
 BookReaderSettingsData loadBookReaderSettingsFile(const std::string& cachePath) {
   BookReaderSettingsData data;
   captureReaderSettings(data.readerSettings);
+  std::strncpy(data.dictionarySdFontFamilyName, SETTINGS.dictionarySdFontFamilyName,
+               sizeof(data.dictionarySdFontFamilyName) - 1);
+  data.dictionarySdFontFamilyName[sizeof(data.dictionarySdFontFamilyName) - 1] = '\0';
+  data.dictionaryFontPointSize = SETTINGS.dictionaryFontPointSize;
 
   FsFile file;
   if (!Storage.openFileForRead("ERS", cachePath + READER_SETTINGS_FILE_NAME, file)) {
@@ -1234,6 +1238,12 @@ BookReaderSettingsData loadBookReaderSettingsFile(const std::string& cachePath) 
   if (flags & READER_SETTINGS_FLAG_DICTIONARY_FONT) {
     data.dictionarySdFontFamilyName[sizeof(data.dictionarySdFontFamilyName) - 1] = '\0';
     data.hasDictionaryFontOverride = data.dictionarySdFontFamilyName[0] != '\0';
+  }
+  if (!data.hasDictionaryFontOverride) {
+    std::strncpy(data.dictionarySdFontFamilyName, SETTINGS.dictionarySdFontFamilyName,
+                 sizeof(data.dictionarySdFontFamilyName) - 1);
+    data.dictionarySdFontFamilyName[sizeof(data.dictionarySdFontFamilyName) - 1] = '\0';
+    data.dictionaryFontPointSize = SETTINGS.dictionaryFontPointSize;
   }
   return data;
 }
@@ -1899,8 +1909,9 @@ void EpubReaderActivity::saveDictionaryFontForBook(const char* familyName, const
   } else {
     data.dictionarySdFontFamilyName[0] = '\0';
     data.hasDictionaryFontOverride = false;
+    data.dictionaryFontPointSize = 0;
   }
-  data.dictionaryFontPointSize = pointSize;
+  if (data.hasDictionaryFontOverride) data.dictionaryFontPointSize = pointSize;
   saveBookReaderSettingsFile(epub->getCachePath(), data);
 }
 
@@ -2212,6 +2223,7 @@ void EpubReaderActivity::openReaderMenu() {
           saveReaderOptionsForBook, this, saveGlobalSettingsForBookReader, this, beginGlobalSettingsEditForBookReader,
           this, !previewActive && epub && epub->hasStablePageNumbers(), endGlobalSettingsEditForBookReader, this,
           bookSettings.dictionarySdFontFamilyName, bookSettings.dictionaryFontPointSize,
+          bookSettings.hasDictionaryFontOverride,
           saveDictionaryFontForBookReader, this),
       [this](const ActivityResult& result) {
         if (const auto* clipping = std::get_if<ClippingJumpResult>(&result.data)) {

@@ -9,6 +9,7 @@
 - Dictionary lookup and lookup history
 - EPUB books can use a dedicated SD-card dictionary font while keeping a different reader font.
 - EPUB books can set a dedicated dictionary font size independently of the reader font size.
+- Dictionary font and size defaults can be set globally from Settings > Reader > Font Options, with per-book choices still taking precedence.
 - Reusable dictionary SD-font builder with IPA coverage and per-family ZIP packaging
 - RTC-enabled devices can now choose the date format and numeric separator shown in headers from Settings > System > Device.
 - The web EPUB optimizer now splits oversized chapters into memory-friendlier sections before sending them to the reader.

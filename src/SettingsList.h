@@ -224,6 +224,68 @@ inline SettingInfo buildFontFamilySetting(const SdCardFontRegistry* registry) {
   return s;
 }
 
+inline SettingInfo buildDictionaryFontFamilySetting(const SdCardFontRegistry* registry) {
+  SettingInfo s;
+  s.nameId = StrId::STR_DICTIONARY_FONT;
+  s.type = SettingType::ENUM;
+  s.key = "dictionaryFont";
+  s.category = StrId::STR_CAT_READER;
+  s.enumStringValues.push_back(I18N.get(StrId::STR_USE_READER_FONT));
+
+  std::vector<std::string> familyNames;
+  if (registry) {
+    const auto& families = registry->getFamilies();
+    familyNames.reserve(families.size());
+    s.enumStringValues.reserve(families.size() + 1);
+    for (const auto& family : families) {
+      familyNames.push_back(family.name);
+      s.enumStringValues.push_back(family.name);
+    }
+  }
+
+  s.valueGetter = [familyNames]() -> uint8_t {
+    for (size_t i = 0; i < familyNames.size(); ++i) {
+      if (familyNames[i] == SETTINGS.dictionarySdFontFamilyName) return static_cast<uint8_t>(i + 1);
+    }
+    return 0;
+  };
+  s.valueSetter = [familyNames](const uint8_t value) {
+    if (value == 0 || value > familyNames.size()) {
+      SETTINGS.dictionarySdFontFamilyName[0] = '\0';
+      SETTINGS.dictionaryFontPointSize = 0;
+      return;
+    }
+    strncpy(SETTINGS.dictionarySdFontFamilyName, familyNames[value - 1].c_str(),
+            sizeof(SETTINGS.dictionarySdFontFamilyName) - 1);
+    SETTINGS.dictionarySdFontFamilyName[sizeof(SETTINGS.dictionarySdFontFamilyName) - 1] = '\0';
+  };
+  return s;
+}
+
+inline SettingInfo buildDictionaryFontSizeSetting(const SdCardFontRegistry* registry) {
+  SettingInfo s;
+  s.nameId = StrId::STR_DICTIONARY_FONT_SIZE;
+  s.type = SettingType::ENUM;
+  s.valuePtr = &CrossPointSettings::dictionaryFontPointSize;
+  s.key = "dictionaryFontSize";
+  s.category = StrId::STR_CAT_READER;
+  s.enumStringValues.push_back(I18N.get(StrId::STR_USE_READER_FONT_SIZE));
+  s.enumRawValues.push_back(0);
+
+  if (!registry || SETTINGS.dictionarySdFontFamilyName[0] == '\0') return s;
+  const auto* family = registry->findFamily(SETTINGS.dictionarySdFontFamilyName);
+  if (!family) return s;
+
+  const auto sizes = family->availableSizes();
+  s.enumStringValues.reserve(sizes.size() + 1);
+  s.enumRawValues.reserve(sizes.size() + 1);
+  for (const uint8_t pointSize : sizes) {
+    s.enumStringValues.push_back(fontSizePointLabel(pointSize));
+    s.enumRawValues.push_back(pointSize);
+  }
+  return s;
+}
+
 inline SettingInfo buildDictionarySetting(const DictionaryRegistry* dictRegistry) {
   SettingInfo s;
   s.nameId = StrId::STR_DICTIONARY;
@@ -839,6 +901,14 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     }
   }
   if (dictRegistry) {
+    if (dictRegistry->count() > 0) {
+      auto fontSizeIt =
+          std::find_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.nameId == StrId::STR_FONT_SIZE; });
+      const size_t insertIndex =
+          fontSizeIt == v.end() ? v.size() : static_cast<size_t>(std::distance(v.begin(), fontSizeIt) + 1);
+      v.insert(v.begin() + insertIndex, buildDictionaryFontFamilySetting(registry));
+      v.insert(v.begin() + insertIndex + 1, buildDictionaryFontSizeSetting(registry));
+    }
     auto guideIt =
         std::find_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.nameId == StrId::STR_GUIDE_READING; });
     const auto insertPos = guideIt == v.end() ? v.end() : guideIt + 1;
@@ -862,6 +932,8 @@ inline std::vector<SettingInfo> buildGroupedReaderSettingsList(const std::vector
   readerSettings.push_back(SettingInfo::SectionHeader(StrId::STR_READER_FONT_OPTIONS));
   addReaderSetting(StrId::STR_FONT_FAMILY);
   addReaderSetting(StrId::STR_FONT_SIZE);
+  addReaderSetting(StrId::STR_DICTIONARY_FONT);
+  addReaderSetting(StrId::STR_DICTIONARY_FONT_SIZE);
   readerSettings.push_back(SettingInfo::Action(StrId::STR_MANAGE_FONTS, SettingAction::DownloadFonts));
   addReaderSetting(StrId::STR_SD_FONT_SIZE_RANGE);
 
@@ -930,14 +1002,16 @@ inline std::vector<SettingInfo> buildBookReaderSettingsParentList(const std::vec
 
 inline std::vector<SettingInfo> buildReaderFontSettingsList(const std::vector<SettingInfo>& allSettings) {
   std::vector<SettingInfo> settings;
-  settings.reserve(7);
+  settings.reserve(9);
   addSettingByName(settings, allSettings, StrId::STR_FONT_FAMILY);
   addSettingByName(settings, allSettings, StrId::STR_FONT_SIZE);
+  addSettingByName(settings, allSettings, StrId::STR_DICTIONARY_FONT);
+  addSettingByName(settings, allSettings, StrId::STR_DICTIONARY_FONT_SIZE);
   addSettingByName(settings, allSettings, StrId::STR_LINE_SPACING);
   addSettingByName(settings, allSettings, StrId::STR_WORD_SPACING);
+  addSettingByName(settings, allSettings, StrId::STR_TEXT_AA);
   settings.push_back(SettingInfo::Action(StrId::STR_MANAGE_FONTS, SettingAction::DownloadFonts));
   addSettingByName(settings, allSettings, StrId::STR_SD_FONT_SIZE_RANGE);
-  addSettingByName(settings, allSettings, StrId::STR_TEXT_AA);
   return settings;
 }
 

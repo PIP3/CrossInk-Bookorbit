@@ -63,7 +63,7 @@ class EpubReaderMenuActivity final : public Activity {
       void* beginGlobalSettingsEditContext = nullptr, bool stablePageNumbersAvailable = false,
       ReaderOptionsActivity::GlobalSettingsEditCallback endGlobalSettingsEditCallback = nullptr,
       void* endGlobalSettingsEditContext = nullptr, const char* dictionaryFontFamilyName = nullptr,
-      uint8_t dictionaryFontPointSize = 0,
+      uint8_t dictionaryFontPointSize = 0, bool hasDictionaryFontOverride = false,
       ReaderOptionsActivity::DictionaryFontChangedCallback dictionaryFontChangedCallback = nullptr,
       void* dictionaryFontChangedContext = nullptr);
 
@@ -142,6 +142,7 @@ class EpubReaderMenuActivity final : public Activity {
   void* endGlobalSettingsEditContext = nullptr;
   char dictionaryFontFamilyName[64] = "";
   uint8_t dictionaryFontPointSize = 0;
+  bool hasDictionaryFontOverride = false;
   ReaderOptionsActivity::DictionaryFontChangedCallback dictionaryFontChangedCallback = nullptr;
   void* dictionaryFontChangedContext = nullptr;
   bool settingsChanged = false;

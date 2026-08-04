@@ -168,7 +168,7 @@ The history screen shows the 50 most recent entries. The on-disk history is appe
 
 ## IPA Phonetic Characters
 
-Dictionary definitions use the active reader font and size by default. In an EPUB, open **Book Options > Font Options > Dictionary Font** to choose a different installed SD-card font for that book, then use **Dictionary Font Size** to choose one of its installed point sizes. **Use Reader Size** follows the active reader size. A saved size with no matching file uses the closest available size from the dictionary family.
+Dictionary definitions use the active reader font and size by default. If at least one dictionary is installed, you can set the default dictionary font and size in **Settings > Reader > Font Options**. Books inherit those defaults unless you choose a different font or size in **Book Options > Font Options**. Choose **Use Global** in Book Options to return a book to the global defaults. If no custom dictionary font is selected, definitions use the active reader font and size. A saved size with no matching file uses the closest available size from the dictionary family.
 
 Only one SD-card font family is loaded at a time: CrossInk temporarily swaps to the dictionary font while a definition is open, then restores the reader font when you close it. If the selected dictionary font is missing, the definition falls back to the reader font but keeps the selection, so it resumes automatically if you reinstall the family.
 
@@ -176,10 +176,7 @@ Built-in fonts keep the glyphs they contain and approximate only unsupported pro
 
 You can download CrossInk's SD card catalog of fonts with IPA glyphs built-in from [Inky](https://inky.crossink.dev/#downloads).
 
-Maintainers regenerating that catalog can use the
-[dictionary font builder](dictionary-development.md#generating-dictionary-fonts),
-which adds dictionary IPA and combining-mark coverage to the normal reader font
-families and packages the resulting SD-card fonts.
+See the [dictionary font builder](dictionary-development.md#generating-dictionary-fonts) if you want to build your own dictionary fonts via the CLI.
 
 ---
 
