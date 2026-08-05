@@ -4,6 +4,7 @@
 #include <Epub.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include <HalDisplay.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Serialization.h>
@@ -1877,6 +1878,11 @@ void HomeActivity::render(RenderLock&&) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
+  const auto displayHomeBuffer = [this] {
+    const auto refreshMode = initialFullRefresh ? HalDisplay::FULL_REFRESH : HalDisplay::FAST_REFRESH;
+    initialFullRefresh = false;
+    renderer.displayBuffer(refreshMode);
+  };
 
   if (usesMinimalHomeInteraction()) {
     renderer.clearScreen();
@@ -1893,7 +1899,7 @@ void HomeActivity::render(RenderLock&&) {
         const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
         GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
       }
-      renderer.displayBuffer();
+      displayHomeBuffer();
       return;
     }
 
@@ -1921,7 +1927,7 @@ void HomeActivity::render(RenderLock&&) {
                           recentBooks.empty() ? "" : tr(STR_READ));
     }
 
-    renderer.displayBuffer();
+    displayHomeBuffer();
 
     if (!firstRenderDone) {
       firstRenderDone = true;
@@ -1975,7 +1981,7 @@ void HomeActivity::render(RenderLock&&) {
         }
       }
 
-      renderer.displayBuffer();
+      displayHomeBuffer();
       // E-ink refresh complete — pre-render the missing adjacent frame while idle.
       updateSlidingWindowCache(centerIdx, bookCount);
       // Mirror the slow-path trigger: generate missing thumbnails on the second
@@ -2042,7 +2048,7 @@ void HomeActivity::render(RenderLock&&) {
                           : mappedInput.mapLabels(readLabel, tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
-  renderer.displayBuffer();
+  displayHomeBuffer();
 
   if (!firstRenderDone) {
     firstRenderDone = true;
