@@ -116,6 +116,9 @@ DictionaryRegistry dictionaryRegistry;
 FontCacheManager fontCacheManager(renderer.getFontMap(), renderer.getSdCardFonts());
 static unsigned long allowSleepAt = 0;
 static unsigned long lastX4ProPowerClickAt = 0;
+// A held power button can span deep-sleep wake and the first main-loop frame.
+// Do not treat that wake gesture as an in-session shortcut until it has been released.
+static bool powerButtonReleasedSinceWake = false;
 
 namespace {
 constexpr unsigned long X4PRO_POWER_DOUBLE_CLICK_MS = 500;
@@ -1165,7 +1168,12 @@ void loop() {
     return;
   }
 
-  if (millis() >= allowSleepAt && handleGlobalPowerButtonAction(getPowerButtonAction())) {
+  if (!powerButtonReleasedSinceWake && !gpio.isPressed(HalGPIO::BTN_POWER)) {
+    powerButtonReleasedSinceWake = true;
+  }
+
+  if (powerButtonReleasedSinceWake && millis() >= allowSleepAt &&
+      handleGlobalPowerButtonAction(getPowerButtonAction())) {
     lastActivityTime = millis();
     return;
   }
