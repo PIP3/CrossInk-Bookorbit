@@ -46,6 +46,27 @@ class BookOrbitSyncClient {
   static constexpr Error LOW_MEMORY = KOReaderSyncClient::LOW_MEMORY;
 
   /**
+   * Keeps one TLS connection open across the requests of a single sync.
+   *
+   * A sync makes several requests to the same host in a row, and a handshake costs a second
+   * or two on this hardware. Hold a Session around the sequence and they share one:
+   *
+   *   BookOrbitSyncClient::Session session;
+   *   getProgress(...);
+   *   uploadPageStats(...);
+   *
+   * Requests made with no Session open behave exactly as before, one connection each. Do
+   * not hold one across a user decision — it would keep a socket open while the screen waits.
+   */
+  class Session {
+   public:
+    Session();
+    ~Session();
+    Session(const Session&) = delete;
+    Session& operator=(const Session&) = delete;
+  };
+
+  /**
    * Authenticate with the BookOrbit server (validate credentials).
    * @return OK on success, error code on failure
    */

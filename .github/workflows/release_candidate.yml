@@ -73,14 +73,35 @@ jobs:
       - name: Set version from branch
         shell: bash
         run: |
-          VERSION="${RC_BRANCH_RAW}-RC"
-          escaped_version=$(printf '%s\n' "$VERSION" | sed 's/[&|]/\\&/g')
-          sed -i "s|^crossink_version = .*|crossink_version = ${escaped_version}|" platformio.ini
+          # scripts/git_branch.py appends its own "-rc+<hash>" for the default env, so write
+          # the bare branch name here. Fails loudly: a silent no-op ships the wrong version.
+          python3 - "$RC_BRANCH_RAW" <<'PY'
+          import re
+          import sys
+
+          version = sys.argv[1]
+          path = 'platformio.ini'
+          with open(path) as f:
+              text = f.read()
+
+          def set_in_section(section):
+              return re.sub(r'(?m)^version\s*=.*$', f'version = {version}', section, count=1)
+
+          new_text, count = re.subn(
+              r'(?ms)^\[crossink\]\n.*?(?=^\[|\Z)', lambda m: set_in_section(m.group(0)), text, count=1
+          )
+          if count != 1 or f'version = {version}' not in new_text:
+              sys.exit(f'could not set [crossink] version in {path}')
+
+          with open(path, 'w') as f:
+              f.write(new_text)
+          PY
+          grep -A1 '^\[crossink\]' platformio.ini
 
       - name: Build CrossPoint
         shell: bash
         env:
-          CROSSPOINT_RC_ARTIFACTS: "1"
+          CROSSINK_RELEASE_VERSION: "1"
           CROSSPOINT_RC_BRANCH: ${{ env.RC_BRANCH_RAW }}
           CROSSPOINT_RC_HASH: ${{ env.RC_HASH_SHORT }}
         run: |
@@ -93,7 +114,7 @@ jobs:
       - name: Create GitHub RC Prerelease
         uses: softprops/action-gh-release@v3
         with:
-          token: ${{ secrets.RELEASE_PAT }}
+          token: ${{ github.token }}
           tag_name: ${{ env.RC_TAG }}
           target_commitish: ${{ github.sha }}
           name: RC ${{ env.RC_BRANCH_SAFE }} ${{ env.RC_HASH_SHORT }}
@@ -102,5 +123,5 @@ jobs:
           draft: true
           prerelease: true
           files: |
-            .pio/build/tiny/firmware-tiny-${{ env.RC_BRANCH_SAFE }}-${{ env.RC_HASH_SHORT }}-RC.bin
-            .pio/build/xlarge/firmware-xlarge-${{ env.RC_BRANCH_SAFE }}-${{ env.RC_HASH_SHORT }}-RC.bin
+            .pio/build/default/firmware-x3-x4-${{ env.RC_BRANCH_SAFE }}-${{ env.RC_HASH_SHORT }}-RC.bin
+            .pio/build/sticky/firmware-sticky-${{ env.RC_BRANCH_SAFE }}-${{ env.RC_HASH_SHORT }}-RC.bin

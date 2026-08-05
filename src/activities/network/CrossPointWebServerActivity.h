@@ -33,6 +33,7 @@ class CrossPointWebServerActivity final : public Activity {
   std::string returnBookPath;
   bool hasInitialNetworkMode = false;
   NetworkMode initialNetworkMode = NetworkMode::JOIN_NETWORK;
+  bool networkBootReady = false;
 
   // Network mode
   NetworkMode networkMode = NetworkMode::JOIN_NETWORK;
@@ -57,7 +58,9 @@ class CrossPointWebServerActivity final : public Activity {
   int lastWifiBars = 0;
 
   void renderServerRunning() const;
+  void renderHeader() const;
   void renderWifiIndicator(int subHeaderTop) const;
+  bool exitRequested() const;
 
   void onNetworkModeSelected(NetworkMode mode);
   void onWifiSelectionComplete(bool connected);
@@ -71,11 +74,12 @@ class CrossPointWebServerActivity final : public Activity {
                                        std::string returnBookPath = {})
       : Activity("CrossPointWebServer", renderer, mappedInput), returnBookPath(std::move(returnBookPath)) {}
   CrossPointWebServerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, NetworkMode initialNetworkMode,
-                              std::string returnBookPath = {})
+                              std::string returnBookPath = {}, bool networkBootReady = false)
       : Activity("CrossPointWebServer", renderer, mappedInput),
         returnBookPath(std::move(returnBookPath)),
         hasInitialNetworkMode(true),
-        initialNetworkMode(initialNetworkMode) {}
+        initialNetworkMode(initialNetworkMode),
+        networkBootReady(networkBootReady) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;

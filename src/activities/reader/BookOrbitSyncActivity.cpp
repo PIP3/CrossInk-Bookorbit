@@ -179,14 +179,22 @@ void BookOrbitSyncActivity::performSync() {
     return;
   }
 
-  const auto result = BookOrbitSyncClient::getProgress(documentHash, remoteProgress);
-  LOG_INF("BookOrbit", "Progress fetch result=%d (http=%d)", static_cast<int>(result),
-          BookOrbitSyncClient::lastHttpCode);
+  // One TLS connection for the whole automatic sequence: the progress fetch and the stats
+  // upload that follows go to the same host, and a handshake costs a second or two here. The
+  // session deliberately ends before the screen waits on a user decision, so no socket is
+  // held open across it; the later progress upload opens its own.
+  BookOrbitSyncClient::Error result;
+  {
+    BookOrbitSyncClient::Session session;
+    result = BookOrbitSyncClient::getProgress(documentHash, remoteProgress);
+    LOG_INF("BookOrbit", "Progress fetch result=%d (http=%d)", static_cast<int>(result),
+            BookOrbitSyncClient::lastHttpCode);
 
-  // Progress fetch reaching the server (even with no stored progress) means auth and
-  // connectivity are good: piggyback the queued reading-session stats on this session.
-  if (result == BookOrbitSyncClient::OK || result == BookOrbitSyncClient::NOT_FOUND) {
-    uploadQueuedStats();
+    // Progress fetch reaching the server (even with no stored progress) means auth and
+    // connectivity are good: piggyback the queued reading-session stats on this session.
+    if (result == BookOrbitSyncClient::OK || result == BookOrbitSyncClient::NOT_FOUND) {
+      uploadQueuedStats();
+    }
   }
 
   if (result == BookOrbitSyncClient::NOT_FOUND) {
