@@ -11,6 +11,7 @@
 #include "FontInstaller.h"
 #include "SdCardFont.h"
 #include "activities/Activity.h"
+#include "activities/ScreenTransitionRefresh.h"
 #include "util/ButtonNavigator.h"
 
 struct Rect;
@@ -79,6 +80,7 @@ class FontDownloadActivity : public Activity {
   };
 
   State state_ = WIFI_SELECTION;
+  ScreenTransitionRefresh screenTransitionRefresh_;
   FontInstaller fontInstaller_;
   ButtonNavigator buttonNavigator_;
 
