@@ -2,6 +2,7 @@
 #include <Logging.h>
 
 #include <cassert>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <utility>
@@ -64,6 +65,7 @@ class Activity {
   virtual bool canSnapshotForSleepOverlay() const { return false; }
   virtual bool handlesReaderPowerSettingsOverride() const { return false; }
   virtual bool openReaderSettingsMenu() { return false; }
+  virtual bool handleShortcutAction(uint8_t) { return false; }
   virtual std::string getCurrentBookPath() const { return {}; }
   virtual ScreenshotInfo getScreenshotInfo() const { return {}; }
 

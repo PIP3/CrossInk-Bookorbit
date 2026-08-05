@@ -232,6 +232,16 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     SHORT_PWRBTN_COUNT
   };
 
+  // Home-key shortcuts reuse power-button actions where possible, with the
+  // three Home-specific actions appended so existing power-button values stay
+  // stable on disk.
+  enum HOME_BUTTON_ACTION {
+    HOME_BUTTON_BACK_HOME = SHORT_PWRBTN_COUNT,
+    HOME_BUTTON_TOGGLE_FRONTLIGHT,
+    HOME_BUTTON_READER_MENU,
+    HOME_BUTTON_ACTION_COUNT
+  };
+
   // Hide battery percentage
   enum HIDE_BATTERY_PERCENTAGE { HIDE_NEVER = 0, HIDE_READER = 1, HIDE_ALWAYS = 2, HIDE_BATTERY_PERCENTAGE_COUNT };
 
@@ -365,6 +375,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t shortPwrBtn = IGNORE;
   // Long power button action behaviour
   uint8_t longPwrBtn = SLEEP;
+  // X4 Pro capacitive Home-key actions. Values below SHORT_PWRBTN_COUNT map
+  // directly to the matching power-button shortcut action.
+  uint8_t homeButtonTapAction = HOME_BUTTON_BACK_HOME;
+  uint8_t homeButtonDoubleTapAction = HOME_BUTTON_TOGGLE_FRONTLIGHT;
+  uint8_t homeButtonLongPressAction = HOME_BUTTON_READER_MENU;
   // EPUB reading orientation settings
   // 0 = portrait (default), 1 = landscape clockwise, 2 = inverted, 3 = landscape counter-clockwise
   uint8_t orientation = PORTRAIT;

@@ -116,6 +116,7 @@ DictionaryRegistry dictionaryRegistry;
 FontCacheManager fontCacheManager(renderer.getFontMap(), renderer.getSdCardFonts());
 static unsigned long allowSleepAt = 0;
 static unsigned long lastX4ProPowerClickAt = 0;
+static unsigned long lastX4ProHomeKeyTapAt = 0;
 // A held power button can span deep-sleep wake and the first main-loop frame.
 // Do not treat that wake gesture as an in-session shortcut until it has been released.
 static bool powerButtonReleasedSinceWake = false;
@@ -597,6 +598,70 @@ bool handleX4ProFrontlightDoubleClick() {
   SETTINGS.frontlightOn = lightOn ? 1 : 0;
   SETTINGS.saveToFile();
   LOG_INF("LIGHT", "Frontlight toggled %s by power-button double-click", lightOn ? "on" : "off");
+  return true;
+#endif
+}
+
+bool executeX4ProHomeButtonAction(const uint8_t action) {
+  switch (action) {
+    case CrossPointSettings::HOME_BUTTON_BACK_HOME:
+      return activityManager.handleHomeButtonBackOrHome();
+    case CrossPointSettings::HOME_BUTTON_TOGGLE_FRONTLIGHT: {
+      const bool lightOn = !Frontlight.isOn();
+      Frontlight.setOn(lightOn);
+      SETTINGS.frontlightOn = lightOn ? 1 : 0;
+      SETTINGS.saveToFile();
+      LOG_INF("LIGHT", "Frontlight toggled %s by Home key", lightOn ? "on" : "off");
+      return true;
+    }
+    case CrossPointSettings::HOME_BUTTON_READER_MENU:
+      return activityManager.openReaderMenuFromShortcut();
+    default:
+      break;
+  }
+
+  if (action >= CrossPointSettings::SHORT_PWRBTN_COUNT) {
+    return false;
+  }
+
+  const auto powerAction = static_cast<CrossPointSettings::SHORT_PWRBTN>(action);
+  if (handleGlobalPowerButtonAction(powerAction)) {
+    return true;
+  }
+  activityManager.handleShortcutAction(action);
+  return true;
+}
+
+bool handleX4ProHomeKeyShortcuts() {
+#ifdef SIMULATOR
+  return false;
+#else
+  if (!BoardConfig::isX4Pro() || !mappedInputManager.hasHomeKey()) {
+    return false;
+  }
+
+  if (gpio.wasHomeKeyLongPressed()) {
+    if (SETTINGS.homeButtonLongPressAction == CrossPointSettings::HOME_BUTTON_READER_MENU) {
+      return false;
+    }
+    executeX4ProHomeButtonAction(SETTINGS.homeButtonLongPressAction);
+    return true;
+  }
+
+  if (!gpio.wasHomeKeyTapped()) return false;
+
+  const unsigned long now = millis();
+  if (lastX4ProHomeKeyTapAt == 0 || now - lastX4ProHomeKeyTapAt > X4PRO_POWER_DOUBLE_CLICK_MS) {
+    lastX4ProHomeKeyTapAt = now;
+    if (SETTINGS.homeButtonTapAction == CrossPointSettings::HOME_BUTTON_BACK_HOME) {
+      return false;
+    }
+    executeX4ProHomeButtonAction(SETTINGS.homeButtonTapAction);
+    return true;
+  }
+
+  lastX4ProHomeKeyTapAt = 0;
+  executeX4ProHomeButtonAction(SETTINGS.homeButtonDoubleTapAction);
   return true;
 #endif
 }
@@ -1151,9 +1216,9 @@ void loop() {
     return;
   }
 #endif
-  // X4 Pro-only frontlight shortcut. Consume the second release so a configured
-  // short-power action does not also run for the click that toggled the light.
-  if (handleX4ProFrontlightDoubleClick()) {
+  // X4 Pro-only frontlight shortcuts. Consume the completing second release/tap
+  // so the single-press action does not also run for that input.
+  if (handleX4ProFrontlightDoubleClick() || handleX4ProHomeKeyShortcuts()) {
     return;
   }
 

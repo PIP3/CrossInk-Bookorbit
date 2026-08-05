@@ -125,6 +125,9 @@ class ActivityManager {
   bool isHomeActivity() const;
   bool isReaderActivity() const;
   bool readerPowerButtonOpensSettings() const;
+  bool handleHomeButtonBackOrHome();
+  bool openReaderMenuFromShortcut();
+  bool handleShortcutAction(uint8_t action);
   bool hasActivityNamed(const char* activityName) const;
 #ifdef SIMULATOR
   bool isCurrentActivityNamed(const char* activityName) const;

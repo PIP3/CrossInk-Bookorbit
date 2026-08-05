@@ -59,12 +59,14 @@ void ControlsOptionsActivity::onExit() { Activity::onExit(); }
 void ControlsOptionsActivity::rebuildSettingsList() {
   settings.clear();
   powerSettings.clear();
+  homeButtonSettings.clear();
   frontButtonSettings.clear();
   sideButtonSettings.clear();
 
   const auto allSettings = getSettingsList();
   settings = buildControlsSettingsParentList(allSettings);
   powerSettings = buildControlsPowerSettingsList(allSettings);
+  homeButtonSettings = buildControlsHomeButtonSettingsList(allSettings);
 #if CROSSINK_APP_CAP_TOUCH
   if (!gpio.hasTouch()) {
     frontButtonSettings = buildControlsFrontButtonSettingsList(allSettings);
@@ -83,6 +85,9 @@ void ControlsOptionsActivity::setCurrentSettings() {
     case SettingAction::ControlsPowerButton:
       currentSettings = &powerSettings;
       break;
+    case SettingAction::ControlsHomeButton:
+      currentSettings = &homeButtonSettings;
+      break;
     case SettingAction::ControlsFrontButtons:
       currentSettings = &frontButtonSettings;
       break;
@@ -100,6 +105,8 @@ StrId ControlsOptionsActivity::activeSubmenuTitleId() const {
   switch (activeSubmenu) {
     case SettingAction::ControlsPowerButton:
       return StrId::STR_POWER_BUTTON;
+    case SettingAction::ControlsHomeButton:
+      return StrId::STR_HOME_BUTTON;
     case SettingAction::ControlsFrontButtons:
       return StrId::STR_FRONT_BUTTONS;
     case SettingAction::ControlsSideButtons:

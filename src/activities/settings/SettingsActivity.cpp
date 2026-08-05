@@ -56,6 +56,7 @@ namespace {
 constexpr int systemVersionFooterSideMargin = 20;
 constexpr int systemVersionFooterBottomInset = 15;
 constexpr size_t controlsParentBaseCount = 3;
+constexpr size_t controlsHomeButtonCount = 3;
 constexpr size_t controlsPowerMinCount = 2;
 constexpr size_t controlsPowerMaxCount = 3;
 constexpr size_t controlsFrontButtonCount = 6;
@@ -235,6 +236,7 @@ void SettingsActivity::rebuildSettingsLists() {
   readerPageLayoutSettings.clear();
   controlsSettings.clear();
   controlsPowerSettings.clear();
+  controlsHomeButtonSettings.clear();
   controlsFrontButtonSettings.clear();
   controlsSideButtonSettings.clear();
   systemSettings.clear();
@@ -269,6 +271,7 @@ void SettingsActivity::rebuildSettingsLists() {
   systemGlobalStatsSettings = buildSystemGlobalStatsSettingsList(allSettings);
   controlsSettings = buildControlsSettingsParentList(allSettings);
   controlsPowerSettings = buildControlsPowerSettingsList(allSettings);
+  controlsHomeButtonSettings = buildControlsHomeButtonSettingsList(allSettings);
 #if CROSSINK_APP_CAP_TOUCH
   if (!gpio.hasTouch()) {
     controlsFrontButtonSettings = buildControlsFrontButtonSettingsList(allSettings);
@@ -276,7 +279,8 @@ void SettingsActivity::rebuildSettingsLists() {
   controlsSideButtonSettings = buildControlsSideButtonSettingsList(allSettings);
 
   const bool hasTouch = gpio.hasTouch();
-  const size_t expectedControlsCount = controlsParentBaseCount - (hasTouch ? 1u : 0u) +
+  const bool hasHomeKey = gpio.hasHomeKey();
+  const size_t expectedControlsCount = controlsParentBaseCount - (hasTouch ? 1u : 0u) + (hasHomeKey ? 1u : 0u) +
                                        (hasSettingByName(allSettings, StrId::STR_TILT_PAGE_TURN) ? 1u : 0u) +
                                        (hasSettingByName(allSettings, StrId::STR_TILT_PAGE_TURN_DIRECTION) ? 1u : 0u);
   const size_t expectedFrontButtonCount = hasTouch ? 0u : controlsFrontButtonCount;
@@ -284,17 +288,19 @@ void SettingsActivity::rebuildSettingsLists() {
   controlsFrontButtonSettings = buildControlsFrontButtonSettingsList(allSettings);
   controlsSideButtonSettings = buildControlsSideButtonSettingsList(allSettings);
 
-  const size_t expectedControlsCount = controlsParentBaseCount +
+  const size_t expectedControlsCount = controlsParentBaseCount + (gpio.hasHomeKey() ? 1u : 0u) +
                                        (hasSettingByName(allSettings, StrId::STR_TILT_PAGE_TURN) ? 1u : 0u) +
                                        (hasSettingByName(allSettings, StrId::STR_TILT_PAGE_TURN_DIRECTION) ? 1u : 0u);
   constexpr size_t expectedFrontButtonCount = controlsFrontButtonCount;
 #endif
-  if (controlsSettings.size() != expectedControlsCount || controlsPowerSettings.size() < controlsPowerMinCount ||
-      controlsPowerSettings.size() > controlsPowerMaxCount ||
+  if (controlsSettings.size() != expectedControlsCount ||
+      (gpio.hasHomeKey() && controlsHomeButtonSettings.size() != controlsHomeButtonCount) ||
+      controlsPowerSettings.size() < controlsPowerMinCount || controlsPowerSettings.size() > controlsPowerMaxCount ||
       controlsFrontButtonSettings.size() != expectedFrontButtonCount ||
       controlsSideButtonSettings.size() != controlsSideButtonCount) {
-    LOG_ERR("SET", "Unexpected controls menu counts: controls=%u/%u power=%u front=%u side=%u",
+    LOG_ERR("SET", "Unexpected controls menu counts: controls=%u/%u home=%u power=%u front=%u side=%u",
             static_cast<uint32_t>(controlsSettings.size()), static_cast<uint32_t>(expectedControlsCount),
+            static_cast<uint32_t>(controlsHomeButtonSettings.size()),
             static_cast<uint32_t>(controlsPowerSettings.size()),
             static_cast<uint32_t>(controlsFrontButtonSettings.size()),
             static_cast<uint32_t>(controlsSideButtonSettings.size()));
@@ -325,6 +331,9 @@ void SettingsActivity::setCurrentSettingsForCategory() {
       switch (activeSubmenu) {
         case SettingAction::ControlsPowerButton:
           currentSettings = &controlsPowerSettings;
+          break;
+        case SettingAction::ControlsHomeButton:
+          currentSettings = &controlsHomeButtonSettings;
           break;
         case SettingAction::ControlsFrontButtons:
           currentSettings = &controlsFrontButtonSettings;
@@ -378,6 +387,8 @@ StrId SettingsActivity::activeSubmenuTitleId() const {
       return StrId::STR_READER_PAGE_LAYOUT;
     case SettingAction::ControlsPowerButton:
       return StrId::STR_POWER_BUTTON;
+    case SettingAction::ControlsHomeButton:
+      return StrId::STR_HOME_BUTTON;
     case SettingAction::ControlsFrontButtons:
       return StrId::STR_FRONT_BUTTONS;
     case SettingAction::ControlsSideButtons:

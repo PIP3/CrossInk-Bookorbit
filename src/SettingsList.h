@@ -354,6 +354,62 @@ inline SettingInfo buildSleepScreenSetting() {
   return s;
 }
 
+inline SettingInfo buildHomeButtonActionSetting(const StrId nameId, uint8_t CrossPointSettings::* const valuePtr,
+                                                const char* const key) {
+  return SettingInfo::Enum(nameId, valuePtr,
+                           {StrId::STR_BACK_HOME,
+                            StrId::STR_TOGGLE_FRONTLIGHT,
+                            StrId::STR_READER_MENU,
+                            StrId::STR_IGNORE,
+                            StrId::STR_SLEEP,
+                            StrId::STR_PAGE_TURN,
+                            StrId::STR_TOGGLE_BOOKMARK,
+                            StrId::STR_READING_STATS,
+                            StrId::STR_MARK_FINISHED,
+                            StrId::STR_FORCE_REFRESH,
+                            StrId::STR_CHANGE_FONT,
+                            StrId::STR_TOGGLE_GUIDE_DOTS,
+                            StrId::STR_TOGGLE_BIONIC_READING,
+                            StrId::STR_CYCLE_PAGE_TURN,
+                            StrId::STR_SYNC_PROGRESS,
+                            StrId::STR_FILE_TRANSFER,
+                            StrId::STR_CALIBRE_WIRELESS,
+                            StrId::STR_JOIN_NETWORK,
+                            StrId::STR_CREATE_HOTSPOT,
+                            StrId::STR_SCREENSHOT_BUTTON,
+                            StrId::STR_READER_DARK_MODE,
+                            StrId::STR_FOOTNOTES,
+                            StrId::STR_BROWSE_FILES,
+                            StrId::STR_SAVE_CLIPPING,
+                            StrId::STR_LOOKUP},
+                           key, StrId::STR_CAT_CONTROLS)
+      .withEnumRawValues({CrossPointSettings::HOME_BUTTON_BACK_HOME,
+                          CrossPointSettings::HOME_BUTTON_TOGGLE_FRONTLIGHT,
+                          CrossPointSettings::HOME_BUTTON_READER_MENU,
+                          CrossPointSettings::IGNORE,
+                          CrossPointSettings::SLEEP,
+                          CrossPointSettings::PAGE_TURN,
+                          CrossPointSettings::TOGGLE_BOOKMARK,
+                          CrossPointSettings::READING_STATS,
+                          CrossPointSettings::MARK_FINISHED,
+                          CrossPointSettings::FORCE_REFRESH,
+                          CrossPointSettings::TOGGLE_FONT,
+                          CrossPointSettings::TOGGLE_GUIDE_DOTS,
+                          CrossPointSettings::TOGGLE_BIONIC_READING,
+                          CrossPointSettings::CYCLE_PAGE_TURN,
+                          CrossPointSettings::SYNC_PROGRESS,
+                          CrossPointSettings::FILE_TRANSFER,
+                          CrossPointSettings::CALIBRE_WIRELESS,
+                          CrossPointSettings::JOIN_NETWORK,
+                          CrossPointSettings::CREATE_HOTSPOT,
+                          CrossPointSettings::SCREENSHOT,
+                          CrossPointSettings::TOGGLE_DARK_MODE,
+                          CrossPointSettings::FOOTNOTES,
+                          CrossPointSettings::FILE_BROWSER,
+                          CrossPointSettings::CREATE_CLIPPING,
+                          CrossPointSettings::LOOKUP_WORD});
+}
+
 // Shared settings list used by both the device settings UI and the web settings API.
 // Each entry has a key (for JSON API) and category (for grouping).
 // ACTION-type entries and entries without a key are device-only.
@@ -589,6 +645,12 @@ inline const std::vector<SettingInfo>& getBaseSettingsList() {
                                 CrossPointSettings::FILE_BROWSER,
                                 CrossPointSettings::CREATE_CLIPPING,
                                 CrossPointSettings::LOOKUP_WORD}));
+    add(buildHomeButtonActionSetting(StrId::STR_HOME_BUTTON_TAP, &CrossPointSettings::homeButtonTapAction,
+                                     "homeButtonTapAction"));
+    add(buildHomeButtonActionSetting(StrId::STR_HOME_BUTTON_DOUBLE_TAP, &CrossPointSettings::homeButtonDoubleTapAction,
+                                     "homeButtonDoubleTapAction"));
+    add(buildHomeButtonActionSetting(StrId::STR_HOME_BUTTON_LONG_PRESS, &CrossPointSettings::homeButtonLongPressAction,
+                                     "homeButtonLongPressAction"));
     add(SettingInfo::Enum(StrId::STR_LONG_PRESS_MENU_ACTION, &CrossPointSettings::longPressMenuAction,
                           {StrId::STR_IGNORE,
                            StrId::STR_SLEEP,
@@ -889,6 +951,15 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
       removeEnumRawValue(*themeIt, static_cast<uint8_t>(CrossPointSettings::UI_THEME::ROUNDEDRAFF));
     }
   }
+  if (!gpio.hasHomeKey()) {
+    v.erase(std::remove_if(v.begin(), v.end(),
+                           [](const SettingInfo& s) {
+                             return s.nameId == StrId::STR_HOME_BUTTON_TAP ||
+                                    s.nameId == StrId::STR_HOME_BUTTON_DOUBLE_TAP ||
+                                    s.nameId == StrId::STR_HOME_BUTTON_LONG_PRESS;
+                           }),
+            v.end());
+  }
   if (registry && registry->getFamilyCount() > 0) {
     auto it = std::find_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.nameId == StrId::STR_FONT_FAMILY; });
     if (it != v.end()) {
@@ -1046,10 +1117,14 @@ inline std::vector<SettingInfo> buildControlsSettingsParentList(const std::vecto
   const bool hasTiltPageTurnSetting = hasSettingByName(allSettings, StrId::STR_TILT_PAGE_TURN);
   const bool hasTiltPageTurnDirectionSetting = hasSettingByName(allSettings, StrId::STR_TILT_PAGE_TURN_DIRECTION);
   const bool hasFrontButtons = !gpio.hasTouch();
+  const bool hasHomeKey = gpio.hasHomeKey();
 
   std::vector<SettingInfo> settings;
-  settings.reserve(2 + (hasFrontButtons ? 1u : 0u) + (hasTiltPageTurnSetting ? 1u : 0u) +
+  settings.reserve(2 + (hasHomeKey ? 1u : 0u) + (hasFrontButtons ? 1u : 0u) + (hasTiltPageTurnSetting ? 1u : 0u) +
                    (hasTiltPageTurnDirectionSetting ? 1u : 0u));
+  if (hasHomeKey) {
+    settings.push_back(SettingInfo::Submenu(StrId::STR_HOME_BUTTON, SettingAction::ControlsHomeButton));
+  }
   settings.push_back(SettingInfo::Submenu(StrId::STR_POWER_BUTTON, SettingAction::ControlsPowerButton));
   if (hasFrontButtons) {
     settings.push_back(SettingInfo::Submenu(StrId::STR_FRONT_BUTTONS, SettingAction::ControlsFrontButtons));
@@ -1057,6 +1132,15 @@ inline std::vector<SettingInfo> buildControlsSettingsParentList(const std::vecto
   settings.push_back(SettingInfo::Submenu(StrId::STR_SIDE_BUTTONS, SettingAction::ControlsSideButtons));
   if (hasTiltPageTurnSetting) addSettingByName(settings, allSettings, StrId::STR_TILT_PAGE_TURN);
   if (hasTiltPageTurnDirectionSetting) addSettingByName(settings, allSettings, StrId::STR_TILT_PAGE_TURN_DIRECTION);
+  return settings;
+}
+
+inline std::vector<SettingInfo> buildControlsHomeButtonSettingsList(const std::vector<SettingInfo>& allSettings) {
+  std::vector<SettingInfo> settings;
+  settings.reserve(3);
+  addSettingByName(settings, allSettings, StrId::STR_HOME_BUTTON_TAP);
+  addSettingByName(settings, allSettings, StrId::STR_HOME_BUTTON_DOUBLE_TAP);
+  addSettingByName(settings, allSettings, StrId::STR_HOME_BUTTON_LONG_PRESS);
   return settings;
 }
 

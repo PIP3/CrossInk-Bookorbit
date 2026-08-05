@@ -214,12 +214,28 @@ bool ActivityManager::handleGlobalHomeGesture() {
     return false;
   }
 
+  return handleHomeButtonBackOrHome();
+}
+
+bool ActivityManager::handleHomeButtonBackOrHome() {
+  if (!currentActivity || pendingAction != PendingAction::None || currentActivity->isHomeActivity()) {
+    return false;
+  }
+
   if (currentActivity->handleHomeGesture()) {
     return true;
   }
 
   goHome();
   return true;
+}
+
+bool ActivityManager::openReaderMenuFromShortcut() {
+  return currentActivity && pendingAction == PendingAction::None && currentActivity->openReaderSettingsMenu();
+}
+
+bool ActivityManager::handleShortcutAction(const uint8_t action) {
+  return currentActivity && pendingAction == PendingAction::None && currentActivity->handleShortcutAction(action);
 }
 
 bool ActivityManager::handleReaderPowerButtonSettingsOverride() {

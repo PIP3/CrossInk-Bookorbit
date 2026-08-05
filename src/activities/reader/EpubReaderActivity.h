@@ -461,6 +461,7 @@ class EpubReaderActivity final : public Activity {
     openReaderMenu();
     return true;
   }
+  bool handleShortcutAction(uint8_t action) override;
   std::string getCurrentBookPath() const override { return epub ? epub->getPath() : std::string{}; }
   void setAutoPageTurnIntervalSeconds(uint16_t seconds);
   uint16_t getAutoPageTurnIntervalSeconds() const;

@@ -583,6 +583,8 @@ bool MappedInputManager::wasReaderLightPanelGesture() const {
 
 bool MappedInputManager::wasHomeGesture() const {
   if (!hasHomeKeyHardware()) return wasBottomEdgeUpSwipe();
+  if (!touchInputEnabled()) return false;
+  if (SETTINGS.homeButtonTapAction != CrossPointSettings::HOME_BUTTON_BACK_HOME) return false;
 #ifdef SIMULATOR
   return simulatorHomeKeyInput.wasTapped();
 #else
@@ -591,7 +593,8 @@ bool MappedInputManager::wasHomeGesture() const {
 }
 
 bool MappedInputManager::wasReaderMenuHold() const {
-  if (!hasHomeKeyHardware()) return false;
+  if (!hasHomeKeyHardware() || !touchInputEnabled()) return false;
+  if (SETTINGS.homeButtonLongPressAction != CrossPointSettings::HOME_BUTTON_READER_MENU) return false;
 #ifdef SIMULATOR
   return simulatorHomeKeyInput.wasLongPressed();
 #else
