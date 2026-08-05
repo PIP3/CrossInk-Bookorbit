@@ -13,7 +13,7 @@ struct Rect;
 // Frontlight quick panel (boards with a frontlight + home key, e.g. X4 Pro).
 // Opened globally by the top-edge down-swipe: a top-anchored drop-down (only the
 // upper third of the screen) with brightness and warmth sliders driving the
-// light live, plus an on/off toggle with a sun icon. It renders as an overlay —
+// light live, plus an on/off toggle with a frontlight icon. It renders as an overlay —
 // the content underneath stays on screen below the panel, and a tap there
 // dismisses it. State is persisted once on exit (SPIFFS write throttling).
 class FrontlightPanelActivity final : public Activity {

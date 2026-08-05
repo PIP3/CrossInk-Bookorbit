@@ -203,7 +203,7 @@ int FrontlightPanelActivity::computePanelBottom() const {
   const int16_t lh = uiTarget.lineHeight(tokens.bodyText.font);
   int y = metrics.topPadding + TouchHeaderBackButton::height(metrics, mappedInput);
   y += tokens.spaceLg;                     // leading spacer
-  y += tokens.rowHeight + tokens.spaceSm;  // brightness label + sun toggle row
+  y += tokens.rowHeight + tokens.spaceSm;  // brightness label + frontlight toggle row
   y += tokens.rowHeight + tokens.spaceLg;  // brightness slider
   if (Frontlight.hasColorTemperature()) {
     y += lh + tokens.spaceSm + tokens.rowHeight + tokens.spaceLg;  // warmth label + slider
@@ -233,27 +233,27 @@ void FrontlightPanelActivity::buildPanelScreen(UiApp::ScreenType& screen) {
 
   screen.spacer(theme.spaceLg);
 
-  // Header row: "Brightness NN%" on the left, a tappable sun icon on the right
-  // that toggles the light — bright `sun` when on, `sun-dim` when off (the icon
-  // itself is the state indicator). Sharing a row with the label frees the
+  // Header row: "Brightness NN%" on the left, a tappable bulb icon on the right
+  // that toggles the light — `lightbulb` when on, `lightbulb-off` when off (the
+  // icon itself is the state indicator). Sharing a row with the label frees the
   // whole bottom toggle row, shrinking the panel.
   const fui::Rect headerRow = screen.takeTop(rowH, theme.spaceSm).inset(sideInset);
   snprintf(line, sizeof(line), "%s  %u%%", tr(STR_BRIGHTNESS), static_cast<unsigned>(brightness));
-  const fui::BitmapRef sunIcon = fui::bitmapFromIcon(lightOn ? icon_sun_32 : icon_sun_dim_32);
-  const int16_t iconW = static_cast<int16_t>(sunIcon.width);
-  const int16_t iconH = static_cast<int16_t>(sunIcon.height);
+  const fui::BitmapRef lightIcon = fui::bitmapFromIcon(lightOn ? icon_lightbulb_28 : icon_lightbulb_off_28);
+  const int16_t iconW = static_cast<int16_t>(lightIcon.width);
+  const int16_t iconH = static_cast<int16_t>(lightIcon.height);
   const fui::Rect iconRect{static_cast<int16_t>(headerRow.x + headerRow.width - iconW),
                            static_cast<int16_t>(headerRow.y + (rowH - iconH) / 2), iconW, iconH};
   const fui::Rect labelRect{headerRow.x, static_cast<int16_t>(headerRow.y + (rowH - lh) / 2),
                             static_cast<int16_t>(headerRow.width - iconW - theme.spaceMd), lh};
   screen.target().text(labelRect, line, theme.bodyText);
   // Generous hit target: the full header-row height and a wide band on the right
-  // (well beyond the 32px glyph) so the toggle is easy to hit. Stays within the
+  // (well beyond the glyph) so the toggle is easy to hit. Stays within the
   // header row so it never steals taps from the brightness slider below.
   const int16_t hitW = static_cast<int16_t>(iconW + theme.spaceLg * 4);
   const fui::Rect hitRect{static_cast<int16_t>(headerRow.right() - hitW), headerRow.y, hitW, rowH};
   screen.frame().hit(hitRect, ACTION_TOGGLE);
-  screen.target().bitmap(iconRect, sunIcon, fui::BitmapMode::Center);
+  screen.target().bitmap(iconRect, lightIcon, fui::BitmapMode::Center);
 
   fui::SliderProps brightnessSlider;
   brightnessSlider.value = brightness;
