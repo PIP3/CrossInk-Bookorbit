@@ -1,12 +1,12 @@
 #include "BookOrbitSyncActivity.h"
 
 #include <GfxRenderer.h>
+#include <HalClock.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
 #include <WallClock.h>
 #include <WiFi.h>
-#include <esp_sntp.h>
 #include <esp_wifi.h>
 
 #include <algorithm>
@@ -34,33 +34,15 @@
 // support cannot regress the existing generic KOReader sync path.
 
 namespace {
-void syncTimeWithNTP() {
-  if (esp_sntp_enabled()) {
-    esp_sntp_stop();
-  }
-
-  esp_sntp_setoperatingmode(ESP_SNTP_OPMODE_POLL);
-  esp_sntp_setservername(0, "pool.ntp.org");
-  esp_sntp_init();
-
-  int retry = 0;
-  const int maxRetries = 50;  // 5 seconds max
-  while (sntp_get_sync_status() != SNTP_SYNC_STATUS_COMPLETED && retry < maxRetries) {
-    vTaskDelay(100 / portTICK_PERIOD_MS);
-    retry++;
-  }
-
-  if (retry < maxRetries) {
-    LOG_DBG("BookOrbit", "NTP time synced");
-  } else {
-    LOG_DBG("BookOrbit", "NTP sync timeout, using fallback");
-  }
-}
+// The SNTP client this used to drive directly lives behind halClock now. Those calls reach
+// into lwIP's core, which requires the caller to hold the core lock when it is not the
+// TCP/IP thread, and the stack this firmware builds against aborts on an unlocked call
+// instead of tolerating it. One implementation, in the HAL, is the only way to be sure the
+// locking is right everywhere -- this file and KOReaderSyncActivity had copies of it.
+void syncTimeWithNTP() { halClock.syncSystemTimeFromNTP(); }
 
 void wifiOff() {
-  if (esp_sntp_enabled()) {
-    esp_sntp_stop();
-  }
+  // No SNTP stop here: syncSystemTimeFromNTP() releases the client before it returns.
   WiFi.disconnect(false);
   delay(100);
   WiFi.mode(WIFI_OFF);
