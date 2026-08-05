@@ -585,6 +585,10 @@ bool MappedInputManager::wasHomeGesture() const {
   if (!hasHomeKeyHardware()) return wasBottomEdgeUpSwipe();
   if (!touchInputEnabled()) return false;
   if (SETTINGS.homeButtonTapAction != CrossPointSettings::HOME_BUTTON_BACK_HOME) return false;
+  if (deferredHomeGesture) {
+    deferredHomeGesture = false;
+    return true;
+  }
 #ifdef SIMULATOR
   return simulatorHomeKeyInput.wasTapped();
 #else

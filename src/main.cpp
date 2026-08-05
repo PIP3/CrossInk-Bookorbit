@@ -117,12 +117,14 @@ FontCacheManager fontCacheManager(renderer.getFontMap(), renderer.getSdCardFonts
 static unsigned long allowSleepAt = 0;
 static unsigned long lastX4ProPowerClickAt = 0;
 static unsigned long lastX4ProHomeKeyTapAt = 0;
+static bool x4ProHomeKeyTapPending = false;
 // A held power button can span deep-sleep wake and the first main-loop frame.
 // Do not treat that wake gesture as an in-session shortcut until it has been released.
 static bool powerButtonReleasedSinceWake = false;
 
 namespace {
 constexpr unsigned long X4PRO_POWER_DOUBLE_CLICK_MS = 500;
+constexpr unsigned long X4PRO_HOME_KEY_DOUBLE_TAP_MS = 300;
 constexpr unsigned long X4PRO_POWER_CLICK_MAX_HOLD_MS = 400;
 }  // namespace
 
@@ -640,27 +642,40 @@ bool handleX4ProHomeKeyShortcuts() {
     return false;
   }
 
+  const unsigned long now = millis();
+  bool completedPendingTap = false;
+  if (x4ProHomeKeyTapPending && now - lastX4ProHomeKeyTapAt > X4PRO_HOME_KEY_DOUBLE_TAP_MS) {
+    // A single-tap action must wait briefly so the reader does not navigate
+    // away before a second capacitive-key tap can be recognized.
+    x4ProHomeKeyTapPending = false;
+    if (SETTINGS.homeButtonTapAction == CrossPointSettings::HOME_BUTTON_BACK_HOME) {
+      // Keep reader menus and other overlays on their existing local Home route.
+      mappedInputManager.queueDeferredHomeGesture();
+    } else {
+      executeX4ProHomeButtonAction(SETTINGS.homeButtonTapAction);
+      completedPendingTap = true;
+    }
+  }
+
   if (gpio.wasHomeKeyLongPressed()) {
+    // A hold is a separate gesture, not the second half of a double tap.
+    x4ProHomeKeyTapPending = false;
     if (SETTINGS.homeButtonLongPressAction == CrossPointSettings::HOME_BUTTON_READER_MENU) {
-      return false;
+      return completedPendingTap;
     }
     executeX4ProHomeButtonAction(SETTINGS.homeButtonLongPressAction);
     return true;
   }
 
-  if (!gpio.wasHomeKeyTapped()) return false;
+  if (!gpio.wasHomeKeyTapped()) return completedPendingTap;
 
-  const unsigned long now = millis();
-  if (lastX4ProHomeKeyTapAt == 0 || now - lastX4ProHomeKeyTapAt > X4PRO_POWER_DOUBLE_CLICK_MS) {
+  if (!x4ProHomeKeyTapPending) {
     lastX4ProHomeKeyTapAt = now;
-    if (SETTINGS.homeButtonTapAction == CrossPointSettings::HOME_BUTTON_BACK_HOME) {
-      return false;
-    }
-    executeX4ProHomeButtonAction(SETTINGS.homeButtonTapAction);
+    x4ProHomeKeyTapPending = true;
     return true;
   }
 
-  lastX4ProHomeKeyTapAt = 0;
+  x4ProHomeKeyTapPending = false;
   executeX4ProHomeButtonAction(SETTINGS.homeButtonDoubleTapAction);
   return true;
 #endif
@@ -1216,8 +1231,8 @@ void loop() {
     return;
   }
 #endif
-  // X4 Pro-only frontlight shortcuts. Consume the completing second release/tap
-  // so the single-press action does not also run for that input.
+  // X4 Pro-only button shortcuts. Home-key taps are consumed until their
+  // single- or double-tap action is known.
   if (handleX4ProFrontlightDoubleClick() || handleX4ProHomeKeyShortcuts()) {
     return;
   }
@@ -1251,6 +1266,11 @@ void loop() {
 
   const unsigned long activityStartTime = millis();
   activityManager.loop();
+#if CROSSINK_APP_CAP_TOUCH
+  // A delayed Home event is valid for this activity dispatch only. If an
+  // unrelated gesture took priority, do not carry it into the next activity.
+  mappedInputManager.clearDeferredHomeGesture();
+#endif
   const unsigned long activityDuration = millis() - activityStartTime;
 
 #ifdef SIMULATOR

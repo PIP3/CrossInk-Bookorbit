@@ -84,6 +84,9 @@ class MappedInputManager {
   // Exit-to-home intent. Boards with a capacitive home key (X4 Pro) use the
   // key's press edge; everywhere else it's the bottom-edge up-swipe.
   bool wasHomeGesture() const;
+  // Deliver a delayed capacitive Home-key tap through the usual activity route.
+  void queueDeferredHomeGesture() { deferredHomeGesture = true; }
+  void clearDeferredHomeGesture() { deferredHomeGesture = false; }
   // Contextual menu intent (the reader menu). Home-key boards move this to the
   // bottom-edge up-swipe (freed by the home key); others keep the top-edge
   // down-swipe.
@@ -130,6 +133,8 @@ class MappedInputManager {
   }
   constexpr bool wasLeftEdgeGesture() const { return false; }
   constexpr bool wasHomeGesture() const { return false; }
+  constexpr void queueDeferredHomeGesture() {}
+  constexpr void clearDeferredHomeGesture() {}
   constexpr bool wasMenuGesture() const { return false; }
   constexpr bool wasLightPanelGesture() const { return false; }
   constexpr bool wasReaderMenuGesture() const { return false; }
@@ -172,6 +177,7 @@ class MappedInputManager {
   mutable bool suppressPowerConfirmRelease = false;
 #if CROSSINK_APP_CAP_TOUCH
   mutable bool suppressTouchTap = false;
+  mutable bool deferredHomeGesture = false;
 #endif
 #ifdef SIMULATOR
   std::array<bool, BUTTON_COUNT> simulatorPressed{};
