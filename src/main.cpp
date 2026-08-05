@@ -1248,12 +1248,14 @@ void loop() {
     return;
   }
 
-  if (!powerButtonReleasedSinceWake && !gpio.isPressed(HalGPIO::BTN_POWER)) {
-    powerButtonReleasedSinceWake = true;
-  }
-
-  if (powerButtonReleasedSinceWake && millis() >= allowSleepAt &&
-      handleGlobalPowerButtonAction(getPowerButtonAction())) {
+  // Do not feed the wake gesture into getPowerButtonAction(). In particular,
+  // the release edge can otherwise run the configured short/long Power action
+  // in the same loop that arms the post-wake guard.
+  if (!powerButtonReleasedSinceWake) {
+    if (!gpio.isPressed(HalGPIO::BTN_POWER)) {
+      powerButtonReleasedSinceWake = true;
+    }
+  } else if (millis() >= allowSleepAt && handleGlobalPowerButtonAction(getPowerButtonAction())) {
     lastActivityTime = millis();
     return;
   }
