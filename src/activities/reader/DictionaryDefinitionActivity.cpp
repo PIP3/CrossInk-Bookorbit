@@ -401,7 +401,6 @@ void DictionaryDefinitionActivity::reflowForDefinitionFontChange() {
 void DictionaryDefinitionActivity::redrawModalBackground() {
   if (!hasModalBackground() || !modalBackgroundNeedsRedraw_) return;
 
-  const int previousFontId = definitionFontId_;
   if (definitionFontSource_ == DefinitionFontSource::Dictionary) {
     sdFontSystem.restoreReaderFont(renderer);
     backgroundRender_(backgroundContext_);
@@ -413,9 +412,11 @@ void DictionaryDefinitionActivity::redrawModalBackground() {
     if (renderer.isSdCardFont(definitionFontId_)) {
       renderer.releaseSdCardFontForLowMemory(definitionFontId_, /*preserveAdvanceTable=*/true);
     }
-    if (definitionFontId_ != previousFontId) {
-      reflowForDefinitionFontChange();
-    }
+    // SD font IDs are deterministic, so reloading the same family returns the
+    // same ID even though its advance table was discarded with the old font.
+    // Reflow every restored dictionary font to rebuild those metrics before
+    // drawing; otherwise lines wrapped with stale/narrow widths can overflow.
+    reflowForDefinitionFontChange();
   } else {
     backgroundRender_(backgroundContext_);
   }
