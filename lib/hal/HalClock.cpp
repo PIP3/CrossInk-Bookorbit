@@ -1,6 +1,7 @@
 #include "HalClock.h"
 
 #include <Logging.h>
+#include <TcpipCoreLock.h>
 #include <WiFi.h>
 #include <esp_sntp.h>
 #include <time.h>
@@ -305,8 +306,13 @@ bool HalClock::syncSystemTimeFromNTP() {
   // whatever request the caller connected for. Left running, it holds a socket and its
   // buffers for the rest of the session, taking them from the TLS handshake that follows,
   // which on this hardware completes with only a few KB to spare.
-  if (esp_sntp_enabled()) {
-    esp_sntp_stop();
+  // See TcpipCoreLock: esp_sntp_stop() reaches into lwIP's core and must be serialised
+  // against the TCP/IP thread. configTzTime() above takes the same lock internally.
+  {
+    TcpipCoreLock coreLock;
+    if (esp_sntp_enabled()) {
+      esp_sntp_stop();
+    }
   }
 
   if (synced) {

@@ -11,6 +11,7 @@ Based on CrossInk v1.5.0-rc-3.
 
 ### Fixed
 
+- Starting a BookOrbit or KOReader sync no longer crashes the device. Both ask an internet time server for the current time before syncing, and they did so from the wrong thread — harmless on earlier firmware, but the network stack CrossInk 1.5.0 builds against checks for this and aborts on the spot. It only happened when the time server's address was not already known, which is why a sync could work one minute and crash the next.
 - Reopening a book returns to the page you left instead of the one before it. CrossInk 1.5.0 restores your position from a position in the text rather than a page number, so it survives a change of font or margins that repaginates the chapter — but the lookup stopped one page short whenever that position fell exactly on a page boundary, which is every time, since what gets saved is the start of the page you were on. Applying a position received from KOReader Sync was affected the same way.
 - BookOrbit sync, statistics and the catalog work again against servers whose certificate chain has grown. Both had started failing at the TLS handshake: the certificate authorities now used by most hosts issue longer chains than this hardware can parse with the previous TLS library, whatever the free memory. All BookOrbit requests now use the same TLS transport CrossInk 1.5.0 introduced for its own downloads, which handles those chains comfortably — the catalog is also noticeably faster for it.
 
