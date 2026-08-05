@@ -5,6 +5,19 @@ records only its own additions. Each release states the CrossInk version it is b
 on; for everything inherited from upstream, see the
 [CrossInk changelog](https://github.com/uxjulia/CrossInk/blob/main/CHANGELOG.md).
 
+## [Unreleased]
+
+Based on CrossInk v1.5.0-rc-3.
+
+### Fixed
+
+- Reopening a book returns to the page you left instead of the one before it. CrossInk 1.5.0 restores your position from a position in the text rather than a page number, so it survives a change of font or margins that repaginates the chapter — but the lookup stopped one page short whenever that position fell exactly on a page boundary, which is every time, since what gets saved is the start of the page you were on. Applying a position received from KOReader Sync was affected the same way.
+- BookOrbit sync, statistics and the catalog work again against servers whose certificate chain has grown. Both had started failing at the TLS handshake: the certificate authorities now used by most hosts issue longer chains than this hardware can parse with the previous TLS library, whatever the free memory. All BookOrbit requests now use the same TLS transport CrossInk 1.5.0 introduced for its own downloads, which handles those chains comfortably — the catalog is also noticeably faster for it.
+
+### Security
+
+- BookOrbit connections no longer verify the server's certificate. The TLS transport that can complete these handshakes has no access to the root-certificate store the previous one used, so it cannot confirm that the server answering is really yours. Your credentials and reading data are still encrypted in transit; what is no longer checked is the identity at the other end, which matters on a network you do not control — a café or airport hotspot rather than your home WiFi. The same limitation applies to the OPDS catalog since CrossInk 1.5.0, and has always applied to KOReader Sync. It will be lifted once the SDK exposes a certificate store to that transport; until then, sync from a network you trust.
+
 ## [v1.4.1+bookorbit.3] - 2026-08-02
 
 Based on CrossInk v1.4.0.

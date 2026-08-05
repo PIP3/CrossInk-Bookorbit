@@ -7,10 +7,12 @@
 #include <HTTPClient.h>
 #include <I18n.h>
 #include <Logging.h>
+#include <Memory.h>
 #ifdef SIMULATOR
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #else
+#include <SecureHttpClient.h>
 #include <esp_crt_bundle.h>
 #include <esp_err.h>
 #include <esp_http_client.h>
@@ -149,69 +151,84 @@ void logHeapStats(const char* phase, const char* url = nullptr) {
           (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMinFreeHeap(), (unsigned)ESP.getMaxAllocHeap());
 }
 
-// Response buffer for reading HTTP body
-struct ResponseBuffer {
-  char* data = nullptr;
-  int len = 0;
-  int capacity = 0;
+// Every BookOrbit request goes over wolfSSL rather than esp_http_client/mbedTLS. mbedTLS
+// cannot parse a modern certificate chain within the heap left after WiFi on this chip: it
+// fails the handshake with MBEDTLS_ERR_X509_FATAL_ERROR, which is what broke sync and the
+// catalog against servers on Let's Encrypt's four-certificate path. The catalog moved first
+// (see BookOrbitCatalogClient); this brings the sync endpoints across too.
+//
+// Returns the HTTP status, or a negative value when the transport itself failed. The
+// response body, if any, lands in outBody.
+// Non-null while a BookOrbitSyncClient::Session is alive; requests then share its socket.
+std::unique_ptr<freeink::SecureHttpClient> s_session;
 
-  ~ResponseBuffer() { free(data); }
-
-  bool ensure(int size) {
-    if (size <= capacity) return true;
-    char* newData = (char*)realloc(data, size);
-    if (!newData) return false;
-    data = newData;
-    capacity = size;
-    return true;
-  }
-};
-
-// HTTP event handler to collect response body
-esp_err_t httpEventHandler(esp_http_client_event_t* evt) {
-  auto* buf = static_cast<ResponseBuffer*>(evt->user_data);
-  if (evt->event_id == HTTP_EVENT_ON_DATA && buf) {
-    if (buf->ensure(buf->len + evt->data_len + 1)) {
-      memcpy(buf->data + buf->len, evt->data, evt->data_len);
-      buf->len += evt->data_len;
-      buf->data[buf->len] = '\0';
-    } else {
-      LOG_ERR("BookOrbit", "Response buffer allocation failed (%d bytes)", evt->data_len);
-    }
-  }
-  return ESP_OK;
+void configureClient(freeink::SecureHttpClient& http, const bool reuse) {
+  http.setUserAgent("CrossInk-ESP32-" CROSSINK_VERSION);
+  http.setTimeout(15000);
+  http.setReuse(reuse);
+  // Unverified, like every other network path in this firmware: wolfSSL is the only
+  // transport whose handshake fits this chip's heap, and it has no access to ESP-IDF's root
+  // bundle (that bundle verifies through mbedTLS's own primitives). Credentials are still
+  // encrypted in transit, but the server's identity is not authenticated.
+  http.setInsecure();
 }
 
-// Create configured esp_http_client with small TLS buffers
-esp_http_client_handle_t createClient(const char* url, ResponseBuffer* buf,
-                                      esp_http_client_method_t method = HTTP_METHOD_GET) {
-  esp_http_client_config_t config = {};
-  config.url = url;
-  config.event_handler = httpEventHandler;
-  config.user_data = buf;
-  config.method = method;
-  config.timeout_ms = 15000;
-  config.buffer_size = HTTP_BUF_SIZE;
-  config.buffer_size_tx = HTTP_BUF_SIZE;
-  config.crt_bundle_attach = esp_crt_bundle_attach;
-
-  esp_http_client_handle_t client = esp_http_client_init(&config);
-  if (!client) return nullptr;
-
-  // BookOrbit's kosync-compatible auth headers. Accept is plain application/json to
-  // mirror BookOrbit's own KOReader plugin (not the kosync vendor type).
-  if (esp_http_client_set_header(client, "Accept", "application/json") != ESP_OK ||
-      esp_http_client_set_header(client, "x-auth-user", BOOKORBIT_STORE.getUsername().c_str()) != ESP_OK ||
-      esp_http_client_set_header(client, "x-auth-key", BOOKORBIT_STORE.getMd5Password().c_str()) != ESP_OK) {
-    LOG_ERR("BookOrbit", "Failed to set auth headers");
-    esp_http_client_cleanup(client);
-    return nullptr;
+int sendBookOrbitRequest(const char* method, const std::string& url, const std::string* payload, std::string& outBody) {
+  outBody.clear();
+  const bool pooled = s_session != nullptr;
+  freeink::SecureHttpClient oneShot;
+  freeink::SecureHttpClient& http = pooled ? *s_session : oneShot;
+  if (!pooled) {
+    configureClient(http, false);
   }
-
-  return client;
+  logHeapStats("Before request", url.c_str());
+  if (!http.begin(url)) {
+    LOG_ERR("BookOrbit", "Failed to open connection: %s", url.c_str());
+    return -1;
+  }
+  // BookOrbit's kosync-compatible auth headers. Accept is plain application/json to mirror
+  // BookOrbit's own KOReader plugin (not the kosync vendor type).
+  http.addHeader("Accept", "application/json");
+  http.addHeader("x-auth-user", BOOKORBIT_STORE.getUsername());
+  http.addHeader("x-auth-key", BOOKORBIT_STORE.getMd5Password());
+  if (payload != nullptr) {
+    http.addHeader("Content-Type", "application/json");
+  }
+  const int code = payload != nullptr ? http.sendRequest(method, *payload) : http.GET();
+  outBody = http.getString();
+  // A pooled client keeps its socket for the next request; the Session closes it.
+  if (!pooled) {
+    http.end();
+  }
+  logHeapStats("After request");
+  return code;
 }
+
 #endif
 }  // namespace
+
+#ifdef SIMULATOR
+BookOrbitSyncClient::Session::Session() {}
+BookOrbitSyncClient::Session::~Session() {}
+#else
+BookOrbitSyncClient::Session::Session() {
+  s_session = makeUniqueNoThrow<freeink::SecureHttpClient>();
+  if (!s_session) {
+    LOG_ERR("BookOrbit", "Session allocation failed; requests will open their own connections");
+    return;
+  }
+  configureClient(*s_session, true);
+  LOG_DBG("BookOrbit", "Sync session open: requests share one TLS connection");
+}
+
+BookOrbitSyncClient::Session::~Session() {
+  if (s_session) {
+    s_session->end();
+    s_session.reset();
+    LOG_DBG("BookOrbit", "Sync session closed");
+  }
+}
+#endif
 
 BookOrbitSyncClient::Error BookOrbitSyncClient::authenticate() {
   lastHttpCode = 0;
@@ -261,26 +278,14 @@ BookOrbitSyncClient::Error BookOrbitSyncClient::authenticate() {
   if (httpCode < 0) return NETWORK_ERROR;
   return SERVER_ERROR;
 #else
-  ResponseBuffer buf;
-  logHeapStats("Before auth client", url.c_str());
-  esp_http_client_handle_t client = createClient(url.c_str(), &buf);
-  if (!client) {
-    lastTransportError = ESP_ERR_NO_MEM;
-    return NETWORK_ERROR;
-  }
+  std::string body;
+  const int httpCode = sendBookOrbitRequest("GET", url, nullptr, body);
+  lastHttpCode = httpCode > 0 ? httpCode : 0;
+  lastTransportError = httpCode < 0 ? httpCode : 0;
+  LOG_DBG("BookOrbit", "Auth response: %d", httpCode);
 
-  logHeapStats("Before auth perform");
-  esp_err_t err = esp_http_client_perform(client);
-  const int httpCode = esp_http_client_get_status_code(client);
-  lastHttpCode = httpCode;
-  lastTransportError = static_cast<int>(err);
-  logHeapStats("After auth perform");
-  esp_http_client_cleanup(client);
-
-  LOG_DBG("BookOrbit", "Auth response: %d (err: %d)", httpCode, err);
-
-  if (err != ESP_OK) return NETWORK_ERROR;
-  if (httpCode == 200) return validateAuthResponse(buf.data);
+  if (httpCode < 0) return NETWORK_ERROR;
+  if (httpCode == 200) return validateAuthResponse(body.c_str());
   if (httpCode == 401) return AUTH_FAILED;
   return SERVER_ERROR;
 #endif
@@ -352,32 +357,20 @@ BookOrbitSyncClient::Error BookOrbitSyncClient::getProgress(const std::string& d
   if (httpCode < 0) return NETWORK_ERROR;
   return SERVER_ERROR;
 #else
-  ResponseBuffer buf;
-  logHeapStats("Before get client", url.c_str());
-  esp_http_client_handle_t client = createClient(url.c_str(), &buf);
-  if (!client) {
-    lastTransportError = ESP_ERR_NO_MEM;
-    return NETWORK_ERROR;
-  }
+  std::string body;
+  const int httpCode = sendBookOrbitRequest("GET", url, nullptr, body);
+  lastHttpCode = httpCode > 0 ? httpCode : 0;
+  lastTransportError = httpCode < 0 ? httpCode : 0;
+  LOG_DBG("BookOrbit", "Get progress response: %d", httpCode);
 
-  logHeapStats("Before get perform");
-  esp_err_t err = esp_http_client_perform(client);
-  const int httpCode = esp_http_client_get_status_code(client);
-  lastHttpCode = httpCode;
-  lastTransportError = static_cast<int>(err);
-  logHeapStats("After get perform");
-  esp_http_client_cleanup(client);
+  if (httpCode < 0) return NETWORK_ERROR;
 
-  LOG_DBG("BookOrbit", "Get progress response: %d (err: %d)", httpCode, err);
-
-  if (err != ESP_OK) return NETWORK_ERROR;
-
-  if (httpCode == 200 && buf.data) {
+  if (httpCode == 200 && !body.empty()) {
     JsonDocument doc;
-    const DeserializationError error = deserializeJson(doc, buf.data);
+    const DeserializationError error = deserializeJson(doc, body);
 
     if (error) {
-      logJsonParseFailure("Get progress", error, buf.data);
+      logJsonParseFailure("Get progress", error, body.c_str());
       return JSON_ERROR;
     }
 
@@ -459,34 +452,14 @@ BookOrbitSyncClient::Error BookOrbitSyncClient::updateProgress(const KOReaderPro
   if (httpCode < 0) return NETWORK_ERROR;
   return SERVER_ERROR;
 #else
-  ResponseBuffer buf;
-  logHeapStats("Before put client", url.c_str());
-  esp_http_client_handle_t client = createClient(url.c_str(), &buf, HTTP_METHOD_PUT);
-  if (!client) {
-    lastTransportError = ESP_ERR_NO_MEM;
-    return NETWORK_ERROR;
-  }
-
-  if (esp_http_client_set_header(client, "Content-Type", "application/json") != ESP_OK ||
-      esp_http_client_set_post_field(client, body.c_str(), body.length()) != ESP_OK) {
-    LOG_ERR("BookOrbit", "Failed to set request body");
-    lastTransportError = ESP_ERR_INVALID_STATE;
-    esp_http_client_cleanup(client);
-    return NETWORK_ERROR;
-  }
-
   LOG_DBG("BookOrbit", "PUT body bytes=%u", static_cast<unsigned>(body.length()));
-  logHeapStats("Before put perform");
-  esp_err_t err = esp_http_client_perform(client);
-  const int httpCode = esp_http_client_get_status_code(client);
-  lastHttpCode = httpCode;
-  lastTransportError = static_cast<int>(err);
-  logHeapStats("After put perform");
-  esp_http_client_cleanup(client);
+  std::string response;
+  const int httpCode = sendBookOrbitRequest("PUT", url, &body, response);
+  lastHttpCode = httpCode > 0 ? httpCode : 0;
+  lastTransportError = httpCode < 0 ? httpCode : 0;
+  LOG_DBG("BookOrbit", "Update progress response: %d", httpCode);
 
-  LOG_DBG("BookOrbit", "Update progress response: %d (err: %d)", httpCode, err);
-
-  if (err != ESP_OK) return NETWORK_ERROR;
+  if (httpCode < 0) return NETWORK_ERROR;
   if (httpCode == 200 || httpCode == 202) return OK;
   if (httpCode == 401) return AUTH_FAILED;
   return SERVER_ERROR;
@@ -577,34 +550,14 @@ BookOrbitSyncClient::Error BookOrbitSyncClient::uploadPageStats(const std::strin
   if (httpCode < 0) return NETWORK_ERROR;
   return SERVER_ERROR;
 #else
-  ResponseBuffer buf;
-  logHeapStats("Before stats client", url.c_str());
-  esp_http_client_handle_t client = createClient(url.c_str(), &buf, HTTP_METHOD_POST);
-  if (!client) {
-    lastTransportError = ESP_ERR_NO_MEM;
-    return NETWORK_ERROR;
-  }
-
-  if (esp_http_client_set_header(client, "Content-Type", "application/json") != ESP_OK ||
-      esp_http_client_set_post_field(client, body.c_str(), body.length()) != ESP_OK) {
-    LOG_ERR("BookOrbit", "Failed to set request body");
-    lastTransportError = ESP_ERR_INVALID_STATE;
-    esp_http_client_cleanup(client);
-    return NETWORK_ERROR;
-  }
-
   LOG_DBG("BookOrbit", "POST body bytes=%u", static_cast<unsigned>(body.length()));
-  logHeapStats("Before stats perform");
-  esp_err_t err = esp_http_client_perform(client);
-  const int httpCode = esp_http_client_get_status_code(client);
-  lastHttpCode = httpCode;
-  lastTransportError = static_cast<int>(err);
-  logHeapStats("After stats perform");
-  esp_http_client_cleanup(client);
+  std::string response;
+  const int httpCode = sendBookOrbitRequest("POST", url, &body, response);
+  lastHttpCode = httpCode > 0 ? httpCode : 0;
+  lastTransportError = httpCode < 0 ? httpCode : 0;
+  LOG_DBG("BookOrbit", "Upload stats response: %d", httpCode);
 
-  LOG_DBG("BookOrbit", "Upload stats response: %d (err: %d)", httpCode, err);
-
-  if (err != ESP_OK) return NETWORK_ERROR;
+  if (httpCode < 0) return NETWORK_ERROR;
   if (httpCode >= 200 && httpCode < 300) return OK;
   if (httpCode == 401) return AUTH_FAILED;
   return SERVER_ERROR;
