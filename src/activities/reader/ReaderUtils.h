@@ -65,7 +65,7 @@ inline int getTopClockStatusBarReservedHeight() {
     return 0;
   }
 
-  return UITheme::getInstance().getMetrics().topPadding + statusBarHeight;
+  return UITheme::getInstance().getMetrics().topPadding + UITheme::getTopStatusBarInset() + statusBarHeight;
 }
 
 inline uint8_t rotatedOrientation(const uint8_t orientation, const bool clockwise) {
