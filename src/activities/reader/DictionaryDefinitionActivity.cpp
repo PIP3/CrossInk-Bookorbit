@@ -35,16 +35,6 @@ static constexpr int kDictionarySwitchTouchHeight = 56;
 
 class DictionaryDefinitionActivity;
 
-static bool dictionaryPageButtonTriggered(MappedInputManager& mappedInput, bool previous) {
-  const bool usePress = SETTINGS.sideButtonLongPress == CrossPointSettings::SIDE_LONG_PRESS::SIDE_LONG_OFF;
-  const auto sideLayout = static_cast<CrossPointSettings::SIDE_BUTTON_LAYOUT>(SETTINGS.sideButtonLayout);
-  const MappedInputManager::Button button =
-      sideLayout == CrossPointSettings::NEXT_NEXT
-          ? (previous ? MappedInputManager::Button::Up : MappedInputManager::Button::Down)
-          : (previous ? MappedInputManager::Button::PageBack : MappedInputManager::Button::PageForward);
-  return usePress ? mappedInput.wasPressed(button) : mappedInput.wasReleased(button);
-}
-
 static std::string dictionaryNameFromPath(const std::string& path) {
   const size_t stemSlash = path.rfind('/');
   if (stemSlash == std::string::npos) return path;
@@ -1256,8 +1246,10 @@ void DictionaryDefinitionActivity::loop() {
 #endif
 
   const auto swipe = mappedInput.wasSwipe();
-  const bool prevPage = dictionaryPageButtonTriggered(mappedInput, true) || swipe == MappedInputManager::SwipeDir::Down;
-  const bool nextPage = dictionaryPageButtonTriggered(mappedInput, false) || swipe == MappedInputManager::SwipeDir::Up;
+  const bool prevPage =
+      DictUtils::dictionaryPageButtonTriggered(mappedInput, true) || swipe == MappedInputManager::SwipeDir::Down;
+  const bool nextPage =
+      DictUtils::dictionaryPageButtonTriggered(mappedInput, false) || swipe == MappedInputManager::SwipeDir::Up;
 
   if (prevPage && currentPage > 0) {
     currentPage--;

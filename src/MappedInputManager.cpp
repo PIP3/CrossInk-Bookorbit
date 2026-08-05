@@ -570,7 +570,12 @@ bool MappedInputManager::wasReaderMenuGesture() const {
   return hasHomeKeyHardware() ? direction == SwipeDir::Up : direction == SwipeDir::Down;
 }
 
-bool MappedInputManager::wasReaderHomeGesture() const { return !hasHomeKeyHardware() && wasSwipe() == SwipeDir::Up; }
+bool MappedInputManager::wasReaderHomeGesture() const {
+  // X4 Pro's capacitive Home key remains the reader's Home action. Only the
+  // touch gesture changes in reader mode: other touch boards use an upward
+  // swipe across the page.
+  return hasHomeKeyHardware() ? wasHomeGesture() : wasSwipe() == SwipeDir::Up;
+}
 
 bool MappedInputManager::wasReaderLightPanelGesture() const {
   return hasHomeKeyHardware() && wasSwipe() == SwipeDir::Down;
