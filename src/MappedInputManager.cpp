@@ -585,6 +585,10 @@ bool MappedInputManager::wasHomeGesture() const {
   if (!hasHomeKeyHardware()) return wasBottomEdgeUpSwipe();
   if (!touchInputEnabled()) return false;
   if (SETTINGS.homeButtonTapAction != CrossPointSettings::HOME_BUTTON_BACK_HOME) return false;
+  // A swipe starting on the lower bezel can also report a short capacitive Home
+  // tap on the X4 Pro. The screen gesture belongs to the active list/reader, so
+  // give it priority over the global Home route for this release frame.
+  if (wasSwipe() != SwipeDir::None) return false;
   if (deferredHomeGesture) {
     deferredHomeGesture = false;
     return true;

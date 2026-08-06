@@ -642,6 +642,15 @@ bool handleX4ProHomeKeyShortcuts() {
     return false;
   }
 
+  // A lower-bezel swipe can report a capacitive Home tap as well. Let the
+  // screen gesture win and cancel any delayed single-tap interpretation so it
+  // cannot navigate Home after the list has already handled the swipe.
+  if (mappedInputManager.wasSwipe() != MappedInputManager::SwipeDir::None) {
+    x4ProHomeKeyTapPending = false;
+    mappedInputManager.clearDeferredHomeGesture();
+    return false;
+  }
+
   const unsigned long now = millis();
   bool completedPendingTap = false;
   if (x4ProHomeKeyTapPending && now - lastX4ProHomeKeyTapAt > X4PRO_HOME_KEY_DOUBLE_TAP_MS) {
