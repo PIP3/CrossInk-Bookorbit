@@ -5386,6 +5386,10 @@ void EpubReaderActivity::silentIndexNextChapterIfNeeded(const uint16_t viewportW
     }
 
     bool attemptAbortedForLowMemory = false;
+    // The page is already on the panel, so lend its framebuffer to miniz while
+    // preparing the next chapter. Without this, a large EPUB entry makes the
+    // inflater take its workspace from the same constrained heap as layout.
+    GfxRenderer::FrameBufferLoan loan(renderer);
     const bool succeeded = attemptSection->createSectionFile(
         readerRenderSpecForProfile(readerFontId, viewportWidth, viewportHeight, profile), nullptr, nullptr,
         &attemptAbortedForLowMemory);
