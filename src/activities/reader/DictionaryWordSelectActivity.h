@@ -35,7 +35,10 @@ class DictionaryWordSelectActivity final : public Activity {
         marginTop(marginTop),
         cachePath(std::move(cachePath)),
         nextPageFirstWord(std::move(nextPageFirstWord)),
-        controller(renderer, mappedInput, *this, cachePath),
+        // DictionaryLookupController borrows this activity-owned path.  Qualify
+        // the member so it cannot instead bind to the constructor parameter,
+        // which is destroyed as soon as construction completes.
+        controller(renderer, mappedInput, *this, this->cachePath),
         framebufferContainsPage_(framebufferContainsPage),
         reservedBottomHeight_(reservedBottomHeight),
         initialTouchX_(initialTouchX),
