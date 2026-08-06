@@ -3102,8 +3102,8 @@ void EpubReaderActivity::openWordSelect(bool framebufferContainsPage, int initia
   // The activity outlives this call, so it must be heap-owned; make the fixed-size
   // object allocation fallible instead of aborting the firmware when memory is tight.
   auto wordSelect = makeUniqueNoThrow<DictionaryWordSelectActivity>(
-      renderer, mappedInput, std::move(pageForLookup), layout.marginLeft, layout.marginTop, bookCachePath,
-      nextPageFirstWord, framebufferContainsPage, layout.marginBottom, initialTouchX, initialTouchY,
+      renderer, mappedInput, std::move(pageForLookup), layout.marginLeft, layout.marginTop, std::move(bookCachePath),
+      std::move(nextPageFirstWord), framebufferContainsPage, layout.marginBottom, initialTouchX, initialTouchY,
       autoLookupInitialWord, bookSettings.dictionarySdFontFamilyName, bookSettings.dictionaryFontPointSize, this,
       &EpubReaderActivity::renderDictionaryLookupBackgroundCallback,
       &EpubReaderActivity::reloadDictionaryLookupPageCallback);
