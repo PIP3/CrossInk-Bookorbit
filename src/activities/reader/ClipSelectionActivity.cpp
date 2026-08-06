@@ -81,6 +81,14 @@ void ClipSelectionActivity::onExit() {
   Activity::onExit();
 }
 
+bool ClipSelectionActivity::handleHomeGesture() {
+  ActivityResult result;
+  result.isCancelled = true;
+  setResult(std::move(result));
+  finish();
+  return true;
+}
+
 void ClipSelectionActivity::allocateSavedBuffer() {
   savedBufferSize = renderer.getBufferSize();
   const size_t chunkCount = (savedBufferSize + BUFFER_CHUNK_SIZE - 1) / BUFFER_CHUNK_SIZE;
