@@ -50,6 +50,7 @@
 
 ### Fixed
 
+- Reading Stats cards on touch devices now leave clear space below the heading divider.
 - X4 network workflows now use a clean refresh when replacing whole screens, preventing prior content from remaining visible in File Transfer, Wi-Fi, Sync Progress, OPDS, updates, and nearby-transfer views.
 - Home and Recent Books no longer repeatedly try to generate a cover thumbnail for EPUBs that do not include a cover.
 - Manage Fonts now reports an installed-font scan memory error instead of restarting when a fragmented X3/X4 heap cannot enumerate a font directory.
