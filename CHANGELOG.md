@@ -49,6 +49,7 @@
 
 ### Fixed
 
+- KOReader Sync no longer crashes after Wi-Fi connects on X3/X4 while starting network time synchronization.
 - Firmware updates now reject images built for a different ESP32 chip family before writing them.
 - Saved Wi-Fi credentials are now protected against cross-task races and oversized corrupted values on dual-core devices.
 - Justified Chinese and Japanese EPUB text now keeps ruby annotations inside page margins and avoids unnecessary short lines.
