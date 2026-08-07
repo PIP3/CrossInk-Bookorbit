@@ -49,6 +49,7 @@
 
 ### Fixed
 
+- Watchdog-triggered resets now open the existing crash-report flow instead of silently returning Home.
 - Translated Wi-Fi and clock labels no longer truncate text or time values in UTF-8 locales.
 - Manage Fonts now opens through a lightweight restart path, freeing reader memory before it loads the font catalog.
 - X4 network workflows now use a clean refresh when replacing whole screens, preventing prior content from remaining visible in File Transfer, Wi-Fi, Sync Progress, OPDS, updates, and nearby-transfer views.
