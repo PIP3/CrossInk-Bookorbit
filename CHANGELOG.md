@@ -49,6 +49,7 @@
 
 ### Fixed
 
+- Saved Wi-Fi credentials are now protected against cross-task races and oversized corrupted values on dual-core devices.
 - Justified Chinese and Japanese EPUB text now keeps ruby annotations inside page margins and avoids unnecessary short lines.
 - Watchdog-triggered resets now open the existing crash-report flow instead of silently returning Home.
 - Translated Wi-Fi and clock labels no longer truncate text or time values in UTF-8 locales.
