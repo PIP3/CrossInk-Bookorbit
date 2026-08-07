@@ -49,6 +49,7 @@
 
 ### Fixed
 
+- End-of-book suggestions are now collected from the book's original folder before a finished EPUB is moved to `/Read`.
 - KOReader Sync no longer crashes after Wi-Fi connects on X3/X4 while starting network time synchronization.
 - Firmware updates now reject images built for a different ESP32 chip family before writing them.
 - Saved Wi-Fi credentials are now protected against cross-task races and oversized corrupted values on dual-core devices.
