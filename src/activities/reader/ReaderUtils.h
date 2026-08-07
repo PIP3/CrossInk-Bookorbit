@@ -59,13 +59,13 @@ inline int getTopClockStatusBarHeight() {
   return std::max(UITheme::getStatusBarHeight(), metrics.statusBarVerticalMargin);
 }
 
-inline int getTopClockStatusBarReservedHeight() {
+inline int getTopClockStatusBarReservedHeight(const GfxRenderer& renderer) {
   const int statusBarHeight = getTopClockStatusBarHeight();
   if (statusBarHeight <= 0) {
     return 0;
   }
 
-  return UITheme::getInstance().getMetrics().topPadding + UITheme::getTopStatusBarInset() + statusBarHeight;
+  return UITheme::getInstance().getMetrics().topPadding + UITheme::getTopStatusBarInset(renderer) + statusBarHeight;
 }
 
 inline uint8_t rotatedOrientation(const uint8_t orientation, const bool clockwise) {

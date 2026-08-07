@@ -487,13 +487,13 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
     if (batteryDetached && lyraHeader) {
       const int statusBarHeight = std::max(UITheme::getStatusBarHeight(), metrics.statusBarVerticalMargin);
       return static_cast<int16_t>(rect.y + (statusBarHeight - renderer.getLineHeight(SMALL_FONT_ID)) / 2 +
-                                  UITheme::getTopStatusBarInset() + clockYOffset);
+                                  UITheme::getTopStatusBarInset(renderer) + clockYOffset);
     }
 
     // RoundedRaff's Home header is taller than ordinary headers. Shift compact
     // headers to its battery baseline; Home already has that extra height.
     return static_cast<int16_t>(
-        band.y + UITheme::getTopStatusBarInset() +
+        band.y + UITheme::getTopStatusBarInset(renderer) +
         (batteryDetached
              ? detachedHeaderBatteryTopInset
              : (roundedRaffCompactHeader ? std::max(0, (metrics.homeTopPadding - metrics.headerHeight) / 2) : 0)));
@@ -1058,8 +1058,8 @@ void BaseTheme::drawTopStatusBarClock(const GfxRenderer& renderer, int topY, con
   const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, timeText);
   const int lineHeight = renderer.getLineHeight(SMALL_FONT_ID);
   const int textX = (renderer.getScreenWidth() - textWidth) / 2;
-  const int effectiveTextYOffset =
-      textYOffset + UITheme::getTopStatusBarInset() + (readerContext ? homeHeaderClockTextYOffset(renderer) : 0);
+  const int effectiveTextYOffset = textYOffset + UITheme::getTopStatusBarInset(renderer) +
+                                   (readerContext ? homeHeaderClockTextYOffset(renderer) : 0);
   const int baseTopY = topY >= 0 ? topY : orientedMarginTop + metrics.topPadding;
   const int textY = baseTopY + (statusBarHeight - lineHeight) / 2 + effectiveTextYOffset;
   renderer.drawText(SMALL_FONT_ID, textX, textY, timeText, !darkMode);

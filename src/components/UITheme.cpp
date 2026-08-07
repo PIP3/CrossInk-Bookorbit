@@ -253,13 +253,13 @@ int UITheme::getProgressBarHeight() {
   return statusBar.showsProgressBar() ? statusBar.progressBarHeightPx + metrics.progressBarMarginTop : 0;
 }
 
-int UITheme::getTopStatusBarInset() {
+int UITheme::getTopStatusBarInset(const GfxRenderer& renderer) {
 #if defined(FREEINK_DEVICE_X4PRO) && FREEINK_DEVICE_X4PRO
-  // The X4 Pro's panel sits slightly recessed behind the top bezel.
-  return 5;
-#else
-  return 0;
+  // The X4 Pro's panel sits slightly recessed behind the portrait top bezel.
+  return renderer.getOrientation() == GfxRenderer::Orientation::Portrait ? 5 : 0;
 #endif
+
+  return 0;
 }
 
 // Centered text implementation that takes the safe area into account

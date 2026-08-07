@@ -41,8 +41,8 @@ class UITheme {
   static UIIcon getFileIcon(const std::string& filename);
   static int getStatusBarHeight();
   static int getProgressBarHeight();
-  // Extra clearance for the X4 Pro's recessed top bezel; zero on other devices.
-  static int getTopStatusBarInset();
+  // Extra clearance for the X4 Pro's recessed portrait top bezel; zero otherwise.
+  static int getTopStatusBarInset(const GfxRenderer& renderer);
 
  private:
   const ThemeMetrics* currentMetrics;

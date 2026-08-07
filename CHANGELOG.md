@@ -51,6 +51,7 @@
 
 ### Fixed
 
+- Fixed clock and publisher page-number spacing near the X4 Pro bezel in rotated reader orientations.
 - X4 Pro power-button wakes are no longer mistaken for USB wakeups and sent immediately back to sleep.
 - X4 Pro now detects USB host connections and refreshes the displayed battery percentage as it charges.
 - End-of-book suggestions are now collected from the book's original folder before a finished EPUB is moved to `/Read`.

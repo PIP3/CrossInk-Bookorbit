@@ -106,6 +106,16 @@ constexpr uint8_t PUBLISHER_PAGE_NUMBER_LEFT_MARGIN_MIN = 15;
 constexpr int PUBLISHER_PAGE_NUMBER_X = 5;
 constexpr uint16_t CLIP_ADVANCE_CODEPOINT_CAPACITY = 256;
 
+int publisherPageNumberX(const GfxRenderer& renderer) {
+#if defined(FREEINK_DEVICE_X4PRO) && FREEINK_DEVICE_X4PRO
+  if (renderer.getOrientation() == GfxRenderer::Orientation::LandscapeCounterClockwise) {
+    return PUBLISHER_PAGE_NUMBER_X + 5;
+  }
+#endif
+
+  return PUBLISHER_PAGE_NUMBER_X;
+}
+
 struct ClipAdvanceCollector {
   static constexpr uint8_t STYLE_COUNT = 4;
   uint32_t codepoints[STYLE_COUNT][CLIP_ADVANCE_CODEPOINT_CAPACITY]{};
@@ -897,7 +907,7 @@ void drawPublisherPageMarkers(const GfxRenderer& renderer, const Page& page, con
       continue;
     }
 
-    const int x = PUBLISHER_PAGE_NUMBER_X;
+    const int x = publisherPageNumberX(renderer);
     if (hasNonAscii) {
       const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, label);
       const int maxY = contentBottom - lineHeight;
@@ -946,7 +956,7 @@ ReaderViewportLayout computeReaderViewportLayout(GfxRenderer& renderer, const bo
   layout.marginRight += SETTINGS.screenMargin;
 
   const uint8_t statusBarHeight = UITheme::getInstance().getStatusBarHeight();
-  const int topStatusBarReservedHeight = ReaderUtils::getTopClockStatusBarReservedHeight();
+  const int topStatusBarReservedHeight = ReaderUtils::getTopClockStatusBarReservedHeight(renderer);
   if (topStatusBarReservedHeight > 0) {
     layout.marginTop += std::max(static_cast<int>(SETTINGS.screenMargin),
                                  topStatusBarReservedHeight + ReaderUtils::TOP_CLOCK_TEXT_PADDING);
