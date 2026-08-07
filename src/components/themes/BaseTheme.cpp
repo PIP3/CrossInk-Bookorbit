@@ -66,27 +66,20 @@ void BaseTheme::fillBatteryIcon(const GfxRenderer& renderer, Rect rect, uint16_t
                                 const bool foregroundBlack) const {
   const bool charging = gpio.isUsbConnected();
 
-  const int maxFillWidth = rect.width - 5;
-  const int fillHeight = rect.height - 4;
-  if (maxFillWidth <= 0 || fillHeight <= 0) {
-    return;
-  }
-  // +1 to round up so we always fill at least one pixel
-  int filledWidth = percentage * maxFillWidth / 100 + 1;
-  if (filledWidth > maxFillWidth) {
-    filledWidth = maxFillWidth;
-  }
-
-  // When charging, ensure minimum fill so lightning bolt is fully visible
-  constexpr int minFillForBolt = 8;
-  if (charging && filledWidth < minFillForBolt) {
-    filledWidth = std::min(minFillForBolt, maxFillWidth);
-  }
-
-  renderer.fillRect(rect.x + 2, rect.y + 2, filledWidth, fillHeight, foregroundBlack);
-
   if (charging) {
+    // Solid fill when charging so lightning bolt is visible.
+    renderer.fillRect(rect.x + 2, rect.y + 2, rect.width - 5, rect.height - 4, foregroundBlack);
     drawBatteryLightningBolt(renderer, rect.x + 4, rect.y + 2, !foregroundBlack);
+  } else {
+    if (percentage > 10) {
+      renderer.fillRect(rect.x + 2, rect.y + 2, 3, rect.height - 4, foregroundBlack);
+    }
+    if (percentage > 40) {
+      renderer.fillRect(rect.x + 6, rect.y + 2, 3, rect.height - 4, foregroundBlack);
+    }
+    if (percentage > 70) {
+      renderer.fillRect(rect.x + 10, rect.y + 2, 3, rect.height - 4, foregroundBlack);
+    }
   }
 }
 
@@ -484,31 +477,17 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
   }
   fui::header(ui.frame, band, props);
 
-  fui::BatteryIndicatorProps battery;
-  battery.percent = static_cast<uint8_t>(percentage > 100 ? 100 : percentage);
-  battery.charging = gpio.isUsbConnected();
-  // Lyra-family headers keep the battery group below the top bezel. Draw the
-  // label separately so it shares the icon's vertical centerline.
-  const bool drawDetachedBatteryLabel = batteryDetached && showBatteryPercentage;
-  battery.label = drawDetachedBatteryLabel ? nullptr : (showBatteryPercentage ? percentText : nullptr);
-  battery.text = tokens.smallText;
-  battery.glyphWidth = static_cast<int16_t>(metrics.batteryWidth);
-  battery.glyphHeight = static_cast<int16_t>(metrics.batteryHeight);
-  battery.gap = batteryPercentSpacing;
   const int16_t batteryEdgeInset = batteryDetached ? 12 : tokens.headerSidePadding;
   const int16_t batteryX = batteryLeft ? static_cast<int16_t>(band.x + batteryEdgeInset)
                                        : static_cast<int16_t>(band.right() - batteryEdgeInset - batteryReserve);
-  const int16_t batteryH =
-      batteryDetached ? static_cast<int16_t>(std::max(metrics.batteryHeight, renderer.getLineHeight(SMALL_FONT_ID)))
-                      : band.height;
   // Lyra places its battery in the top status lane. Align the percentage text
-  // to the clock's text row, then let the icon center itself around that row.
+  // to the clock's text row, while the shared icon helper keeps the glyph
+  // vertically aligned with that label.
   const int16_t batteryY = [&] {
     if (batteryDetached && lyraHeader) {
       const int statusBarHeight = std::max(UITheme::getStatusBarHeight(), metrics.statusBarVerticalMargin);
-      const int clockTextY = rect.y + (statusBarHeight - renderer.getLineHeight(SMALL_FONT_ID)) / 2 +
-                             UITheme::getTopStatusBarInset() + clockYOffset;
-      return static_cast<int16_t>(clockTextY - (batteryH - renderer.getLineHeight(SMALL_FONT_ID)) / 2);
+      return static_cast<int16_t>(rect.y + (statusBarHeight - renderer.getLineHeight(SMALL_FONT_ID)) / 2 +
+                                  UITheme::getTopStatusBarInset() + clockYOffset);
     }
 
     // RoundedRaff's Home header is taller than ordinary headers. Shift compact
@@ -519,12 +498,13 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
              ? detachedHeaderBatteryTopInset
              : (roundedRaffCompactHeader ? std::max(0, (metrics.homeTopPadding - metrics.headerHeight) / 2) : 0)));
   }();
-  fui::batteryIndicator(ui.frame, fui::Rect{batteryX, batteryY, batteryReserve, batteryH}, battery);
-  if (drawDetachedBatteryLabel) {
-    const int iconLeft = batteryX + batteryReserve - metrics.batteryWidth - batteryNubWidth;
-    const int textX = iconLeft - batteryPercentSpacing - renderer.getTextWidth(SMALL_FONT_ID, percentText);
-    const int textY = batteryY + std::max(0, (batteryH - renderer.getLineHeight(SMALL_FONT_ID)) / 2);
-    renderer.drawText(SMALL_FONT_ID, textX, textY, percentText);
+  const int16_t batteryIconX =
+      batteryLeft ? batteryX : static_cast<int16_t>(batteryX + batteryReserve - metrics.batteryWidth - batteryNubWidth);
+  const Rect batteryRect{batteryIconX, batteryY, metrics.batteryWidth, metrics.batteryHeight};
+  if (batteryLeft) {
+    drawBatteryLeft(renderer, batteryRect, showBatteryPercentage);
+  } else {
+    drawBatteryRight(renderer, batteryRect, showBatteryPercentage);
   }
 
   drawTopStatusBarClock(renderer, rect.y, nullptr, readerContext, clockYOffset);
