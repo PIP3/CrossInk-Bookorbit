@@ -53,6 +53,11 @@
 
 - X4 Pro power-button wakes are no longer mistaken for USB wakeups and sent immediately back to sleep.
 - X4 Pro now detects USB host connections and refreshes the displayed battery percentage as it charges.
+- End-of-book suggestions are now collected from the book's original folder before a finished EPUB is moved to `/Read`.
+- KOReader Sync no longer crashes after Wi-Fi connects on X3/X4 while starting network time synchronization.
+- Firmware updates now reject images built for a different ESP32 chip family before writing them.
+- Saved Wi-Fi credentials are now protected against cross-task races and oversized corrupted values on dual-core devices.
+- Justified Chinese and Japanese EPUB text now keeps ruby annotations inside page margins and avoids unnecessary short lines.
 - Watchdog-triggered resets now open the existing crash-report flow instead of silently returning Home.
 - Translated Wi-Fi and clock labels no longer truncate text or time values in UTF-8 locales.
 - Manage Fonts now opens through a lightweight restart path, freeing reader memory before it loads the font catalog.

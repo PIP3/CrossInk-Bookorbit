@@ -335,8 +335,8 @@ void ClockOffsetActivity::render(RenderLock&&) {
     char timeBuf[9];
     const uint8_t encoded = encodeOffset(sign, hours, minutesQuarter);
     if (halClock.formatTime(timeBuf, sizeof(timeBuf), encoded, SETTINGS.clockFormat == 1)) {
-      // 24 bytes did not even hold the label itself once translated: STR_CURRENT_TIME
-      // is 26 bytes in Russian, 24 in Arabic and Ukrainian. See ClockSyncActivity.
+      // STR_CURRENT_TIME alone is 26 bytes in Russian and 24 in Arabic and
+      // Ukrainian, before the separator and formatted time are appended.
       char preview[64];
       snprintf(preview, sizeof(preview), "%s %s", tr(STR_CURRENT_TIME), timeBuf);
       renderer.drawCenteredText(UI_10_FONT_ID, layout.downRect.y + layout.downRect.height + 24, preview);
