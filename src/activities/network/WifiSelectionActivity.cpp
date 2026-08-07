@@ -1096,7 +1096,9 @@ void WifiSelectionActivity::render(RenderLock&&) {
   Rect screen = theme.getScreenSafeArea(renderer, true, false);
 
   // Draw header
-  char countStr[32];
+  // Translated labels can exceed the English byte count in UTF-8 (Arabic is
+  // currently about 37 bytes), so leave room without allocating on the heap.
+  char countStr[64];
   snprintf(countStr, sizeof(countStr), tr(STR_NETWORKS_FOUND), realNetworkCount);
   const Rect header{screen.x, screen.y + metrics.topPadding, screen.width,
                     TouchHeaderBackButton::height(metrics, mappedInput)};
