@@ -334,6 +334,16 @@ class EpubReaderActivity final : public Activity {
   bool saveProgress(int spineIndex, int currentPage, int pageCount);
   bool queueProgressSave(int spineIndex, int currentPage, int pageCount, bool forceSave = false);
   bool flushQueuedProgress();
+
+  // Mints the BookOrbit xpointer for a highlight just added to the clipping store. Done here
+  // rather than at sync time because it walks the chapter's HTML structure, which is nearly
+  // free while this activity already has the chapter open (see BookOrbitAnnotationStore).
+  void recordAnnotationPosition(size_t clippingIndex, uint16_t paragraphIndex, const std::string& highlightText);
+
+  // Stamps a position onto one highlight made before this feature existed, or before a book was
+  // moved. Runs once per chapter per session, after the page is on screen.
+  void backfillAnnotationPositions();
+  int annotationBackfillSpine = -1;
   void cacheCurrentSectionPosition();
   void pauseReadingPaceTimer(const char* reason = "unknown");
   void resumeReadingPaceTimer(const char* reason = "unknown");
@@ -422,7 +432,7 @@ class EpubReaderActivity final : public Activity {
 
  public:
   explicit EpubReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Epub> epub,
-                              BookReaderSettingsData readerSettings, int initialRefreshCountdown,
+                              const BookReaderSettingsData& readerSettings, int initialRefreshCountdown,
                               bool cleanImageBaseOnEntry = false)
       : Activity("EpubReader", renderer, mappedInput),
         epub(std::move(epub)),

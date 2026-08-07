@@ -13,53 +13,9 @@
 #include <utility>
 #include <vector>
 
+#include "XPathBuildCommon.h"
+
 namespace {
-std::string stripPrefix(const XML_Char* name) {
-  if (!name) {
-    return "";
-  }
-
-  const char* local = std::strrchr(name, ':');
-  return local ? std::string(local + 1) : std::string(name);
-}
-
-struct NameCounter {
-  std::string name;
-  int count;
-};
-
-struct ParentState {
-  std::vector<NameCounter> children;
-
-  int nextIndex(const std::string& name) {
-    for (auto& child : children) {
-      if (child.name == name) {
-        child.count++;
-        return child.count;
-      }
-    }
-
-    children.push_back({name, 1});
-    return 1;
-  }
-};
-
-struct PathSegment {
-  std::string name;
-  int index;
-};
-
-std::string buildParagraphXPath(const int spineIndex, const std::vector<PathSegment>& path, const int textNodeIndex,
-                                const size_t charOffset) {
-  std::string xpath = "/body/DocFragment[" + std::to_string(spineIndex + 1) + "]/body";
-  for (const auto& segment : path) {
-    xpath += "/" + segment.name + "[" + std::to_string(segment.index) + "]";
-  }
-  if (textNodeIndex > 0 && charOffset > 0) {
-    xpath += "/text()[" + std::to_string(textNodeIndex) + "]." + std::to_string(charOffset);
-  }
-  return xpath;
-}
 
 size_t countUtf8Codepoints(const XML_Char* data, const int len) {
   if (!data || len <= 0) {
@@ -75,10 +31,6 @@ size_t countUtf8Codepoints(const XML_Char* data, const int len) {
   }
 
   return count;
-}
-
-bool isNonVisibleTextTag(const std::string& name) {
-  return name == "head" || name == "style" || name == "script" || name == "title" || name == "rp" || name == "rt";
 }
 
 class ParagraphTextCounter final : public Print {
