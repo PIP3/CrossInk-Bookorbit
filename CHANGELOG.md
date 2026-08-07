@@ -49,6 +49,7 @@
 
 ### Fixed
 
+- Holding Up or Down in the book menu now switches between its tabs.
 - Choosing Set Cover from an image now uses that image in place, instead of creating a duplicate `sleep.bmp` at the SD-card root.
 - Page Overlay sleep screens now release regenerable reader-font cache data before decoding a PNG, reducing low-memory fallbacks to the default sleep screen.
 - Custom and Page Overlay sleep-image folders now continue to a valid wallpaper when a selected image cannot render.
