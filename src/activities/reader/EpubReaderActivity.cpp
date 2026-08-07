@@ -2502,6 +2502,7 @@ void EpubReaderActivity::loop() {
                             mappedInput.wasReleased(MappedInputManager::Button::Down);
     if (timedOut || navPressed) {
       pendingTiltPageTurnFeedback = false;
+      homeButtonInReaderFeedback = false;
       requestUpdate();
       return;
     }
@@ -4164,6 +4165,8 @@ bool EpubReaderActivity::handleShortcutAction(const uint8_t rawAction) {
     case CrossPointSettings::SHORT_PWRBTN::LOOKUP_WORD:
       executeReaderQuickAction(CrossPointSettings::LONG_MENU_LOOKUP_WORD);
       return true;
+    case CrossPointSettings::SHORT_PWRBTN::TOGGLE_HOME_BUTTON_IN_READER:
+      return false;
     case CrossPointSettings::SHORT_PWRBTN::SLEEP:
     case CrossPointSettings::SHORT_PWRBTN::FORCE_REFRESH:
     case CrossPointSettings::SHORT_PWRBTN::SHORT_PWRBTN_COUNT:
@@ -4300,6 +4303,9 @@ bool EpubReaderActivity::executeShortPowerButtonAction() {
       mappedInput.suppressNextPowerConfirmRelease();
       executeReaderQuickAction(CrossPointSettings::LONG_MENU_LOOKUP_WORD);
       return true;
+    case CrossPointSettings::SHORT_PWRBTN::TOGGLE_HOME_BUTTON_IN_READER:
+      toggleHomeButtonInReader();
+      return true;
     default:
       return false;
   }
@@ -4397,6 +4403,9 @@ bool EpubReaderActivity::executeLongPowerButtonAction() {
       mappedInput.suppressNextPowerConfirmRelease();
       executeReaderQuickAction(CrossPointSettings::LONG_MENU_LOOKUP_WORD);
       return true;
+    case CrossPointSettings::SHORT_PWRBTN::TOGGLE_HOME_BUTTON_IN_READER:
+      toggleHomeButtonInReader();
+      return true;
     default:
       return false;
   }
@@ -4453,6 +4462,20 @@ void EpubReaderActivity::showCompletedFeedback(bool isCompleted) {
 
 void EpubReaderActivity::showTiltPageTurnFeedback(bool enabled) {
   tiltPageTurnFeedbackEnabled = enabled;
+  homeButtonInReaderFeedback = false;
+  pendingTiltPageTurnFeedback = true;
+  tiltPageTurnFeedbackShowTime = millis();
+}
+
+void EpubReaderActivity::toggleHomeButtonInReader() {
+  if (!gpio.hasHomeKey()) return;
+  SETTINGS.homeButtonInReaderEnabled = SETTINGS.homeButtonInReaderEnabled ? 0 : 1;
+  if (!SETTINGS.saveToFile()) {
+    LOG_ERR("ERS", "Failed to save Home button reader setting");
+  }
+  mappedInput.clearDeferredHomeGesture();
+  tiltPageTurnFeedbackEnabled = SETTINGS.homeButtonInReaderEnabled;
+  homeButtonInReaderFeedback = true;
   pendingTiltPageTurnFeedback = true;
   tiltPageTurnFeedbackShowTime = millis();
 }
@@ -5932,7 +5955,9 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int fo
     drawToastBuffer(renderer, msg);
   }
   if (pendingTiltPageTurnFeedback) {
-    const char* msg = tiltPageTurnFeedbackEnabled ? tr(STR_TILT_TO_TURN_ON) : tr(STR_TILT_TO_TURN_OFF);
+    const char* msg = homeButtonInReaderFeedback
+                          ? (tiltPageTurnFeedbackEnabled ? tr(STR_HOME_BUTTON_ENABLED) : tr(STR_HOME_BUTTON_DISABLED))
+                          : (tiltPageTurnFeedbackEnabled ? tr(STR_TILT_TO_TURN_ON) : tr(STR_TILT_TO_TURN_OFF));
     drawToastBuffer(renderer, msg);
   }
   if (pendingSafeModeToast) {

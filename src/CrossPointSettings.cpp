@@ -502,6 +502,19 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
     this->*(info.valuePtr) = value;
   }
 
+  // The web API shares the base catalog so it can receive raw value 26 even
+  // on boards without a Home key. Never retain that reader-only action there.
+  if (!gpio.hasHomeKey()) {
+    if (shortPwrBtn == TOGGLE_HOME_BUTTON_IN_READER) {
+      shortPwrBtn = IGNORE;
+      needsResave = true;
+    }
+    if (longPwrBtn == TOGGLE_HOME_BUTTON_IN_READER) {
+      longPwrBtn = SLEEP;
+      needsResave = true;
+    }
+  }
+
   if (doc["fileBrowserDisplay"].isNull()) {
     if (!doc["fileBrowserPreview"].isNull()) {
       fileBrowserDisplay = clamp(doc["fileBrowserPreview"] | static_cast<uint8_t>(FILE_BROWSER_DISPLAY_1_LINE),

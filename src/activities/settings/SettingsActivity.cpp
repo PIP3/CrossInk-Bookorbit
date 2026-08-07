@@ -55,7 +55,7 @@ namespace {
 constexpr int systemVersionFooterSideMargin = 20;
 constexpr int systemVersionFooterBottomInset = 15;
 constexpr size_t controlsParentBaseCount = 3;
-constexpr size_t controlsHomeButtonCount = 3;
+constexpr size_t controlsHomeButtonCount = 4;
 constexpr size_t controlsPowerMinCount = 2;
 constexpr size_t controlsPowerMaxCount = 3;
 constexpr size_t controlsFrontButtonCount = 6;

@@ -208,6 +208,10 @@ bool MappedInputManager::hasTouch() const { return touchInputEnabled(); }
 
 bool MappedInputManager::hasTouchHardware() const { return gpio.hasTouch(); }
 
+bool MappedInputManager::isHomeButtonLockedInReader() const {
+  return readerMode && hasHomeKeyHardware() && !SETTINGS.homeButtonInReaderEnabled && !readerTouchscreenOverride;
+}
+
 void MappedInputManager::rememberTouchHeldTime() const {
   touchHeldOverrideValid = true;
   touchHeldOverrideMs = gpio.lastTouchHeldMs();
@@ -519,7 +523,7 @@ bool MappedInputManager::wasLeftEdgeGesture() const { return wasBackGesture(); }
 
 bool MappedInputManager::hasHomeKeyHardware() const {
 #ifdef SIMULATOR
-#ifdef SIMULATOR_DEVICE_X4PRO
+#if defined(SIMULATOR_DEVICE_X4_PRO) || defined(SIMULATOR_DEVICE_X4PRO)
   return true;
 #else
   return false;
@@ -584,6 +588,10 @@ bool MappedInputManager::wasReaderLightPanelGesture() const {
 bool MappedInputManager::wasHomeGesture() const {
   if (!hasHomeKeyHardware()) return wasBottomEdgeUpSwipe();
   if (!touchInputEnabled()) return false;
+  if (isHomeButtonLockedInReader()) {
+    clearDeferredHomeGesture();
+    return false;
+  }
   if (SETTINGS.homeButtonTapAction != CrossPointSettings::HOME_BUTTON_BACK_HOME) return false;
   // A swipe starting on the lower bezel can also report a short capacitive Home
   // tap on the X4 Pro. The screen gesture belongs to the active list/reader, so
@@ -602,6 +610,7 @@ bool MappedInputManager::wasHomeGesture() const {
 
 bool MappedInputManager::wasReaderMenuHold() const {
   if (!hasHomeKeyHardware() || !touchInputEnabled()) return false;
+  if (isHomeButtonLockedInReader()) return false;
   if (SETTINGS.homeButtonLongPressAction != CrossPointSettings::HOME_BUTTON_READER_MENU) return false;
 #ifdef SIMULATOR
   return simulatorHomeKeyInput.wasLongPressed();

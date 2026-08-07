@@ -229,7 +229,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     CREATE_HOTSPOT = 20,
     CREATE_CLIPPING = 21,
     LOOKUP_WORD = 22,
-    SHORT_PWRBTN_COUNT
+    SHORT_PWRBTN_COUNT,
+    // Raw value 26 follows the three Home-specific values 23-25 without
+    // changing the persisted power-button mappings 0-22.
+    TOGGLE_HOME_BUTTON_IN_READER = 26
   };
 
   // Home-key shortcuts reuse power-button actions where possible, with the
@@ -380,6 +383,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t homeButtonTapAction = HOME_BUTTON_BACK_HOME;
   uint8_t homeButtonDoubleTapAction = HOME_BUTTON_TOGGLE_FRONTLIGHT;
   uint8_t homeButtonLongPressAction = HOME_BUTTON_READER_MENU;
+  // Home-key devices can lock the capacitive Home key while a reader page is
+  // active. Reader menus temporarily override this without changing the value.
+  uint8_t homeButtonInReaderEnabled = 1;
   // EPUB reading orientation settings
   // 0 = portrait (default), 1 = landscape clockwise, 2 = inverted, 3 = landscape counter-clockwise
   uint8_t orientation = PORTRAIT;

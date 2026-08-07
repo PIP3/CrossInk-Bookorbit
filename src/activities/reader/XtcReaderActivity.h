@@ -67,6 +67,7 @@ class XtcReaderActivity final : public Activity {
   void deleteBookCache();
   void openReaderMenu();
   void onReaderMenuConfirm(int action);
+  void toggleHomeButtonInReader();
   bool executeLongPressBackAction();
 
  public:

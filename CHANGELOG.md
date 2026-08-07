@@ -2,6 +2,7 @@
 
 ### Added
 
+- X4 Pro readers can lock the Home button while reading, with a Power-button shortcut to toggle it.
 - End-of-book suggestions can now be opened directly by tapping their rows on touch devices.
 - EPUB tables now lay out a row at a time in both Incremental and Full Section indexing, keeping regular tables readable without whole-table buffering.
 - Touch support for Seeed Studio Sticky

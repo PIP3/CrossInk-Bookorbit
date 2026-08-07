@@ -49,6 +49,7 @@ class TxtReaderActivity final : public Activity {
   bool flushQueuedProgress();
   void loadProgress();
   void toggleDarkMode();
+  void toggleHomeButtonInReader();
   bool consumeLongPowerButtonRelease();
   bool consumeLongPowerButtonHold();
   bool executePowerButtonAction();

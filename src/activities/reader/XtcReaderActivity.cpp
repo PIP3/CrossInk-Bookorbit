@@ -269,6 +269,9 @@ void XtcReaderActivity::loop() {
         return true;
       case CrossPointSettings::SHORT_PWRBTN::CREATE_CLIPPING:
         return false;
+      case CrossPointSettings::SHORT_PWRBTN::TOGGLE_HOME_BUTTON_IN_READER:
+        toggleHomeButtonInReader();
+        return true;
       default:
         return false;
     }
@@ -411,6 +414,18 @@ void XtcReaderActivity::loop() {
     }
     requestUpdate();
   }
+}
+
+void XtcReaderActivity::toggleHomeButtonInReader() {
+  if (!mappedInput.hasHomeKey()) return;
+  SETTINGS.homeButtonInReaderEnabled = SETTINGS.homeButtonInReaderEnabled ? 0 : 1;
+  if (!SETTINGS.saveToFile()) {
+    LOG_ERR("XTR", "Failed to save Home button reader setting");
+  }
+  mappedInput.clearDeferredHomeGesture();
+  drawToast(renderer, SETTINGS.homeButtonInReaderEnabled ? tr(STR_HOME_BUTTON_ENABLED) : tr(STR_HOME_BUTTON_DISABLED));
+  delay(1000);
+  requestUpdate();
 }
 
 void XtcReaderActivity::pauseReadingStatsTimer(const char* source) {
