@@ -49,6 +49,7 @@
 
 ### Fixed
 
+- Long Wi-Fi, nearby-sync, and SD firmware-update error messages now wrap inside the usable screen area.
 - End-of-book suggestions are now collected from the book's original folder before a finished EPUB is moved to `/Read`.
 - KOReader Sync no longer crashes after Wi-Fi connects on X3/X4 while starting network time synchronization.
 - Firmware updates now reject images built for a different ESP32 chip family before writing them.
