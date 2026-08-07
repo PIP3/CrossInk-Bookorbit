@@ -51,6 +51,7 @@
 
 ### Fixed
 
+- X4 Pro power-button wakes are no longer mistaken for USB wakeups and sent immediately back to sleep.
 - X4 Pro now detects USB host connections and refreshes the displayed battery percentage as it charges.
 - Watchdog-triggered resets now open the existing crash-report flow instead of silently returning Home.
 - Translated Wi-Fi and clock labels no longer truncate text or time values in UTF-8 locales.
