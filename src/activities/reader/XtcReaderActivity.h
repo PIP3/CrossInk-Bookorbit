@@ -34,7 +34,7 @@ class XtcReaderActivity final : public Activity {
   bool longPressBackHandled = false;
   ReaderProgressSaveDebouncer progressSaveDebouncer;
   // Next-book suggestion menu for the End-of-Book screen
-  EndOfBookOptions endOfBookOptions;
+  EndOfBookOptions endOfBookOptions{renderer};
 
   enum class StatusBarOverlayPosition { Bottom, Top };
   struct StatusBarInfo {
