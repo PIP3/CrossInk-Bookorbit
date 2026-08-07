@@ -49,6 +49,7 @@
 
 ### Fixed
 
+- Justified Chinese and Japanese EPUB text now keeps ruby annotations inside page margins and avoids unnecessary short lines.
 - Watchdog-triggered resets now open the existing crash-report flow instead of silently returning Home.
 - Translated Wi-Fi and clock labels no longer truncate text or time values in UTF-8 locales.
 - Manage Fonts now opens through a lightweight restart path, freeing reader memory before it loads the font catalog.
