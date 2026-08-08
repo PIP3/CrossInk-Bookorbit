@@ -15,6 +15,7 @@
 #include "CrossPointState.h"
 #include "GlobalActions.h"
 #include "MappedInputManager.h"
+#include "QuickActions.h"
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
@@ -184,6 +185,7 @@ void TxtReaderActivity::openReaderMenu() {
 }
 
 void TxtReaderActivity::loop() {
+  if (quickActionsPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
   if (consumeLongPowerButtonRelease()) {
     return;
   }
@@ -436,6 +438,9 @@ bool TxtReaderActivity::executeLongPressBackAction() {
 
 bool TxtReaderActivity::handleShortcutAction(const CrossPointSettings::SHORT_PWRBTN action) {
   switch (action) {
+    case CrossPointSettings::SHORT_PWRBTN::QUICK_ACTIONS:
+      QuickActions::showConfiguredPopup(quickActionsPopup, [this] { requestUpdate(); });
+      return true;
     case CrossPointSettings::SHORT_PWRBTN::TOGGLE_DARK_MODE:
       toggleDarkMode();
       return true;
@@ -573,6 +578,9 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
 
 void TxtReaderActivity::render(RenderLock&&) {
   if (!txt) {
+    return;
+  }
+  if (quickActionsPopup.processRender(renderer, mappedInput)) {
     return;
   }
 

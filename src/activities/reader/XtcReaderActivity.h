@@ -17,8 +17,10 @@
 #include "GlobalReadingStats.h"
 #include "ReaderProgressSaveDebouncer.h"
 #include "activities/Activity.h"
+#include "components/OptionPopup.h"
 
 class XtcReaderActivity final : public Activity {
+  OptionPopup quickActionsPopup;
   std::shared_ptr<Xtc> xtc;
 
   uint32_t currentPage = 0;

@@ -28,7 +28,6 @@
 #include "ClipSelectionActivity.h"
 #include "ClippingStore.h"
 #include "CrossPointSettings.h"
-#include "QuickActions.h"
 #include "CrossPointState.h"
 #include "DictionaryWordSelectActivity.h"
 #include "EpubReaderBookmarkListActivity.h"
@@ -45,6 +44,7 @@
 #include "NearbyBookPositionSyncActivity.h"
 #include "ProgressMapper.h"
 #include "QrDisplayActivity.h"
+#include "QuickActions.h"
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
@@ -4200,19 +4200,45 @@ bool EpubReaderActivity::handleShortcutAction(const uint8_t rawAction) {
 
 bool EpubReaderActivity::handleShortcutAction(const CrossPointSettings::SHORT_PWRBTN action) {
   switch (action) {
-    case CrossPointSettings::SHORT_PWRBTN::PAGE_TURN: pageTurn(true, "shortcut"); return true;
-    case CrossPointSettings::SHORT_PWRBTN::TOGGLE_FONT: executeReaderQuickAction(CrossPointSettings::LONG_MENU_CHANGE_FONT); return true;
-    case CrossPointSettings::SHORT_PWRBTN::TOGGLE_GUIDE_DOTS: executeReaderQuickAction(CrossPointSettings::LONG_MENU_TOGGLE_GUIDE_DOTS); return true;
-    case CrossPointSettings::SHORT_PWRBTN::TOGGLE_BIONIC_READING: executeReaderQuickAction(CrossPointSettings::LONG_MENU_TOGGLE_BIONIC); return true;
-    case CrossPointSettings::SHORT_PWRBTN::TOGGLE_BOOKMARK: executeReaderQuickAction(CrossPointSettings::LONG_MENU_TOGGLE_BOOKMARK); return true;
-    case CrossPointSettings::SHORT_PWRBTN::MARK_FINISHED: executeReaderQuickAction(CrossPointSettings::LONG_MENU_MARK_FINISHED); return true;
-    case CrossPointSettings::SHORT_PWRBTN::READING_STATS: executeReaderQuickAction(CrossPointSettings::LONG_MENU_READING_STATS); return true;
-    case CrossPointSettings::SHORT_PWRBTN::CYCLE_PAGE_TURN: executeReaderQuickAction(CrossPointSettings::LONG_MENU_CYCLE_PAGE_TURN); return true;
-    case CrossPointSettings::SHORT_PWRBTN::TOGGLE_TILT_PAGE_TURN: executeReaderQuickAction(CrossPointSettings::LONG_MENU_TOGGLE_TILT_PAGE_TURN); return true;
-    case CrossPointSettings::SHORT_PWRBTN::TOGGLE_DARK_MODE: executeReaderQuickAction(CrossPointSettings::LONG_MENU_TOGGLE_DARK_MODE); return true;
-    case CrossPointSettings::SHORT_PWRBTN::FILE_BROWSER: executeReaderQuickAction(CrossPointSettings::LONG_MENU_FILE_BROWSER); return true;
-    case CrossPointSettings::SHORT_PWRBTN::CREATE_CLIPPING: executeReaderQuickAction(CrossPointSettings::LONG_MENU_CREATE_CLIPPING); return true;
-    case CrossPointSettings::SHORT_PWRBTN::LOOKUP_WORD: executeReaderQuickAction(CrossPointSettings::LONG_MENU_LOOKUP_WORD); return true;
+    case CrossPointSettings::SHORT_PWRBTN::PAGE_TURN:
+      pageTurn(true, "shortcut");
+      return true;
+    case CrossPointSettings::SHORT_PWRBTN::TOGGLE_FONT:
+      executeReaderQuickAction(CrossPointSettings::LONG_MENU_CHANGE_FONT);
+      return true;
+    case CrossPointSettings::SHORT_PWRBTN::TOGGLE_GUIDE_DOTS:
+      executeReaderQuickAction(CrossPointSettings::LONG_MENU_TOGGLE_GUIDE_DOTS);
+      return true;
+    case CrossPointSettings::SHORT_PWRBTN::TOGGLE_BIONIC_READING:
+      executeReaderQuickAction(CrossPointSettings::LONG_MENU_TOGGLE_BIONIC);
+      return true;
+    case CrossPointSettings::SHORT_PWRBTN::TOGGLE_BOOKMARK:
+      executeReaderQuickAction(CrossPointSettings::LONG_MENU_TOGGLE_BOOKMARK);
+      return true;
+    case CrossPointSettings::SHORT_PWRBTN::MARK_FINISHED:
+      executeReaderQuickAction(CrossPointSettings::LONG_MENU_MARK_FINISHED);
+      return true;
+    case CrossPointSettings::SHORT_PWRBTN::READING_STATS:
+      executeReaderQuickAction(CrossPointSettings::LONG_MENU_READING_STATS);
+      return true;
+    case CrossPointSettings::SHORT_PWRBTN::CYCLE_PAGE_TURN:
+      executeReaderQuickAction(CrossPointSettings::LONG_MENU_CYCLE_PAGE_TURN);
+      return true;
+    case CrossPointSettings::SHORT_PWRBTN::TOGGLE_TILT_PAGE_TURN:
+      executeReaderQuickAction(CrossPointSettings::LONG_MENU_TOGGLE_TILT_PAGE_TURN);
+      return true;
+    case CrossPointSettings::SHORT_PWRBTN::TOGGLE_DARK_MODE:
+      executeReaderQuickAction(CrossPointSettings::LONG_MENU_TOGGLE_DARK_MODE);
+      return true;
+    case CrossPointSettings::SHORT_PWRBTN::FILE_BROWSER:
+      executeReaderQuickAction(CrossPointSettings::LONG_MENU_FILE_BROWSER);
+      return true;
+    case CrossPointSettings::SHORT_PWRBTN::CREATE_CLIPPING:
+      executeReaderQuickAction(CrossPointSettings::LONG_MENU_CREATE_CLIPPING);
+      return true;
+    case CrossPointSettings::SHORT_PWRBTN::LOOKUP_WORD:
+      executeReaderQuickAction(CrossPointSettings::LONG_MENU_LOOKUP_WORD);
+      return true;
     case CrossPointSettings::SHORT_PWRBTN::FOOTNOTES:
       executeFootnoteQuickAction();
       return true;
@@ -4225,34 +4251,7 @@ bool EpubReaderActivity::handleShortcutAction(const CrossPointSettings::SHORT_PW
 }
 
 void EpubReaderActivity::openQuickActionsPopup() {
-  std::vector<std::string> labels;
-  std::vector<CrossPointSettings::LONG_PRESS_MENU_ACTION> actions;
-  labels.reserve(std::size(SETTINGS.quickActionSlots));
-  actions.reserve(std::size(SETTINGS.quickActionSlots));
-  static constexpr StrId labelsByPowerAction[] = {
-      StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH,
-      StrId::STR_CHANGE_FONT, StrId::STR_TOGGLE_GUIDE_DOTS, StrId::STR_TOGGLE_BIONIC_READING,
-      StrId::STR_TOGGLE_BOOKMARK, StrId::STR_SYNC_PROGRESS, StrId::STR_MARK_FINISHED,
-      StrId::STR_READING_STATS, StrId::STR_SCREENSHOT_BUTTON, StrId::STR_CYCLE_PAGE_TURN,
-      StrId::STR_FILE_TRANSFER, StrId::STR_TILT_PAGE_TURN, StrId::STR_READER_DARK_MODE,
-      StrId::STR_FOOTNOTES, StrId::STR_BROWSE_FILES, StrId::STR_CALIBRE_WIRELESS,
-      StrId::STR_JOIN_NETWORK, StrId::STR_CREATE_HOTSPOT, StrId::STR_SAVE_CLIPPING, StrId::STR_LOOKUP};
-  for (const uint8_t action : SETTINGS.quickActionSlots) {
-    if (action == CrossPointSettings::IGNORE || action >= CrossPointSettings::QUICK_ACTION_SLOT_ACTION_COUNT ||
-        !QuickActions::isActionAvailable(action)) {
-      continue;
-    }
-    labels.emplace_back(I18N.get(labelsByPowerAction[action]));
-    actions.push_back(QuickActions::toReaderAction(action));
-  }
-  if (actions.empty()) return;
-  quickActionsPopup.show(StrId::STR_QUICK_ACTIONS, labels, 0, [this, actions = std::move(actions)](int selected) {
-    if (selected < 0 || static_cast<size_t>(selected) >= actions.size()) return;
-    const auto action = actions[selected];
-    suppressConfirmShortcutRelease(action);
-    executeReaderQuickAction(action);
-  });
-  requestUpdate();
+  QuickActions::showConfiguredPopup(quickActionsPopup, [this] { requestUpdate(); });
 }
 
 bool EpubReaderActivity::quickActionUsesConfirmRelease(const CrossPointSettings::LONG_PRESS_MENU_ACTION action) const {
@@ -4792,6 +4791,9 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   // indexing may resume only after this render releases it.
   backgroundBuildYieldForInput.store(false, std::memory_order_relaxed);
   if (!epub) {
+    return;
+  }
+  if (quickActionsPopup.processRender(renderer, mappedInput)) {
     return;
   }
 

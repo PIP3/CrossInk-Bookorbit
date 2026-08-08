@@ -1292,7 +1292,7 @@ void loop() {
     if (!gpio.isPressed(HalGPIO::BTN_POWER)) {
       powerButtonReleasedSinceWake = true;
     }
-  } else if (millis() >= allowSleepAt && handleGlobalPowerButtonAction(getPowerButtonAction())) {
+  } else if (millis() >= allowSleepAt && dispatchShortcutAction(getPowerButtonAction())) {
     lastActivityTime = millis();
     return;
   }

@@ -19,6 +19,7 @@
 #include "CrossPointState.h"
 #include "GlobalActions.h"
 #include "MappedInputManager.h"
+#include "QuickActions.h"
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
 #include "XtcReaderChapterSelectionActivity.h"
@@ -178,6 +179,7 @@ void XtcReaderActivity::loop() {
   if (!xtc) {
     return;
   }
+  if (quickActionsPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
 
   const auto touch = ReaderUtils::detectTouchPageTurn(renderer, mappedInput);
   const bool atEndOfBook = currentPage >= xtc->getPageCount();
@@ -766,6 +768,10 @@ bool XtcReaderActivity::executeLongPressBackAction() {
 }
 
 bool XtcReaderActivity::handleShortcutAction(const CrossPointSettings::SHORT_PWRBTN action) {
+  if (action == CrossPointSettings::SHORT_PWRBTN::QUICK_ACTIONS) {
+    QuickActions::showConfiguredPopup(quickActionsPopup, [this] { requestUpdate(); });
+    return true;
+  }
   if (action == CrossPointSettings::SHORT_PWRBTN::FILE_BROWSER) {
     activityManager.goToFileBrowser(xtc ? xtc->getPath() : "");
     return true;
@@ -775,6 +781,9 @@ bool XtcReaderActivity::handleShortcutAction(const CrossPointSettings::SHORT_PWR
 
 void XtcReaderActivity::render(RenderLock&&) {
   if (!xtc) {
+    return;
+  }
+  if (quickActionsPopup.processRender(renderer, mappedInput)) {
     return;
   }
 

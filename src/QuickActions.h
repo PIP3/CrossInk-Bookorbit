@@ -1,14 +1,45 @@
 #pragma once
 
 #include <HalTiltSensor.h>
+#include <I18n.h>
+
+#include <array>
+#include <functional>
 
 #include "CrossPointSettings.h"
+
+class OptionPopup;
 
 // One source of truth for the shortcut that opens Quick Actions.  UI and web
 // settings call this after changing an action, so the persisted state cannot
 // end up with two physical gestures claiming the same menu.
 namespace QuickActions {
 enum class Trigger : uint8_t { None = 0, ShortPower, LongPower, LongBack, LongMenu };
+
+inline constexpr std::array<StrId, CrossPointSettings::QUICK_ACTION_SLOT_ACTION_COUNT> actionLabels = {
+    StrId::STR_IGNORE,
+    StrId::STR_SLEEP,
+    StrId::STR_PAGE_TURN,
+    StrId::STR_FORCE_REFRESH,
+    StrId::STR_CHANGE_FONT,
+    StrId::STR_TOGGLE_GUIDE_DOTS,
+    StrId::STR_TOGGLE_BIONIC_READING,
+    StrId::STR_TOGGLE_BOOKMARK,
+    StrId::STR_SYNC_PROGRESS,
+    StrId::STR_MARK_FINISHED,
+    StrId::STR_READING_STATS,
+    StrId::STR_SCREENSHOT_BUTTON,
+    StrId::STR_CYCLE_PAGE_TURN,
+    StrId::STR_FILE_TRANSFER,
+    StrId::STR_TILT_PAGE_TURN,
+    StrId::STR_READER_DARK_MODE,
+    StrId::STR_FOOTNOTES,
+    StrId::STR_BROWSE_FILES,
+    StrId::STR_CALIBRE_WIRELESS,
+    StrId::STR_JOIN_NETWORK,
+    StrId::STR_CREATE_HOTSPOT,
+    StrId::STR_SAVE_CLIPPING,
+    StrId::STR_LOOKUP};
 
 inline bool supportsTiltPageTurn() { return halTiltSensor.isAvailable(); }
 
@@ -24,10 +55,14 @@ inline void synchronize(CrossPointSettings& settings, Trigger preferred = Trigge
 
   Trigger owner = preferred;
   if (owner == Trigger::None) {
-    if (shortPower) owner = Trigger::ShortPower;
-    else if (longPower) owner = Trigger::LongPower;
-    else if (longBack) owner = Trigger::LongBack;
-    else if (longMenu) owner = Trigger::LongMenu;
+    if (shortPower)
+      owner = Trigger::ShortPower;
+    else if (longPower)
+      owner = Trigger::LongPower;
+    else if (longBack)
+      owner = Trigger::LongBack;
+    else if (longMenu)
+      owner = Trigger::LongMenu;
   }
 
   if (owner != Trigger::ShortPower && shortPower) settings.shortPwrBtn = CrossPointSettings::IGNORE;
@@ -37,7 +72,7 @@ inline void synchronize(CrossPointSettings& settings, Trigger preferred = Trigge
   settings.quickActionsTrigger = static_cast<uint8_t>(owner);
 }
 
-inline Trigger triggerForSetting(uint8_t CrossPointSettings::*member) {
+inline Trigger triggerForSetting(uint8_t CrossPointSettings::* member) {
   if (member == &CrossPointSettings::shortPwrBtn) return Trigger::ShortPower;
   if (member == &CrossPointSettings::longPwrBtn) return Trigger::LongPower;
   if (member == &CrossPointSettings::longPressBackAction) return Trigger::LongBack;
@@ -45,7 +80,7 @@ inline Trigger triggerForSetting(uint8_t CrossPointSettings::*member) {
   return Trigger::None;
 }
 
-inline void settingChanged(CrossPointSettings& settings, uint8_t CrossPointSettings::*member) {
+inline void settingChanged(CrossPointSettings& settings, uint8_t CrossPointSettings::* member) {
   const Trigger trigger = triggerForSetting(member);
   if (trigger == Trigger::None) return;
   const bool selected = (trigger == Trigger::ShortPower || trigger == Trigger::LongPower)
@@ -54,32 +89,5 @@ inline void settingChanged(CrossPointSettings& settings, uint8_t CrossPointSetti
   synchronize(settings, selected ? trigger : Trigger::None);
 }
 
-inline CrossPointSettings::LONG_PRESS_MENU_ACTION toReaderAction(uint8_t powerAction) {
-  switch (powerAction) {
-    case CrossPointSettings::SLEEP: return CrossPointSettings::LONG_MENU_SLEEP;
-    case CrossPointSettings::FORCE_REFRESH: return CrossPointSettings::LONG_MENU_REFRESH_SCREEN;
-    case CrossPointSettings::TOGGLE_FONT: return CrossPointSettings::LONG_MENU_CHANGE_FONT;
-    case CrossPointSettings::TOGGLE_GUIDE_DOTS: return CrossPointSettings::LONG_MENU_TOGGLE_GUIDE_DOTS;
-    case CrossPointSettings::TOGGLE_BIONIC_READING: return CrossPointSettings::LONG_MENU_TOGGLE_BIONIC;
-    case CrossPointSettings::TOGGLE_BOOKMARK: return CrossPointSettings::LONG_MENU_TOGGLE_BOOKMARK;
-    case CrossPointSettings::SYNC_PROGRESS: return CrossPointSettings::LONG_MENU_SYNC_PROGRESS;
-    case CrossPointSettings::MARK_FINISHED: return CrossPointSettings::LONG_MENU_MARK_FINISHED;
-    case CrossPointSettings::READING_STATS: return CrossPointSettings::LONG_MENU_READING_STATS;
-    case CrossPointSettings::SCREENSHOT: return CrossPointSettings::LONG_MENU_SCREENSHOT;
-    case CrossPointSettings::CYCLE_PAGE_TURN: return CrossPointSettings::LONG_MENU_CYCLE_PAGE_TURN;
-    case CrossPointSettings::FILE_TRANSFER: return CrossPointSettings::LONG_MENU_FILE_TRANSFER;
-    case CrossPointSettings::TOGGLE_TILT_PAGE_TURN:
-      return isActionAvailable(powerAction) ? CrossPointSettings::LONG_MENU_TOGGLE_TILT_PAGE_TURN
-                                            : CrossPointSettings::LONG_MENU_OFF;
-    case CrossPointSettings::TOGGLE_DARK_MODE: return CrossPointSettings::LONG_MENU_TOGGLE_DARK_MODE;
-    case CrossPointSettings::FOOTNOTES: return CrossPointSettings::LONG_MENU_FOOTNOTES;
-    case CrossPointSettings::FILE_BROWSER: return CrossPointSettings::LONG_MENU_FILE_BROWSER;
-    case CrossPointSettings::CALIBRE_WIRELESS: return CrossPointSettings::LONG_MENU_CALIBRE_WIRELESS;
-    case CrossPointSettings::JOIN_NETWORK: return CrossPointSettings::LONG_MENU_JOIN_NETWORK;
-    case CrossPointSettings::CREATE_HOTSPOT: return CrossPointSettings::LONG_MENU_CREATE_HOTSPOT;
-    case CrossPointSettings::CREATE_CLIPPING: return CrossPointSettings::LONG_MENU_CREATE_CLIPPING;
-    case CrossPointSettings::LOOKUP_WORD: return CrossPointSettings::LONG_MENU_LOOKUP_WORD;
-    default: return CrossPointSettings::LONG_MENU_OFF;
-  }
-}
+void showConfiguredPopup(OptionPopup& popup, const std::function<void()>& requestUpdate);
 }  // namespace QuickActions

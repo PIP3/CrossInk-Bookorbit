@@ -7,8 +7,10 @@
 #include "CrossPointSettings.h"
 #include "ReaderProgressSaveDebouncer.h"
 #include "activities/Activity.h"
+#include "components/OptionPopup.h"
 
 class TxtReaderActivity final : public Activity {
+  OptionPopup quickActionsPopup;
   std::unique_ptr<Txt> txt;
 
   int currentPage = 0;
