@@ -142,6 +142,8 @@ void ActivityManager::loop() {
 
         if (openReaderMenuAfterPop) {
           openReaderMenuAfterPop = false;
+          // Reader menu implementations may acquire RenderLock.
+          lock.unlock();
           if (currentActivity->openReaderSettingsMenu()) {
             continue;
           }
