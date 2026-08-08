@@ -8,9 +8,11 @@
 #include <iterator>
 
 #include "CrossPointSettings.h"
+#include "QuickActions.h"
 #include "MappedInputManager.h"
 #include "SettingsList.h"
 #include "activities/settings/ButtonRemapActivity.h"
+#include "activities/settings/QuickActionsActivity.h"
 #include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
 
@@ -168,6 +170,7 @@ void ControlsOptionsActivity::openEnumOptionPicker(const SettingInfo& setting) {
     if (selectedSetting.valuePtr != nullptr) {
       SETTINGS.*(selectedSetting.valuePtr) =
           enumRawValueForDisplayIndex(selectedSetting, static_cast<uint8_t>(selectedIndex));
+      QuickActions::settingChanged(SETTINGS, selectedSetting.valuePtr);
       SETTINGS.saveToFile();
     }
   });
@@ -193,6 +196,7 @@ void ControlsOptionsActivity::toggleCurrentSetting() {
     if (optionCount == 0) return;
     const uint8_t nextIndex = (currentIndex + 1) % static_cast<uint8_t>(optionCount);
     SETTINGS.*(setting.valuePtr) = enumRawValueForDisplayIndex(setting, nextIndex);
+    QuickActions::settingChanged(SETTINGS, setting.valuePtr);
     SETTINGS.saveToFile();
   } else if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
     const int8_t cur = SETTINGS.*(setting.valuePtr);
@@ -203,6 +207,11 @@ void ControlsOptionsActivity::toggleCurrentSetting() {
     }
     SETTINGS.saveToFile();
   } else if (setting.type == SettingType::ACTION) {
+    if (setting.action == SettingAction::QuickActions) {
+      startActivityForResult(std::make_unique<QuickActionsActivity>(renderer, mappedInput),
+                             [](const ActivityResult&) { SETTINGS.saveToFile(); });
+      return;
+    }
     if (setting.action == SettingAction::RemapFrontButtons) {
       startActivityForResult(std::make_unique<ButtonRemapActivity>(renderer, mappedInput, false, true),
                              [](const ActivityResult&) { SETTINGS.saveToFile(); });

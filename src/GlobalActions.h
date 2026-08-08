@@ -29,6 +29,7 @@ inline bool isPowerButtonActionAvailableOutsideReader(const CrossPointSettings::
     case CrossPointSettings::SHORT_PWRBTN::CREATE_CLIPPING:
     case CrossPointSettings::SHORT_PWRBTN::LOOKUP_WORD:
     case CrossPointSettings::SHORT_PWRBTN::TOGGLE_HOME_BUTTON_IN_READER:
+    case CrossPointSettings::SHORT_PWRBTN::QUICK_ACTIONS:
     case CrossPointSettings::SHORT_PWRBTN::SHORT_PWRBTN_COUNT:
     default:
       return false;
@@ -36,3 +37,5 @@ inline bool isPowerButtonActionAvailableOutsideReader(const CrossPointSettings::
 }
 
 void enterDeepSleep(bool fromTimeout = false);
+bool handleGlobalPowerButtonAction(CrossPointSettings::SHORT_PWRBTN action);
+bool dispatchShortcutAction(CrossPointSettings::SHORT_PWRBTN action);

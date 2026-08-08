@@ -27,6 +27,7 @@ enum class SettingAction {
   DisplaySleepScreen,
   ReaderFontOptions,
   ReaderPageLayout,
+  QuickActions,
   ControlsPowerButton,
   ControlsHomeButton,
   ControlsFrontButtons,

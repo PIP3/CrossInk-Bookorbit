@@ -19,6 +19,7 @@
 #include "GlobalReadingStats.h"
 #include "ReaderProgressSaveDebouncer.h"
 #include "activities/Activity.h"
+#include "components/OptionPopup.h"
 
 struct ToastRect {
   int x = 0;
@@ -174,6 +175,7 @@ class EpubReaderActivity final : public Activity {
   bool longPressMenuHandled = false;
   bool longPressBackHandled = false;
   bool longPowerButtonHandled = false;
+  OptionPopup quickActionsPopup;
   bool sideButtonLongPressHandled = false;
   bool frontButtonLongPressHandled = false;
   bool touchDictionaryLookupHandled = false;
@@ -378,6 +380,7 @@ class EpubReaderActivity final : public Activity {
   void reindexCurrentSection();
   void prepareCurrentSectionForRelayout();
   void executeReaderQuickAction(CrossPointSettings::LONG_PRESS_MENU_ACTION action);
+  void openQuickActionsPopup();
   bool quickActionUsesConfirmRelease(CrossPointSettings::LONG_PRESS_MENU_ACTION action) const;
   bool quickActionUsesPowerRelease(CrossPointSettings::LONG_PRESS_MENU_ACTION action) const;
   void suppressConfirmShortcutRelease(CrossPointSettings::LONG_PRESS_MENU_ACTION action);
@@ -460,6 +463,7 @@ class EpubReaderActivity final : public Activity {
   bool isReaderActivity() const override { return true; }
   bool canSnapshotForSleepOverlay() const override { return true; }
   bool handlesReaderPowerSettingsOverride() const override { return true; }
+  bool handleShortcutAction(CrossPointSettings::SHORT_PWRBTN action) override;
   bool openReaderSettingsMenu() override {
     if (!epub) {
       return false;

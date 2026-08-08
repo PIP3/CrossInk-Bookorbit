@@ -229,21 +229,23 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     CREATE_HOTSPOT = 20,
     CREATE_CLIPPING = 21,
     LOOKUP_WORD = 22,
-    SHORT_PWRBTN_COUNT,
-    // Raw value 26 follows the three Home-specific values 23-25 without
-    // changing the persisted power-button mappings 0-22.
-    TOGGLE_HOME_BUTTON_IN_READER = 26
+    // Values 23-26 are already persisted by the X4 Pro Home-key feature.
+    // Keep Quick Actions separate so existing Home-key mappings retain their meaning.
+    TOGGLE_HOME_BUTTON_IN_READER = 26,
+    QUICK_ACTIONS = 27,
+    SHORT_PWRBTN_COUNT
   };
 
-  // Home-key shortcuts reuse power-button actions where possible, with the
-  // three Home-specific actions appended so existing power-button values stay
-  // stable on disk.
+  // Home-key shortcuts reuse power-button actions where possible. Keep the
+  // dedicated values stable because they are persisted in settings.bin.
   enum HOME_BUTTON_ACTION {
-    HOME_BUTTON_BACK_HOME = SHORT_PWRBTN_COUNT,
-    HOME_BUTTON_TOGGLE_FRONTLIGHT,
-    HOME_BUTTON_READER_MENU,
-    HOME_BUTTON_ACTION_COUNT
+    HOME_BUTTON_BACK_HOME = 23,
+    HOME_BUTTON_TOGGLE_FRONTLIGHT = 24,
+    HOME_BUTTON_READER_MENU = 25,
+    HOME_BUTTON_ACTION_COUNT = 26
   };
+
+  static constexpr uint8_t QUICK_ACTION_SLOT_ACTION_COUNT = 23;
 
   // Hide battery percentage
   enum HIDE_BATTERY_PERCENTAGE { HIDE_NEVER = 0, HIDE_READER = 1, HIDE_ALWAYS = 2, HIDE_BATTERY_PERCENTAGE_COUNT };
@@ -309,6 +311,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     LONG_MENU_CREATE_HOTSPOT = 19,
     LONG_MENU_CREATE_CLIPPING = 20,
     LONG_MENU_LOOKUP_WORD = 21,
+    // Appended: values are persisted in settings.bin.
+    LONG_MENU_QUICK_ACTIONS = 22,
     LONG_PRESS_MENU_ACTION_COUNT
   };
 
@@ -491,6 +495,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t longPressMenuAction = LONG_MENU_OFF;
   // Long-press Back quick action in reader (defaults to the historical file browser shortcut)
   uint8_t longPressBackAction = LONG_MENU_FILE_BROWSER;
+  // Five reusable reader commands and their single owning shortcut. Keep these
+  // adjacent so old settings files simply retain their default-initialized tail.
+  uint8_t quickActionSlots[5] = {IGNORE, IGNORE, IGNORE, IGNORE, IGNORE};
+  uint8_t quickActionsTrigger = 0;
   // Tilt-based page turning on devices with a supported IMU (X3 and Sticky).
   uint8_t tiltPageTurn = TILT_OFF;
   uint8_t tiltPageTurnDirection = TILT_LEFT_RIGHT;

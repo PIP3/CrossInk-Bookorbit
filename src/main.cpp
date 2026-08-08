@@ -559,6 +559,10 @@ bool handleGlobalPowerButtonAction(const CrossPointSettings::SHORT_PWRBTN action
   }
 }
 
+bool dispatchShortcutAction(const CrossPointSettings::SHORT_PWRBTN action) {
+  return handleGlobalPowerButtonAction(action) || activityManager.handleShortcutAction(action);
+}
+
 namespace {
 constexpr uint16_t POST_SLEEP_SCREEN_SETTLE_MS = 500;
 constexpr uint8_t TILT_SLEEP_MAX_ATTEMPTS = 3;

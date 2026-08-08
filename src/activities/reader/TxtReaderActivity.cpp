@@ -434,6 +434,19 @@ bool TxtReaderActivity::executeLongPressBackAction() {
   }
 }
 
+bool TxtReaderActivity::handleShortcutAction(const CrossPointSettings::SHORT_PWRBTN action) {
+  switch (action) {
+    case CrossPointSettings::SHORT_PWRBTN::TOGGLE_DARK_MODE:
+      toggleDarkMode();
+      return true;
+    case CrossPointSettings::SHORT_PWRBTN::FILE_BROWSER:
+      activityManager.goToFileBrowser(txt ? txt->getPath() : "");
+      return true;
+    default:
+      return false;
+  }
+}
+
 void TxtReaderActivity::initializeReader() {
   if (initialized) {
     return;

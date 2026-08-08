@@ -519,6 +519,10 @@ bool ActivityManager::requestManualReaderRefresh() {
   return true;
 }
 
+bool ActivityManager::handleShortcutAction(const CrossPointSettings::SHORT_PWRBTN action) {
+  return currentActivity && currentActivity->isReaderActivity() && currentActivity->handleShortcutAction(action);
+}
+
 bool ActivityManager::skipLoopDelay() const { return currentActivity && currentActivity->skipLoopDelay(); }
 
 std::string ActivityManager::getCurrentBookPath() const {
