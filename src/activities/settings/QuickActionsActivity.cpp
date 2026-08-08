@@ -1,6 +1,9 @@
 #include "QuickActionsActivity.h"
 
+#include <HalGPIO.h>
 #include <I18n.h>
+
+#include <algorithm>
 
 #include "CrossPointSettings.h"
 #include "QuickActions.h"
@@ -15,10 +18,21 @@ constexpr StrId actionLabels[] = {
     StrId::STR_CREATE_HOTSPOT, StrId::STR_SAVE_CLIPPING, StrId::STR_LOOKUP};
 constexpr StrId triggerLabels[] = {StrId::STR_NONE_OPT, StrId::STR_SHORT_PRESS_POWER, StrId::STR_LONG_PRESS_POWER,
                                    StrId::STR_LONG_PRESS_BACK, StrId::STR_LONG_PRESS_MENU_SHORTCUT};
+
+std::vector<QuickActions::Trigger> availableTriggers() {
+  std::vector<QuickActions::Trigger> triggers = {QuickActions::Trigger::None, QuickActions::Trigger::ShortPower,
+                                                   QuickActions::Trigger::LongPower};
+  if (!gpio.hasTouch()) {
+    triggers.push_back(QuickActions::Trigger::LongBack);
+    triggers.push_back(QuickActions::Trigger::LongMenu);
+  }
+  return triggers;
+}
 }  // namespace
 
 void QuickActionsActivity::onEnter() {
   Activity::onEnter();
+  popup.setDismissOnOutsideTouchDown(true);
   QuickActions::synchronize(SETTINGS);
   showOverview();
 }
@@ -26,7 +40,9 @@ void QuickActionsActivity::onEnter() {
 void QuickActionsActivity::showOverview() {
   std::vector<std::string> rows;
   rows.reserve(6);
-  const auto trigger = static_cast<QuickActions::Trigger>(SETTINGS.quickActionsTrigger);
+  auto trigger = static_cast<QuickActions::Trigger>(SETTINGS.quickActionsTrigger);
+  const auto triggers = availableTriggers();
+  if (std::find(triggers.begin(), triggers.end(), trigger) == triggers.end()) trigger = QuickActions::Trigger::None;
   rows.emplace_back(std::string(I18N.get(StrId::STR_SHORTCUT)) + ": " + I18N.get(triggerLabels[static_cast<uint8_t>(trigger)]));
   for (uint8_t i = 0; i < 5; ++i) {
     const uint8_t action = SETTINGS.quickActionSlots[i];
@@ -41,11 +57,17 @@ void QuickActionsActivity::showOverview() {
 }
 
 void QuickActionsActivity::editShortcut() {
+  const auto triggers = availableTriggers();
   std::vector<std::string> labels;
-  labels.reserve(5);
-  for (const auto label : triggerLabels) labels.emplace_back(I18N.get(label));
-  popup.show(StrId::STR_SHORTCUT, labels, SETTINGS.quickActionsTrigger, [this](int selected) {
-    const auto trigger = static_cast<QuickActions::Trigger>(selected);
+  labels.reserve(triggers.size());
+  uint8_t current = 0;
+  for (uint8_t i = 0; i < triggers.size(); ++i) {
+    labels.emplace_back(I18N.get(triggerLabels[static_cast<uint8_t>(triggers[i])]));
+    if (static_cast<uint8_t>(triggers[i]) == SETTINGS.quickActionsTrigger) current = i;
+  }
+  popup.show(StrId::STR_SHORTCUT, labels, current, [this, triggers](int selected) {
+    if (selected < 0 || static_cast<size_t>(selected) >= triggers.size()) return;
+    const auto trigger = triggers[selected];
     if (trigger == QuickActions::Trigger::ShortPower) SETTINGS.shortPwrBtn = CrossPointSettings::QUICK_ACTIONS;
     if (trigger == QuickActions::Trigger::LongPower) SETTINGS.longPwrBtn = CrossPointSettings::QUICK_ACTIONS;
     if (trigger == QuickActions::Trigger::LongBack) SETTINGS.longPressBackAction = CrossPointSettings::LONG_MENU_QUICK_ACTIONS;
