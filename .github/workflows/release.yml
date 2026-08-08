@@ -57,7 +57,7 @@ jobs:
           fi
           VERSION="${VERSION#v}"
           echo "RELEASE_VERSION=$VERSION" >> "$GITHUB_ENV"
-          sed -i "s/crossink_version = .*/crossink_version = $VERSION/" platformio.ini
+          sed -i "/^\[crossink\]$/,/^\[/s/^version = .*/version = $VERSION/" platformio.ini
 
       - name: Build CrossInk
         env:
