@@ -29,6 +29,9 @@ const HIDDEN_SLUGS = new Set([
   "i18n",
   "translators",
   "webserver-endpoints",
+  "simulator",
+  "dictionary-development",
+  "file-formats",
 ]);
 
 const visibleModules = Object.fromEntries(
