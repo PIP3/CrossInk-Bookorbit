@@ -2841,8 +2841,7 @@ function splitLongXhtmlSections(xhtmlFiles, opfContent, opfPath, enabled) {
       while (partContainer.firstChild) partContainer.removeChild(partContainer.firstChild);
       for (const node of chunk) partContainer.appendChild(partDoc.importNode(node, true));
       for (const element of Array.from(partDoc.getElementsByTagName("*"))) {
-        const anchor = element.getAttribute("id") ||
-          (localName(element) === "a" ? element.getAttribute("name") : null);
+        const anchor = element.getAttribute("id") || (localName(element) === "a" ? element.getAttribute("name") : null);
         if (anchor && !sectionAnchors.has(anchor)) sectionAnchors.set(anchor, partPath);
       }
       out[partPath] = safeSerialize(partDoc, content);
@@ -4303,11 +4302,7 @@ async function convertEpubFile(file, progressCallback) {
         path,
         collapseResult.redirects,
       );
-      extraTextFiles[path] = rewriteSplitSectionReferences(
-        content,
-        path,
-        sectionSplitResult.anchorTargets,
-      );
+      extraTextFiles[path] = rewriteSplitSectionReferences(content, path, sectionSplitResult.anchorTargets);
     }
   }
 

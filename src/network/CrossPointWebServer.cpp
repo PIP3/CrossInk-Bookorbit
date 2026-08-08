@@ -291,6 +291,11 @@ void CrossPointWebServer::begin() {
     return;
   }
 
+  // Add Access-Control-Allow-* headers to every response so web-based clients
+  // and PWAs on other origins can use the HTTP API. Preflight OPTIONS requests
+  // are answered in handleNotFound().
+  server->enableCORS(true);
+
   // Setup routes
   server->on("/", HTTP_GET, [this] { handleRoot(); });
   server->on("/files", HTTP_GET, [this] { handleFileList(); });
