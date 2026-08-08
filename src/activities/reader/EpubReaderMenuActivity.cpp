@@ -141,11 +141,11 @@ Rect readerMenuHeaderActionRect(const Rect& header, const ThemeMetrics& metrics)
 
 Rect readerMenuHeaderActionTouchRect(const Rect& header, const Rect& actionRect) {
   const int touchWidth = std::min(headerActionTouchSize, header.width);
-  const int touchHeight = std::min(headerActionTouchSize, header.height);
-  // Keep the expanded target clear of the right-side battery reserve. The
-  // visual icon stays centered in actionRect; only the tappable area grows.
-  return Rect{actionRect.x + actionRect.width - touchWidth, actionRect.y + actionRect.height - touchHeight, touchWidth,
-              touchHeight};
+  const int touchX = actionRect.x + actionRect.width - touchWidth;
+  // The title reserves the space left of touchX. Treat the remaining header
+  // corner—including the non-interactive battery area—as Home so the icon is
+  // easy to hit without changing its visual placement.
+  return Rect{touchX, header.y, header.x + header.width - touchX, header.height};
 }
 
 void drawSdkIcon(fui::GfxRendererTarget& target, const freeink::Icon& icon, const int x, const int y,
