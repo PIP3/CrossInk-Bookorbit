@@ -641,8 +641,18 @@ bool handleX4ProHomeKeyShortcuts() {
 #ifdef SIMULATOR
   return false;
 #else
-  if (!BoardConfig::isX4Pro() || !mappedInputManager.hasHomeKey()) {
+  if (!mappedInputManager.hasHomeKey()) {
     return false;
+  }
+
+  // Reader menus set the touchscreen override while they are active, which
+  // intentionally lets Home work there. On a page, consume every Home edge
+  // and discard a deferred single tap so nothing fires after it is re-enabled.
+  if (mappedInputManager.isHomeButtonLockedInReader()) {
+    const bool hadPendingTap = x4ProHomeKeyTapPending;
+    x4ProHomeKeyTapPending = false;
+    mappedInputManager.clearDeferredHomeGesture();
+    return hadPendingTap || gpio.wasHomeKeyTapped() || gpio.wasHomeKeyLongPressed();
   }
 
   // A lower-bezel swipe can report a capacitive Home tap as well. Let the

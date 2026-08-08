@@ -49,6 +49,9 @@ class MappedInputManager {
   // The capacitive Home key is part of the touch controller.  Treat it like
   // screen touch so "Disable Touchscreen" also disables the key in readers.
   bool hasHomeKey() const { return touchInputEnabled() && hasHomeKeyHardware(); }
+  // Capability is deliberately separate from this reader-only input gate so
+  // Home-key layouts remain available while the key is locked on reader pages.
+  bool isHomeButtonLockedInReader() const;
   bool wasScreenTapped(int& x, int& y) const;
   // Also reports how long the finger was held before release.
   bool wasScreenTapped(int& x, int& y, unsigned long& heldMs) const;
@@ -86,7 +89,7 @@ class MappedInputManager {
   bool wasHomeGesture() const;
   // Deliver a delayed capacitive Home-key tap through the usual activity route.
   void queueDeferredHomeGesture() { deferredHomeGesture = true; }
-  void clearDeferredHomeGesture() { deferredHomeGesture = false; }
+  void clearDeferredHomeGesture() const { deferredHomeGesture = false; }
   // Contextual menu intent (the reader menu). Home-key boards move this to the
   // bottom-edge up-swipe (freed by the home key); others keep the top-edge
   // down-swipe.
@@ -105,6 +108,7 @@ class MappedInputManager {
   constexpr bool hasTouch() const { return false; }
   constexpr bool hasTouchHardware() const { return false; }
   constexpr bool hasHomeKey() const { return false; }
+  constexpr bool isHomeButtonLockedInReader() const { return false; }
   constexpr bool wasScreenTapped(int&, int&) const { return false; }
   constexpr bool wasScreenTapped(int&, int&, unsigned long&) const { return false; }
   constexpr bool isScreenTouchLongPress(int&, int&, unsigned long) const { return false; }
@@ -134,7 +138,7 @@ class MappedInputManager {
   constexpr bool wasLeftEdgeGesture() const { return false; }
   constexpr bool wasHomeGesture() const { return false; }
   constexpr void queueDeferredHomeGesture() {}
-  constexpr void clearDeferredHomeGesture() {}
+  constexpr void clearDeferredHomeGesture() const {}
   constexpr bool wasMenuGesture() const { return false; }
   constexpr bool wasLightPanelGesture() const { return false; }
   constexpr bool wasReaderMenuGesture() const { return false; }

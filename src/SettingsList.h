@@ -276,9 +276,8 @@ inline SettingInfo buildDictionaryFontSizeSetting(const SdCardFontRegistry* regi
   // With no dedicated dictionary family, a non-zero dictionary size applies
   // to the reader's SD-card family. Built-in reader fonts have no selectable
   // files, so they deliberately retain just the "use reader size" entry.
-  const char* familyName = SETTINGS.dictionarySdFontFamilyName[0] != '\0'
-                               ? SETTINGS.dictionarySdFontFamilyName
-                               : SETTINGS.sdFontFamilyName;
+  const char* familyName =
+      SETTINGS.dictionarySdFontFamilyName[0] != '\0' ? SETTINGS.dictionarySdFontFamilyName : SETTINGS.sdFontFamilyName;
   if (familyName[0] == '\0') return s;
   const auto* family = registry->findFamily(familyName);
   if (!family) return s;
@@ -582,7 +581,8 @@ inline const std::vector<SettingInfo>& getBaseSettingsList() {
                            StrId::STR_FOOTNOTES,
                            StrId::STR_BROWSE_FILES,
                            StrId::STR_SAVE_CLIPPING,
-                           StrId::STR_LOOKUP},
+                           StrId::STR_LOOKUP,
+                           StrId::STR_HOME_BUTTON_LOCK},
                           "shortPwrBtn", StrId::STR_CAT_CONTROLS)
             .withEnumRawValues({CrossPointSettings::IGNORE,
                                 CrossPointSettings::SLEEP,
@@ -605,7 +605,8 @@ inline const std::vector<SettingInfo>& getBaseSettingsList() {
                                 CrossPointSettings::FOOTNOTES,
                                 CrossPointSettings::FILE_BROWSER,
                                 CrossPointSettings::CREATE_CLIPPING,
-                                CrossPointSettings::LOOKUP_WORD}));
+                                CrossPointSettings::LOOKUP_WORD,
+                                CrossPointSettings::TOGGLE_HOME_BUTTON_IN_READER}));
     add(SettingInfo::Enum(StrId::STR_LONG_PRESS_ACTION, &CrossPointSettings::longPwrBtn,
                           {StrId::STR_IGNORE,
                            StrId::STR_SLEEP,
@@ -628,7 +629,8 @@ inline const std::vector<SettingInfo>& getBaseSettingsList() {
                            StrId::STR_FOOTNOTES,
                            StrId::STR_BROWSE_FILES,
                            StrId::STR_SAVE_CLIPPING,
-                           StrId::STR_LOOKUP},
+                           StrId::STR_LOOKUP,
+                           StrId::STR_HOME_BUTTON_LOCK},
                           "longPwrBtn", StrId::STR_CAT_CONTROLS)
             .withEnumRawValues({CrossPointSettings::IGNORE,
                                 CrossPointSettings::SLEEP,
@@ -651,7 +653,12 @@ inline const std::vector<SettingInfo>& getBaseSettingsList() {
                                 CrossPointSettings::FOOTNOTES,
                                 CrossPointSettings::FILE_BROWSER,
                                 CrossPointSettings::CREATE_CLIPPING,
-                                CrossPointSettings::LOOKUP_WORD}));
+                                CrossPointSettings::LOOKUP_WORD,
+                                CrossPointSettings::TOGGLE_HOME_BUTTON_IN_READER}));
+    add(SettingInfo::Enum(StrId::STR_IN_READER, &CrossPointSettings::homeButtonInReaderEnabled,
+                          {StrId::STR_ENABLED, StrId::STR_DISABLED}, "homeButtonInReaderEnabled",
+                          StrId::STR_CAT_CONTROLS)
+            .withEnumRawValues({1, 0}));
     add(buildHomeButtonActionSetting(StrId::STR_HOME_BUTTON_TAP, &CrossPointSettings::homeButtonTapAction,
                                      "homeButtonTapAction"));
     add(buildHomeButtonActionSetting(StrId::STR_HOME_BUTTON_DOUBLE_TAP, &CrossPointSettings::homeButtonDoubleTapAction,
@@ -961,11 +968,16 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
   if (!gpio.hasHomeKey()) {
     v.erase(std::remove_if(v.begin(), v.end(),
                            [](const SettingInfo& s) {
-                             return s.nameId == StrId::STR_HOME_BUTTON_TAP ||
+                             return s.nameId == StrId::STR_IN_READER || s.nameId == StrId::STR_HOME_BUTTON_TAP ||
                                     s.nameId == StrId::STR_HOME_BUTTON_DOUBLE_TAP ||
                                     s.nameId == StrId::STR_HOME_BUTTON_LONG_PRESS;
                            }),
             v.end());
+    for (auto& setting : v) {
+      if (setting.nameId == StrId::STR_SHORT_PWR_BTN || setting.nameId == StrId::STR_LONG_PRESS_ACTION) {
+        removeEnumRawValue(setting, CrossPointSettings::TOGGLE_HOME_BUTTON_IN_READER);
+      }
+    }
   }
   if (registry && registry->getFamilyCount() > 0) {
     auto it = std::find_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.nameId == StrId::STR_FONT_FAMILY; });
@@ -1144,7 +1156,8 @@ inline std::vector<SettingInfo> buildControlsSettingsParentList(const std::vecto
 
 inline std::vector<SettingInfo> buildControlsHomeButtonSettingsList(const std::vector<SettingInfo>& allSettings) {
   std::vector<SettingInfo> settings;
-  settings.reserve(3);
+  settings.reserve(4);
+  addSettingByName(settings, allSettings, StrId::STR_IN_READER);
   addSettingByName(settings, allSettings, StrId::STR_HOME_BUTTON_TAP);
   addSettingByName(settings, allSettings, StrId::STR_HOME_BUTTON_DOUBLE_TAP);
   addSettingByName(settings, allSettings, StrId::STR_HOME_BUTTON_LONG_PRESS);

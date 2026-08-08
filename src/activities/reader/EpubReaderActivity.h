@@ -191,6 +191,7 @@ class EpubReaderActivity final : public Activity {
   unsigned long completedFeedbackShowTime = 0UL;
   bool pendingTiltPageTurnFeedback = false;
   bool tiltPageTurnFeedbackEnabled = false;
+  bool homeButtonInReaderFeedback = false;
   unsigned long tiltPageTurnFeedbackShowTime = 0UL;
   bool pendingRenderModeToast = false;
   bool renderModeToastShown = false;
@@ -411,6 +412,7 @@ class EpubReaderActivity final : public Activity {
   void setBookCompleted(bool isCompleted);
   void showCompletedFeedback(bool isCompleted);
   void showTiltPageTurnFeedback(bool enabled);
+  void toggleHomeButtonInReader();
   void showRenderModeToast(uint8_t renderMode);
   void showSafeModeToast();
   bool storeRenderModeToastRegion(const char* msg);

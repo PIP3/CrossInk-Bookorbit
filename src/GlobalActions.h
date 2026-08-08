@@ -28,6 +28,7 @@ inline bool isPowerButtonActionAvailableOutsideReader(const CrossPointSettings::
     case CrossPointSettings::SHORT_PWRBTN::FILE_BROWSER:
     case CrossPointSettings::SHORT_PWRBTN::CREATE_CLIPPING:
     case CrossPointSettings::SHORT_PWRBTN::LOOKUP_WORD:
+    case CrossPointSettings::SHORT_PWRBTN::TOGGLE_HOME_BUTTON_IN_READER:
     case CrossPointSettings::SHORT_PWRBTN::SHORT_PWRBTN_COUNT:
     default:
       return false;
