@@ -18,8 +18,10 @@
 #include "ClockOffsetActivity.h"
 #include "ClockSyncActivity.h"
 #include "CrossPointSettings.h"
+#include "QuickActions.h"
 #include "FontSelectionActivity.h"
 #include "KOReaderSettingsActivity.h"
+#include "QuickActionsActivity.h"
 #include "MappedInputManager.h"
 #include "OpdsServerListActivity.h"
 #include "SdCardFontSystem.h"
@@ -54,7 +56,7 @@ const StrId SettingsActivity::categoryNames[categoryCount] = {StrId::STR_CAT_DIS
 namespace {
 constexpr int systemVersionFooterSideMargin = 20;
 constexpr int systemVersionFooterBottomInset = 15;
-constexpr size_t controlsParentBaseCount = 3;
+constexpr size_t controlsParentBaseCount = 4;
 constexpr size_t controlsPowerMinCount = 2;
 constexpr size_t controlsPowerMaxCount = 3;
 constexpr size_t controlsFrontButtonCount = 6;
@@ -464,6 +466,7 @@ void SettingsActivity::openEnumOptionPicker(const SettingInfo& setting) {
     if (selectedSetting.valuePtr != nullptr) {
       SETTINGS.*(selectedSetting.valuePtr) =
           enumRawValueForDisplayIndex(selectedSetting, static_cast<uint8_t>(selectedIndex));
+      QuickActions::settingChanged(SETTINGS, selectedSetting.valuePtr);
     } else if (selectedSetting.valueSetter) {
       selectedSetting.valueSetter(static_cast<uint8_t>(selectedIndex));
     }
@@ -885,6 +888,7 @@ void SettingsActivity::toggleCurrentSetting() {
     if (optionCount == 0) return;
     const uint8_t nextIndex = (currentIndex + 1) % static_cast<uint8_t>(optionCount);
     SETTINGS.*(setting.valuePtr) = enumRawValueForDisplayIndex(setting, nextIndex);
+    QuickActions::settingChanged(SETTINGS, setting.valuePtr);
   } else if (setting.type == SettingType::ENUM && setting.valueGetter && setting.valueSetter) {
     if (setting.nameId == StrId::STR_FONT_FAMILY) {
       // Launch font selection submenu instead of cycling
@@ -961,6 +965,9 @@ void SettingsActivity::toggleCurrentSetting() {
       case SettingAction::ClockSync:
         startActivityForResult(std::make_unique<ClockSyncActivity>(renderer, mappedInput), resultHandler);
         break;
+      case SettingAction::QuickActions:
+        startActivityForResult(std::make_unique<QuickActionsActivity>(renderer, mappedInput), resultHandler);
+        break;
       case SettingAction::ReaderFontOptions:
       case SettingAction::ReaderPageLayout:
       case SettingAction::ControlsPowerButton:
@@ -984,6 +991,7 @@ void SettingsActivity::toggleCurrentSetting() {
   }
 
   syncQuickResumeTimeoutForSleepScreen(sleepScreenChanged, quickResumeTimeoutChanged);
+  QuickActions::settingChanged(SETTINGS, setting.valuePtr);
   SETTINGS.saveToFile();
   // Apply this while `setting` still refers to the current list; rebuilding
   // below clears its backing vector and invalidates the reference.

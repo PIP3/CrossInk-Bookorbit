@@ -2,6 +2,7 @@
 
 ### Added
 
+- Quick Actions lets readers assign up to five favorite reader commands to one Power, Back, or Menu shortcut.
 - EPUB tables now lay out a row at a time in both Incremental and Full Section indexing, keeping regular tables readable without whole-table buffering.
 - Touch support for Seeed Studio Sticky
 - Nearby File Transfer can send EPUB, TXT, XTC, XTCH, PNG, and BMP files directly between two CrossInk devices without a Wi-Fi network.

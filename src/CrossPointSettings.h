@@ -229,6 +229,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     CREATE_HOTSPOT = 20,
     CREATE_CLIPPING = 21,
     LOOKUP_WORD = 22,
+    // Appended: values are persisted in settings.bin.
+    QUICK_ACTIONS = 23,
     SHORT_PWRBTN_COUNT
   };
 
@@ -296,6 +298,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     LONG_MENU_CREATE_HOTSPOT = 19,
     LONG_MENU_CREATE_CLIPPING = 20,
     LONG_MENU_LOOKUP_WORD = 21,
+    // Appended: values are persisted in settings.bin.
+    LONG_MENU_QUICK_ACTIONS = 22,
     LONG_PRESS_MENU_ACTION_COUNT
   };
 
@@ -470,6 +474,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t longPressMenuAction = LONG_MENU_OFF;
   // Long-press Back quick action in reader (defaults to the historical file browser shortcut)
   uint8_t longPressBackAction = LONG_MENU_FILE_BROWSER;
+  // Five reusable reader commands and their single owning shortcut. Keep these
+  // adjacent so old settings files simply retain their default-initialized tail.
+  uint8_t quickActionSlots[5] = {IGNORE, IGNORE, IGNORE, IGNORE, IGNORE};
+  uint8_t quickActionsTrigger = 0;
   // Tilt-based page turning on devices with a supported IMU (X3 and Sticky).
   uint8_t tiltPageTurn = TILT_OFF;
   uint8_t tiltPageTurnDirection = TILT_LEFT_RIGHT;

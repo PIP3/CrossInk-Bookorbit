@@ -23,6 +23,7 @@
 #include "AppCapabilities.h"
 #include "AppVersion.h"
 #include "CrossPointSettings.h"
+#include "QuickActions.h"
 #include "FontInstaller.h"
 #include "OpdsServerStore.h"
 #include "SdCardFontSystem.h"
@@ -1418,6 +1419,7 @@ void CrossPointWebServer::handlePostSettings() {
         if (val >= 0 && val < maxVal) {
           if (s.valuePtr) {
             SETTINGS.*(s.valuePtr) = enumRawValueForDisplayIndex(s, static_cast<uint8_t>(val));
+            QuickActions::settingChanged(SETTINGS, s.valuePtr);
           } else if (s.valueSetter) {
             s.valueSetter(static_cast<uint8_t>(val));
           }
