@@ -231,6 +231,7 @@ std::string trimAsciiSpaces(const std::string& value) {
 SettingsActivity::SettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const bool dismissOnUpSwipe)
     : Activity("Settings", renderer, mappedInput),
       dismissOnUpSwipe(dismissOnUpSwipe),
+      entryOrientation(renderer.getOrientation()),
       uiTarget(makeUiTarget(renderer)),
       app(uiTarget, uiTarget.deviceContext()) {}
 
@@ -594,6 +595,11 @@ void SettingsActivity::openStringEditor(const SettingInfo& setting) {
 void SettingsActivity::onEnter() {
   Activity::onEnter();
 
+  // Reapply the orientation captured before the activity being replaced (for
+  // example, a landscape reader) performs its normal portrait reset.
+  renderer.setOrientation(entryOrientation);
+  app.setDevice(uiTarget.deviceContext());
+
   // Dictionary names and paths are needed only while settings are open. Keep
   // the catalog out of the reader's steady-state heap.
   dictionaryRegistry.discover();
@@ -669,6 +675,9 @@ void SettingsActivity::onRowEvent(const fui::ActionEvent& event, void* user) {
 void SettingsActivity::onExit() {
   dictionaryRegistry.clear();
   sdFontSystem.releaseRegistry();
+  // Settings is a transient Home surface when it replaced a reader overlay.
+  // Return Home in its usual portrait orientation after closing it.
+  renderer.setOrientation(GfxRenderer::Orientation::Portrait);
   Activity::onExit();
 
   UITheme::getInstance().reload();  // Re-apply theme in case it was changed

@@ -116,8 +116,12 @@ void FrontlightPanelActivity::toggleLight() {
 void FrontlightPanelActivity::close() { finish(); }
 
 void FrontlightPanelActivity::openSettings() {
-  // Replace the overlay rather than leaving it on the stack. The Settings
-  // activity's swipe-up dismissal then returns directly to Home.
+  // From a reader, close this overlay and open that reader's own menu. The
+  // same icon elsewhere continues to open the global Settings screen.
+  if (activityManager.openReaderMenuAfterClosingOverlay()) {
+    return;
+  }
+
   activityManager.goToSettings(true);
 }
 

@@ -139,6 +139,18 @@ void ActivityManager::loop() {
       } else {
         currentActivity = std::move(stackActivities.back());
         stackActivities.pop_back();
+
+        if (openReaderMenuAfterPop) {
+          openReaderMenuAfterPop = false;
+          if (currentActivity->openReaderSettingsMenu()) {
+            continue;
+          }
+          // TXT is a reader without a settings menu; retain the icon's
+          // existing Global Settings fallback for that case.
+          goToSettings(true);
+          continue;
+        }
+
         // Handle result if necessary
         if (currentActivity->resultHandler) {
           // Move it here to avoid the case where handler calling another startActivityForResult()
@@ -232,6 +244,17 @@ bool ActivityManager::handleHomeButtonBackOrHome() {
 
 bool ActivityManager::openReaderMenuFromShortcut() {
   return currentActivity && pendingAction == PendingAction::None && currentActivity->openReaderSettingsMenu();
+}
+
+bool ActivityManager::openReaderMenuAfterClosingOverlay() {
+  if (!currentActivity || pendingAction != PendingAction::None || stackActivities.empty() ||
+      !stackActivities.back()->isReaderActivity()) {
+    return false;
+  }
+
+  openReaderMenuAfterPop = true;
+  popActivity();
+  return true;
 }
 
 bool ActivityManager::handleShortcutAction(const uint8_t action) {

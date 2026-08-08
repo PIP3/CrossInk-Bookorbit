@@ -254,6 +254,9 @@ class SettingsActivity final : public Activity {
   // The frontlight-panel shortcut opens Settings as a transient Home menu.
   // Its swipe-up closes the screen; regular Settings keeps swipe scrolling.
   bool dismissOnUpSwipe = false;
+  // Settings can be created over a landscape reader. Its teardown resets the
+  // renderer before this activity enters, so retain the requested layout.
+  GfxRenderer::Orientation entryOrientation;
   bool showSettingSelection = true;
   SettingAction activeSubmenu = SettingAction::None;
   SettingAction parentSubmenu = SettingAction::None;

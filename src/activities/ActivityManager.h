@@ -10,8 +10,8 @@
 #include <string>
 #include <vector>
 
-#include "GfxRenderer.h"
 #include "CrossPointSettings.h"
+#include "GfxRenderer.h"
 #include "MappedInputManager.h"
 #include "util/ScreenshotInfo.h"
 
@@ -57,6 +57,9 @@ class ActivityManager {
   std::unique_ptr<Activity> pendingActivity;
   enum class PendingAction { None, Push, Pop, Replace };
   PendingAction pendingAction = PendingAction::None;
+  // Set when an overlay is closed specifically to hand control back to the
+  // reader's menu. It must wait until the reader is current again.
+  bool openReaderMenuAfterPop = false;
 
   // Task to render and display the activity
   TaskHandle_t renderTaskHandle = nullptr;
@@ -128,6 +131,7 @@ class ActivityManager {
   bool readerPowerButtonOpensSettings() const;
   bool handleHomeButtonBackOrHome();
   bool openReaderMenuFromShortcut();
+  bool openReaderMenuAfterClosingOverlay();
   bool handleShortcutAction(uint8_t action);
   bool hasActivityNamed(const char* activityName) const;
 #ifdef SIMULATOR
