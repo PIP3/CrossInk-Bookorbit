@@ -67,11 +67,11 @@ Rect settingsHeaderRect(const ThemeMetrics& metrics, const int pageWidth) {
   return Rect{0, metrics.topPadding, pageWidth, CompactHeader::headerBottomY(metrics) - metrics.topPadding};
 }
 
-bool useLandscapeTouchLayout(const GfxRenderer& renderer, const MappedInputManager& mappedInput) {
-  if (!mappedInput.hasTouchHardware()) return false;
-  const auto orientation = renderer.getOrientation();
-  return orientation == GfxRenderer::Orientation::LandscapeClockwise ||
-         orientation == GfxRenderer::Orientation::LandscapeCounterClockwise;
+bool useLandscapeTouchLayout(const GfxRenderer& renderer) {
+  // Layout is a board capability decision, not a live GT911 probe result. A
+  // Settings activity can be created while touch is being reinitialized, but
+  // it must still match the reader's landscape viewport.
+  return BoardConfig::hasTouch() && renderer.getScreenWidth() > renderer.getScreenHeight();
 }
 
 uint8_t enumDisplayIndexForRawValue(const SettingInfo& setting, uint8_t rawValue) {
@@ -747,8 +747,12 @@ void SettingsActivity::loop() {
   // Swipes scroll the viewport; the selection stays put (it may scroll
   // off-screen) and button navigation pulls the view back to it.
   const auto swipe = mappedInput.wasSwipe();
-  if (dismissOnUpSwipe && !useLandscapeTouchLayout(renderer, mappedInput) &&
-      swipe == MappedInputManager::SwipeDir::Up) {
+  const bool landscapeTouch = useLandscapeTouchLayout(renderer);
+  // The frontlight shortcut keeps its quick exit in landscape, but only from
+  // the X4 Pro's lower-edge gesture band. Other upward swipes scroll the list.
+  const bool dismissLandscapeFromBottomEdge = landscapeTouch && mappedInput.wasBottomEdgeUpSwipe();
+  if (dismissOnUpSwipe && swipe == MappedInputManager::SwipeDir::Up &&
+      (!landscapeTouch || dismissLandscapeFromBottomEdge)) {
     SETTINGS.saveToFile();
     finish();
     return;
@@ -1094,7 +1098,7 @@ void SettingsActivity::settingsScreen(UiApp::ScreenType& screen, void* user) {
 
 void SettingsActivity::buildSettingsScreen(UiApp::ScreenType& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const bool landscapeTouch = useLandscapeTouchLayout(renderer, mappedInput);
+  const bool landscapeTouch = useLandscapeTouchLayout(renderer);
   // Content starts directly below the compact header divider.
   screen.setContentMargin(fui::Insets{static_cast<int16_t>(settingsTabBarTop(metrics)), 0,
                                       static_cast<int16_t>(metrics.buttonHintsHeight), 0});

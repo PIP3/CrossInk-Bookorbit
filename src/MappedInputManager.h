@@ -84,6 +84,9 @@ class MappedInputManager {
   SwipeDir wasSwipe() const;
   bool wasSwipeWithPoints(SwipeDir& direction, int& startX, int& startY, int& endX, int& endY) const;
   bool wasLeftEdgeGesture() const;
+  // An upward swipe that starts in the lower edge band. X4 Pro uses this for
+  // its reader menu because its capacitive key handles Home.
+  bool wasBottomEdgeUpSwipe() const;
   // Exit-to-home intent. Boards with a capacitive home key (X4 Pro) use the
   // key's press edge; everywhere else it's the bottom-edge up-swipe.
   bool wasHomeGesture() const;
@@ -136,6 +139,7 @@ class MappedInputManager {
     return false;
   }
   constexpr bool wasLeftEdgeGesture() const { return false; }
+  constexpr bool wasBottomEdgeUpSwipe() const { return false; }
   constexpr bool wasHomeGesture() const { return false; }
   constexpr void queueDeferredHomeGesture() {}
   constexpr void clearDeferredHomeGesture() const {}
@@ -212,7 +216,6 @@ class MappedInputManager {
   bool hasHomeKeyHardware() const;
   bool wasBackGesture() const;
   bool wasTopEdgeDownSwipe() const;
-  bool wasBottomEdgeUpSwipe() const;
   // Fetch the pending swipe (if any) and map both endpoints to logical screen coords.
   bool decodeSwipe(int& sx, int& sy, int& ex, int& ey) const;
   bool listItemFromPoint(int x, int y, int& index, int itemCount, int selectedIndex, int listTop, int listHeight,
