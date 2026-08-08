@@ -11,6 +11,7 @@
 #include <cstring>
 #include <iterator>
 
+#include "AppCapabilities.h"
 #include "AppVersion.h"
 #include "BackupStatsActivity.h"
 #include "ButtonRemapActivity.h"
@@ -18,12 +19,12 @@
 #include "ClockOffsetActivity.h"
 #include "ClockSyncActivity.h"
 #include "CrossPointSettings.h"
-#include "QuickActions.h"
 #include "FontSelectionActivity.h"
 #include "KOReaderSettingsActivity.h"
-#include "QuickActionsActivity.h"
 #include "MappedInputManager.h"
 #include "OpdsServerListActivity.h"
+#include "QuickActions.h"
+#include "QuickActionsActivity.h"
 #include "SdCardFontSystem.h"
 #include "SdFirmwareUpdateActivity.h"
 #include "SettingsList.h"
@@ -70,10 +71,14 @@ Rect settingsHeaderRect(const ThemeMetrics& metrics, const int pageWidth) {
 }
 
 bool useLandscapeTouchLayout(const GfxRenderer& renderer) {
-  // Layout is a board capability decision, not a live GT911 probe result. A
-  // Settings activity can be created while touch is being reinitialized, but
-  // it must still match the reader's landscape viewport.
-  return BoardConfig::hasTouch() && renderer.getScreenWidth() > renderer.getScreenHeight();
+  // Layout is an app capability decision, not a live GT911 probe or SDK board
+  // profile result. The simulator supplies touch through its own device
+  // profile, while firmware can construct Settings during touch reinitialization.
+#if CROSSINK_APP_CAP_TOUCH
+  return renderer.getScreenWidth() > renderer.getScreenHeight();
+#else
+  return false;
+#endif
 }
 
 uint8_t enumDisplayIndexForRawValue(const SettingInfo& setting, uint8_t rawValue) {
