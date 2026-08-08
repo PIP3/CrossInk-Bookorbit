@@ -4238,7 +4238,10 @@ void EpubReaderActivity::openQuickActionsPopup() {
       StrId::STR_FOOTNOTES, StrId::STR_BROWSE_FILES, StrId::STR_CALIBRE_WIRELESS,
       StrId::STR_JOIN_NETWORK, StrId::STR_CREATE_HOTSPOT, StrId::STR_SAVE_CLIPPING, StrId::STR_LOOKUP};
   for (const uint8_t action : SETTINGS.quickActionSlots) {
-    if (action == CrossPointSettings::IGNORE || action >= CrossPointSettings::QUICK_ACTION_SLOT_ACTION_COUNT) continue;
+    if (action == CrossPointSettings::IGNORE || action >= CrossPointSettings::QUICK_ACTION_SLOT_ACTION_COUNT ||
+        !QuickActions::isActionAvailable(action)) {
+      continue;
+    }
     labels.emplace_back(I18N.get(labelsByPowerAction[action]));
     actions.push_back(QuickActions::toReaderAction(action));
   }

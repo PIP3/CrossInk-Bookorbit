@@ -1,5 +1,7 @@
 #pragma once
 
+#include <HalTiltSensor.h>
+
 #include "CrossPointSettings.h"
 
 // One source of truth for the shortcut that opens Quick Actions.  UI and web
@@ -7,6 +9,12 @@
 // end up with two physical gestures claiming the same menu.
 namespace QuickActions {
 enum class Trigger : uint8_t { None = 0, ShortPower, LongPower, LongBack, LongMenu };
+
+inline bool supportsTiltPageTurn() { return halTiltSensor.isAvailable(); }
+
+inline bool isActionAvailable(const uint8_t action) {
+  return action != CrossPointSettings::TOGGLE_TILT_PAGE_TURN || supportsTiltPageTurn();
+}
 
 inline void synchronize(CrossPointSettings& settings, Trigger preferred = Trigger::None) {
   const bool shortPower = settings.shortPwrBtn == CrossPointSettings::QUICK_ACTIONS;
@@ -60,7 +68,9 @@ inline CrossPointSettings::LONG_PRESS_MENU_ACTION toReaderAction(uint8_t powerAc
     case CrossPointSettings::SCREENSHOT: return CrossPointSettings::LONG_MENU_SCREENSHOT;
     case CrossPointSettings::CYCLE_PAGE_TURN: return CrossPointSettings::LONG_MENU_CYCLE_PAGE_TURN;
     case CrossPointSettings::FILE_TRANSFER: return CrossPointSettings::LONG_MENU_FILE_TRANSFER;
-    case CrossPointSettings::TOGGLE_TILT_PAGE_TURN: return CrossPointSettings::LONG_MENU_TOGGLE_TILT_PAGE_TURN;
+    case CrossPointSettings::TOGGLE_TILT_PAGE_TURN:
+      return isActionAvailable(powerAction) ? CrossPointSettings::LONG_MENU_TOGGLE_TILT_PAGE_TURN
+                                            : CrossPointSettings::LONG_MENU_OFF;
     case CrossPointSettings::TOGGLE_DARK_MODE: return CrossPointSettings::LONG_MENU_TOGGLE_DARK_MODE;
     case CrossPointSettings::FOOTNOTES: return CrossPointSettings::LONG_MENU_FOOTNOTES;
     case CrossPointSettings::FILE_BROWSER: return CrossPointSettings::LONG_MENU_FILE_BROWSER;

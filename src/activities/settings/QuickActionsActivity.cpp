@@ -28,6 +28,16 @@ std::vector<QuickActions::Trigger> availableTriggers() {
   }
   return triggers;
 }
+
+std::vector<uint8_t> availableActions() {
+  std::vector<uint8_t> actions;
+  actions.reserve(CrossPointSettings::QUICK_ACTION_SLOT_ACTION_COUNT);
+  for (uint8_t action = CrossPointSettings::IGNORE;
+       action < CrossPointSettings::QUICK_ACTION_SLOT_ACTION_COUNT; ++action) {
+    if (QuickActions::isActionAvailable(action)) actions.push_back(action);
+  }
+  return actions;
+}
 }  // namespace
 
 void QuickActionsActivity::onEnter() {
@@ -46,7 +56,10 @@ void QuickActionsActivity::showOverview() {
   rows.emplace_back(std::string(I18N.get(StrId::STR_SHORTCUT)) + ": " + I18N.get(triggerLabels[static_cast<uint8_t>(trigger)]));
   for (uint8_t i = 0; i < 5; ++i) {
     const uint8_t action = SETTINGS.quickActionSlots[i];
-    const char* label = action < CrossPointSettings::QUICK_ACTION_SLOT_ACTION_COUNT ? I18N.get(actionLabels[action]) : "-";
+    const char* label = action < CrossPointSettings::QUICK_ACTION_SLOT_ACTION_COUNT &&
+                                QuickActions::isActionAvailable(action)
+                            ? I18N.get(actionLabels[action])
+                            : "-";
     rows.emplace_back(std::to_string(i + 1) + ". " + label);
   }
   popup.show(StrId::STR_QUICK_ACTIONS, rows, 0, [this](int selected) {
@@ -79,13 +92,15 @@ void QuickActionsActivity::editShortcut() {
 }
 
 void QuickActionsActivity::editSlot(uint8_t slot) {
+  const auto actions = availableActions();
   std::vector<std::string> labels;
-  labels.reserve(CrossPointSettings::QUICK_ACTION_SLOT_ACTION_COUNT);
-  for (const auto label : actionLabels) labels.emplace_back(I18N.get(label));
-  uint8_t current = SETTINGS.quickActionSlots[slot];
-  if (current >= CrossPointSettings::QUICK_ACTION_SLOT_ACTION_COUNT) current = CrossPointSettings::IGNORE;
-  popup.show(StrId::STR_QUICK_ACTIONS, labels, current, [this, slot](int selected) {
-    SETTINGS.quickActionSlots[slot] = static_cast<uint8_t>(selected);
+  labels.reserve(actions.size());
+  for (const uint8_t action : actions) labels.emplace_back(I18N.get(actionLabels[action]));
+  const auto currentIt = std::find(actions.begin(), actions.end(), SETTINGS.quickActionSlots[slot]);
+  const uint8_t current = currentIt == actions.end() ? 0 : static_cast<uint8_t>(currentIt - actions.begin());
+  popup.show(StrId::STR_QUICK_ACTIONS, labels, current, [this, slot, actions](int selected) {
+    if (selected < 0 || static_cast<size_t>(selected) >= actions.size()) return;
+    SETTINGS.quickActionSlots[slot] = actions[selected];
     SETTINGS.saveToFile();
     showOverview();
   });

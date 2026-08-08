@@ -15,6 +15,7 @@
 
 #include "CrossPointSettings.h"
 #include "KOReaderCredentialStore.h"
+#include "QuickActions.h"
 #include "activities/settings/SettingsActivity.h"
 #include "util/Dictionary.h"
 #include "util/DictionaryRegistry.h"
@@ -906,7 +907,7 @@ inline const std::vector<SettingInfo>& getBaseSettingsList() {
     add(SettingInfo::Toggle(StrId::STR_CLOCK_SYNCED, &CrossPointSettings::clockHasBeenSynced, "clockHasBeenSynced",
                             StrId::STR_CAT_SYSTEM));
     // Only show tilt page turn settings when the active device has a supported IMU.
-    if (halTiltSensor.isAvailable()) {
+    if (QuickActions::supportsTiltPageTurn()) {
       for (auto& setting : v) {
         if (setting.nameId == StrId::STR_SHORT_PWR_BTN || setting.nameId == StrId::STR_LONG_PRESS_ACTION ||
             setting.nameId == StrId::STR_LONG_PRESS_MENU_ACTION ||
