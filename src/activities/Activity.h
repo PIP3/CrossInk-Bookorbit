@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "ActivityManager.h"  // for using the ActivityManager singleton
+#include "CrossPointSettings.h"
 #include "ActivityResult.h"
 #include "GfxRenderer.h"
 #include "MappedInputManager.h"
@@ -64,6 +65,7 @@ class Activity {
   virtual bool canSnapshotForSleepOverlay() const { return false; }
   virtual bool handlesReaderPowerSettingsOverride() const { return false; }
   virtual bool openReaderSettingsMenu() { return false; }
+  virtual bool handleShortcutAction(CrossPointSettings::SHORT_PWRBTN) { return false; }
   virtual std::string getCurrentBookPath() const { return {}; }
   virtual ScreenshotInfo getScreenshotInfo() const { return {}; }
 

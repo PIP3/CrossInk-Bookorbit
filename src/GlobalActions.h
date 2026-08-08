@@ -35,3 +35,5 @@ inline bool isPowerButtonActionAvailableOutsideReader(const CrossPointSettings::
 }
 
 void enterDeepSleep(bool fromTimeout = false);
+bool handleGlobalPowerButtonAction(CrossPointSettings::SHORT_PWRBTN action);
+bool dispatchShortcutAction(CrossPointSettings::SHORT_PWRBTN action);

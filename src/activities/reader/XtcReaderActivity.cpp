@@ -750,6 +750,14 @@ bool XtcReaderActivity::executeLongPressBackAction() {
   }
 }
 
+bool XtcReaderActivity::handleShortcutAction(const CrossPointSettings::SHORT_PWRBTN action) {
+  if (action == CrossPointSettings::SHORT_PWRBTN::FILE_BROWSER) {
+    activityManager.goToFileBrowser(xtc ? xtc->getPath() : "");
+    return true;
+  }
+  return false;
+}
+
 void XtcReaderActivity::render(RenderLock&&) {
   if (!xtc) {
     return;

@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "GfxRenderer.h"
+#include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "util/ScreenshotInfo.h"
 
@@ -131,6 +132,7 @@ class ActivityManager {
 #endif
   bool canSnapshotForSleepOverlay() const;
   bool requestManualReaderRefresh();
+  bool handleShortcutAction(CrossPointSettings::SHORT_PWRBTN action);
   bool skipLoopDelay() const;
   std::string getCurrentBookPath() const;
   ScreenshotInfo getScreenshotInfo() const;
