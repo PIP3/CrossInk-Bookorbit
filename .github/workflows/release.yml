@@ -62,7 +62,7 @@ jobs:
       - name: Build CrossInk
         env:
           CROSSINK_RELEASE_VERSION: ${{ env.RELEASE_VERSION }}
-        run: pio run -e default -e sticky
+        run: pio run -j1 -e default -e sticky
 
       - name: Generate release catalog
         run: |

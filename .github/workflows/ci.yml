@@ -79,7 +79,7 @@ jobs:
       - name: Build CrossInk firmware
         run: |
           set -euo pipefail
-          pio run -e default -e sticky -e x4-pro | tee pio.log
+          pio run -j1 -e default -e sticky | tee pio.log
 
       - name: Smoke test button simulator
         run: |

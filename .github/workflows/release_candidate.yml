@@ -88,7 +88,7 @@ jobs:
           for env_name in $RC_ENVS; do
             build_args+=(-e "$env_name")
           done
-          pio run "${build_args[@]}"
+          pio run -j1 "${build_args[@]}"
 
       - name: Create GitHub RC Prerelease
         uses: softprops/action-gh-release@v3
