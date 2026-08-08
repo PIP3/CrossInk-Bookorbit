@@ -51,6 +51,8 @@ class OptionPopup {
     activate(currentIndex);
   }
 
+  void setDismissOnOutsideTouchDown(bool enabled) { dismissOnOutsideTouchDown = enabled; }
+
   bool handleInput(MappedInputManager& input, const std::function<void()>& requestUpdate) {
     if (!active) return false;
 
@@ -75,6 +77,10 @@ class OptionPopup {
           }
           break;
         }
+      }
+      if (dismissOnOutsideTouchDown && !contains(hitLayout.dialog, tx, ty)) {
+        active = false;
+        requestUpdate();
       }
       return true;
     }
@@ -228,6 +234,7 @@ class OptionPopup {
   }
 
   bool active = false;
+  bool dismissOnOutsideTouchDown = false;
   std::string title;
   std::vector<std::string> ownedStrings;
   int selectedIndex = 0;

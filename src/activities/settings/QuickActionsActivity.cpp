@@ -32,6 +32,7 @@ std::vector<QuickActions::Trigger> availableTriggers() {
 
 void QuickActionsActivity::onEnter() {
   Activity::onEnter();
+  popup.setDismissOnOutsideTouchDown(true);
   QuickActions::synchronize(SETTINGS);
   showOverview();
 }
