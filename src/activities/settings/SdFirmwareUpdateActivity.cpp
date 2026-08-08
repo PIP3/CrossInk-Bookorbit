@@ -258,7 +258,13 @@ void SdFirmwareUpdateActivity::render(RenderLock&&) {
   } else if (state == State::FAILED) {
     renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_UPDATE_FAILED), true, EpdFontFamily::BOLD);
     if (!errorMessage.empty()) {
-      renderer.drawCenteredText(UI_10_FONT_ID, top + lineHeight + metrics.verticalSpacing, errorMessage.c_str());
+      const auto errorLines =
+          renderer.wrappedText(UI_10_FONT_ID, errorMessage.c_str(), pageWidth - metrics.contentSidePadding * 2, 3);
+      int errorY = top + lineHeight + metrics.verticalSpacing;
+      for (const auto& line : errorLines) {
+        renderer.drawCenteredText(UI_10_FONT_ID, errorY, line.c_str());
+        errorY += lineHeight;
+      }
     }
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);

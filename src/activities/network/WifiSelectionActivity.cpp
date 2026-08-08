@@ -1316,11 +1316,17 @@ void WifiSelectionActivity::renderSavePrompt(const Rect* screen, const ThemeMetr
 
 void WifiSelectionActivity::renderConnectionFailed(const Rect* screen, const ThemeMetrics* metrics) const {
   const auto height = renderer.getLineHeight(UI_10_FONT_ID);
-  const auto top = screen->y + (screen->height - height * 2) / 2;
+  const int messageWidth = screen->width - metrics->contentSidePadding * 2;
+  const auto errorLines = renderer.wrappedText(UI_10_FONT_ID, connectionError.c_str(), messageWidth, 3);
+  const auto top = screen->y + (screen->height - height * (1 + errorLines.size())) / 2;
 
   UITheme::drawCenteredText(renderer, *screen, UI_12_FONT_ID, top - 20, tr(STR_CONNECTION_FAILED), true,
                             EpdFontFamily::BOLD);
-  UITheme::drawCenteredText(renderer, *screen, UI_10_FONT_ID, top + 20, connectionError.c_str());
+  int errorY = top + height + 10;
+  for (const auto& line : errorLines) {
+    UITheme::drawCenteredText(renderer, *screen, UI_10_FONT_ID, errorY, line.c_str());
+    errorY += height;
+  }
 
   // Use centralized button hints
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_DONE), "", "");

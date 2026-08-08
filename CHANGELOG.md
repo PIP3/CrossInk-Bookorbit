@@ -52,9 +52,12 @@
 
 ### Fixed
 
-- Fixed clock and publisher page-number spacing near the X4 Pro bezel in rotated reader orientations.
-- X4 Pro power-button wakes are no longer mistaken for USB wakeups and sent immediately back to sleep.
-- X4 Pro now detects USB host connections and refreshes the displayed battery percentage as it charges.
+- Holding Up or Down in the book menu now switches between its tabs.
+- Clearing an EPUB's cache from the book menu now returns to the open book instead of Home.
+- Choosing Set Cover from an image now uses that image in place, instead of creating a duplicate `sleep.bmp` at the SD-card root.
+- Page Overlay sleep screens now release regenerable reader-font cache data before decoding a PNG, reducing low-memory fallbacks to the default sleep screen.
+- Custom and Page Overlay sleep-image folders now continue to a valid wallpaper when a selected image cannot render.
+- Long Wi-Fi, nearby-sync, and SD firmware-update error messages now wrap inside the usable screen area.
 - End-of-book suggestions are now collected from the book's original folder before a finished EPUB is moved to `/Read`.
 - KOReader Sync no longer crashes after Wi-Fi connects on X3/X4 while starting network time synchronization.
 - Firmware updates now reject images built for a different ESP32 chip family before writing them.
