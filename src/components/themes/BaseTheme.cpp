@@ -1089,7 +1089,8 @@ void BaseTheme::drawTextField(const GfxRenderer& renderer, Rect rect, const int 
 }
 
 void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, const std::vector<std::string>& options,
-                                int selectedIndex) const {
+                                int selectedIndex, const bool showConfirmationFooter, const char* cancelLabel,
+                                const char* saveLabel) const {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
@@ -1118,8 +1119,11 @@ void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, 
     return;
   }
 
-  const int maxDialogH = std::max(rowHeight + titleLineHeight + metrics.optionPopupTitleGap + innerPadding * 2,
-                                  pageHeight - metrics.buttonHintsHeight - metrics.optionPopupDialogSideMargin * 2);
+  constexpr int footerHeight = 56;
+  const int footerSpace = showConfirmationFooter ? footerHeight : 0;
+  const int maxDialogH =
+      std::max(rowHeight + titleLineHeight + metrics.optionPopupTitleGap + innerPadding * 2 + footerSpace,
+               pageHeight - metrics.buttonHintsHeight - metrics.optionPopupDialogSideMargin * 2);
   // Reserve the narrow scroll gutter up front. A wrapped title may reduce the
   // number of visible options, so deciding this after title layout would make
   // the draw and cached touch geometry disagree.
@@ -1128,13 +1132,13 @@ void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, 
                                    12 / 10,
                                pageWidth - metrics.optionPopupDialogSideMargin * 2);
   const int titleContentWidth = std::max(1, dialogW - innerPadding * 2);
-  const int maxTitleLines =
-      std::max(1, (maxDialogH - innerPadding * 2 - metrics.optionPopupTitleGap - rowHeight) / titleLineHeight);
+  const int maxTitleLines = std::max(
+      1, (maxDialogH - innerPadding * 2 - metrics.optionPopupTitleGap - rowHeight - footerSpace) / titleLineHeight);
   const auto titleLines =
       renderer.wrappedText(UI_12_FONT_ID, title, titleContentWidth, maxTitleLines, EpdFontFamily::BOLD);
   const int titleHeight = static_cast<int>(titleLines.size()) * titleLineHeight;
   const int maxListHeight =
-      std::max(rowHeight, maxDialogH - innerPadding * 2 - titleHeight - metrics.optionPopupTitleGap);
+      std::max(rowHeight, maxDialogH - innerPadding * 2 - titleHeight - metrics.optionPopupTitleGap - footerSpace);
   const int rowStep = rowHeight + itemSpacing;
   const int maxVisibleOptions = std::max(1, std::min(optionCount, (maxListHeight + itemSpacing) / rowStep));
   const int safeSelectedIndex = std::clamp(selectedIndex, 0, optionCount - 1);
@@ -1146,7 +1150,7 @@ void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, 
   const int scrollBarGutter =
       hasHiddenOptions ? metrics.scrollBarWidth + metrics.scrollBarRightOffset + selectionHPadding : 0;
   const int contentHeight = titleHeight + metrics.optionPopupTitleGap + listHeight;
-  const int dialogH = contentHeight + innerPadding * 2;
+  const int dialogH = contentHeight + innerPadding * 2 + footerSpace;
   const int dialogX = (pageWidth - dialogW) / 2;
   const int dialogY = (pageHeight - dialogH) / 2;
 
@@ -1223,5 +1227,19 @@ void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, 
     // Selected on light bg: text stays dark (invert=true).
     const bool invertText = selected ? metrics.optionPopupSelectionLight : true;
     renderer.drawText(optionFontId, textX, textY, labelText, invertText, optionStyle);
+  }
+
+  if (showConfirmationFooter) {
+    const int footerY = dialogY + dialogH - footerHeight;
+    const int dividerX = dialogX + dialogW / 2;
+    renderer.drawLine(dialogX, footerY, dialogX + dialogW, footerY, true);
+    renderer.drawLine(dividerX, footerY, dividerX, dialogY + dialogH, true);
+    const char* leftLabel = cancelLabel ? cancelLabel : "";
+    const char* rightLabel = saveLabel ? saveLabel : "";
+    const int labelY = footerY + (footerHeight - renderer.getLineHeight(UI_12_FONT_ID)) / 2;
+    renderer.drawText(UI_12_FONT_ID, dialogX + (dialogW / 2 - renderer.getTextWidth(UI_12_FONT_ID, leftLabel)) / 2,
+                      labelY, leftLabel, true, EpdFontFamily::BOLD);
+    renderer.drawText(UI_12_FONT_ID, dividerX + (dialogW / 2 - renderer.getTextWidth(UI_12_FONT_ID, rightLabel)) / 2,
+                      labelY, rightLabel, true, EpdFontFamily::BOLD);
   }
 }
