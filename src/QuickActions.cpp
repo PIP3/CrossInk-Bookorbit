@@ -14,11 +14,10 @@ void showConfiguredPopup(OptionPopup& popup, const std::function<void()>& reques
   labels.reserve(std::size(SETTINGS.quickActionSlots));
   actions.reserve(std::size(SETTINGS.quickActionSlots));
   for (const uint8_t action : SETTINGS.quickActionSlots) {
-    if (action == CrossPointSettings::IGNORE || action >= CrossPointSettings::QUICK_ACTION_SLOT_ACTION_COUNT ||
-        !isActionAvailable(action)) {
+    if (action == CrossPointSettings::IGNORE || !isActionAvailable(action)) {
       continue;
     }
-    labels.emplace_back(I18N.get(actionLabels[action]));
+    labels.emplace_back(I18N.get(actionLabel(action)));
     actions.push_back(action);
   }
   if (actions.empty()) return;

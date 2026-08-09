@@ -153,6 +153,21 @@ class OptionPopup {
       return true;
     }
 
+    const auto swipe = input.wasSwipe();
+    if (swipe == MappedInputManager::SwipeDir::Up || swipe == MappedInputManager::SwipeDir::Down) {
+      const auto& hitLayout = getLayout(input.getRenderer());
+      const int visibleCount = static_cast<int>(hitLayout.options.size());
+      if (visibleCount < count) {
+        const int delta = swipe == MappedInputManager::SwipeDir::Up ? visibleCount : -visibleCount;
+        selectedIndex = std::clamp(selectedIndex + delta, 0, count - 1);
+        layoutValid = false;
+        requestUpdate();
+      }
+      touchDownOptionIndex = -1;
+      touchDownTarget = TouchTarget::None;
+      return true;
+    }
+
     if (input.wasPressed(MappedInputManager::Button::Up) || input.wasPressed(MappedInputManager::Button::Left)) {
       if (confirmationMode && footerFocused) {
         footerFocused = false;

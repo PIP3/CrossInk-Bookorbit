@@ -1,5 +1,6 @@
 #pragma once
 
+#include <HalGPIO.h>
 #include <HalTiltSensor.h>
 #include <I18n.h>
 
@@ -44,7 +45,15 @@ inline constexpr std::array<StrId, CrossPointSettings::QUICK_ACTION_SLOT_ACTION_
 inline bool supportsTiltPageTurn() { return halTiltSensor.isAvailable(); }
 
 inline bool isActionAvailable(const uint8_t action) {
-  return action != CrossPointSettings::TOGGLE_TILT_PAGE_TURN || supportsTiltPageTurn();
+  if (action < CrossPointSettings::QUICK_ACTION_SLOT_ACTION_COUNT) {
+    return action != CrossPointSettings::TOGGLE_TILT_PAGE_TURN || supportsTiltPageTurn();
+  }
+  return action == CrossPointSettings::TOGGLE_HOME_BUTTON_IN_READER && gpio.hasHomeKey();
+}
+
+inline StrId actionLabel(const uint8_t action) {
+  if (action < CrossPointSettings::QUICK_ACTION_SLOT_ACTION_COUNT) return actionLabels[action];
+  return StrId::STR_HOME_BUTTON_LOCK;
 }
 
 inline void synchronize(CrossPointSettings& settings, Trigger preferred = Trigger::None) {

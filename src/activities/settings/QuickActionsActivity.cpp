@@ -24,9 +24,8 @@ std::vector<QuickActions::Trigger> availableTriggers() {
 
 std::vector<uint8_t> availableActions() {
   std::vector<uint8_t> actions;
-  actions.reserve(CrossPointSettings::QUICK_ACTION_SLOT_ACTION_COUNT);
-  for (uint8_t action = CrossPointSettings::IGNORE; action < CrossPointSettings::QUICK_ACTION_SLOT_ACTION_COUNT;
-       ++action) {
+  actions.reserve(CrossPointSettings::SHORT_PWRBTN_COUNT);
+  for (uint8_t action = CrossPointSettings::IGNORE; action < CrossPointSettings::SHORT_PWRBTN_COUNT; ++action) {
     if (QuickActions::isActionAvailable(action)) actions.push_back(action);
   }
   return actions;
@@ -53,10 +52,7 @@ void QuickActionsActivity::showOverview() {
                     I18N.get(triggerLabels[static_cast<uint8_t>(draftTrigger)]));
   for (uint8_t i = 0; i < 5; ++i) {
     const uint8_t action = draftSlots[i];
-    const char* label =
-        action < CrossPointSettings::QUICK_ACTION_SLOT_ACTION_COUNT && QuickActions::isActionAvailable(action)
-            ? I18N.get(QuickActions::actionLabels[action])
-            : "-";
+    const char* label = QuickActions::isActionAvailable(action) ? I18N.get(QuickActions::actionLabel(action)) : "-";
     rows.emplace_back(std::to_string(i + 1) + ". " + label);
   }
   popup.showConfirmed(
@@ -92,7 +88,7 @@ void QuickActionsActivity::editSlot(uint8_t slot) {
   const auto actions = availableActions();
   std::vector<std::string> labels;
   labels.reserve(actions.size());
-  for (const uint8_t action : actions) labels.emplace_back(I18N.get(QuickActions::actionLabels[action]));
+  for (const uint8_t action : actions) labels.emplace_back(I18N.get(QuickActions::actionLabel(action)));
   const auto currentIt = std::find(actions.begin(), actions.end(), draftSlots[slot]);
   const uint8_t current = currentIt == actions.end() ? 0 : static_cast<uint8_t>(currentIt - actions.begin());
   popup.show(StrId::STR_QUICK_ACTIONS, labels, current, [this, slot, actions](int selected) {
