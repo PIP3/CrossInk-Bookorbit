@@ -4,6 +4,8 @@
 
 ### Fixed
 
+- Xteink readers wake faster by skipping redundant bootloader image validation after sleep.
+
 ### Changed
 
 ## [v1.5.0] - 2026-08-08
