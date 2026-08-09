@@ -2,15 +2,23 @@
 
 ### Added
 
+### Changed
+
+- Font Family choices now identify built-in and SD-card fonts by their available point-size ranges.
+
 ### Fixed
 
+- Network connections no longer trigger repeated full-panel flashes.
+- Dictionary word selection now follows the physical front-button direction in counter-clockwise landscape mode.
+- End-of-book suggestions can now be opened by tapping them on touch devices.
+- Dictionary font switches now retry after releasing the reader font when memory is tight.
+- XTC table of contents now includes every available page entry, so large books can jump beyond the first 128 pages.
+- Saved clipping highlights now remain accurate when a font or font-size change reflows a word across an inserted hyphen.
 - Xteink readers wake faster by skipping redundant bootloader image validation after sleep.
 - Large EPUB images keep the reader responsive during decoding.
 - Full-height EPUB images no longer disappear when their container adds a top margin.
 - Cancelling a chapter, footnote, location, or QR screen opened from the EPUB menu returns to that menu.
 - EPUB and XTC readers retain less memory during ordinary reading by loading end-of-book suggestions only when needed.
-
-### Changed
 
 ## [v1.5.0] - 2026-08-08
 
@@ -92,7 +100,7 @@
 - Dictionary misses can switch dictionaries without leaving the reader, and dictionary read failures now report an error instead of a false “not found.”
 - Reader popups, KOReader Wi-Fi labels, Lyra battery headers, and the sleep message now remain correctly oriented and positioned.
 - Manual refreshes preserve EPUB and TXT text anti-aliasing; XTC and XTCH status bars show the configured time-left estimate.
-- Watchdog resets return to the crash-report flow, and power-button wake timing no longer depends on SD-card startup.
+- Watchdog panics with captured diagnostics open crash reporting, while reset-only events return normally; power-button wake timing no longer depends on SD-card startup.
 - The web file manager and uploads now handle simulator/device ports and stalled connections safely; unsupported settings stay hidden, and the optimizer removes empty chapter stubs without breaking table-of-contents links.
 
 ## [v1.4.0.1] - 2026-07-28
