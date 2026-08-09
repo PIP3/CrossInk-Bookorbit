@@ -1,3 +1,13 @@
+## [Unreleased]
+
+### Added
+
+### Changed
+
+### Fixed
+
+- Network connections no longer trigger repeated full-panel flashes.
+
 ## [v1.5.0] - 2026-08-08
 
 ### Added
