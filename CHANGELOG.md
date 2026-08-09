@@ -6,6 +6,7 @@
 
 - Xteink readers wake faster by skipping redundant bootloader image validation after sleep.
 - Large EPUB images keep the reader responsive during decoding.
+- Full-height EPUB images no longer disappear when their container adds a top margin.
 
 ### Changed
 

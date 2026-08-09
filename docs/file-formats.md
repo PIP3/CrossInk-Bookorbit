@@ -251,11 +251,14 @@ Binary layout:
 
 ## `section.bin`
 
-### Version 59
+### Version 61
 
 Each file in `sections/*.bin` stores one laid-out spine section. The header is
 also the cache-busting key: if any layout-affecting setting differs from the
 current reader settings, the section is discarded and rebuilt.
+
+Version 61 clamps an inline image's top margin after the page-break decision.
+This prevents a viewport-height image from being cached beyond the page bottom.
 
 Version 59 adds a compact page-start visible-text-offset lookup table. The
 offset is a Unicode codepoint coordinate in the spine XHTML, so reader progress

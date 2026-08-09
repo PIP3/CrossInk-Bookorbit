@@ -2088,6 +2088,13 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                   }
                 }
 
+                // A viewport-height image leaves no room for a container top
+                // margin, including after the page break above starts a fresh page.
+                // Keep the placement inside the renderable viewport.
+                if (self->currentPageNextY + imageMarginTop + displayHeight > self->viewportHeight) {
+                  const int remainingTopMargin = self->viewportHeight - displayHeight - self->currentPageNextY;
+                  imageMarginTop = static_cast<int16_t>(std::max(0, remainingTopMargin));
+                }
                 self->currentPageNextY += imageMarginTop;
                 self->attachPendingPublisherPageMarkers(self->currentPageNextY);
 
