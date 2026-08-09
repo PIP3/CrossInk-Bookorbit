@@ -2569,7 +2569,7 @@ void EpubReaderActivity::loop() {
   }
 
 #if CROSSINK_APP_CAP_TOUCH
-  if (touch.tapped && handleTouchFootnoteLink(touch.x, touch.y)) {
+  if (!atEndOfBook && touch.tapped && handleTouchFootnoteLink(touch.x, touch.y)) {
     return;
   }
 #endif
