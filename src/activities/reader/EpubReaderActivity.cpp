@@ -2541,13 +2541,26 @@ void EpubReaderActivity::loop() {
   // finished. Two independent finished-book features key off this same condition.
   const bool atEndOfBook = currentSpineIndex > 0 && currentSpineIndex >= epub->getSpineItemsCount();
 
-  // Collect suggestions before arming the /Read move or handling an input that may
-  // leave the reader. render() normally gets here first, but its update is asynchronous;
-  // a queued page-turn/home input can otherwise exit and move the EPUB before the render
-  // task has scanned the book's original folder.
-  if (atEndOfBook && !endOfBookOptions.loaded()) {
+  // Paged back into the book: release the end screen app and its theme tokens.
+  if (!atEndOfBook && endOfBookOptions) {
     RenderLock lock(*this);
-    endOfBookOptions.loadOnce(epub->getPath());
+    endOfBookOptions.reset();
+  }
+
+  // The render task is asynchronous. Prepare suggestions before an input can
+  // leave the reader and move this EPUB into /Read/, while still allocating
+  // this UI state only when the end screen is reached.
+  if (atEndOfBook) {
+    RenderLock lock(*this);
+    if (!endOfBookOptions) {
+      endOfBookOptions = makeUniqueNoThrow<EndOfBookOptions>(renderer);
+      if (!endOfBookOptions) {
+        LOG_ERR("ERS", "OOM: EndOfBookOptions (%u bytes)", static_cast<unsigned>(sizeof(EndOfBookOptions)));
+      }
+    }
+    if (endOfBookOptions) {
+      endOfBookOptions->loadOnce(epub->getPath());
+    }
   }
 
   // Drop this book from the Recent Books list; if the reader then pages back into the book,
@@ -2626,9 +2639,9 @@ void EpubReaderActivity::loop() {
   // While the end screen suggestion menu is showing it owns Confirm/Back/navigation
   // input. Anything it doesn't handle (e.g. long-press Back) falls through to the
   // regular handlers below; page turns are absorbed by the end-of-book block.
-  if (atEndOfBook && endOfBookOptions.menuActive()) {
+  if (atEndOfBook && endOfBookOptions && endOfBookOptions->menuActive()) {
     std::string openPath;
-    switch (endOfBookOptions.handleMenuInput(mappedInput, &openPath)) {
+    switch (endOfBookOptions->handleMenuInput(mappedInput, &openPath)) {
       case EndOfBookOptions::Action::OpenBook:
         activityManager.goToReader(openPath);
         return;
@@ -2836,7 +2849,7 @@ void EpubReaderActivity::loop() {
   // At end of the book with no suggestion menu, forward button goes home and back
   // button returns to last page
   if (currentSpineIndex > 0 && currentSpineIndex >= epub->getSpineItemsCount()) {
-    if (endOfBookOptions.menuActive()) {
+    if (endOfBookOptions && endOfBookOptions->menuActive()) {
       // Selection movement was handled above; absorb leftover page-turn triggers so
       // e.g. "previous" at the top of the list doesn't jump back into the book
       return;
@@ -4878,11 +4891,17 @@ void EpubReaderActivity::render(RenderLock&& lock) {
 
   // Show end of book screen
   if (currentSpineIndex == epub->getSpineItemsCount()) {
-    // Usually preloaded by loop() before the /Read move is armed. Keep this fallback
-    // for an initial render that wins the race with the main task.
-    endOfBookOptions.loadOnce(epub->getPath());
+    if (!endOfBookOptions) {
+      endOfBookOptions = makeUniqueNoThrow<EndOfBookOptions>(renderer);
+      if (!endOfBookOptions) {
+        LOG_ERR("ERS", "OOM: EndOfBookOptions (%u bytes)", static_cast<unsigned>(sizeof(EndOfBookOptions)));
+      }
+    }
     renderer.clearScreen();
-    endOfBookOptions.render(renderer, mappedInput);
+    if (endOfBookOptions) {
+      endOfBookOptions->loadOnce(epub->getPath());
+      endOfBookOptions->render(renderer, mappedInput);
+    }
     renderer.displayBuffer();
     automaticPageTurnActive = false;
     showPendingSyncSaveError();

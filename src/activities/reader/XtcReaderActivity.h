@@ -9,6 +9,7 @@
 
 #include <Xtc.h>
 
+#include <memory>
 #include <string>
 #include <utility>
 
@@ -35,8 +36,8 @@ class XtcReaderActivity final : public Activity {
   bool frontButtonLongPressHandled = false;
   bool longPressBackHandled = false;
   ReaderProgressSaveDebouncer progressSaveDebouncer;
-  // Next-book suggestion menu for the End-of-Book screen
-  EndOfBookOptions endOfBookOptions{renderer};
+  // The end screen owns these UI resources only while it is visible.
+  std::unique_ptr<EndOfBookOptions> endOfBookOptions;
 
   enum class StatusBarOverlayPosition { Bottom, Top };
   struct StatusBarInfo {

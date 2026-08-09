@@ -11,6 +11,7 @@
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
+#include <Memory.h>
 
 #include <algorithm>
 
@@ -184,13 +185,19 @@ void XtcReaderActivity::loop() {
   const auto touch = ReaderUtils::detectTouchPageTurn(renderer, mappedInput);
   const bool atEndOfBook = currentPage >= xtc->getPageCount();
 
+  // Paged back into the book: release the end screen app and its theme tokens.
+  if (!atEndOfBook && endOfBookOptions) {
+    RenderLock lock(*this);
+    endOfBookOptions.reset();
+  }
+
   // While the end screen suggestion menu is showing it owns Confirm/Back/navigation
   // input. Anything it doesn't handle (e.g. long-press Back to the file browser) falls
   // through to the regular handlers below; page turns are absorbed by the end-of-book
   // block.
-  if (atEndOfBook && endOfBookOptions.menuActive()) {
+  if (atEndOfBook && endOfBookOptions && endOfBookOptions->menuActive()) {
     std::string openPath;
-    switch (endOfBookOptions.handleMenuInput(mappedInput, &openPath)) {
+    switch (endOfBookOptions->handleMenuInput(mappedInput, &openPath)) {
       case EndOfBookOptions::Action::OpenBook:
         activityManager.goToReader(openPath);
         return;
@@ -375,7 +382,7 @@ void XtcReaderActivity::loop() {
   // At end of the book with no suggestion menu, forward button goes home and back
   // button returns to last page
   if (currentPage >= xtc->getPageCount()) {
-    if (endOfBookOptions.menuActive()) {
+    if (endOfBookOptions && endOfBookOptions->menuActive()) {
       // Selection movement was handled above; absorb leftover page-turn triggers so
       // e.g. "previous" at the top of the list doesn't jump back into the book
       return;
@@ -789,11 +796,19 @@ void XtcReaderActivity::render(RenderLock&&) {
 
   // Bounds check
   if (currentPage >= xtc->getPageCount()) {
-    // Show end of book screen. Sole load site: runs on the render task (serialized by
-    // RenderLock); the main task only reads the suggestions once the flag is published.
-    endOfBookOptions.loadOnce(xtc->getPath());
+    // This is the sole creation and load site: its app and theme tokens are
+    // absent during normal reading and allocation failure leaves an empty end screen.
+    if (!endOfBookOptions) {
+      endOfBookOptions = makeUniqueNoThrow<EndOfBookOptions>(renderer);
+      if (!endOfBookOptions) {
+        LOG_ERR("XTR", "OOM: EndOfBookOptions (%u bytes)", static_cast<unsigned>(sizeof(EndOfBookOptions)));
+      }
+    }
     renderer.clearScreen();
-    endOfBookOptions.render(renderer, mappedInput);
+    if (endOfBookOptions) {
+      endOfBookOptions->loadOnce(xtc->getPath());
+      endOfBookOptions->render(renderer, mappedInput);
+    }
     renderer.displayBuffer();
     return;
   }
