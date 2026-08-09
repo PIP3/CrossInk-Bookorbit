@@ -233,6 +233,10 @@ bool MappedInputManager::wasScreenTapped(int& x, int& y) const {
   }
 #ifdef SIMULATOR
   if (simulatorTouch.releasedThisFrame) {
+    if (simulatorTouch.longPressFired) {
+      simulatorTouch.longPressFired = false;
+      return false;
+    }
     x = simulatorTouch.startX;
     y = simulatorTouch.startY;
     rememberTouchHeldTime();
@@ -256,6 +260,25 @@ bool MappedInputManager::wasScreenTapped(int& x, int& y, unsigned long& heldMs) 
 bool MappedInputManager::isScreenTouchLongPress(int& x, int& y, const unsigned long thresholdMs) const {
   unsigned long heldMs = 0;
   return isScreenTouchTapCandidate(x, y, heldMs) && heldMs >= thresholdMs;
+}
+
+bool MappedInputManager::wasScreenLongPress(int& x, int& y) const {
+  if (!touchInputEnabled()) return false;
+#ifdef SIMULATOR
+  if (simulatorTouch.pressed && !simulatorTouch.longPressFired &&
+      millis() - simulatorTouch.startedAt >= 500UL) {
+    simulatorTouch.longPressFired = true;
+    x = simulatorTouch.startX;
+    y = simulatorTouch.startY;
+    return true;
+  }
+#endif
+  float nx = 0.0f;
+  float ny = 0.0f;
+  if (!gpio.wasTouchLongPress(nx, ny)) return false;
+  gpio.suppressTouchContact();
+  renderer.tapToLogical(nx, ny, x, y);
+  return true;
 }
 
 bool MappedInputManager::isInVerticalEdgeGestureZone(const int y) const {
@@ -908,6 +931,7 @@ void MappedInputManager::simulatorClearInputFrame() {
 #if CROSSINK_APP_CAP_TOUCH
   simulatorTouch.pressedThisFrame = false;
   simulatorTouch.releasedThisFrame = false;
+  simulatorTouch.longPressFired = false;
 #endif
 }
 
