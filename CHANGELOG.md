@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Font Family choices now identify built-in and SD-card fonts by their available point-size ranges.
+
 ### Fixed
 
 - Network connections no longer trigger repeated full-panel flashes.
