@@ -3198,7 +3198,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
               armReadingPaceWarmup("chapter_jump");
               pauseReadingPaceTimer("chapter_jump");
             } else {
-              resumeReadingPaceTimer("chapter_selection_cancel");
+              openReaderMenu();
             }
           });
       break;
@@ -3211,7 +3211,8 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
                                  const auto& footnoteResult = std::get<FootnoteResult>(result.data);
                                  navigateToHref(footnoteResult.href, true);
                                } else {
-                                 resumeReadingPaceTimer("footnotes_cancel");
+                                 openReaderMenu();
+                                 return;
                                }
                                requestUpdate();
                              });
@@ -3232,7 +3233,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
             if (!result.isCancelled) {
               jumpToPercent(std::get<PercentResult>(result.data).percent);
             } else {
-              resumeReadingPaceTimer("percent_selection_cancel");
+              openReaderMenu();
             }
           });
       break;
@@ -3258,7 +3259,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
             pauseReadingPaceTimer("qr_display");
             startActivityForResult(
                 std::make_unique<QrDisplayActivity>(renderer, mappedInput, fullText),
-                [this](const ActivityResult& result) { resumeReadingPaceTimer("qr_display_return"); });
+                [this](const ActivityResult&) { openReaderMenu(); });
             break;
           }
         }
