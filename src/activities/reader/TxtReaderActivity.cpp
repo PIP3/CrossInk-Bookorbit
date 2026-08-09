@@ -408,7 +408,7 @@ bool TxtReaderActivity::executeLongPressBackAction() {
       enterDeepSleep();
       return true;
     case CrossPointSettings::LONG_PRESS_MENU_ACTION::LONG_MENU_REFRESH_SCREEN:
-      pagesUntilFullRefresh = 1;
+      prepareManualRefresh();
       requestUpdate();
       return true;
     case CrossPointSettings::LONG_PRESS_MENU_ACTION::LONG_MENU_FILE_TRANSFER:

@@ -181,7 +181,12 @@ inline PageTurnResult detectPageTurn(const MappedInputManager& input) {
 // renderer.waitRefreshComplete() and must rebuild the differential baseline
 // before the next page turn (the tiled grayscale cleanup does).
 inline void displayWithRefreshCycle(const GfxRenderer& renderer, int& pagesUntilFullRefresh, bool async = false) {
-  const auto mode = (pagesUntilFullRefresh <= 1) ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH;
+  // A negative countdown is reserved for the explicit Refresh Screen shortcut.
+  // Regular cadence cleanup remains a HALF refresh at 1, while the manual command
+  // uses the panel's visibly complete waveform.
+  const auto mode = pagesUntilFullRefresh < 0    ? HalDisplay::FULL_REFRESH
+                    : pagesUntilFullRefresh <= 1 ? HalDisplay::HALF_REFRESH
+                                                 : HalDisplay::FAST_REFRESH;
   if (async) {
     renderer.displayBufferAsync(mode);
   } else {

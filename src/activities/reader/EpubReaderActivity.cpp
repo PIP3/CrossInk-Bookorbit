@@ -6070,7 +6070,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int fo
       // Image pages intentionally bypass the regular refresh cadence. Preserve
       // a pending clean base before their double-FAST grayscale pipeline.
       if (cleanImageBasePending) {
-        renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+        renderer.displayBuffer(pagesUntilFullRefresh < 0 ? HalDisplay::FULL_REFRESH : HalDisplay::HALF_REFRESH);
         cleanImageBasePending = false;
       }
       renderer.displayBuffer(HalDisplay::FAST_REFRESH);
@@ -6083,7 +6083,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int fo
       // text-only grayscale turns; other panels keep the FAST fallback behavior.
       renderer.displayGrayscaleBase(HalDisplay::FAST_REFRESH);
     } else {
-      renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+      renderer.displayBuffer(pagesUntilFullRefresh < 0 ? HalDisplay::FULL_REFRESH : HalDisplay::HALF_REFRESH);
     }
     // The image's own page is handled above and doesn't count toward the full
     // refresh cadence. But the grayscale pass below leaves gray charge in the
@@ -6097,7 +6097,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int fo
       // Cleanup turns still need the stronger HALF pass, but X3 grayscale
       // overlays settle better if the OEM precondition step runs before the
       // gray planes are written.
-      renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+      renderer.displayBuffer(pagesUntilFullRefresh < 0 ? HalDisplay::FULL_REFRESH : HalDisplay::HALF_REFRESH);
       renderer.preconditionGrayscale();
       pagesUntilFullRefresh = SETTINGS.getRefreshFrequency();
     } else if (overlapRefresh) {

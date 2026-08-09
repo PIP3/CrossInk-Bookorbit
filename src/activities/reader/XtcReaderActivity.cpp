@@ -742,7 +742,7 @@ bool XtcReaderActivity::executeLongPressBackAction() {
       enterDeepSleep();
       return true;
     case CrossPointSettings::LONG_PRESS_MENU_ACTION::LONG_MENU_REFRESH_SCREEN:
-      pagesUntilFullRefresh = 1;
+      prepareManualRefresh();
       requestUpdate();
       return true;
     case CrossPointSettings::LONG_PRESS_MENU_ACTION::LONG_MENU_FILE_TRANSFER:
@@ -902,7 +902,7 @@ void XtcReaderActivity::renderPage() {
     }
 
     if (pagesUntilFullRefresh <= 1) {
-      renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+      renderer.displayBuffer(pagesUntilFullRefresh < 0 ? HalDisplay::FULL_REFRESH : HalDisplay::HALF_REFRESH);
       renderer.preconditionGrayscale();
       pagesUntilFullRefresh = SETTINGS.getRefreshFrequency();
     } else {

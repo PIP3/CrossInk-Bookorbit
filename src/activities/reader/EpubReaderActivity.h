@@ -440,7 +440,7 @@ class EpubReaderActivity final : public Activity {
   void loop() override;
   void render(RenderLock&& lock) override;
   bool prepareManualRefresh() override {
-    pagesUntilFullRefresh = 1;
+    pagesUntilFullRefresh = -1;
     cleanImageBasePending = true;
     return true;
   }

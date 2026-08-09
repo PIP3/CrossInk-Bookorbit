@@ -83,7 +83,7 @@ class XtcReaderActivity final : public Activity {
   void loop() override;
   void render(RenderLock&&) override;
   bool prepareManualRefresh() override {
-    pagesUntilFullRefresh = 1;
+    pagesUntilFullRefresh = -1;
     return true;
   }
   bool isReaderActivity() const override { return true; }
