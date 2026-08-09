@@ -1090,7 +1090,7 @@ void BaseTheme::drawTextField(const GfxRenderer& renderer, Rect rect, const int 
 
 void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, const std::vector<std::string>& options,
                                 int selectedIndex, const bool showConfirmationFooter, const char* cancelLabel,
-                                const char* saveLabel) const {
+                                const char* saveLabel, const bool saveFocused) const {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
@@ -1202,7 +1202,7 @@ void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, 
   for (int visibleIndex = 0; visibleIndex < visibleCount; visibleIndex++) {
     const int optionIndex = visibleStart + visibleIndex;
     const int itemY = y + visibleIndex * (rowHeight + itemSpacing);
-    const bool selected = (optionIndex == safeSelectedIndex);
+    const bool selected = !saveFocused && optionIndex == safeSelectedIndex;
     const char* labelText = options[optionIndex].c_str();
 
     if (metrics.optionPopupDrawAllRows || selected) {
@@ -1237,9 +1237,10 @@ void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, 
     const char* leftLabel = cancelLabel ? cancelLabel : "";
     const char* rightLabel = saveLabel ? saveLabel : "";
     const int labelY = footerY + (footerHeight - renderer.getLineHeight(UI_12_FONT_ID)) / 2;
+    if (saveFocused) renderer.fillRect(dividerX, footerY + 1, dialogX + dialogW - dividerX, footerHeight - 1, true);
     renderer.drawText(UI_12_FONT_ID, dialogX + (dialogW / 2 - renderer.getTextWidth(UI_12_FONT_ID, leftLabel)) / 2,
                       labelY, leftLabel, true, EpdFontFamily::BOLD);
     renderer.drawText(UI_12_FONT_ID, dividerX + (dialogW / 2 - renderer.getTextWidth(UI_12_FONT_ID, rightLabel)) / 2,
-                      labelY, rightLabel, true, EpdFontFamily::BOLD);
+                      labelY, rightLabel, !saveFocused, EpdFontFamily::BOLD);
   }
 }

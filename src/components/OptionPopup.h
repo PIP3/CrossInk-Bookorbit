@@ -47,10 +47,12 @@ class OptionPopup {
   }
 
   void showConfirmed(StrId titleId, const std::vector<std::string>& options, int currentIndex,
-                     std::function<void(int)> onSave, std::function<void()> onCancel) {
+                     std::function<void(int)> onActivate, std::function<void()> onSave,
+                     std::function<void()> onCancel) {
     title = I18N.get(titleId);
     ownedStrings = options;
-    onSelectCallback = std::move(onSave);
+    onSelectCallback = std::move(onActivate);
+    onSaveCallback = std::move(onSave);
     onCancelCallback = std::move(onCancel);
     confirmationMode = true;
     activate(currentIndex);
@@ -117,7 +119,7 @@ class OptionPopup {
         return true;
       }
       if (touchDownTarget == TouchTarget::Save && contains(hitLayout.save, tx, ty)) {
-        save(input, requestUpdate, false);
+        confirm(input, requestUpdate, false);
         return true;
       }
       if (touchDownTarget == TouchTarget::Outside && !contains(hitLayout.dialog, tx, ty)) {
@@ -128,7 +130,7 @@ class OptionPopup {
         selectedIndex = touchDownOptionIndex;
         touchDownOptionIndex = -1;
         if (confirmationMode) {
-          requestUpdate();
+          activateSelection(input, requestUpdate, false);
           return true;
         }
         save(input, requestUpdate, false);
@@ -138,7 +140,7 @@ class OptionPopup {
         if (contains(hitLayout.options[i], tx, ty)) {
           selectedIndex = hitLayout.firstOptionIndex + i;
           if (confirmationMode) {
-            requestUpdate();
+            activateSelection(input, requestUpdate, false);
             return true;
           }
           save(input, requestUpdate, false);
@@ -152,18 +154,38 @@ class OptionPopup {
     }
 
     if (input.wasPressed(MappedInputManager::Button::Up) || input.wasPressed(MappedInputManager::Button::Left)) {
-      selectedIndex = (selectedIndex - 1 + count) % count;
+      if (confirmationMode && footerFocused) {
+        footerFocused = false;
+        selectedIndex = count - 1;
+      } else if (confirmationMode && selectedIndex == 0) {
+        footerFocused = true;
+      } else {
+        selectedIndex = (selectedIndex - 1 + count) % count;
+      }
       layoutValid = false;
       requestUpdate();
       return true;
     } else if (input.wasPressed(MappedInputManager::Button::Down) ||
                input.wasPressed(MappedInputManager::Button::Right)) {
-      selectedIndex = (selectedIndex + 1) % count;
+      if (confirmationMode && footerFocused) {
+        footerFocused = false;
+        selectedIndex = 0;
+      } else if (confirmationMode && selectedIndex == count - 1) {
+        footerFocused = true;
+      } else {
+        selectedIndex = (selectedIndex + 1) % count;
+      }
       layoutValid = false;
       requestUpdate();
       return true;
     } else if (input.wasPressed(MappedInputManager::Button::Confirm)) {
-      save(input, requestUpdate, true);
+      if (confirmationMode && !footerFocused) {
+        activateSelection(input, requestUpdate, true);
+      } else if (confirmationMode) {
+        confirm(input, requestUpdate, true);
+      } else {
+        save(input, requestUpdate, true);
+      }
       return true;
     } else if (input.wasPressed(MappedInputManager::Button::Back)) {
       cancel(input, requestUpdate, true);
@@ -174,9 +196,9 @@ class OptionPopup {
 
   bool processRender(GfxRenderer& renderer, const MappedInputManager& input) const {
     if (!active) return false;
-    const auto popupLabels =
-        input.mapLabels(confirmationMode ? tr(STR_CANCEL) : tr(STR_BACK),
-                        confirmationMode ? tr(STR_SAVE) : tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+    const auto popupLabels = input.mapLabels(confirmationMode ? tr(STR_CANCEL) : tr(STR_BACK),
+                                             confirmationMode && footerFocused ? tr(STR_SAVE) : tr(STR_SELECT),
+                                             tr(STR_DIR_UP), tr(STR_DIR_DOWN));
     GUI.drawButtonHints(renderer, popupLabels.btn1, popupLabels.btn2, popupLabels.btn3, popupLabels.btn4, true);
     render(renderer);
     renderer.displayBuffer();
@@ -186,7 +208,7 @@ class OptionPopup {
   void render(const GfxRenderer& renderer) const {
     if (!active) return;
     GUI.drawOptionPopup(renderer, title.c_str(), ownedStrings, selectedIndex, confirmationMode, tr(STR_CANCEL),
-                        tr(STR_SAVE));
+                        tr(STR_SAVE), footerFocused);
   }
 
   bool isActive() const { return active; }
@@ -286,12 +308,14 @@ class OptionPopup {
   bool active = false;
   bool dismissOnOutsideTouchDown = false;
   bool confirmationMode = false;
+  bool footerFocused = false;
   std::string title;
   std::vector<std::string> ownedStrings;
   int selectedIndex = 0;
   int touchDownOptionIndex = -1;
   TouchTarget touchDownTarget = TouchTarget::None;
   std::function<void(int)> onSelectCallback;
+  std::function<void()> onSaveCallback;
   std::function<void()> onCancelCallback;
   mutable Layout layout;
   mutable bool layoutValid = false;
@@ -300,6 +324,7 @@ class OptionPopup {
     layoutValid = false;
     touchDownOptionIndex = -1;
     touchDownTarget = TouchTarget::None;
+    footerFocused = false;
     if (ownedStrings.empty()) {
       active = false;
       onSelectCallback = nullptr;
@@ -320,7 +345,24 @@ class OptionPopup {
 
   void prepareStandardShow() {
     confirmationMode = false;
+    footerFocused = false;
+    onSaveCallback = nullptr;
     onCancelCallback = nullptr;
+  }
+
+  void activateSelection(MappedInputManager& input, const std::function<void()>& requestUpdate,
+                         const bool suppressRelease) {
+    active = false;
+    if (suppressRelease) input.suppressNextConfirmRelease();
+    if (onSelectCallback) onSelectCallback(selectedIndex);
+    requestUpdate();
+  }
+
+  void confirm(MappedInputManager& input, const std::function<void()>& requestUpdate, const bool suppressRelease) {
+    active = false;
+    if (suppressRelease) input.suppressNextConfirmRelease();
+    if (onSaveCallback) onSaveCallback();
+    requestUpdate();
   }
 
   void save(MappedInputManager& input, const std::function<void()>& requestUpdate, const bool suppressRelease) {

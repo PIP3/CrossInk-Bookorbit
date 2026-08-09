@@ -72,6 +72,23 @@ inline void synchronize(CrossPointSettings& settings, Trigger preferred = Trigge
   settings.quickActionsTrigger = static_cast<uint8_t>(owner);
 }
 
+inline void applyTrigger(CrossPointSettings& settings, const Trigger trigger) {
+  if (settings.shortPwrBtn == CrossPointSettings::QUICK_ACTIONS) settings.shortPwrBtn = CrossPointSettings::IGNORE;
+  if (settings.longPwrBtn == CrossPointSettings::QUICK_ACTIONS) settings.longPwrBtn = CrossPointSettings::IGNORE;
+  if (settings.longPressBackAction == CrossPointSettings::LONG_MENU_QUICK_ACTIONS) {
+    settings.longPressBackAction = CrossPointSettings::LONG_MENU_OFF;
+  }
+  if (settings.longPressMenuAction == CrossPointSettings::LONG_MENU_QUICK_ACTIONS) {
+    settings.longPressMenuAction = CrossPointSettings::LONG_MENU_OFF;
+  }
+
+  if (trigger == Trigger::ShortPower) settings.shortPwrBtn = CrossPointSettings::QUICK_ACTIONS;
+  if (trigger == Trigger::LongPower) settings.longPwrBtn = CrossPointSettings::QUICK_ACTIONS;
+  if (trigger == Trigger::LongBack) settings.longPressBackAction = CrossPointSettings::LONG_MENU_QUICK_ACTIONS;
+  if (trigger == Trigger::LongMenu) settings.longPressMenuAction = CrossPointSettings::LONG_MENU_QUICK_ACTIONS;
+  settings.quickActionsTrigger = static_cast<uint8_t>(trigger);
+}
+
 inline Trigger triggerForSetting(uint8_t CrossPointSettings::* member) {
   if (member == &CrossPointSettings::shortPwrBtn) return Trigger::ShortPower;
   if (member == &CrossPointSettings::longPwrBtn) return Trigger::LongPower;

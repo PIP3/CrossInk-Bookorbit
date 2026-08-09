@@ -37,32 +37,37 @@ void QuickActionsActivity::onEnter() {
   Activity::onEnter();
   popup.setDismissOnOutsideTouchDown(true);
   QuickActions::synchronize(SETTINGS);
+  draftTrigger = static_cast<QuickActions::Trigger>(SETTINGS.quickActionsTrigger);
+  std::copy_n(SETTINGS.quickActionSlots, draftSlots.size(), draftSlots.begin());
   showOverview();
 }
 
 void QuickActionsActivity::showOverview() {
   std::vector<std::string> rows;
   rows.reserve(6);
-  auto trigger = static_cast<QuickActions::Trigger>(SETTINGS.quickActionsTrigger);
   const auto triggers = availableTriggers();
-  if (std::find(triggers.begin(), triggers.end(), trigger) == triggers.end()) trigger = QuickActions::Trigger::None;
+  if (std::find(triggers.begin(), triggers.end(), draftTrigger) == triggers.end()) {
+    draftTrigger = QuickActions::Trigger::None;
+  }
   rows.emplace_back(std::string(I18N.get(StrId::STR_SHORTCUT)) + ": " +
-                    I18N.get(triggerLabels[static_cast<uint8_t>(trigger)]));
+                    I18N.get(triggerLabels[static_cast<uint8_t>(draftTrigger)]));
   for (uint8_t i = 0; i < 5; ++i) {
-    const uint8_t action = SETTINGS.quickActionSlots[i];
+    const uint8_t action = draftSlots[i];
     const char* label =
         action < CrossPointSettings::QUICK_ACTION_SLOT_ACTION_COUNT && QuickActions::isActionAvailable(action)
             ? I18N.get(QuickActions::actionLabels[action])
             : "-";
     rows.emplace_back(std::to_string(i + 1) + ". " + label);
   }
-  popup.show(StrId::STR_QUICK_ACTIONS, rows, 0, [this](int selected) {
-    if (selected == 0)
-      editShortcut();
-    else if (selected > 0 && selected <= 5)
-      editSlot(static_cast<uint8_t>(selected - 1));
-  });
-  popup.setCancelCallback([this] { finish(); });
+  popup.showConfirmed(
+      StrId::STR_QUICK_ACTIONS, rows, 0,
+      [this](int selected) {
+        if (selected == 0)
+          editShortcut();
+        else if (selected > 0 && selected <= 5)
+          editSlot(static_cast<uint8_t>(selected - 1));
+      },
+      [this] { saveDraft(); }, [this] { finish(); });
   requestUpdate();
 }
 
@@ -73,19 +78,11 @@ void QuickActionsActivity::editShortcut() {
   uint8_t current = 0;
   for (uint8_t i = 0; i < triggers.size(); ++i) {
     labels.emplace_back(I18N.get(triggerLabels[static_cast<uint8_t>(triggers[i])]));
-    if (static_cast<uint8_t>(triggers[i]) == SETTINGS.quickActionsTrigger) current = i;
+    if (triggers[i] == draftTrigger) current = i;
   }
   popup.show(StrId::STR_SHORTCUT, labels, current, [this, triggers](int selected) {
     if (selected < 0 || static_cast<size_t>(selected) >= triggers.size()) return;
-    const auto trigger = triggers[selected];
-    if (trigger == QuickActions::Trigger::ShortPower) SETTINGS.shortPwrBtn = CrossPointSettings::QUICK_ACTIONS;
-    if (trigger == QuickActions::Trigger::LongPower) SETTINGS.longPwrBtn = CrossPointSettings::QUICK_ACTIONS;
-    if (trigger == QuickActions::Trigger::LongBack)
-      SETTINGS.longPressBackAction = CrossPointSettings::LONG_MENU_QUICK_ACTIONS;
-    if (trigger == QuickActions::Trigger::LongMenu)
-      SETTINGS.longPressMenuAction = CrossPointSettings::LONG_MENU_QUICK_ACTIONS;
-    QuickActions::synchronize(SETTINGS, trigger);
-    SETTINGS.saveToFile();
+    draftTrigger = triggers[selected];
     showOverview();
   });
   popup.setCancelCallback([this] { showOverview(); });
@@ -96,23 +93,26 @@ void QuickActionsActivity::editSlot(uint8_t slot) {
   std::vector<std::string> labels;
   labels.reserve(actions.size());
   for (const uint8_t action : actions) labels.emplace_back(I18N.get(QuickActions::actionLabels[action]));
-  const auto currentIt = std::find(actions.begin(), actions.end(), SETTINGS.quickActionSlots[slot]);
+  const auto currentIt = std::find(actions.begin(), actions.end(), draftSlots[slot]);
   const uint8_t current = currentIt == actions.end() ? 0 : static_cast<uint8_t>(currentIt - actions.begin());
-  popup.showConfirmed(
-      StrId::STR_QUICK_ACTIONS, labels, current,
-      [this, slot, actions](int selected) {
-        if (selected < 0 || static_cast<size_t>(selected) >= actions.size()) return;
-        SETTINGS.quickActionSlots[slot] = actions[selected];
-        SETTINGS.saveToFile();
-        showOverview();
-      },
-      [this] { showOverview(); });
+  popup.show(StrId::STR_QUICK_ACTIONS, labels, current, [this, slot, actions](int selected) {
+    if (selected < 0 || static_cast<size_t>(selected) >= actions.size()) return;
+    draftSlots[slot] = actions[selected];
+    showOverview();
+  });
+  popup.setCancelCallback([this] { showOverview(); });
+}
+
+void QuickActionsActivity::saveDraft() {
+  QuickActions::applyTrigger(SETTINGS, draftTrigger);
+  std::copy(draftSlots.begin(), draftSlots.end(), SETTINGS.quickActionSlots);
+  SETTINGS.saveToFile();
+  finish();
 }
 
 void QuickActionsActivity::loop() {
   if (popup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    SETTINGS.saveToFile();
     finish();
   }
 }
