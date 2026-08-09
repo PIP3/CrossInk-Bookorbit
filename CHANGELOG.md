@@ -9,6 +9,7 @@
 ### Fixed
 
 - Quick Actions shortcuts now open reliably while reading.
+- Quick Actions now close before refreshing the reader screen.
 - Opening Settings from the frontlight panel no longer freezes the reader.
 - EPUB tables now lay out a row at a time in both Incremental and Full Section indexing, keeping regular tables readable without whole-table buffering.
 - Touch support for Seeed Studio Sticky

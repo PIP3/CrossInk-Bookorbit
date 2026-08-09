@@ -510,7 +510,8 @@ bool handleGlobalPowerButtonAction(const CrossPointSettings::SHORT_PWRBTN action
       enterDeepSleep();
       return true;
     case CrossPointSettings::SHORT_PWRBTN::FORCE_REFRESH: {
-      if (SETTINGS.textAntiAliasing && activityManager.requestManualReaderRefresh()) {
+      // Reader redraws must replace overlays before the panel refreshes.
+      if (activityManager.requestManualReaderRefresh()) {
         return true;
       }
       RenderLock lock;
