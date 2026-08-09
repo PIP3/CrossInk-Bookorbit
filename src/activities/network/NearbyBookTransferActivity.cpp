@@ -122,7 +122,7 @@ void NearbyBookTransferActivity::onEnter() {
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
   destinationFolder_ = SETTINGS.nearbyReceiveFolder[0] ? SETTINGS.nearbyReceiveFolder : "/";
   uiReady_ = false;
-  app_.setTheme(uiThemeTokens(uiTarget_));
+  applySharedUiTheme(app_, uiTarget_);
   app_.on(ACTION_ROW, &NearbyBookTransferActivity::onRowEvent, this);
   app_.setScreen(&NearbyBookTransferActivity::menuScreen, this);
 

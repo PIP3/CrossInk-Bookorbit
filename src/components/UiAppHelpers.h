@@ -6,6 +6,7 @@
 #include "MappedInputManager.h"
 #include "components/UIScale.h"
 #include "components/UITheme.h"
+#include "components/UIThemeTokens.h"
 #include "components/icons/listIcons.h"
 
 // Shared glue for activities hosting a FreeInkApp: the font-bound render
@@ -20,6 +21,21 @@ inline freeink::ui::GfxRendererTarget makeUiTarget(const GfxRenderer& renderer) 
   target.setFont(freeink::ui::GfxRendererTarget::FONT_BODY, spec.bodyFontId);
   target.setFont(freeink::ui::GfxRendererTarget::FONT_TITLE, spec.titleFontId);
   return target;
+}
+
+// Activities share one refreshed token block rather than each retaining an
+// identical ~1.5KB copy. The token object outlives stacked activities.
+inline freeink::ui::ThemeTokens& sharedUiThemeTokens() {
+  static freeink::ui::ThemeTokens tokens;
+  return tokens;
+}
+
+template <size_t MaxInteractions, size_t MaxHandlers>
+inline void applySharedUiTheme(freeink::ui::FreeInkApp<MaxInteractions, MaxHandlers>& app,
+                               const freeink::ui::GfxRendererTarget& target) {
+  auto& tokens = sharedUiThemeTokens();
+  tokens = uiThemeTokens(target);
+  app.setThemeRef(&tokens);
 }
 
 // Tap release with coords, plus the raw release the tap classifier never

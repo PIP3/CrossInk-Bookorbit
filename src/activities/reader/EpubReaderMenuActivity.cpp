@@ -481,7 +481,7 @@ void EpubReaderMenuActivity::onEnter() {
   uiReady = false;
   visibleRows = 1;
   topIndex = 0;
-  app.setTheme(uiThemeTokens(uiTarget));
+  applySharedUiTheme(app, uiTarget);
   app.on(ACTION_ROW, &EpubReaderMenuActivity::onRowEvent, this);
   app.setScreen(&EpubReaderMenuActivity::menuScreen, this);
   requestUpdate();

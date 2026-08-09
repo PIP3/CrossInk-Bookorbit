@@ -50,7 +50,7 @@ void FrontlightPanelActivity::onEnter() {
   lightOn = Frontlight.isOn();
 
   uiReady = false;
-  app.setTheme(uiThemeTokens(uiTarget));
+  applySharedUiTheme(app, uiTarget);
   app.on(ACTION_BRIGHTNESS, &FrontlightPanelActivity::onBrightnessEvent, this);
   app.on(ACTION_WARMTH, &FrontlightPanelActivity::onWarmthEvent, this);
   app.on(ACTION_TOGGLE, &FrontlightPanelActivity::onToggleEvent, this);

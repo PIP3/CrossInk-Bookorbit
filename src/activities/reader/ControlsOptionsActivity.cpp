@@ -50,7 +50,7 @@ void ControlsOptionsActivity::onEnter() {
   uiReady = false;
   visibleRows = 1;
   topIndex = 0;
-  app.setTheme(uiThemeTokens(uiTarget));
+  applySharedUiTheme(app, uiTarget);
   app.on(ACTION_ROW, &ControlsOptionsActivity::onRowEvent, this);
   app.setScreen(&ControlsOptionsActivity::optionsScreen, this);
   requestUpdate();

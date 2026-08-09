@@ -619,7 +619,7 @@ void SettingsActivity::onEnter() {
   uiReady = false;
   visibleRows = 1;
   topIndex = 0;
-  app.setTheme(uiThemeTokens(uiTarget));
+  applySharedUiTheme(app, uiTarget);
   app.on(ACTION_ROW, &SettingsActivity::onRowEvent, this);
   app.on(ACTION_TAB, &SettingsActivity::onTabEvent, this);
   app.setScreen(&SettingsActivity::settingsScreen, this);
@@ -696,7 +696,7 @@ void SettingsActivity::applyUiSettingChange(uint8_t CrossPointSettings::* valueP
   uiTarget.setFont(fui::GfxRendererTarget::FONT_SMALL, spec.smallFontId);
   uiTarget.setFont(fui::GfxRendererTarget::FONT_BODY, spec.bodyFontId);
   uiTarget.setFont(fui::GfxRendererTarget::FONT_TITLE, spec.titleFontId);
-  app.setTheme(uiThemeTokens(uiTarget));
+  applySharedUiTheme(app, uiTarget);
 }
 
 void SettingsActivity::loop() {
