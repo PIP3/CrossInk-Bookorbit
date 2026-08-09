@@ -1,3 +1,11 @@
+## [Unreleased]
+
+### Added
+
+### Fixed
+
+### Changed
+
 ## [v1.5.0] - 2026-08-08
 
 ### Added
@@ -8,11 +16,6 @@
 
 ### Fixed
 
-- Quick Actions shortcuts now open reliably while reading.
-- Quick Actions now close before refreshing the reader screen.
-- Refresh Screen shortcuts now use a visibly complete full-panel refresh.
-- Quick Actions now include Home Button Lock on X4 Pro, and long action lists scroll a page per swipe.
-- Opening Settings from the frontlight panel no longer freezes the reader.
 - EPUB tables now lay out a row at a time in both Incremental and Full Section indexing, keeping regular tables readable without whole-table buffering.
 - Touch support for Seeed Studio Sticky
 - Nearby File Transfer can send EPUB, TXT, XTC, XTCH, PNG, and BMP files directly between two CrossInk devices without a Wi-Fi network.
