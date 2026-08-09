@@ -7,6 +7,7 @@
 ### Fixed
 
 - Network connections no longer trigger repeated full-panel flashes.
+- Dictionary word selection now follows the physical front-button direction in counter-clockwise landscape mode.
 
 ## [v1.5.0] - 2026-08-08
 
