@@ -1,4 +1,5 @@
 #pragma once
+#include <HalGPIO.h>
 #include <I18n.h>
 
 #include <algorithm>
@@ -8,6 +9,7 @@
 
 #include "GfxRenderer.h"
 #include "MappedInputManager.h"
+#include "components/TouchActionButtons.h"
 #include "components/UIScale.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -55,11 +57,19 @@ class OptionPopup {
     onSelectCallback = std::move(onActivate);
     onSaveCallback = std::move(onSave);
     onCancelCallback = std::move(onCancel);
+    primaryOptionIndex = -1;
     confirmationMode = true;
     activate(currentIndex);
   }
 
   void setCancelCallback(std::function<void()> onCancel) { onCancelCallback = std::move(onCancel); }
+
+  // Confirmation-style option lists can mark one option as the primary action
+  // without changing the appearance of ordinary option selectors.
+  void setPrimaryOptionIndex(const int index) {
+    primaryOptionIndex = index;
+    layoutValid = false;
+  }
 
   void show(const char* titleStr, const std::vector<std::string>& options, int currentIndex,
             std::function<void(int)> onSelect) {
@@ -224,7 +234,7 @@ class OptionPopup {
   void render(const GfxRenderer& renderer) const {
     if (!active) return;
     GUI.drawOptionPopup(renderer, title.c_str(), ownedStrings, selectedIndex, confirmationMode, tr(STR_CANCEL),
-                        tr(STR_SAVE), footerFocused);
+                        tr(STR_SAVE), footerFocused, primaryOptionIndex);
   }
 
   bool isActive() const { return active; }
@@ -235,6 +245,7 @@ class OptionPopup {
     std::vector<Rect> options;
     Rect cancel{0, 0, 0, 0};
     Rect save{0, 0, 0, 0};
+    TouchActionButtons::Layout footer;
     int firstOptionIndex = 0;
   };
 
@@ -249,21 +260,26 @@ class OptionPopup {
     const auto pageWidth = renderer.getScreenWidth();
     const auto pageHeight = renderer.getScreenHeight();
     const int optionFontId = uiScaleSpec().bodyFontId;
+    const bool touch = gpio.hasTouch();
     const EpdFontFamily::Style optionStyle =
         metrics.optionPopupOptionFontBold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR;
 
-    const int itemSpacing = metrics.optionPopupItemSpacing;
+    const bool touchActionStyle = touch && primaryOptionIndex >= 0 && ownedStrings.size() == 2;
+    const int itemSpacing = touchActionStyle ? TouchActionButtons::kDefaultGap : metrics.optionPopupItemSpacing;
     const int innerPadding = metrics.optionPopupInnerPadding;
     const int selectionHPadding = metrics.optionPopupSelectionHPadding;
     const int selectionVPadding = metrics.optionPopupSelectionVPadding;
 
     const int optionLineHeight = renderer.getLineHeight(optionFontId);
     const int titleLineHeight = renderer.getLineHeight(UI_12_FONT_ID);
-    const int rowHeight = optionLineHeight + selectionVPadding * 2;
+    const int rowHeight =
+        touchActionStyle ? TouchActionButtons::kDefaultHeight : optionLineHeight + selectionVPadding * 2;
 
     int maxTextWidth = renderer.getTextWidth(UI_12_FONT_ID, title.c_str(), EpdFontFamily::BOLD);
-    for (const auto& opt : ownedStrings) {
-      const int width = renderer.getTextWidth(optionFontId, opt.c_str(), optionStyle);
+    for (size_t i = 0; i < ownedStrings.size(); ++i) {
+      const auto& opt = ownedStrings[i];
+      const auto style = primaryOptionIndex == static_cast<int>(i) ? EpdFontFamily::BOLD : optionStyle;
+      const int width = renderer.getTextWidth(optionFontId, opt.c_str(), style);
       if (width > maxTextWidth) maxTextWidth = width;
     }
 
@@ -303,15 +319,29 @@ class OptionPopup {
 
     layout.dialog = Rect{dialogX, dialogY, dialogW, dialogH};
     layout.firstOptionIndex = visibleStart;
-    layout.cancel =
-        confirmationMode ? Rect{dialogX, dialogY + dialogH - footerHeight, dialogW / 2, footerHeight} : Rect{};
-    layout.save = confirmationMode ? Rect{dialogX + dialogW / 2, dialogY + dialogH - footerHeight,
-                                          dialogW - dialogW / 2, footerHeight}
-                                   : Rect{};
+    layout.footer = TouchActionButtons::Layout();
+    if (confirmationMode) {
+      const int footerY = dialogY + dialogH - footerSpace;
+      layout.cancel = Rect{dialogX, footerY, dialogW / 2, footerHeight};
+      layout.save = Rect{dialogX + dialogW / 2, footerY, dialogW - dialogW / 2, footerHeight};
+    } else {
+      layout.cancel = Rect();
+      layout.save = Rect();
+    }
     layout.options.clear();
     layout.options.reserve(visibleCount);
-    for (int i = 0; i < visibleCount; i++) {
-      layout.options.push_back(Rect{itemRectX, firstItemY + i * (rowHeight + itemSpacing), itemRectW, rowHeight});
+    if (touchActionStyle && visibleCount == 2) {
+      const auto actions =
+          TouchActionButtons::vertical(Rect{itemRectX, firstItemY, itemRectW, listHeight}, 2, rowHeight, itemSpacing);
+      const int primaryOffset = primaryOptionIndex - visibleStart;
+      const int secondaryOffset = primaryOffset == 0 ? 1 : 0;
+      layout.options.resize(2);
+      layout.options[primaryOffset] = actions.buttons[0];
+      layout.options[secondaryOffset] = actions.buttons[1];
+    } else {
+      for (int i = 0; i < visibleCount; i++) {
+        layout.options.push_back(Rect{itemRectX, firstItemY + i * (rowHeight + itemSpacing), itemRectW, rowHeight});
+      }
     }
     layoutValid = true;
     return layout;
@@ -333,6 +363,7 @@ class OptionPopup {
   std::function<void(int)> onSelectCallback;
   std::function<void()> onSaveCallback;
   std::function<void()> onCancelCallback;
+  int primaryOptionIndex = -1;
   mutable Layout layout;
   mutable bool layoutValid = false;
 
@@ -364,6 +395,7 @@ class OptionPopup {
     footerFocused = false;
     onSaveCallback = nullptr;
     onCancelCallback = nullptr;
+    primaryOptionIndex = -1;
   }
 
   void activateSelection(MappedInputManager& input, const std::function<void()>& requestUpdate,

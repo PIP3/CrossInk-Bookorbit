@@ -270,7 +270,7 @@ class BaseTheme {
   virtual void drawOptionPopup(const GfxRenderer& renderer, const char* title, const std::vector<std::string>& options,
                                int selectedIndex, bool showConfirmationFooter = false,
                                const char* cancelLabel = nullptr, const char* saveLabel = nullptr,
-                               bool saveFocused = false) const;
+                               bool saveFocused = false, int primaryOptionIndex = -1) const;
   virtual void fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const;
   virtual void drawStatusBar(GfxRenderer& renderer, const float bookProgress, const int currentPage,
                              const int pageCount, std::string title, const int paddingBottom = 0,

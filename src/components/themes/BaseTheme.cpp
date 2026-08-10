@@ -19,6 +19,7 @@
 #include "I18n.h"
 #include "RecentBooksStore.h"
 #include "activities/reader/BookReadingStats.h"
+#include "components/TouchActionButtons.h"
 #include "components/TouchRegistry.h"
 #include "components/UIScale.h"
 #include "components/UITheme.h"
@@ -1090,7 +1091,7 @@ void BaseTheme::drawTextField(const GfxRenderer& renderer, Rect rect, const int 
 
 void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, const std::vector<std::string>& options,
                                 int selectedIndex, const bool showConfirmationFooter, const char* cancelLabel,
-                                const char* saveLabel, const bool saveFocused) const {
+                                const char* saveLabel, const bool saveFocused, const int primaryOptionIndex) const {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
@@ -1099,18 +1100,22 @@ void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, 
   const EpdFontFamily::Style optionStyle =
       metrics.optionPopupOptionFontBold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR;
 
-  const int itemSpacing = metrics.optionPopupItemSpacing;
+  const bool touchActionStyle = gpio.hasTouch() && primaryOptionIndex >= 0 && options.size() == 2;
+  const int itemSpacing = touchActionStyle ? TouchActionButtons::kDefaultGap : metrics.optionPopupItemSpacing;
   const int innerPadding = metrics.optionPopupInnerPadding;
   const int selectionHPadding = metrics.optionPopupSelectionHPadding;
   const int selectionVPadding = metrics.optionPopupSelectionVPadding;
 
   const int optionLineHeight = renderer.getLineHeight(optionFontId);
   const int titleLineHeight = renderer.getLineHeight(UI_12_FONT_ID);
-  const int rowHeight = optionLineHeight + selectionVPadding * 2;
+  const int rowHeight =
+      touchActionStyle ? TouchActionButtons::kDefaultHeight : optionLineHeight + selectionVPadding * 2;
 
   int maxTextWidth = renderer.getTextWidth(UI_12_FONT_ID, title, EpdFontFamily::BOLD);
-  for (const auto& opt : options) {
-    int w = renderer.getTextWidth(optionFontId, opt.c_str(), optionStyle);
+  for (size_t i = 0; i < options.size(); ++i) {
+    const auto& opt = options[i];
+    const auto style = primaryOptionIndex == static_cast<int>(i) ? EpdFontFamily::BOLD : optionStyle;
+    int w = renderer.getTextWidth(optionFontId, opt.c_str(), style);
     if (w > maxTextWidth) maxTextWidth = w;
   }
 
@@ -1120,6 +1125,7 @@ void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, 
   }
 
   constexpr int footerHeight = 56;
+  const bool touch = gpio.hasTouch();
   const int footerSpace = showConfirmationFooter ? footerHeight : 0;
   const int maxDialogH =
       std::max(rowHeight + titleLineHeight + metrics.optionPopupTitleGap + innerPadding * 2 + footerSpace,
@@ -1199,47 +1205,59 @@ void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, 
     renderer.fillRect(scrollBarX - metrics.scrollBarWidth, scrollBarY, metrics.scrollBarWidth, scrollBarHeight, true);
   }
 
-  for (int visibleIndex = 0; visibleIndex < visibleCount; visibleIndex++) {
-    const int optionIndex = visibleStart + visibleIndex;
-    const int itemY = y + visibleIndex * (rowHeight + itemSpacing);
-    const bool selected = !saveFocused && optionIndex == safeSelectedIndex;
-    const char* labelText = options[optionIndex].c_str();
+  if (touchActionStyle && visibleCount == 2) {
+    const auto actionLayout = TouchActionButtons::vertical(Rect{itemRectX, y, itemRectW, listHeight},
+                                                           static_cast<uint8_t>(visibleCount), rowHeight, itemSpacing);
+    const int primaryOffset = primaryOptionIndex - visibleStart;
+    const int secondaryOffset = primaryOffset == 0 ? 1 : 0;
+    const char* labels[] = {options[visibleStart + primaryOffset].c_str(),
+                            options[visibleStart + secondaryOffset].c_str()};
+    const int selectedVisualIndex = safeSelectedIndex == primaryOptionIndex ? 0 : 1;
+    TouchActionButtons::draw(renderer, actionLayout, labels, 0, saveFocused ? -1 : selectedVisualIndex, optionFontId);
+  } else {
+    for (int visibleIndex = 0; visibleIndex < visibleCount; visibleIndex++) {
+      const int optionIndex = visibleStart + visibleIndex;
+      const int itemY = y + visibleIndex * (rowHeight + itemSpacing);
+      const bool selected = !saveFocused && optionIndex == safeSelectedIndex;
+      const char* labelText = options[optionIndex].c_str();
 
-    if (metrics.optionPopupDrawAllRows || selected) {
-      Color rowColor;
-      if (selected) {
-        rowColor = metrics.optionPopupSelectionLight ? Color::LightGray : Color::Black;
-      } else {
-        rowColor = Color::White;
+      if (metrics.optionPopupDrawAllRows || selected) {
+        Color rowColor;
+        if (selected) {
+          rowColor = metrics.optionPopupSelectionLight ? Color::LightGray : Color::Black;
+        } else {
+          rowColor = Color::White;
+        }
+        if (selectionRadius > 0) {
+          renderer.fillRoundedRect(itemRectX, itemY, itemRectW, rowHeight, selectionRadius, rowColor);
+        } else {
+          renderer.fillRect(itemRectX, itemY, itemRectW, rowHeight, rowColor == Color::Black);
+        }
       }
-      if (selectionRadius > 0) {
-        renderer.fillRoundedRect(itemRectX, itemY, itemRectW, rowHeight, selectionRadius, rowColor);
-      } else {
-        renderer.fillRect(itemRectX, itemY, itemRectW, rowHeight, rowColor == Color::Black);
-      }
+
+      const auto style = primaryOptionIndex == optionIndex ? EpdFontFamily::BOLD : optionStyle;
+      const int textW = renderer.getTextWidth(optionFontId, labelText, style);
+      const int textY = itemY + (rowHeight - optionLineHeight) / 2;
+      const int textX = itemRectX + (itemRectW - textW) / 2;
+      // Unselected items: text is dark (invert=true means draw on white bg).
+      // Selected on dark bg: text must be white (invert=false).
+      // Selected on light bg: text stays dark (invert=true).
+      const bool invertText = selected ? metrics.optionPopupSelectionLight : true;
+      renderer.drawText(optionFontId, textX, textY, labelText, invertText, style);
     }
-
-    const int textW = renderer.getTextWidth(optionFontId, labelText, optionStyle);
-    const int textY = itemY + (rowHeight - optionLineHeight) / 2;
-    const int textX = itemRectX + (itemRectW - textW) / 2;
-    // Unselected items: text is dark (invert=true means draw on white bg).
-    // Selected on dark bg: text must be white (invert=false).
-    // Selected on light bg: text stays dark (invert=true).
-    const bool invertText = selected ? metrics.optionPopupSelectionLight : true;
-    renderer.drawText(optionFontId, textX, textY, labelText, invertText, optionStyle);
   }
 
   if (showConfirmationFooter) {
     const int footerY = dialogY + dialogH - footerHeight;
+    const char* leftLabel = cancelLabel ? cancelLabel : "";
+    const char* rightLabel = saveLabel ? saveLabel : "";
     const int dividerX = dialogX + dialogW / 2;
     renderer.drawLine(dialogX, footerY, dialogX + dialogW, footerY, true);
     renderer.drawLine(dividerX, footerY, dividerX, dialogY + dialogH, true);
-    const char* leftLabel = cancelLabel ? cancelLabel : "";
-    const char* rightLabel = saveLabel ? saveLabel : "";
     const int labelY = footerY + (footerHeight - renderer.getLineHeight(UI_12_FONT_ID)) / 2;
     if (saveFocused) renderer.fillRect(dividerX, footerY + 1, dialogX + dialogW - dividerX, footerHeight - 1, true);
     renderer.drawText(UI_12_FONT_ID, dialogX + (dialogW / 2 - renderer.getTextWidth(UI_12_FONT_ID, leftLabel)) / 2,
-                      labelY, leftLabel, true, EpdFontFamily::BOLD);
+                      labelY, leftLabel, true, EpdFontFamily::REGULAR);
     renderer.drawText(UI_12_FONT_ID, dividerX + (dialogW / 2 - renderer.getTextWidth(UI_12_FONT_ID, rightLabel)) / 2,
                       labelY, rightLabel, !saveFocused, EpdFontFamily::BOLD);
   }

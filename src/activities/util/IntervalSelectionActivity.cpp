@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "DeviceCapabilities.h"
+#include "components/TouchActionButtons.h"
 #include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -16,9 +17,6 @@
 namespace {
 constexpr int TOUCH_STEP_BUTTON_SIZE = 56;
 constexpr int TOUCH_STEP_BUTTON_GAP = 32;
-constexpr int TOUCH_ACTION_BUTTON_WIDTH = 160;
-constexpr int TOUCH_ACTION_BUTTON_HEIGHT = 64;
-constexpr int TOUCH_ACTION_BUTTON_GAP = 32;
 
 Rect touchStepButtonRect(const Rect& screen, const int index) {
   const int totalWidth = TOUCH_STEP_BUTTON_SIZE * 4 + TOUCH_STEP_BUTTON_GAP * 3;
@@ -26,12 +24,13 @@ Rect touchStepButtonRect(const Rect& screen, const int index) {
   return Rect{x, 220, TOUCH_STEP_BUTTON_SIZE, TOUCH_STEP_BUTTON_SIZE};
 }
 
-Rect touchActionButtonRect(const Rect& screen, const bool confirm) {
-  constexpr int sideMargin = 46;
-  const int availableButtonWidth = std::max(1, (screen.width - sideMargin * 2 - TOUCH_ACTION_BUTTON_GAP) / 2);
-  const int buttonWidth = std::min(TOUCH_ACTION_BUTTON_WIDTH, availableButtonWidth);
-  return Rect{confirm ? screen.x + screen.width - sideMargin - buttonWidth : screen.x + sideMargin,
-              screen.y + screen.height - TOUCH_ACTION_BUTTON_HEIGHT - 28, buttonWidth, TOUCH_ACTION_BUTTON_HEIGHT};
+TouchActionButtons::Layout touchActionLayout(const Rect& screen) {
+  constexpr int sideMargin = 24;
+  constexpr int bottomMargin = 12;
+  constexpr int totalHeight = TouchActionButtons::kDefaultHeight * 2 + TouchActionButtons::kDefaultGap;
+  return TouchActionButtons::vertical(Rect{screen.x + sideMargin, screen.y + screen.height - bottomMargin - totalHeight,
+                                           std::max(1, screen.width - sideMargin * 2), totalHeight},
+                                      2);
 }
 
 bool contains(const Rect& rect, const int x, const int y) {
@@ -138,15 +137,17 @@ void IntervalSelectionActivity::loop() {
   // are terminal actions, so waiting for a release can make a perfectly still
   // tap feel ignored while the controller settles its release event.
   if (mappedInput.hasTouch() && mappedInput.wasScreenTouchDown(tx, ty)) {
-    if (contains(touchActionButtonRect(touchScreen, false), tx, ty)) {
-      ActivityResult result;
-      result.isCancelled = true;
-      setResult(std::move(result));
+    const auto actions = touchActionLayout(touchScreen);
+    const int touchedAction = TouchActionButtons::indexAt(actions, tx, ty);
+    if (touchedAction == 0) {
+      setResult(IntervalResult{static_cast<uint32_t>(value)});
       finish();
       return;
     }
-    if (contains(touchActionButtonRect(touchScreen, true), tx, ty)) {
-      setResult(IntervalResult{static_cast<uint32_t>(value)});
+    if (touchedAction == 1) {
+      ActivityResult result;
+      result.isCancelled = true;
+      setResult(std::move(result));
       finish();
       return;
     }
@@ -293,17 +294,9 @@ void IntervalSelectionActivity::render(RenderLock&&) {
       drawChevron(rect, index >= 2, index == 0 || index == 3);
     }
 
-    const Rect cancelRect = touchActionButtonRect(touchScreen, false);
-    const Rect confirmRect = touchActionButtonRect(touchScreen, true);
-    drawButton(cancelRect);
-    drawButton(confirmRect);
-    auto drawButtonLabel = [&](const Rect& rect, const char* label) {
-      const int x = rect.x + (rect.width - renderer.getTextWidth(UI_10_FONT_ID, label)) / 2;
-      const int y = rect.y + (rect.height - renderer.getLineHeight(UI_10_FONT_ID)) / 2;
-      renderer.drawText(UI_10_FONT_ID, x, y, label);
-    };
-    drawButtonLabel(cancelRect, tr(STR_CANCEL));
-    drawButtonLabel(confirmRect, tr(STR_CONFIRM));
+    const auto actions = touchActionLayout(touchScreen);
+    const char* labels[] = {tr(STR_CONFIRM), tr(STR_CANCEL)};
+    TouchActionButtons::draw(renderer, actions, labels, 0, -1, UI_10_FONT_ID);
   } else {
     // Two-line step hint: front buttons do the small step, side buttons the large step. Built from
     // separate label + value strings (rather than splitting one localized sentence) so the layout

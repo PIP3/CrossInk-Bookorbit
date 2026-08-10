@@ -5,46 +5,26 @@
 
 #include <algorithm>
 
+#include "components/TouchActionButtons.h"
 #include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
 namespace {
 
-constexpr int TOUCH_ACTION_HEIGHT = 48;
-constexpr int TOUCH_ACTION_GAP = 10;
-
-struct TouchActionLayout {
-  Rect buttons[2];
-  int rowStep;
-  int rowHeight;
-};
-
-TouchActionLayout touchActionLayout(const Rect& screen, const ThemeMetrics& metrics) {
-  const int buttonX = screen.x + metrics.contentSidePadding;
-  const int buttonWidth = std::max(1, screen.width - metrics.contentSidePadding * 2);
-  const int firstButtonY =
-      screen.y + screen.height - metrics.verticalSpacing - TOUCH_ACTION_HEIGHT * 2 - TOUCH_ACTION_GAP;
-  return {
-      {Rect{buttonX, firstButtonY, buttonWidth, TOUCH_ACTION_HEIGHT},
-       Rect{buttonX, firstButtonY + TOUCH_ACTION_HEIGHT + TOUCH_ACTION_GAP, buttonWidth, TOUCH_ACTION_HEIGHT}},
-      TOUCH_ACTION_HEIGHT + TOUCH_ACTION_GAP,
-      TOUCH_ACTION_HEIGHT,
-  };
+TouchActionButtons::Layout touchActionLayout(const Rect& screen, const ThemeMetrics& metrics) {
+  constexpr int totalHeight = TouchActionButtons::kDefaultHeight * 2 + TouchActionButtons::kDefaultGap;
+  const Rect container{screen.x + metrics.contentSidePadding,
+                       screen.y + screen.height - metrics.verticalSpacing - totalHeight,
+                       std::max(1, screen.width - metrics.contentSidePadding * 2), totalHeight};
+  return TouchActionButtons::vertical(container, 2);
 }
 
 void drawTouchActionButtons(GfxRenderer& renderer, const Rect& screen, const ThemeMetrics& metrics,
                             const char* confirmLabel) {
   const auto actions = touchActionLayout(screen, metrics);
-  const char* labels[] = {tr(STR_CANCEL), confirmLabel};
-  const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
-  for (int action = 0; action < 2; ++action) {
-    const Rect& button = actions.buttons[action];
-    renderer.drawRect(button.x, button.y, button.width, button.height, true);
-    const int textX = button.x + (button.width - renderer.getTextWidth(UI_10_FONT_ID, labels[action])) / 2;
-    const int textY = button.y + (button.height - lineHeight) / 2;
-    renderer.drawText(UI_10_FONT_ID, textX, textY, labels[action]);
-  }
+  const char* labels[] = {confirmLabel, tr(STR_CANCEL)};
+  TouchActionButtons::draw(renderer, actions, labels, 0, -1, UI_10_FONT_ID);
 }
 
 }  // namespace
@@ -131,17 +111,17 @@ void NearbyBookPositionSyncActivity::loop() {
     const Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
     const auto actions = touchActionLayout(screen, metrics);
     int touchedAction = -1;
-    const auto touch =
-        mappedInput.rowTouch(touchedAction, actions.buttons[0].y, actions.rowStep, 2, actions.buttons[0].x,
-                             actions.buttons[0].x + actions.buttons[0].width, actions.rowHeight);
+    const auto touch = mappedInput.rowTouch(touchedAction, actions.buttons[0].y,
+                                            actions.buttons[1].y - actions.buttons[0].y, 2, actions.buttons[0].x,
+                                            actions.buttons[0].x + actions.buttons[0].width, actions.buttons[0].height);
     if (touch == MappedInputManager::RowTouch::Down) return;
     if (touch == MappedInputManager::RowTouch::Tap) {
-      if (touchedAction == 0) {
-        returnToReader(true);
-      } else if (canShare) {
+      if (touchedAction == 0 && canShare) {
         startSync();
-      } else {
+      } else if (touchedAction == 0) {
         applyPeerPosition();
+      } else {
+        returnToReader(true);
       }
       return;
     }
@@ -774,18 +754,18 @@ void NearbyBookPositionSyncActivity::loop() {
     const Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
     const auto actions = touchActionLayout(screen, metrics);
     int touchedAction = -1;
-    const auto touch =
-        mappedInput.rowTouch(touchedAction, actions.buttons[0].y, actions.rowStep, 2, actions.buttons[0].x,
-                             actions.buttons[0].x + actions.buttons[0].width, actions.rowHeight);
+    const auto touch = mappedInput.rowTouch(touchedAction, actions.buttons[0].y,
+                                            actions.buttons[1].y - actions.buttons[0].y, 2, actions.buttons[0].x,
+                                            actions.buttons[0].x + actions.buttons[0].width, actions.buttons[0].height);
     if (touch == MappedInputManager::RowTouch::Down) return;
     if (touch == MappedInputManager::RowTouch::Tap) {
-      if (touchedAction == 0) {
-        returnToReader(true);
-      } else if (canShare) {
+      if (touchedAction == 0 && canShare) {
         startSync();
-      } else if (applyPeerPosition()) {
+      } else if (touchedAction == 0 && applyPeerPosition()) {
         sendAck(peerSourceMac_.data());
         returnToReader();
+      } else if (touchedAction == 1) {
+        returnToReader(true);
       }
       return;
     }

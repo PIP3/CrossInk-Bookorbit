@@ -225,20 +225,25 @@ void EpubReaderPercentSelectionActivity::buildPercentScreen(UiApp::ScreenType& s
                                       stepBand.height});
     }
 
-    const int16_t actionInset = static_cast<int16_t>(theme.spaceLg * 2);
-    const fui::Rect actionBand =
-        screen.takeBottom(theme.rowHeight, theme.spaceLg).inset(fui::Insets{0, actionInset, 0, actionInset});
-    const int16_t actionGap = theme.spaceLg;
-    const int16_t actionWidth = static_cast<int16_t>((actionBand.width - actionGap) / 2);
+    const int16_t actionGap = theme.spaceMd;
+    const int16_t actionBandHeight = static_cast<int16_t>(theme.rowHeight * 2 + actionGap);
+    const fui::Rect actionBand = screen.takeBottom(actionBandHeight, theme.spaceLg);
+    const int16_t actionHeight = static_cast<int16_t>((actionBand.height - actionGap) / 2);
     fui::ButtonProps action;
-    action.label = tr(STR_CANCEL);
-    action.action = ACTION_CANCEL;
     action.inputMask = fui::InputTouch;
-    screen.button(action, fui::Rect{actionBand.x, actionBand.y, actionWidth, actionBand.height});
+    action.styles = fui::outlinedButtonStyles();
+    action.text = theme.bodyText;
+    action.text.align = fui::TextAlign::Center;
+    action.minTouchSize = 52;
     action.label = tr(STR_CONFIRM);
     action.action = ACTION_CONFIRM;
-    screen.button(action, fui::Rect{static_cast<int16_t>(actionBand.right() - actionWidth), actionBand.y, actionWidth,
-                                    actionBand.height});
+    action.text.bold = true;
+    screen.button(action, fui::Rect{actionBand.x, actionBand.y, actionBand.width, actionHeight});
+    action.label = tr(STR_CANCEL);
+    action.action = ACTION_CANCEL;
+    action.text.bold = false;
+    screen.button(action, fui::Rect{actionBand.x, static_cast<int16_t>(actionBand.y + actionHeight + actionGap),
+                                    actionBand.width, actionHeight});
     return;
   }
 

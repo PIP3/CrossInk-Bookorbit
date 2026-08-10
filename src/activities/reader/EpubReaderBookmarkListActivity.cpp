@@ -59,6 +59,7 @@ void EpubReaderBookmarkListActivity::showBookmarkDeletePopup() {
     if (optionIndex == 1) deleteSelectedBookmark();
     requestUpdate();
   });
+  confirmPopup.setPrimaryOptionIndex(1);
   requestUpdate();
 }
 
