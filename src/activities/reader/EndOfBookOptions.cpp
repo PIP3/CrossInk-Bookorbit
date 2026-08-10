@@ -123,6 +123,7 @@ EndOfBookOptions::Action EndOfBookOptions::handleMenuInput(const MappedInputMana
   const auto sideTriggered = [&](const MappedInputManager::Button button) {
     return sideUsePress ? input.wasPressed(button) : input.wasReleased(button);
   };
+  const int itemCount = static_cast<int>(names.size()) + 1;  // + "Home" entry
   if (sideTriggered(MappedInputManager::Button::PageBack) || input.wasReleased(MappedInputManager::Button::Left)) {
     selector = ButtonNavigator::previousIndex(selector, itemCount);  // wraps to the bottom
     return Action::Redraw;
