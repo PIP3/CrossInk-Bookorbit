@@ -17,11 +17,20 @@
 namespace {
 constexpr int TOUCH_STEP_BUTTON_SIZE = 56;
 constexpr int TOUCH_STEP_BUTTON_GAP = 32;
+constexpr int TOUCH_STEP_LABEL_HEIGHT = 56;
 
 Rect touchStepButtonRect(const Rect& screen, const int index) {
   const int totalWidth = TOUCH_STEP_BUTTON_SIZE * 4 + TOUCH_STEP_BUTTON_GAP * 3;
   const int x = screen.x + (screen.width - totalWidth) / 2 + index * (TOUCH_STEP_BUTTON_SIZE + TOUCH_STEP_BUTTON_GAP);
   return Rect{x, 220, TOUCH_STEP_BUTTON_SIZE, TOUCH_STEP_BUTTON_SIZE};
+}
+
+Rect touchStepLabelRect(const Rect& screen, const int index) {
+  constexpr int top = 176;
+  const int width = screen.width / 4;
+  const int x = screen.x + index * width;
+  const int right = index == 3 ? screen.x + screen.width : x + width;
+  return Rect{x, top, right - x, TOUCH_STEP_LABEL_HEIGHT};
 }
 
 TouchActionButtons::Layout touchActionLayout(const Rect& screen) {
@@ -50,6 +59,10 @@ void formatCompactSeconds(const int seconds, char* buf, const size_t len) {
 
 int IntervalSelectionActivity::clampedValue(const int candidate) const {
   return std::clamp(candidate, minValue, maxValue);
+}
+
+bool IntervalSelectionActivity::usesTextTouchStepControls() const {
+  return titleId == StrId::STR_TIME_TO_SLEEP || titleId == StrId::STR_AUTO_TURN_INTERVAL_SECONDS;
 }
 
 void IntervalSelectionActivity::onEnter() {
@@ -177,7 +190,9 @@ void IntervalSelectionActivity::loop() {
 
     if (mappedInput.hasTouch()) {
       for (int index = 0; index < 4; ++index) {
-        if (!contains(touchStepButtonRect(touchScreen, index), tx, ty)) continue;
+        const Rect stepRect = usesTextTouchStepControls() ? touchStepLabelRect(touchScreen, index)
+                                                          : touchStepButtonRect(touchScreen, index);
+        if (!contains(stepRect, tx, ty)) continue;
         constexpr int deltas[] = {-1, -1, 1, 1};
         const int step = (index == 0 || index == 3) ? largeStep : smallStep;
         adjustValue(deltas[index] * step);
@@ -266,32 +281,46 @@ void IntervalSelectionActivity::render(RenderLock&&) {
   renderer.fillRect(knobX, barY - 4, 4, barHeight + 8, true);
 
   if (mappedInput.hasTouch()) {
-    auto drawButton = [&](const Rect& rect) {
-      renderer.fillRectDither(rect.x, rect.y, rect.width, rect.height, Color::White);
-      renderer.drawRect(rect.x, rect.y, rect.width, rect.height, true);
-    };
-    auto drawChevron = [&](const Rect& rect, const bool pointsRight, const bool doubleChevron) {
-      const int centreY = rect.y + rect.height / 2;
-      const int halfHeight = 12;
-      const int firstX = rect.x + (doubleChevron ? 13 : 20);
-      const int spacing = 14;
-      const int chevronCount = doubleChevron ? 2 : 1;
-      for (int i = 0; i < chevronCount; ++i) {
-        const int x = firstX + i * spacing;
-        if (pointsRight) {
-          renderer.drawLine(x, centreY - halfHeight, x + 12, centreY, 2, true);
-          renderer.drawLine(x + 12, centreY, x, centreY + halfHeight, 2, true);
-        } else {
-          renderer.drawLine(x + 12, centreY - halfHeight, x, centreY, 2, true);
-          renderer.drawLine(x, centreY, x + 12, centreY + halfHeight, 2, true);
-        }
+    if (usesTextTouchStepControls()) {
+      char labels[4][12];
+      snprintf(labels[0], sizeof(labels[0]), "%+d", -largeStep);
+      snprintf(labels[1], sizeof(labels[1]), "%+d", -smallStep);
+      snprintf(labels[2], sizeof(labels[2]), "%+d", smallStep);
+      snprintf(labels[3], sizeof(labels[3]), "%+d", largeStep);
+      for (int index = 0; index < 4; ++index) {
+        const Rect rect = touchStepLabelRect(touchScreen, index);
+        const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, labels[index]);
+        const int textY = rect.y + (rect.height - renderer.getLineHeight(UI_10_FONT_ID)) / 2;
+        renderer.drawText(UI_10_FONT_ID, rect.x + (rect.width - textWidth) / 2, textY, labels[index]);
       }
-    };
+    } else {
+      auto drawButton = [&](const Rect& rect) {
+        renderer.fillRectDither(rect.x, rect.y, rect.width, rect.height, Color::White);
+        renderer.drawRect(rect.x, rect.y, rect.width, rect.height, true);
+      };
+      auto drawChevron = [&](const Rect& rect, const bool pointsRight, const bool doubleChevron) {
+        const int centreY = rect.y + rect.height / 2;
+        const int halfHeight = 12;
+        const int firstX = rect.x + (doubleChevron ? 13 : 20);
+        const int spacing = 14;
+        const int chevronCount = doubleChevron ? 2 : 1;
+        for (int i = 0; i < chevronCount; ++i) {
+          const int x = firstX + i * spacing;
+          if (pointsRight) {
+            renderer.drawLine(x, centreY - halfHeight, x + 12, centreY, 2, true);
+            renderer.drawLine(x + 12, centreY, x, centreY + halfHeight, 2, true);
+          } else {
+            renderer.drawLine(x + 12, centreY - halfHeight, x, centreY, 2, true);
+            renderer.drawLine(x, centreY, x + 12, centreY + halfHeight, 2, true);
+          }
+        }
+      };
 
-    for (int index = 0; index < 4; ++index) {
-      const Rect rect = touchStepButtonRect(touchScreen, index);
-      drawButton(rect);
-      drawChevron(rect, index >= 2, index == 0 || index == 3);
+      for (int index = 0; index < 4; ++index) {
+        const Rect rect = touchStepButtonRect(touchScreen, index);
+        drawButton(rect);
+        drawChevron(rect, index >= 2, index == 0 || index == 3);
+      }
     }
 
     const auto actions = touchActionLayout(touchScreen);

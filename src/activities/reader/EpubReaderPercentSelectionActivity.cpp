@@ -226,15 +226,18 @@ void EpubReaderPercentSelectionActivity::buildPercentScreen(UiApp::ScreenType& s
     }
 
     const int16_t actionGap = theme.spaceMd;
-    const int16_t actionBandHeight = static_cast<int16_t>(theme.rowHeight * 2 + actionGap);
+    // Reserve at least as much vertical space as each button needs. Otherwise
+    // FreeInkUI expands the smaller rows to minTouchSize after the bottom band
+    // has been placed, which can draw the Cancel action beyond the screen.
+    const int16_t actionHeight = std::max<int16_t>(theme.rowHeight, 56);
+    const int16_t actionBandHeight = static_cast<int16_t>(actionHeight * 2 + actionGap);
     const fui::Rect actionBand = screen.takeBottom(actionBandHeight, theme.spaceLg);
-    const int16_t actionHeight = static_cast<int16_t>((actionBand.height - actionGap) / 2);
     fui::ButtonProps action;
     action.inputMask = fui::InputTouch;
     action.styles = fui::outlinedButtonStyles();
     action.text = theme.bodyText;
     action.text.align = fui::TextAlign::Center;
-    action.minTouchSize = 52;
+    action.minTouchSize = actionHeight;
     action.label = tr(STR_CONFIRM);
     action.action = ACTION_CONFIRM;
     action.text.bold = true;

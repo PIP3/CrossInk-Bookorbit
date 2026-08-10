@@ -11,6 +11,7 @@
 
 #include "MappedInputManager.h"
 #include "components/CompactHeader.h"
+#include "components/TouchActionButtons.h"
 #include "components/TouchHeaderBackButton.h"
 #include "components/TouchRegistry.h"
 #include "components/UITheme.h"
@@ -729,6 +730,17 @@ void renderEditBookDatesPage(GfxRenderer& renderer, const MappedInputManager* ma
                          icon_chevron_up_32, BookStatsTouchTarget::DateAdjustUp);
     drawDateAdjustButton(renderer, adjustButtonX, row2Y + (fieldH - adjustButtonSize) / 2, adjustButtonSize,
                          icon_chevron_down_32, BookStatsTouchTarget::DateAdjustDown);
+
+    constexpr int actionHeight = TouchActionButtons::kDefaultHeight;
+    constexpr int actionGap = TouchActionButtons::kDefaultGap;
+    constexpr int actionTotalHeight = actionHeight * 2 + actionGap;
+    const Rect actionArea{metrics.contentSidePadding, cardY + cardH + metrics.verticalSpacing,
+                          pageWidth - metrics.contentSidePadding * 2, actionTotalHeight};
+    const auto actions = TouchActionButtons::vertical(actionArea, 2);
+    const char* labels[] = {tr(STR_SAVE), tr(STR_CANCEL)};
+    TouchActionButtons::draw(renderer, actions, labels, 0, -1, UI_10_FONT_ID);
+    TouchRegistry::getInstance().add(actions.buttons[0], BookStatsTouchTarget::DateSave, TouchRegistry::Item);
+    TouchRegistry::getInstance().add(actions.buttons[1], BookStatsTouchTarget::DateCancel, TouchRegistry::Item);
   }
 #endif
 
