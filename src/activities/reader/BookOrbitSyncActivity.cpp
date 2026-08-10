@@ -38,12 +38,16 @@
 // support cannot regress the existing generic KOReader sync path.
 
 namespace {
-// The SNTP client this used to drive directly lives behind halClock now. Those calls reach
-// into lwIP's core, which requires the caller to hold the core lock when it is not the
-// TCP/IP thread, and the stack this firmware builds against aborts on an unlocked call
-// instead of tolerating it. One implementation, in the HAL, is the only way to be sure the
-// locking is right everywhere -- this file and KOReaderSyncActivity had copies of it.
-void syncTimeWithNTP() { halClock.syncSystemTimeFromNTP(); }
+// The SNTP client lives behind halClock, whose esp-netif implementation routes every lwIP
+// interaction through the core-lock-safe execution path -- this file and KOReaderSyncActivity
+// used to carry hand-rolled copies of that discipline.
+void syncTimeWithNTP() {
+#ifndef SIMULATOR
+  if (!halClock.syncSystemTimeFromNTP()) {
+    LOG_DBG("BookOrbit", "NTP sync unavailable, using fallback");
+  }
+#endif
+}
 
 void wifiOff() {
   // No SNTP stop here: syncSystemTimeFromNTP() releases the client before it returns.

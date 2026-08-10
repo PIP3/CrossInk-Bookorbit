@@ -1,7 +1,6 @@
 #include "KOReaderSyncActivity.h"
 
 #include <GfxRenderer.h>
-#include <HalClock.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
@@ -16,6 +15,7 @@
 #include "CrossPointSettings.h"
 #include "Epub/Section.h"
 #include "EpubReaderUtils.h"
+#include "HalClock.h"
 #include "KOReaderCredentialStore.h"
 #include "KOReaderDocumentId.h"
 #include "MappedInputManager.h"
@@ -77,12 +77,15 @@ const char* matchMethodName(const DocumentMatchMethod method) {
   return method == DocumentMatchMethod::FILENAME ? "filename" : "binary";
 }
 
-// See BookOrbitSyncActivity: the SNTP client lives behind halClock so its lwIP core locking
-// has one implementation rather than a copy per sync activity.
-void syncTimeWithNTP() { halClock.syncSystemTimeFromNTP(); }
+void syncTimeWithNTP() {
+#ifndef SIMULATOR
+  if (!halClock.syncSystemTimeFromNTP()) {
+    LOG_DBG("KOSync", "NTP sync unavailable, using fallback");
+  }
+#endif
+}
 
 void wifiOff() {
-  // No SNTP stop here: syncSystemTimeFromNTP() releases the client before it returns.
   WiFi.disconnect(false);
   delay(100);
   WiFi.mode(WIFI_OFF);
@@ -201,8 +204,9 @@ void KOReaderSyncActivity::onWifiSelectionComplete(const bool success) {
   }
   requestUpdate(true);
 
-  // Sync time with NTP before making API requests; WallClock uses the pre/post
-  // difference to correct timestamps recorded earlier in this power era.
+  // Sync time with NTP before making API requests
+  // Bracket the NTP sync so WallClock can measure this power era's clock correction; queued
+  // reading stats and BookOrbit identities stamped before this moment get fixed against it.
   uint32_t epochBeforeNtp = 0;
   WallClock::now(epochBeforeNtp);
   syncTimeWithNTP();
@@ -556,7 +560,6 @@ void KOReaderSyncActivity::onEnter() {
     return;
   }
 
-  LOG_INF("KOSync", "KOReader sync starting");
   ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
   lockInitialConfirmRelease = mappedInput.isPressed(MappedInputManager::Button::Confirm);
 
@@ -622,13 +625,13 @@ void KOReaderSyncActivity::render(RenderLock&&) {
 
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4, true);
-    renderer.displayBuffer();
+    renderer.displayBuffer(screenTransitionRefresh.modeFor(static_cast<uint8_t>(state)));
     return;
   }
 
   if (state == SYNCING || state == UPLOADING) {
     UITheme::drawCenteredText(renderer, screen, UI_10_FONT_ID, top, statusMessage.c_str(), true, EpdFontFamily::BOLD);
-    renderer.displayBuffer();
+    renderer.displayBuffer(screenTransitionRefresh.modeFor(static_cast<uint8_t>(state)));
     return;
   }
 
@@ -692,7 +695,7 @@ void KOReaderSyncActivity::render(RenderLock&&) {
     // Bottom button hints
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4, true);
-    renderer.displayBuffer();
+    renderer.displayBuffer(screenTransitionRefresh.modeFor(static_cast<uint8_t>(state)));
     return;
   }
 
@@ -702,7 +705,7 @@ void KOReaderSyncActivity::render(RenderLock&&) {
 
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_UPLOAD), "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4, true);
-    renderer.displayBuffer();
+    renderer.displayBuffer(screenTransitionRefresh.modeFor(static_cast<uint8_t>(state)));
     return;
   }
 
@@ -713,7 +716,7 @@ void KOReaderSyncActivity::render(RenderLock&&) {
 
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_DONE), "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4, true);
-    renderer.displayBuffer();
+    renderer.displayBuffer(screenTransitionRefresh.modeFor(static_cast<uint8_t>(state)));
     return;
   }
 
@@ -730,7 +733,7 @@ void KOReaderSyncActivity::render(RenderLock&&) {
 
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4, true);
-    renderer.displayBuffer();
+    renderer.displayBuffer(screenTransitionRefresh.modeFor(static_cast<uint8_t>(state)));
     return;
   }
 }
