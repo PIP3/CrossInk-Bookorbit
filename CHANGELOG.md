@@ -8,6 +8,7 @@
 
 ### Fixed
 
+- Change Font shortcuts now switch away from an active SD-card font instead of reindexing with the same font.
 - Network connections no longer trigger repeated full-panel flashes.
 - Dictionary word selection now follows the physical front-button direction in counter-clockwise landscape mode.
 - End-of-book suggestions can now be opened by tapping them on touch devices.
