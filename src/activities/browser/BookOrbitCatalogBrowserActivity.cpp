@@ -12,6 +12,7 @@
 #include <cctype>
 #include <cstring>
 
+#include "./BookOrbitCatalogListCache.h"
 #include "BookOrbitCredentialStore.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
@@ -21,6 +22,7 @@
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/reader/BookReadingStats.h"
 #include "activities/util/KeyboardEntryActivity.h"
+#include "components/CompactHeader.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "network/HttpDownloader.h"
@@ -28,7 +30,6 @@
 #include "util/StringUtils.h"
 
 namespace {
-constexpr int PAGE_ITEMS = 23;
 constexpr size_t BOOKORBIT_DOWNLOAD_BUFFER_SIZE = 2048;
 constexpr char READ_FOLDER_PREFIX[] = "/Read";
 constexpr size_t MAX_LOCAL_ENTRIES = 200;
@@ -76,6 +77,7 @@ void BookOrbitCatalogBrowserActivity::onEnter() {
   consumeConfirm = false;
   errorMessage.clear();
   statusMessage = tr(STR_CHECKING_WIFI);
+  BookOrbitCatalogListCache::clear();
 
   if (!BOOKORBIT_STORE.hasCredentials()) {
     state = BrowserState::ERROR;
@@ -120,8 +122,10 @@ void BookOrbitCatalogBrowserActivity::onWifiSelectionComplete(const bool connect
     return;
   }
   sdFontSystem.releaseForNetwork(renderer);
-  showLoadingBeforeFetch();
-  loadRoot();
+  if (!loadRoot(/*allowNetwork=*/false)) {
+    showLoadingBeforeFetch();
+    loadRoot();
+  }
 }
 
 void BookOrbitCatalogBrowserActivity::showLoadingBeforeFetch() {
@@ -133,15 +137,22 @@ void BookOrbitCatalogBrowserActivity::showLoadingBeforeFetch() {
   }
 }
 
-void BookOrbitCatalogBrowserActivity::loadRoot() {
+bool BookOrbitCatalogBrowserActivity::loadRoot(const bool allowNetwork) {
   navLevel = NavLevel::Root;
   std::vector<BookOrbitCatalogSection> sections;
-  if (!BookOrbitCatalogClient::fetchRootSections(sections)) {
+  const bool cacheHit = BookOrbitCatalogListCache::loadRootSections(sections);
+  if (!cacheHit && !allowNetwork) {
+    return false;
+  }
+  if (!cacheHit && !BookOrbitCatalogClient::fetchRootSections(sections)) {
     state = BrowserState::ERROR;
     errorMessage = BookOrbitCatalogClient::lastFetchBadResponse ? tr(STR_BOOKORBIT_CATALOG_BAD_RESPONSE)
                                                                 : tr(STR_BOOKORBIT_CATALOG_ERROR);
     requestUpdate();
-    return;
+    return false;
+  }
+  if (!cacheHit) {
+    BookOrbitCatalogListCache::saveRootSections(sections);
   }
 
   entries.clear();
@@ -173,10 +184,12 @@ void BookOrbitCatalogBrowserActivity::loadRoot() {
   state = entries.empty() ? BrowserState::ERROR : BrowserState::BROWSING;
   if (entries.empty()) errorMessage = tr(STR_NO_ENTRIES);
   requestUpdate();
+  return true;
 }
 
 void BookOrbitCatalogBrowserActivity::loadLocalBooks(const std::string& kind) {
   entries.clear();
+  listTitle = (kind == "in-progress") ? tr(STR_BOOKORBIT_IN_PROGRESS) : tr(STR_BOOKORBIT_ON_DEVICE);
 
   if (kind == "in-progress") {
     // Books with local reading progress: the recent-books list minus finished ones.
@@ -191,6 +204,11 @@ void BookOrbitCatalogBrowserActivity::loadLocalBooks(const std::string& kind) {
       entry.path = book.path;
       entries.push_back(std::move(entry));
     }
+    std::sort(entries.begin(), entries.end(), [](const Entry& a, const Entry& b) {
+      if (FsHelpers::naturalLess(a.title, b.title)) return true;
+      if (FsHelpers::naturalLess(b.title, a.title)) return false;
+      return FsHelpers::naturalLess(a.subtitle, b.subtitle);
+    });
   } else {
     // Every EPUB in the download location and the /Read folder, offline.
     const auto scanDir = [this](const char* dirPath) {
@@ -213,27 +231,44 @@ void BookOrbitCatalogBrowserActivity::loadLocalBooks(const std::string& kind) {
     };
     scanDir("/");
     scanDir(READ_FOLDER_PREFIX);
-    std::sort(entries.begin(), entries.end(), [](const Entry& a, const Entry& b) { return a.title < b.title; });
+    std::sort(entries.begin(), entries.end(), [](const Entry& a, const Entry& b) {
+      if (FsHelpers::naturalLess(a.title, b.title)) return true;
+      if (FsHelpers::naturalLess(b.title, a.title)) return false;
+      return FsHelpers::naturalLess(a.subtitle, b.subtitle);
+    });
   }
 
-  // Local listings behave like a book list one level below the root.
+  // Local listings behave like a book list one level below the root. Neutralise
+  // the paging context left by a previous server listing: without this, reaching
+  // the bottom of a local list could append SERVER results into it, and the
+  // scroll indicator would size itself on the stale server total.
   navLevel = NavLevel::Books;
   booksFromFacet = false;
+  listPage = 1;
+  listTotal = static_cast<int>(entries.size());
+  listPageSize = std::max<int>(1, static_cast<int>(entries.size()));
   selectorIndex = 0;
   state = entries.empty() ? BrowserState::ERROR : BrowserState::BROWSING;
   if (entries.empty()) errorMessage = tr(STR_NO_ENTRIES);
   requestUpdate();
 }
 
-void BookOrbitCatalogBrowserActivity::loadFacetEntries(const std::string& sectionId, const std::string& title,
-                                                       const int page) {
+bool BookOrbitCatalogBrowserActivity::loadFacetEntries(const std::string& sectionId, const std::string& title,
+                                                       const int page, const bool append, const bool allowNetwork) {
   BookOrbitFacetPage result;
-  if (!BookOrbitCatalogClient::fetchSectionEntries(sectionId, page, result)) {
+  const bool cacheHit = BookOrbitCatalogListCache::loadFacetPage(sectionId, page, result);
+  if (!cacheHit && !allowNetwork) {
+    return false;
+  }
+  if (!cacheHit && !BookOrbitCatalogClient::fetchSectionEntries(sectionId, page, result)) {
     state = BrowserState::ERROR;
     errorMessage = BookOrbitCatalogClient::lastFetchBadResponse ? tr(STR_BOOKORBIT_CATALOG_BAD_RESPONSE)
                                                                 : tr(STR_BOOKORBIT_CATALOG_ERROR);
     requestUpdate();
-    return;
+    return false;
+  }
+  if (!cacheHit) {
+    BookOrbitCatalogListCache::saveFacetPage(sectionId, page, result);
   }
 
   // Commit the navigation context only on success, so a failed page fetch leaves
@@ -244,13 +279,11 @@ void BookOrbitCatalogBrowserActivity::loadFacetEntries(const std::string& sectio
   facetPage = page;
   facetHasNext = result.hasNext;
 
-  entries.clear();
-  if (page > 1) {
-    Entry prev;
-    prev.type = EntryType::PREV_PAGE;
-    prev.title = tr(STR_PREV_PAGE);
-    entries.push_back(std::move(prev));
+  if (!append) {
+    entries.clear();
   }
+  // Server order is kept as-is: it is already alphabetical for facets, and a
+  // per-page sort would break the overall order once pages are appended.
   for (auto& facet : result.entries) {
     Entry entry;
     entry.type = EntryType::FACET;
@@ -262,28 +295,32 @@ void BookOrbitCatalogBrowserActivity::loadFacetEntries(const std::string& sectio
     entry.seriesId = facet.seriesId;
     entries.push_back(std::move(entry));
   }
-  if (facetHasNext) {
-    Entry next;
-    next.type = EntryType::NEXT_PAGE;
-    next.title = tr(STR_NEXT_PAGE);
-    entries.push_back(std::move(next));
+  if (!append) {
+    selectorIndex = 0;
   }
-
-  selectorIndex = 0;
   state = entries.empty() ? BrowserState::ERROR : BrowserState::BROWSING;
   if (entries.empty()) errorMessage = tr(STR_NO_ENTRIES);
   requestUpdate();
+  return true;
 }
 
-void BookOrbitCatalogBrowserActivity::loadBooks(const BookOrbitBookQuery& query, const std::string& title,
-                                                const int page, const bool fromFacet) {
+bool BookOrbitCatalogBrowserActivity::loadBooks(const BookOrbitBookQuery& query, const std::string& title,
+                                                const int page, const bool fromFacet, const bool append,
+                                                const bool allowNetwork) {
   BookOrbitBookPage result;
-  if (!BookOrbitCatalogClient::fetchBooks(query, page, result)) {
+  const bool cacheHit = BookOrbitCatalogListCache::loadBooksPage(query, page, result);
+  if (!cacheHit && !allowNetwork) {
+    return false;
+  }
+  if (!cacheHit && !BookOrbitCatalogClient::fetchBooks(query, page, result)) {
     state = BrowserState::ERROR;
     errorMessage = BookOrbitCatalogClient::lastFetchBadResponse ? tr(STR_BOOKORBIT_CATALOG_BAD_RESPONSE)
                                                                 : tr(STR_BOOKORBIT_CATALOG_ERROR);
     requestUpdate();
-    return;
+    return false;
+  }
+  if (!cacheHit) {
+    BookOrbitCatalogListCache::saveBooksPage(query, page, result);
   }
 
   // Commit the navigation context only on success (see loadFacetEntries).
@@ -296,13 +333,12 @@ void BookOrbitCatalogBrowserActivity::loadBooks(const BookOrbitBookQuery& query,
   listTotal = result.total;
   listPageSize = result.pageSize > 0 ? result.pageSize : BookOrbitCatalogClient::PAGE_SIZE;
 
-  entries.clear();
-  if (page > 1) {
-    Entry prev;
-    prev.type = EntryType::PREV_PAGE;
-    prev.title = tr(STR_PREV_PAGE);
-    entries.push_back(std::move(prev));
+  if (!append) {
+    entries.clear();
   }
+  // Server order carries the listing's meaning -- recency for "Continue reading"
+  // and "Recently added", series order for series -- and appending pages keeps
+  // it consistent; a client-side re-sort would destroy both.
   for (auto& book : result.books) {
     Entry entry;
     entry.type = EntryType::BOOK;
@@ -312,18 +348,37 @@ void BookOrbitCatalogBrowserActivity::loadBooks(const BookOrbitBookQuery& query,
     entry.onDevice = bookOnDevice(book.title, book.author);
     entries.push_back(std::move(entry));
   }
-  const bool hasNext = static_cast<long>(page) * listPageSize < listTotal;
-  if (hasNext) {
-    Entry next;
-    next.type = EntryType::NEXT_PAGE;
-    next.title = tr(STR_NEXT_PAGE);
-    entries.push_back(std::move(next));
+  if (!append) {
+    selectorIndex = 0;
   }
-
-  selectorIndex = 0;
   state = entries.empty() ? BrowserState::ERROR : BrowserState::BROWSING;
   if (entries.empty()) errorMessage = tr(STR_NO_ENTRIES);
   requestUpdate();
+  return true;
+}
+
+bool BookOrbitCatalogBrowserActivity::appendNextPageForCurrentList(const bool allowNetwork) {
+  const size_t previousCount = entries.size();
+  if (navLevel == NavLevel::FacetList && facetHasNext) {
+    if (!loadFacetEntries(facetSectionId, facetTitle, facetPage + 1, true, /*allowNetwork=*/false)) {
+      if (!allowNetwork) return false;
+      showLoadingBeforeFetch();
+      loadFacetEntries(facetSectionId, facetTitle, facetPage + 1, true);
+    }
+    return state == BrowserState::BROWSING && entries.size() > previousCount;
+  }
+
+  const bool booksHasNext = static_cast<long>(listPage) * listPageSize < listTotal;
+  if (navLevel == NavLevel::Books && booksHasNext) {
+    if (!loadBooks(listQuery, listTitle, listPage + 1, booksFromFacet, true, /*allowNetwork=*/false)) {
+      if (!allowNetwork) return false;
+      showLoadingBeforeFetch();
+      loadBooks(listQuery, listTitle, listPage + 1, booksFromFacet, true);
+    }
+    return state == BrowserState::BROWSING && entries.size() > previousCount;
+  }
+
+  return false;
 }
 
 void BookOrbitCatalogBrowserActivity::launchSearch() {
@@ -348,11 +403,13 @@ void BookOrbitCatalogBrowserActivity::performSearch(const std::string& query) {
     requestUpdate();
     return;
   }
-  showLoadingBeforeFetch();
   BookOrbitBookQuery bookQuery;
   bookQuery.sort = "title";
   bookQuery.query = query;
-  loadBooks(bookQuery, query, 1, /*fromFacet=*/false);
+  if (!loadBooks(bookQuery, query, 1, /*fromFacet=*/false, /*append=*/false, /*allowNetwork=*/false)) {
+    showLoadingBeforeFetch();
+    loadBooks(bookQuery, query, 1, /*fromFacet=*/false);
+  }
 }
 
 void BookOrbitCatalogBrowserActivity::downloadBook(const int64_t bookId, const std::string& title) {
@@ -440,14 +497,18 @@ void BookOrbitCatalogBrowserActivity::downloadBook(const int64_t bookId, const s
     clearBookCache(filename);
     // The listing was freed for download headroom; rebuild it from the stored
     // context so the user returns to the same page.
-    showLoadingBeforeFetch();
-    loadBooks(listQuery, listTitle, listPage, booksFromFacet);
+    if (!loadBooks(listQuery, listTitle, listPage, booksFromFacet, /*append=*/false, /*allowNetwork=*/false)) {
+      showLoadingBeforeFetch();
+      loadBooks(listQuery, listTitle, listPage, booksFromFacet);
+    }
     return;
   } else if (result == HttpDownloader::ABORTED) {
     LOG_DBG("BookOrbit", "Download cancelled");
     mappedInput.suppressNextBackRelease();
-    showLoadingBeforeFetch();
-    loadBooks(listQuery, listTitle, listPage, booksFromFacet);
+    if (!loadBooks(listQuery, listTitle, listPage, booksFromFacet, /*append=*/false, /*allowNetwork=*/false)) {
+      showLoadingBeforeFetch();
+      loadBooks(listQuery, listTitle, listPage, booksFromFacet);
+    }
     return;
   } else {
     state = BrowserState::ERROR;
@@ -490,11 +551,17 @@ void BookOrbitCatalogBrowserActivity::loop() {
         onGoHome();
       } else if (entries.empty()) {
         // The listing was freed for a download that then failed; rebuild it.
-        showLoadingBeforeFetch();
         if (navLevel == NavLevel::FacetList) {
-          loadFacetEntries(facetSectionId, facetTitle, facetPage);
+          if (!loadFacetEntries(facetSectionId, facetTitle, facetPage, /*append=*/false, /*allowNetwork=*/false)) {
+            showLoadingBeforeFetch();
+            loadFacetEntries(facetSectionId, facetTitle, facetPage);
+          }
         } else {
-          loadBooks(listQuery, listTitle, listPage, booksFromFacet);
+          if (!loadBooks(listQuery, listTitle, listPage, booksFromFacet, /*append=*/false,
+                         /*allowNetwork=*/false)) {
+            showLoadingBeforeFetch();
+            loadBooks(listQuery, listTitle, listPage, booksFromFacet);
+          }
         }
       } else {
         state = BrowserState::BROWSING;
@@ -519,17 +586,21 @@ void BookOrbitCatalogBrowserActivity::loop() {
         const auto& entry = entries[selectorIndex];
         switch (entry.type) {
           case EntryType::SECTION: {
-            showLoadingBeforeFetch();
             BookOrbitBookQuery query;
             query.sort = entry.sectionId == "continue-reading" ? "recently_read"
                          : entry.sectionId == "all-books"      ? "title"
                                                                : "recently_added";
-            loadBooks(query, entry.title, 1, /*fromFacet=*/false);
+            if (!loadBooks(query, entry.title, 1, /*fromFacet=*/false, /*append=*/false, /*allowNetwork=*/false)) {
+              showLoadingBeforeFetch();
+              loadBooks(query, entry.title, 1, /*fromFacet=*/false);
+            }
             break;
           }
           case EntryType::FACET_SECTION:
-            showLoadingBeforeFetch();
-            loadFacetEntries(entry.sectionId, entry.title, 1);
+            if (!loadFacetEntries(entry.sectionId, entry.title, 1, /*append=*/false, /*allowNetwork=*/false)) {
+              showLoadingBeforeFetch();
+              loadFacetEntries(entry.sectionId, entry.title, 1);
+            }
             break;
           case EntryType::LOCAL_SECTION:
             loadLocalBooks(entry.sectionId);
@@ -538,7 +609,6 @@ void BookOrbitCatalogBrowserActivity::loop() {
             activityManager.goToReader(entry.path);
             break;
           case EntryType::FACET: {
-            showLoadingBeforeFetch();
             // Mirror BookOrbit's own plugin: author filters by the entry id; series
             // prefers the numeric seriesId and sorts by series order.
             BookOrbitBookQuery query;
@@ -552,7 +622,10 @@ void BookOrbitCatalogBrowserActivity::loop() {
             } else {
               query.author = entry.sectionId;
             }
-            loadBooks(query, entry.title, 1, /*fromFacet=*/true);
+            if (!loadBooks(query, entry.title, 1, /*fromFacet=*/true, /*append=*/false, /*allowNetwork=*/false)) {
+              showLoadingBeforeFetch();
+              loadBooks(query, entry.title, 1, /*fromFacet=*/true);
+            }
             break;
           }
           case EntryType::SEARCH:
@@ -561,52 +634,92 @@ void BookOrbitCatalogBrowserActivity::loop() {
           case EntryType::BOOK:
             downloadBook(entry.bookId, entry.title);
             break;
-          case EntryType::PREV_PAGE:
-            showLoadingBeforeFetch();
-            if (navLevel == NavLevel::FacetList) {
-              loadFacetEntries(facetSectionId, facetTitle, facetPage - 1);
-            } else {
-              loadBooks(listQuery, listTitle, listPage - 1, booksFromFacet);
-            }
-            break;
-          case EntryType::NEXT_PAGE:
-            showLoadingBeforeFetch();
-            if (navLevel == NavLevel::FacetList) {
-              loadFacetEntries(facetSectionId, facetTitle, facetPage + 1);
-            } else {
-              loadBooks(listQuery, listTitle, listPage + 1, booksFromFacet);
-            }
-            break;
         }
       }
     } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       if (navLevel == NavLevel::Root) {
         onGoHome();
       } else if (navLevel == NavLevel::Books && booksFromFacet) {
-        showLoadingBeforeFetch();
-        loadFacetEntries(facetSectionId, facetTitle, facetPage);
+        if (!loadFacetEntries(facetSectionId, facetTitle, facetPage, /*append=*/false, /*allowNetwork=*/false)) {
+          showLoadingBeforeFetch();
+          loadFacetEntries(facetSectionId, facetTitle, facetPage);
+        }
       } else {
-        showLoadingBeforeFetch();
-        loadRoot();
+        if (!loadRoot(/*allowNetwork=*/false)) {
+          showLoadingBeforeFetch();
+          loadRoot();
+        }
       }
     }
 
     if (!entries.empty()) {
-      const auto entryCount = entries.size();
-      buttonNavigator.onNextRelease([this, entryCount] {
-        selectorIndex = ButtonNavigator::nextIndex(selectorIndex, entryCount);
+      // Same rows-per-page the themed list draws, so page jumps land where the
+      // display pages; a fixed constant would drift from the theme's row height.
+      const int pageItems = listPageItems();
+      // More content on the server than is loaded? Then the loaded end is a
+      // phantom boundary mid-listing: never wrap onto or past it.
+      const auto hasMorePages = [this] {
+        if (navLevel == NavLevel::FacetList) return facetHasNext;
+        if (navLevel == NavLevel::Books) return static_cast<long>(listPage) * listPageSize < listTotal;
+        return false;
+      };
+      // Prefetch at the page turn: after a forward move onto the last loaded
+      // screen-page, append until that page is fully backed by loaded entries
+      // (server pages are not screen-page multiples, and can even be smaller
+      // than one screen). The load pause lands on a transition the e-ink
+      // refreshes anyway instead of mid-page, and the page comes up full. The
+      // lambdas read entries.size() live because appends grow the list.
+      const auto extendIfOnLastPage = [this, pageItems, hasMorePages] {
+        const int lastPageStart = (static_cast<int>(entries.size()) - 1) / pageItems * pageItems;
+        if (selectorIndex < lastPageStart) return;
+        const int wantedCount = (selectorIndex / pageItems + 1) * pageItems;
+        while (static_cast<int>(entries.size()) < wantedCount && hasMorePages()) {
+          if (!appendNextPageForCurrentList()) break;
+        }
+      };
+      buttonNavigator.onNextRelease([this, extendIfOnLastPage, hasMorePages] {
+        if (selectorIndex + 1 >= static_cast<int>(entries.size()) && hasMorePages() &&
+            !appendNextPageForCurrentList()) {
+          requestUpdate();  // could not load past the end (e.g. network); hold position, no wrap
+          return;
+        }
+        selectorIndex = ButtonNavigator::nextIndex(selectorIndex, entries.size());
+        extendIfOnLastPage();
         requestUpdate();
       });
-      buttonNavigator.onPreviousRelease([this, entryCount] {
-        selectorIndex = ButtonNavigator::previousIndex(selectorIndex, entryCount);
+      // Backward from the very top: when the session cache holds the rest of the
+      // listing, materialise it (no requests) and wrap to the real end. A cache
+      // miss keeps the clamp -- a Previous press should not start a network crawl.
+      const auto materialiseFromCache = [this, hasMorePages] {
+        while (hasMorePages() && appendNextPageForCurrentList(/*allowNetwork=*/false)) {
+        }
+        return !hasMorePages();
+      };
+      buttonNavigator.onPreviousRelease([this, hasMorePages, materialiseFromCache] {
+        if (selectorIndex == 0 && hasMorePages() && !materialiseFromCache()) return;
+        selectorIndex = ButtonNavigator::previousIndex(selectorIndex, entries.size());
         requestUpdate();
       });
-      buttonNavigator.onNextContinuous([this, entryCount] {
-        selectorIndex = ButtonNavigator::nextPageIndex(selectorIndex, entryCount, PAGE_ITEMS);
+      buttonNavigator.onNextContinuous([this, pageItems, extendIfOnLastPage, hasMorePages] {
+        const int count = static_cast<int>(entries.size());
+        if (selectorIndex / pageItems == (count - 1) / pageItems && hasMorePages() && !appendNextPageForCurrentList()) {
+          requestUpdate();
+          return;
+        }
+        selectorIndex = ButtonNavigator::nextPageIndex(selectorIndex, entries.size(), pageItems);
+        extendIfOnLastPage();
         requestUpdate();
       });
-      buttonNavigator.onPreviousContinuous([this, entryCount] {
-        selectorIndex = ButtonNavigator::previousPageIndex(selectorIndex, entryCount, PAGE_ITEMS);
+      buttonNavigator.onPreviousContinuous([this, pageItems, hasMorePages, materialiseFromCache] {
+        if (selectorIndex / pageItems == 0 && hasMorePages()) {
+          if (selectorIndex > 0) {
+            selectorIndex = 0;  // finish the backward run at the top first
+            requestUpdate();
+            return;
+          }
+          if (!materialiseFromCache()) return;
+        }
+        selectorIndex = ButtonNavigator::previousPageIndex(selectorIndex, entries.size(), pageItems);
         requestUpdate();
       });
     }
@@ -615,10 +728,18 @@ void BookOrbitCatalogBrowserActivity::loop() {
 
 void BookOrbitCatalogBrowserActivity::render(RenderLock&&) {
   renderer.clearScreen();
+
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
+  const auto& metrics = UITheme::getInstance().getMetrics();
 
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, tr(STR_BOOKORBIT_CATALOG), true, EpdFontFamily::BOLD);
+  std::string headerTitle = tr(STR_BOOKORBIT_CATALOG);
+  if (navLevel == NavLevel::FacetList && !facetTitle.empty()) {
+    headerTitle = facetTitle;
+  } else if (navLevel == NavLevel::Books && !listTitle.empty()) {
+    headerTitle = listTitle;
+  }
+  CompactHeader::drawTitle(renderer, headerTitle.c_str());
 
   if (state == BrowserState::CHECK_WIFI || state == BrowserState::LOADING) {
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, statusMessage.c_str());
@@ -668,25 +789,29 @@ void BookOrbitCatalogBrowserActivity::render(RenderLock&&) {
   if (entries.empty()) {
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, tr(STR_NO_ENTRIES));
   } else {
-    const auto entryCount = entries.size();
-    const auto pageStartIndex = selectorIndex / PAGE_ITEMS * PAGE_ITEMS;
-    renderer.fillRect(0, 60 + (selectorIndex % PAGE_ITEMS) * 30 - 2, pageWidth - 1, 30);
+    const auto entryCount = static_cast<int>(entries.size());
 
-    for (size_t i = pageStartIndex; i < entryCount && i < static_cast<size_t>(pageStartIndex + PAGE_ITEMS); i++) {
-      const auto& entry = entries[i];
-      const bool isBookRow = entry.type == EntryType::BOOK || entry.type == EntryType::LOCAL_BOOK;
-      std::string displayText = isBookRow ? entry.title : "> " + entry.title;
-      if (isBookRow && !entry.subtitle.empty()) displayText += " - " + entry.subtitle;
-      // Keep the right edge clear for the on-device marker on catalog rows.
-      const int textWidth = entry.onDevice ? pageWidth - 60 : pageWidth - 40;
-      auto item = renderer.truncatedText(UI_10_FONT_ID, displayText.c_str(), textWidth);
-      const int rowY = 60 + (i % PAGE_ITEMS) * 30;
-      const bool inverted = i != static_cast<size_t>(selectorIndex);
-      renderer.drawText(UI_10_FONT_ID, 20, rowY, item.c_str(), inverted);
-      if (entry.onDevice) {
-        renderer.drawText(UI_10_FONT_ID, pageWidth - 32, rowY, ON_DEVICE_MARKER, inverted);
-      }
-    }
+    const int contentTop = CompactHeader::contentTop(metrics);
+    const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight;
+    // The subtitle carries the author; without it two same-title search results
+    // are indistinguishable. Passing the lambda also selects the taller row
+    // height every themed list with subtitles uses.
+    // Book listings tell the scroll indicator the server's total, so its size
+    // and position are right from the first draw of a partially loaded list.
+    const int scrollTotal = navLevel == NavLevel::Books ? listTotal : -1;
+    GUI.drawList(
+        renderer, Rect{0, contentTop, pageWidth, contentHeight}, entryCount, selectorIndex,
+        [this](int i) { return entries[i].title; }, [this](int i) { return entries[i].subtitle; },
+        nullptr,  // rowIcon
+        [this](int i) { return entries[i].onDevice ? ON_DEVICE_MARKER : ""; },
+        /*highlightValue=*/false, /*rowDimmed=*/nullptr, /*isHeader=*/nullptr, /*rowHeightScale=*/1,
+        /*showSelection=*/true, scrollTotal);
   }
   renderer.displayBuffer();
+}
+
+int BookOrbitCatalogBrowserActivity::listPageItems() const {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const int contentHeight = renderer.getScreenHeight() - CompactHeader::contentTop(metrics) - metrics.buttonHintsHeight;
+  return std::max(1, GUI.getListPageItems(contentHeight, /*hasSubtitle=*/true));
 }
