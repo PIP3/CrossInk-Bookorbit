@@ -78,6 +78,7 @@ class PageHorizontalRule final : public PageElement {
 struct TableFragmentCell {
   static constexpr uint8_t MAX_SERIALIZED_LINES = 64;
   bool isHeader = false;
+  uint8_t colSpan = 1;
   std::vector<std::shared_ptr<TextBlock>> lines;
 
   bool serialize(FsFile& file) const;

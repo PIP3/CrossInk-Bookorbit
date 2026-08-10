@@ -253,10 +253,6 @@ Binary layout:
 
 ### Version 62
 
-Each file in `sections/*.bin` stores one laid-out spine section. The header is
-also the cache-busting key: if any layout-affecting setting differs from the
-current reader settings, the section is discarded and rebuilt.
-
 Version 62 adds a `protectedImageUnits` (`uint32_t` LE) header field immediately
 after `pageCount`. It stores the cumulative fixed-point image contribution of
 the cached pages (256 units per physical page), allowing partial and finalized
@@ -267,6 +263,17 @@ older versions are rebuilt for the new image-aware estimate.
 
 Suspended incremental section caches use version `0xFA` and carry the same
 `protectedImageUnits` field. The previous partial sentinel was `0xF9`.
+
+Version 61 adds compact low-memory table rows and stores each table cell's
+column span in the page fragment payload. Full and suspended partial section
+caches rebuild together because the table grid representation is part of the
+serialized page layout. Complete files use version byte `61`; suspended
+partials use sentinel byte `0xF8`; both values invalidate older full and
+partial caches.
+
+Each file in `sections/*.bin` stores one laid-out spine section. The header is
+also the cache-busting key: if any layout-affecting setting differs from the
+current reader settings, the section is discarded and rebuilt.
 
 Version 59 adds a compact page-start visible-text-offset lookup table. The
 offset is a Unicode codepoint coordinate in the spine XHTML, so reader progress
