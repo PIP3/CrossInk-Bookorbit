@@ -1,4 +1,4 @@
-> **This is a personal fork of [CrossInk](https://github.com/uxjulia/CrossInk)** that adds [BookOrbit](https://github.com/bookorbit/bookorbit) integration — reading-progress sync and a catalog browser for downloading books straight from your own server — plus a working clock on hardware that has no clock chip.
+> **This is a personal fork of [CrossInk](https://github.com/uxjulia/CrossInk)** that adds [BookOrbit](https://github.com/bookorbit/bookorbit) integration — two-way sync of reading progress, highlights and bookmarks, and a catalog browser for downloading books straight from your own server — plus a working clock on hardware that has no clock chip.
 
 Everything else — fonts, themes, reader features, reading stats, controls, the web server — comes from CrossInk unchanged. See the [upstream README](https://github.com/uxjulia/CrossInk#readme) for those, and the [docs](./docs/) folder in this repository for the detailed guides.
 
@@ -9,12 +9,13 @@ Everything else — fonts, themes, reader features, reading stats, controls, the
 ## What's different in this fork
 
 - **BookOrbit progress sync** — sync your reading position with a self-hosted BookOrbit server, independently of (and alongside) KOReader Sync.
+- **BookOrbit highlight and bookmark sync** — two-way: what you highlight or bookmark on the device appears in the web reader at its exact place in the text, what you add on the web lands in the book, and deletions propagate both ways.
 - **BookOrbit catalog browser** — browse your server's library on the device and download EPUBs over WiFi, including by author and by series.
 - **Offline shortcuts to your own books** — "On device" and "In progress" categories that open a book directly, without touching the network.
 - **Reading statistics pushed to BookOrbit** — your reading time, streaks and pace on the server's dashboard, fed by the pages you turn on the device.
 - **A working clock on the X4** — the status-bar clock, which upstream can only show on hardware that has a clock chip, plus an opt-in mode that keeps the time running through sleep.
 
-BookOrbit exposes a KOReader-compatible sync API, so this fork talks to it the same way the official BookOrbit KOReader plugin does. Your BookOrbit server must be recent enough to serve the KOReader plugin endpoints under `{server}/api/v1/koreader` — including `plugin/catalog/*` for the catalog browser.
+BookOrbit exposes a KOReader-compatible sync API, so this fork talks to it the same way the official BookOrbit KOReader plugin does. Your BookOrbit server must be recent enough to serve the KOReader plugin endpoints under `{server}/api/v1/koreader` — including `plugin/catalog/*` for the catalog browser and `plugin/annotations/*` / `plugin/bookmarks/*` for highlight and bookmark sync (servers without those are detected, and the missing steps are simply skipped).
 
 ---
 
@@ -40,6 +41,34 @@ BookOrbit identifies books by the binary partial-MD5 hash of the EPUB file (the 
 ### Syncing without opening the menu
 
 **Settings → Controls** lets you bind _BookOrbit Sync_ to the power button (short or long press) or to a long press on Menu or Back. The action also works outside the reader: it syncs the book you last had open, or opens the BookOrbit settings if no account is configured yet.
+
+## Syncing highlights and bookmarks
+
+Every BookOrbit sync of a book also exchanges its highlights and bookmarks with the
+server, in both directions:
+
+- **Highlights** made on the device appear in BookOrbit's web reader at their exact
+  position in the text, with the book's exact wording; highlights created in the web
+  reader come down and are drawn in the book. Deleting one on either side removes it
+  from the other at the next sync.
+- **Bookmarks** work the same way: a page bookmarked on the device shows up in the web
+  reader, and a bookmark placed on the web lands in the book — on the right page when
+  the device has already read that chapter, at the chapter start otherwise, refined the
+  first time you jump to it.
+
+Nothing to enable: if an account is configured, both ride along with every sync, and
+the sync screen reports what each exchange did ("Highlights: 2 sent, 1 added, 0
+removed"). Book matching is the same binary hash as progress sync, so the same EPUB
+file has to be on both sides.
+
+Details worth knowing:
+
+- New highlights upload in batches of 8 per sync — this hardware bounds what fits
+  beside an open TLS connection — so a large backlog drains over a few syncs.
+- Highlights and bookmarks made before this feature existed gain their sync identity
+  progressively as you read, one chapter per visit, and start syncing from there.
+- A highlight's stored text is capped at 2 KB; an extremely long web highlight is drawn
+  up to where that cap cuts its text.
 
 ## Reading statistics
 
