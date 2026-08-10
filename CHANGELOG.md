@@ -8,6 +8,8 @@
 
 ### Fixed
 
+- XTCH cover and thumbnail generation now stays within the available memory on X3/X4 after its cache is cleared.
+- Change Font shortcuts now switch away from an active SD-card font instead of reindexing with the same font.
 - Network connections no longer trigger repeated full-panel flashes.
 - Dictionary word selection now follows the physical front-button direction in counter-clockwise landscape mode.
 - End-of-book suggestions can now be opened by tapping them on touch devices.
