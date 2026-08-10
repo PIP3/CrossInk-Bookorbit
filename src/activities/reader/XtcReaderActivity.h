@@ -23,6 +23,7 @@ class XtcReaderActivity final : public Activity {
 
   uint32_t currentPage = 0;
   int pagesUntilFullRefresh = 0;
+  unsigned long lastPageTurnTime = 0UL;
   unsigned long pageShownAtMs = 0UL;
   uint32_t sessionReadingSeconds = 0;
   BookReadingStats stats;

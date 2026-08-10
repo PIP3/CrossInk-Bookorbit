@@ -367,6 +367,16 @@ void XtcReaderActivity::loop() {
     return;
   }
 
+  // Mirror EPUB's manual-turn guard: the render task updates the panel
+  // concurrently, so accepting another turn before it owns RenderLock can mix
+  // two pages. The short time gap covers that request-to-render startup window.
+  constexpr unsigned long kMinManualTurnGapMs = 200;
+  const unsigned long now = millis();
+  if (RenderLock::peek() || (now - lastPageTurnTime) < kMinManualTurnGapMs) {
+    return;
+  }
+  lastPageTurnTime = now;
+
   // At end of the book with no suggestion menu, forward button goes home and back
   // button returns to last page
   if (currentPage >= xtc->getPageCount()) {
