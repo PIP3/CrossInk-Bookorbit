@@ -734,8 +734,10 @@ void renderEditBookDatesPage(GfxRenderer& renderer, const MappedInputManager* ma
     constexpr int actionHeight = TouchActionButtons::kDefaultHeight;
     constexpr int actionGap = TouchActionButtons::kDefaultGap;
     constexpr int actionTotalHeight = actionHeight * 2 + actionGap;
-    const Rect actionArea{metrics.contentSidePadding, cardY + cardH + metrics.verticalSpacing,
-                          pageWidth - metrics.contentSidePadding * 2, actionTotalHeight};
+    const Rect safeArea = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+    const Rect actionArea{safeArea.x + metrics.contentSidePadding,
+                          safeArea.y + safeArea.height - metrics.verticalSpacing - actionTotalHeight,
+                          safeArea.width - metrics.contentSidePadding * 2, actionTotalHeight};
     const auto actions = TouchActionButtons::vertical(actionArea, 2);
     const char* labels[] = {tr(STR_SAVE), tr(STR_CANCEL)};
     TouchActionButtons::draw(renderer, actions, labels, 0, -1, UI_10_FONT_ID);
