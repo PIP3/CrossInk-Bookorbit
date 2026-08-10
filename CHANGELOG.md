@@ -21,6 +21,7 @@
 - Xteink readers wake faster by skipping redundant bootloader image validation after sleep.
 - Large EPUB images keep the reader responsive during decoding.
 - Full-height EPUB images no longer disappear when their container adds a top margin.
+- EPUB page estimates now keep image-only and mixed image pages from being multiplied by XHTML byte density.
 - Cancelling a chapter, footnote, location, or QR screen opened from the EPUB menu returns to that menu.
 - EPUB and XTC readers retain less memory during ordinary reading by loading end-of-book suggestions only when needed.
 

@@ -121,10 +121,12 @@ class EpubReaderActivity final : public Activity {
     int firstSpineIndex = -1;
     int lastSpineIndex = -1;
     uint32_t settingsSignature = 0;
-    uint32_t knownSiblingPages = 0;
+    uint64_t knownSiblingImageUnits = 0;
+    uint64_t knownSiblingNonImageUnits = 0;
     uint32_t knownSiblingBytes = 0;
     uint32_t unknownSiblingBytes = 0;
-    uint32_t precedingKnownPages = 0;
+    uint64_t precedingKnownImageUnits = 0;
+    uint64_t precedingKnownNonImageUnits = 0;
     uint32_t precedingUnknownBytes = 0;
     uint16_t unknownSiblingCount = 0;
     uint16_t precedingUnknownCount = 0;

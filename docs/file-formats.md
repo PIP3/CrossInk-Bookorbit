@@ -251,14 +251,22 @@ Binary layout:
 
 ## `section.bin`
 
-### Version 61
+### Version 62
 
 Each file in `sections/*.bin` stores one laid-out spine section. The header is
 also the cache-busting key: if any layout-affecting setting differs from the
 current reader settings, the section is discarded and rebuilt.
 
-Version 61 clamps an inline image's top margin after the page-break decision.
-This prevents a viewport-height image from being cached beyond the page bottom.
+Version 62 adds a `protectedImageUnits` (`uint32_t` LE) header field immediately
+after `pageCount`. It stores the cumulative fixed-point image contribution of
+the cached pages (256 units per physical page), allowing partial and finalized
+sections to estimate only their non-image pages from XHTML byte density. The
+serialized page payload and all page lookup tables are unchanged. Version 61
+clamped an inline image's top margin after the page-break decision; caches from
+older versions are rebuilt for the new image-aware estimate.
+
+Suspended incremental section caches use version `0xFA` and carry the same
+`protectedImageUnits` field. The previous partial sentinel was `0xF9`.
 
 Version 59 adds a compact page-start visible-text-offset lookup table. The
 offset is a Unicode codepoint coordinate in the spine XHTML, so reader progress
@@ -305,6 +313,7 @@ anchor behavior introduced in version 45. It includes:
   forced paragraph indents, paragraph alignment, viewport size, hyphenation,
   embedded CSS, image rendering mode, Bionic Reading, Guide Dots, word spacing,
   and EPUB render mode
+- section header `protectedImageUnits` (`uint32_t` fixed-point units, 256 per page)
 - page offset LUT
 - anchor-to-page map for fragment and footnote navigation
 - paragraph and list-item LUTs used by KOReader sync page refinement
@@ -332,7 +341,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 59
+#define EXPECTED_VERSION 62
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
 #define FOOTNOTE_HREF_LEN 96
@@ -545,6 +554,7 @@ struct SectionBin {
     u8 renderMode; // 0 = CrossInk Default, 1 = Balanced, 2 = Light
 
     u16 pageCount;
+    u32 protectedImageUnits;
     u32 pageLutOffset;
     u32 anchorMapOffset;
     u32 paragraphLutOffset;

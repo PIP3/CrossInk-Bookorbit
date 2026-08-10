@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <Epub/Page.h>
+#include <Epub/PageCountEstimator.h>
 #include <Epub/blocks/TextBlock.h>
 #include <FontCacheManager.h>
 #include <FsHelpers.h>
@@ -6523,12 +6524,17 @@ void EpubReaderActivity::refreshChapterGroupEstimate(const uint16_t viewportWidt
     Section sibling(epub, spineIndex, renderer, sectionCacheSuffixForRenderMode(renderMode));
     const bool loaded = sibling.loadSectionFile(
         readerRenderSpecForProfile(readerFontId, viewportWidth, viewportHeight, buildProfileForRenderMode(renderMode)));
-    const uint32_t siblingPages = loaded ? sibling.estimatedTotalPages() : 0;
-    if (siblingPages > 0 && spineBytes > 0) {
-      refreshed.knownSiblingPages += siblingPages;
+    const uint64_t siblingImageUnits = loaded ? sibling.estimatedProtectedImageUnits() : 0;
+    const uint64_t siblingNonImageUnits = loaded ? sibling.estimatedNonImageProjectionUnits() : 0;
+    if ((siblingImageUnits > 0 || siblingNonImageUnits > 0) && spineBytes > 0) {
+      refreshed.knownSiblingImageUnits += siblingImageUnits;
+      refreshed.knownSiblingNonImageUnits += siblingNonImageUnits;
       refreshed.knownSiblingBytes += spineBytes;
       refreshed.siblingEstimateUsed = refreshed.siblingEstimateUsed || sibling.isPartial() || sibling.isBuilding();
-      if (spineIndex < currentSpineIndex) refreshed.precedingKnownPages += siblingPages;
+      if (spineIndex < currentSpineIndex) {
+        refreshed.precedingKnownImageUnits += siblingImageUnits;
+        refreshed.precedingKnownNonImageUnits += siblingNonImageUnits;
+      }
     } else {
       refreshed.unknownSiblingBytes += spineBytes;
       refreshed.unknownSiblingCount++;
@@ -6540,10 +6546,14 @@ void EpubReaderActivity::refreshChapterGroupEstimate(const uint16_t viewportWidt
   }
   refreshed.valid = true;
   chapterGroupEstimate = refreshed;
-  LOG_DBG("ERS", "Chapter group estimate: spine=%d range=%d-%d known=%lu pages/%lu bytes unknown=%u/%lu bytes",
-          currentSpineIndex, firstSpineIndex, lastSpineIndex, static_cast<unsigned long>(refreshed.knownSiblingPages),
-          static_cast<unsigned long>(refreshed.knownSiblingBytes), refreshed.unknownSiblingCount,
-          static_cast<unsigned long>(refreshed.unknownSiblingBytes));
+  LOG_DBG(
+      "ERS",
+      "Chapter group estimate: spine=%d range=%d-%d known=%llu image/%llu text units/%lu bytes unknown=%u/%lu bytes",
+      currentSpineIndex, firstSpineIndex, lastSpineIndex,
+      static_cast<unsigned long long>(refreshed.knownSiblingImageUnits),
+      static_cast<unsigned long long>(refreshed.knownSiblingNonImageUnits),
+      static_cast<unsigned long>(refreshed.knownSiblingBytes), refreshed.unknownSiblingCount,
+      static_cast<unsigned long>(refreshed.unknownSiblingBytes));
 }
 
 bool EpubReaderActivity::resolveChapterGroupPageProgress(int& currentPage, int& pageCount, float& chapterProgress,
@@ -6551,31 +6561,39 @@ bool EpubReaderActivity::resolveChapterGroupPageProgress(int& currentPage, int& 
   if (!chapterGroupEstimate.valid || !section || chapterGroupEstimate.currentSpineIndex != currentSpineIndex) {
     return false;
   }
-  const uint32_t currentPages = section->estimatedTotalPages();
   const size_t previousCumulative = currentSpineIndex > 0 ? epub->getCumulativeSpineItemSize(currentSpineIndex - 1) : 0;
   const size_t cumulative = epub->getCumulativeSpineItemSize(currentSpineIndex);
   const uint32_t currentBytes =
       cumulative > previousCumulative
           ? static_cast<uint32_t>(std::min<size_t>(cumulative - previousCumulative, UINT32_MAX))
           : 0;
-  const uint64_t knownPages = static_cast<uint64_t>(chapterGroupEstimate.knownSiblingPages) + currentPages;
+  const uint64_t currentImageUnits = section->estimatedProtectedImageUnits();
+  const uint64_t currentNonImageUnits = section->estimatedNonImageProjectionUnits();
+  const uint64_t knownImageUnits = chapterGroupEstimate.knownSiblingImageUnits + currentImageUnits;
+  const uint64_t knownNonImageUnits = chapterGroupEstimate.knownSiblingNonImageUnits + currentNonImageUnits;
   const uint64_t knownBytes = static_cast<uint64_t>(chapterGroupEstimate.knownSiblingBytes) + currentBytes;
-  if (knownPages == 0 || knownBytes == 0) return false;
+  if (knownImageUnits + knownNonImageUnits == 0 || knownBytes == 0) return false;
 
-  const auto estimateUnknownPages = [knownPages, knownBytes](const uint32_t bytes, const uint16_t itemCount) {
-    if (bytes == 0 || itemCount == 0) return uint32_t{0};
-    const uint64_t projected = (static_cast<uint64_t>(bytes) * knownPages + knownBytes / 2U) / knownBytes;
-    return static_cast<uint32_t>(std::max<uint64_t>(itemCount, projected));
+  const auto estimateUnknownUnits = [knownNonImageUnits, knownBytes](const uint32_t bytes, const uint16_t itemCount) {
+    if (bytes == 0 || itemCount == 0) return uint64_t{0};
+    const uint64_t projected =
+        PageCountEstimator::projectNonImageUnits(knownNonImageUnits, bytes, knownBytes);
+    const uint64_t minimum = static_cast<uint64_t>(itemCount) * PageCountEstimator::kUnitsPerPage;
+    return std::max(minimum, projected);
   };
-  const uint32_t unknownPages =
-      estimateUnknownPages(chapterGroupEstimate.unknownSiblingBytes, chapterGroupEstimate.unknownSiblingCount);
-  const uint32_t precedingUnknownPages =
-      estimateUnknownPages(chapterGroupEstimate.precedingUnknownBytes, chapterGroupEstimate.precedingUnknownCount);
-  const uint64_t groupedTotal = knownPages + unknownPages;
-  const uint64_t groupedCurrent = static_cast<uint64_t>(chapterGroupEstimate.precedingKnownPages) +
-                                  precedingUnknownPages + static_cast<uint32_t>(section->currentPage) + 1U;
-  pageCount = static_cast<int>(std::min<uint64_t>(60000, std::max<uint64_t>(1, groupedTotal)));
-  currentPage = static_cast<int>(std::min<uint64_t>(groupedCurrent, static_cast<uint64_t>(pageCount)));
+  const uint64_t unknownUnits =
+      estimateUnknownUnits(chapterGroupEstimate.unknownSiblingBytes, chapterGroupEstimate.unknownSiblingCount);
+  const uint64_t precedingUnknownUnits =
+      estimateUnknownUnits(chapterGroupEstimate.precedingUnknownBytes, chapterGroupEstimate.precedingUnknownCount);
+  const uint64_t groupedTotalUnits = knownImageUnits + knownNonImageUnits + unknownUnits;
+  const uint64_t groupedCurrentUnits =
+      chapterGroupEstimate.precedingKnownImageUnits + chapterGroupEstimate.precedingKnownNonImageUnits +
+      precedingUnknownUnits + (static_cast<uint64_t>(section->currentPage) + 1U) * PageCountEstimator::kUnitsPerPage;
+  const uint64_t groupedTotal = groupedTotalUnits / PageCountEstimator::kUnitsPerPage;
+  const uint64_t groupedCurrent = groupedCurrentUnits / PageCountEstimator::kUnitsPerPage;
+  pageCount = static_cast<int>(std::min<uint64_t>(PageCountEstimator::kMaxPages, std::max<uint64_t>(1, groupedTotal)));
+  currentPage =
+      static_cast<int>(std::min<uint64_t>(std::max<uint64_t>(1, groupedCurrent), static_cast<uint64_t>(pageCount)));
   chapterProgress = pageCount > 0 ? static_cast<float>(currentPage - 1) / static_cast<float>(pageCount) : 0.0f;
   pageCountEstimated = section->isBuilding() || section->isPartial() || chapterGroupEstimate.siblingEstimateUsed ||
                        chapterGroupEstimate.unknownSiblingCount > 0;

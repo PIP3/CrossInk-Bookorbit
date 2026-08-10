@@ -386,6 +386,42 @@ void Page::renderWithImagePlaceholders(GfxRenderer& renderer, const int fontId, 
   }
 }
 
+uint16_t Page::imageEstimateUnits(const uint16_t viewportHeight) const {
+  bool hasImage = false;
+  bool hasReadableContent = false;
+  uint32_t imageHeight = 0;
+  for (const auto& element : elements) {
+    switch (element->getTag()) {
+      case TAG_PageImage: {
+        hasImage = true;
+        const auto& image = static_cast<const PageImage&>(*element).getImageBlock();
+        if (viewportHeight > 0) {
+          const int imageTop = std::max(0, static_cast<int>(element->yPos));
+          const int imageBottom =
+              std::min(static_cast<int>(viewportHeight),
+                       static_cast<int>(element->yPos) + std::max(0, static_cast<int>(image.getHeight())));
+          if (imageBottom > imageTop) {
+            imageHeight += static_cast<uint32_t>(imageBottom - imageTop);
+          }
+        }
+        break;
+      }
+      case TAG_PageLine:
+      case TAG_PageTableFragment:
+        hasReadableContent = true;
+        break;
+      case TAG_PageHorizontalRule:
+        break;
+    }
+  }
+
+  if (!hasImage) return 0;
+  if (!hasReadableContent || viewportHeight == 0) return PageCountEstimator::kUnitsPerPage;
+
+  const uint32_t units = (imageHeight * PageCountEstimator::kUnitsPerPage) / viewportHeight;
+  return static_cast<uint16_t>(std::min<uint32_t>(PageCountEstimator::kUnitsPerPage, units));
+}
+
 bool Page::serialize(FsFile& file) const {
   const uint16_t count = elements.size();
   if (elements.size() > MAX_PAGE_ELEMENTS) {
