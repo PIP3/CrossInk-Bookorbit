@@ -14,6 +14,7 @@
 - Dictionary word selection now follows the physical front-button direction in counter-clockwise landscape mode.
 - End-of-book suggestions can now be opened by tapping them on touch devices.
 - XTC and XTCH readers now ignore overlapping page turns while the display is updating, preventing corrupted pages after rapid swipes.
+- XTC and XTCH readers no longer corrupt a page when turning or opening the menu during rendering.
 - Dictionary font switches now retry after releasing the reader font when memory is tight.
 - XTC table of contents now includes every available page entry, so large books can jump beyond the first 128 pages.
 - Saved clipping highlights now remain accurate when a font or font-size change reflows a word across an inserted hyphen.
