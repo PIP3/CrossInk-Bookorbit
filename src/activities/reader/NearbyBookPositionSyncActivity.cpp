@@ -855,7 +855,26 @@ void NearbyBookPositionSyncActivity::enqueueEspNowPacket(const uint8_t* sourceMa
 
   auto queueEvent = [&]() {
     if (xSemaphoreTake(eventMutex_, 0) != pdTRUE) return;
-    if (eventOverflow_ || eventCount_ >= MAX_SYNC_EVENTS) {
+    if (eventOverflow_) {
+      xSemaphoreGive(eventMutex_);
+      return;
+    }
+
+    // ESP-NOW retries are expected while the receiver maps a position. Keep
+    // only the newest copy of an idempotent packet from each peer so a slow
+    // X4 render or EPUB lookup cannot fill this fixed-size inbox.
+    for (uint8_t offset = 0; offset < eventCount_; ++offset) {
+      const uint8_t eventIndex = static_cast<uint8_t>((eventHead_ + offset) % MAX_SYNC_EVENTS);
+      SyncEvent& queuedEvent = events_[eventIndex];
+      if (queuedEvent.type == event.type && queuedEvent.sourceMac == event.sourceMac &&
+          queuedEvent.deviceMac == event.deviceMac) {
+        queuedEvent = event;
+        xSemaphoreGive(eventMutex_);
+        return;
+      }
+    }
+
+    if (eventCount_ >= MAX_SYNC_EVENTS) {
       eventOverflow_ = true;
       eventHead_ = 0;
       eventCount_ = 0;

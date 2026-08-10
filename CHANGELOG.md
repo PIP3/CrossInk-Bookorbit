@@ -8,6 +8,7 @@
 
 ### Fixed
 
+- Nearby Position Sync now tolerates repeated nearby position packets while a reader is preparing the received location.
 - XTCH cover and thumbnail generation now stays within the available memory on X3/X4 after its cache is cleared.
 - Change Font shortcuts now switch away from an active SD-card font instead of reindexing with the same font.
 - Network connections no longer trigger repeated full-panel flashes.
