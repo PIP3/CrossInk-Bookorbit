@@ -6581,11 +6581,38 @@ bool EpubReaderActivity::resolveChapterGroupPageProgress(int& currentPage, int& 
   return true;
 }
 
+bool EpubReaderActivity::isTocChapterDestination(const int targetSpineIndex, const std::string& anchor) const {
+  if (!epub || targetSpineIndex < 0 || targetSpineIndex >= epub->getSpineItemsCount()) {
+    return false;
+  }
+
+  const int firstTocIndex = epub->getTocIndexForSpineIndex(targetSpineIndex);
+  if (firstTocIndex < 0) {
+    return false;
+  }
+
+  // A file-level TOC target has no fragment. Otherwise require the matching
+  // TOC anchor: a footnote may share a spine item with a chapter entry.
+  if (anchor.empty()) {
+    return true;
+  }
+  for (int tocIndex = firstTocIndex; tocIndex < epub->getTocItemsCount(); ++tocIndex) {
+    const auto tocItem = epub->getTocItem(tocIndex);
+    if (tocItem.spineIndex != targetSpineIndex) {
+      break;
+    }
+    if (tocItem.anchor == anchor) {
+      return true;
+    }
+  }
+  return false;
+}
+
 bool EpubReaderActivity::shouldUseFootnotePreview(const int targetSpineIndex, const std::string& anchor) const {
   if (!epub || anchor.empty() || targetSpineIndex < 0 || targetSpineIndex >= epub->getSpineItemsCount()) {
     return false;
   }
-  return targetSpineIndex != currentSpineIndex;
+  return targetSpineIndex != currentSpineIndex && !isTocChapterDestination(targetSpineIndex, anchor);
 }
 
 std::string EpubReaderActivity::footnotePreviewCacheSuffix(const EpubRenderMode renderMode,
@@ -6607,12 +6634,6 @@ void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool s
   pageLoadRetryCount = 0;
   if (!epub) return;
 
-  // Push current position onto saved stack
-  if (savePosition && section && footnoteDepth < MAX_FOOTNOTE_DEPTH) {
-    savedPositions[footnoteDepth] = {currentSpineIndex, section->currentPage};
-    footnoteDepth++;
-  }
-
   // Extract fragment anchor (e.g. "#note1" or "chapter2.xhtml#note1")
   std::string anchor;
   const auto hashPos = hrefStr.find('#');
@@ -6632,13 +6653,22 @@ void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool s
 
   if (targetSpineIndex < 0) {
     LOG_DBG("ERS", "Could not resolve href: %s", hrefStr.c_str());
-    if (savePosition && footnoteDepth > 0) footnoteDepth--;  // undo push
     return;
+  }
+
+  // Internal links are collected with footnotes so their rendered words can
+  // be tapped. A destination declared in the book TOC is a chapter jump,
+  // though: it must replace the current chapter instead of opening a preview.
+  const bool chapterDestination = isTocChapterDestination(targetSpineIndex, anchor);
+  const bool saveFootnotePosition = savePosition && !chapterDestination;
+  if (saveFootnotePosition && section && footnoteDepth < MAX_FOOTNOTE_DEPTH) {
+    savedPositions[footnoteDepth] = {currentSpineIndex, section->currentPage};
+    footnoteDepth++;
   }
 
   {
     RenderLock lock(*this);
-    const bool useFootnotePreview = savePosition && !anchor.empty() &&
+    const bool useFootnotePreview = saveFootnotePosition && !anchor.empty() &&
                                     (preferFootnotePreview || shouldUseFootnotePreview(targetSpineIndex, anchor));
     pendingAnchor = anchor;
     pendingFootnotePreviewAnchor = useFootnotePreview ? anchor : std::string{};
@@ -6647,7 +6677,7 @@ void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool s
     nextPageNumber = 0;
     section.reset();
   }
-  armReadingPaceWarmup(savePosition ? "href_navigation" : "href_restore");
+  armReadingPaceWarmup(saveFootnotePosition ? "href_navigation" : "chapter_link_navigation");
   requestUpdate();
 }
 
