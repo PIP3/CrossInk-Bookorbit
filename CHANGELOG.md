@@ -24,6 +24,7 @@
 - EPUB page estimates now keep image-only and mixed image pages from being multiplied by XHTML byte density.
 - Cancelling a chapter, footnote, location, or QR screen opened from the EPUB menu returns to that menu.
 - EPUB and XTC readers retain less memory during ordinary reading by loading end-of-book suggestions only when needed.
+- Long inherited dictionary-font names no longer overlap or extend beyond Font Options rows at Large UI size.
 
 ## [v1.5.0] - 2026-08-08
 
