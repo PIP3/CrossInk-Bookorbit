@@ -17,7 +17,9 @@ struct Rect;
 // the content underneath stays on screen below the panel, and a tap there
 // dismisses it. State is persisted once on exit (SPIFFS write throttling).
 class FrontlightPanelActivity final : public Activity {
-  using UiApp = freeink::ui::FreeInkApp<8, 4>;
+  // The sun toggle, two sliders, and four -/+ targets need seven interaction
+  // slots. Keep small headroom for the panel's fixed controls.
+  using UiApp = freeink::ui::FreeInkApp<10, 6>;
 
   ButtonNavigator buttonNavigator;
 
@@ -39,13 +41,18 @@ class FrontlightPanelActivity final : public Activity {
   static void onBrightnessEvent(const freeink::ui::ActionEvent& event, void* user);
   static void onWarmthEvent(const freeink::ui::ActionEvent& event, void* user);
   static void onToggleEvent(const freeink::ui::ActionEvent& event, void* user);
+  static void onBrightnessStepEvent(const freeink::ui::ActionEvent& event, void* user);
+  static void onWarmthStepEvent(const freeink::ui::ActionEvent& event, void* user);
   void buildPanelScreen(UiApp::ScreenType& screen);
+  void addStepSlider(UiApp::ScreenType& screen, const freeink::ui::Rect& row, uint8_t value,
+                     freeink::ui::ActionId sliderAction, freeink::ui::ActionId stepAction);
   Rect settingsButtonRect() const;
   // Height of the drop-down, derived from the content it holds (header +
   // sliders + toggle). Same layout math as buildPanelScreen so the frame,
   // content margin, and dismiss threshold all agree.
   int computePanelBottom() const;
   void adjustBrightness(int delta);
+  void adjustWarmth(int delta);
   void toggleLight();
   void close();
   void openSettings();
