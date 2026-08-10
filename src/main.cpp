@@ -587,6 +587,13 @@ bool handleX4ProFrontlightDoubleClick() {
 #ifdef SIMULATOR
   return false;
 #else
+  if (mappedInputManager.isPowerReleaseSuppressed()) {
+    // A modal consumed this Power press as Confirm. Do not pair its release
+    // with the click that opened the modal.
+    lastX4ProPowerClickAt = 0;
+    return false;
+  }
+
   if (!BoardConfig::isX4Pro() || !gpio.wasReleased(HalGPIO::BTN_POWER)) {
     return false;
   }
@@ -638,7 +645,7 @@ bool executeX4ProHomeButtonAction(const uint8_t action) {
   if (handleGlobalPowerButtonAction(powerAction)) {
     return true;
   }
-  activityManager.handleShortcutAction(action);
+  activityManager.handleShortcutAction(powerAction);
   return true;
 }
 
@@ -996,13 +1003,13 @@ void setup() {
   UITheme::getInstance().reload();
   ButtonNavigator::setMappedInputManager(mappedInputManager);
   logBootHeap("boot state ready");
-  // Frontlight PWM up (no-op on boards without one). Brightness + warmth are always
-  // restored from persisted settings. The on/off state defaults to OFF at wake/boot —
-  // so the user isn't greeted by a surprise glow (or a silent battery drain) — unless
-  // "Restore Light on Wake" is enabled, which brings back the pre-sleep on/off state too.
-  // Silent/network restarts are automated transitions rather than deliberate
-  // sleep, so preserve the light state across them regardless of that setting.
+  // Frontlight PWM up (no-op on boards without one). X4 Pro restores the complete
+  // persisted state; other frontlight boards retain their opt-in wake behavior.
+#if FREEINK_DEVICE_X4PRO || defined(SIMULATOR_DEVICE_X4_PRO)
+  const bool restoreLightOn = SETTINGS.frontlightOn != 0;
+#else
   const bool restoreLightOn = SETTINGS.frontlightOn != 0 && (SETTINGS.frontlightRestoreOnWake != 0 || isSilentReboot);
+#endif
   Frontlight.begin(SETTINGS.frontlightBrightness, SETTINGS.frontlightWarmth, restoreLightOn);
 
   // Re-sync the wake-hold NVS mirror with the freshly-loaded settings, covering

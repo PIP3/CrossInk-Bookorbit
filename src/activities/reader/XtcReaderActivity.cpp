@@ -783,6 +783,10 @@ bool XtcReaderActivity::handleShortcutAction(const CrossPointSettings::SHORT_PWR
     activityManager.goToFileBrowser(xtc ? xtc->getPath() : "");
     return true;
   }
+  if (action == CrossPointSettings::SHORT_PWRBTN::TOGGLE_HOME_BUTTON_IN_READER) {
+    toggleHomeButtonInReader();
+    return true;
+  }
   return false;
 }
 

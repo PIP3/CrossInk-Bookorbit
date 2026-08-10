@@ -27,6 +27,7 @@
 #include "ClippingStore.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "GlobalActions.h"
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
 #include "RecentBookProgress.h"
@@ -1392,6 +1393,8 @@ bool HomeActivity::preRenderCarouselFrames(bool showProgressPopup) {
 }
 
 void HomeActivity::loop() {
+  if (quickActionsPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
+
   if (usesMinimalHomeInteraction()) {
     const int pressedFrontButton = mappedInput.getPressedFrontButton();
     const int releasedFrontButton = mappedInput.getReleasedFrontButton();
@@ -1874,7 +1877,31 @@ void HomeActivity::loop() {
   }
 }
 
+bool HomeActivity::handleShortcutAction(const CrossPointSettings::SHORT_PWRBTN action) {
+  if (action != CrossPointSettings::SHORT_PWRBTN::QUICK_ACTIONS) {
+    return false;
+  }
+
+  QuickActions::showConfiguredPopup(
+      quickActionsPopup, [this] { requestUpdate(); },
+      [this](const auto selectedAction) {
+        if (selectedAction == CrossPointSettings::SHORT_PWRBTN::FORCE_REFRESH) {
+          // OptionPopup has already dismissed itself. Repaint Home before flushing
+          // so the full refresh cannot preserve the popup in the panel image.
+          initialFullRefresh = true;
+          requestUpdate();
+          return;
+        }
+        dispatchShortcutAction(selectedAction);
+      });
+  return true;
+}
+
 void HomeActivity::render(RenderLock&&) {
+  if (quickActionsPopup.processRender(renderer, mappedInput)) {
+    return;
+  }
+
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();

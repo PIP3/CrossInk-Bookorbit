@@ -36,6 +36,7 @@ class MappedInputManager {
   void suppressNextConfirmRelease() { suppressConfirmRelease = true; }
   void suppressNextPowerRelease() { suppressPowerRelease = true; }
   void suppressNextPowerConfirmRelease() { suppressPowerConfirmRelease = true; }
+  bool isPowerReleaseSuppressed() const { return suppressPowerRelease; }
   bool wasPressed(Button button) const;
   bool wasReleased(Button button) const;
   bool isPressed(Button button) const;

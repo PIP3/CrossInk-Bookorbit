@@ -8,6 +8,7 @@
 
 #include "GfxRenderer.h"
 #include "MappedInputManager.h"
+#include "components/UIScale.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -247,7 +248,7 @@ class OptionPopup {
     const auto& metrics = UITheme::getInstance().getMetrics();
     const auto pageWidth = renderer.getScreenWidth();
     const auto pageHeight = renderer.getScreenHeight();
-    const int optionFontId = metrics.optionPopupUseSmallFont ? UI_10_FONT_ID : UI_12_FONT_ID;
+    const int optionFontId = uiScaleSpec().bodyFontId;
     const EpdFontFamily::Style optionStyle =
         metrics.optionPopupOptionFontBold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR;
 

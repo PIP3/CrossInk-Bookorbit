@@ -16,8 +16,9 @@
 namespace {
 constexpr int TOUCH_STEP_BUTTON_SIZE = 56;
 constexpr int TOUCH_STEP_BUTTON_GAP = 32;
-constexpr int TOUCH_ACTION_BUTTON_WIDTH = 120;
-constexpr int TOUCH_ACTION_BUTTON_HEIGHT = 48;
+constexpr int TOUCH_ACTION_BUTTON_WIDTH = 160;
+constexpr int TOUCH_ACTION_BUTTON_HEIGHT = 64;
+constexpr int TOUCH_ACTION_BUTTON_GAP = 32;
 
 Rect touchStepButtonRect(const Rect& screen, const int index) {
   const int totalWidth = TOUCH_STEP_BUTTON_SIZE * 4 + TOUCH_STEP_BUTTON_GAP * 3;
@@ -27,9 +28,10 @@ Rect touchStepButtonRect(const Rect& screen, const int index) {
 
 Rect touchActionButtonRect(const Rect& screen, const bool confirm) {
   constexpr int sideMargin = 46;
-  return Rect{confirm ? screen.x + screen.width - sideMargin - TOUCH_ACTION_BUTTON_WIDTH : screen.x + sideMargin,
-              screen.y + screen.height - TOUCH_ACTION_BUTTON_HEIGHT - 28, TOUCH_ACTION_BUTTON_WIDTH,
-              TOUCH_ACTION_BUTTON_HEIGHT};
+  const int availableButtonWidth = std::max(1, (screen.width - sideMargin * 2 - TOUCH_ACTION_BUTTON_GAP) / 2);
+  const int buttonWidth = std::min(TOUCH_ACTION_BUTTON_WIDTH, availableButtonWidth);
+  return Rect{confirm ? screen.x + screen.width - sideMargin - buttonWidth : screen.x + sideMargin,
+              screen.y + screen.height - TOUCH_ACTION_BUTTON_HEIGHT - 28, buttonWidth, TOUCH_ACTION_BUTTON_HEIGHT};
 }
 
 bool contains(const Rect& rect, const int x, const int y) {

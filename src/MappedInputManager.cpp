@@ -665,6 +665,13 @@ bool MappedInputManager::wasPressed(const Button button) const {
       return true;
     }
 
+    if (powerAsConfirmInReaderMode && gpio.wasPressed(HalGPIO::BTN_POWER)) {
+      // The active reader popup owns this Power press. Keep its configured
+      // short/long action from firing after the popup confirms on press.
+      suppressPowerRelease = true;
+      return true;
+    }
+
     return shouldUsePowerAsConfirmFallback() &&
            !isPowerButtonActionAvailableOutsideReader(
                static_cast<CrossPointSettings::SHORT_PWRBTN>(SETTINGS.shortPwrBtn)) &&
@@ -777,6 +784,10 @@ bool MappedInputManager::isPressed(const Button button) const {
     return !isPowerButtonActionAvailableOutsideReader(
                static_cast<CrossPointSettings::SHORT_PWRBTN>(SETTINGS.shortPwrBtn)) ||
            gpio.getHeldTime() >= SETTINGS.getPowerButtonLongPressDuration();
+  }
+
+  if (button == Button::Power && suppressPowerRelease) {
+    return false;
   }
 
   return mapButton(button, &HalGPIO::isPressed);

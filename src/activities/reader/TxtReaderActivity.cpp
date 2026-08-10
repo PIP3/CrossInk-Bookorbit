@@ -447,6 +447,9 @@ bool TxtReaderActivity::handleShortcutAction(const CrossPointSettings::SHORT_PWR
     case CrossPointSettings::SHORT_PWRBTN::FILE_BROWSER:
       activityManager.goToFileBrowser(txt ? txt->getPath() : "");
       return true;
+    case CrossPointSettings::SHORT_PWRBTN::TOGGLE_HOME_BUTTON_IN_READER:
+      toggleHomeButtonInReader();
+      return true;
     default:
       return false;
   }

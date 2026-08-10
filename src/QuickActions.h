@@ -115,5 +115,8 @@ inline void settingChanged(CrossPointSettings& settings, uint8_t CrossPointSetti
   synchronize(settings, selected ? trigger : Trigger::None);
 }
 
-void showConfiguredPopup(OptionPopup& popup, const std::function<void()>& requestUpdate);
+using ActionHandler = std::function<void(CrossPointSettings::SHORT_PWRBTN)>;
+
+void showConfiguredPopup(OptionPopup& popup, const std::function<void()>& requestUpdate,
+                         ActionHandler actionHandler = {});
 }  // namespace QuickActions

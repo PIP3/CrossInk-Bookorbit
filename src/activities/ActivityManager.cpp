@@ -545,7 +545,8 @@ bool ActivityManager::requestManualReaderRefresh() {
 }
 
 bool ActivityManager::handleShortcutAction(const CrossPointSettings::SHORT_PWRBTN action) {
-  return currentActivity && currentActivity->isReaderActivity() && currentActivity->handleShortcutAction(action);
+  return currentActivity && (currentActivity->isReaderActivity() || currentActivity->isHomeActivity()) &&
+         currentActivity->handleShortcutAction(action);
 }
 
 bool ActivityManager::skipLoopDelay() const { return currentActivity && currentActivity->skipLoopDelay(); }
