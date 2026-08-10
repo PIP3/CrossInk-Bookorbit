@@ -20,7 +20,6 @@
 #include "ClockOffsetActivity.h"
 #include "ClockSyncActivity.h"
 #include "CrossPointSettings.h"
-#include "FontDownloadActivity.h"
 #include "FontSelectionActivity.h"
 #include "KOReaderSettingsActivity.h"
 #include "MappedInputManager.h"
@@ -985,11 +984,7 @@ void SettingsActivity::toggleCurrentSetting() {
         startActivityForResult(std::make_unique<SdFirmwareUpdateActivity>(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::DownloadFonts:
-        startActivityForResult(std::make_unique<FontDownloadActivity>(renderer, mappedInput),
-                               [this](const ActivityResult&) {
-                                 SETTINGS.saveToFile();
-                                 rebuildSettingsLists();
-                               });
+        silentRestartToManageFonts();
         break;
       case SettingAction::Language:
         openLanguagePicker();
@@ -1198,6 +1193,9 @@ void SettingsActivity::buildSettingsScreen(UiApp::ScreenType& screen) {
     } else {
       tabStyles.selected.background = fui::Paint::dither(fui::Color::LightGray);
       tabStyles.selected.foreground = fui::Paint::solid(fui::Color::Black);
+      // Let the selected underline meet the shared bottom divider, as in the
+      // original Lyra tab bar. The default bottom inset leaves a visible gap.
+      tabProps.tabInset.bottom = 0;
       tabProps.selectedUnderline = 2;
     }
     // Focus/flash states keep the pill instead of falling back to an unset

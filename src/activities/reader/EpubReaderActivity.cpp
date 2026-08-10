@@ -2264,7 +2264,11 @@ void EpubReaderActivity::onEnter() {
   // Save current epub as last opened epub and add to recent books
   APP_STATE.openEpubPath = epub->getPath();
   APP_STATE.saveToFile();
-  RECENT_BOOKS.addOrUpdateBook(epub->getPath(), epub->getTitle(), epub->getAuthor(), epub->getThumbBmpPath());
+  const RecentBook::CoverState coverState =
+      epub->hasCoverImage() ? RecentBook::CoverState::Unknown : RecentBook::CoverState::Missing;
+  RECENT_BOOKS.addOrUpdateBook(epub->getPath(), epub->getTitle(), epub->getAuthor(),
+                               coverState == RecentBook::CoverState::Missing ? "" : epub->getThumbBmpPath(),
+                               coverState);
 
   // Trigger first update
   requestUpdate();
@@ -2686,6 +2690,15 @@ void EpubReaderActivity::loop() {
   // finished. Two independent finished-book features key off this same condition.
   const bool atEndOfBook = currentSpineIndex > 0 && currentSpineIndex >= epub->getSpineItemsCount();
 
+  // Collect suggestions before arming the /Read move or handling an input that may
+  // leave the reader. render() normally gets here first, but its update is asynchronous;
+  // a queued page-turn/home input can otherwise exit and move the EPUB before the render
+  // task has scanned the book's original folder.
+  if (atEndOfBook && !endOfBookOptions.loaded()) {
+    RenderLock lock(*this);
+    endOfBookOptions.loadOnce(epub->getPath());
+  }
+
   // Drop this book from the Recent Books list; if the reader then pages back into the book,
   // re-add it. So removal only sticks if the reader leaves while still on the End-of-Book
   // screen. Acts only on the transition (guarded by recentsEntryRemoved) — no per-frame writes.
@@ -2960,6 +2973,13 @@ void EpubReaderActivity::loop() {
   if (!prevTriggered && !nextTriggered) {
     idlePrewarmNextPage();
     return;
+  }
+
+  if (nextTriggered && silentPrefetchBuildActive.load(std::memory_order_relaxed)) {
+    // This turn still advances to the visible next page. The speculative build
+    // sees this at its next parser checkpoint and leaves no partial .bin behind.
+    silentPrefetchCancelRequested.store(true, std::memory_order_relaxed);
+    LOG_DBG("ERS", "Forward page turn requested while silent next-chapter indexing is busy; cancelling prefetch");
   }
 
   // At end of the book with no suggestion menu, forward button goes home and back
@@ -3243,8 +3263,8 @@ void EpubReaderActivity::openWordSelect(bool framebufferContainsPage, int initia
   // The activity outlives this call, so it must be heap-owned; make the fixed-size
   // object allocation fallible instead of aborting the firmware when memory is tight.
   auto wordSelect = makeUniqueNoThrow<DictionaryWordSelectActivity>(
-      renderer, mappedInput, std::move(pageForLookup), layout.marginLeft, layout.marginTop, bookCachePath,
-      nextPageFirstWord, framebufferContainsPage, layout.marginBottom, initialTouchX, initialTouchY,
+      renderer, mappedInput, std::move(pageForLookup), layout.marginLeft, layout.marginTop, std::move(bookCachePath),
+      std::move(nextPageFirstWord), framebufferContainsPage, layout.marginBottom, initialTouchX, initialTouchY,
       autoLookupInitialWord, bookSettings.dictionarySdFontFamilyName, bookSettings.dictionaryFontPointSize, this,
       &EpubReaderActivity::renderDictionaryLookupBackgroundCallback,
       &EpubReaderActivity::reloadDictionaryLookupPageCallback);
@@ -4905,8 +4925,8 @@ void EpubReaderActivity::render(RenderLock&& lock) {
 
   // Show end of book screen
   if (currentSpineIndex == epub->getSpineItemsCount()) {
-    // Sole load site: runs on the render task (serialized by RenderLock); the main
-    // task only reads the suggestions once the loaded flag is published
+    // Usually preloaded by loop() before the /Read move is armed. Keep this fallback
+    // for an initial render that wins the race with the main task.
     endOfBookOptions.loadOnce(epub->getPath());
     renderer.clearScreen();
     endOfBookOptions.render(renderer, mappedInput);
@@ -5640,9 +5660,17 @@ void EpubReaderActivity::silentIndexNextChapterIfNeeded(const uint16_t viewportW
 
   LOG_DBG("ERS", "Silently indexing next chapter: %d (free=%u, maxAlloc=%u)", nextSpineIndex, ESP.getFreeHeap(),
           ESP.getMaxAllocHeap());
+  silentPrefetchCancelRequested.store(false, std::memory_order_relaxed);
+  silentPrefetchBuildActive.store(true, std::memory_order_release);
+  struct ClearSilentPrefetchBuildActive {
+    std::atomic<bool>& active;
+    ~ClearSilentPrefetchBuildActive() { active.store(false, std::memory_order_release); }
+  } clearSilentPrefetchBuildActive{silentPrefetchBuildActive};
+
   bool layoutAbortedForLowMemory = false;
   bool buildSucceeded = false;
   bool safeModeBuildSucceeded = false;
+  bool prefetchCancelled = false;
   EpubRenderMode usedRenderMode = selectedRenderMode;
 
   const auto buildNextSection = [&](const SectionBuildProfile& profile) {
@@ -5655,9 +5683,25 @@ void EpubReaderActivity::silentIndexNextChapterIfNeeded(const uint16_t viewportW
     }
 
     bool attemptAbortedForLowMemory = false;
+    bool attemptCancelled = false;
+    SectionBuildOptions buildOptions;
+    buildOptions.shouldCancel = [](void* context) {
+      return static_cast<EpubReaderActivity*>(context)->silentPrefetchCancelRequested.load(std::memory_order_relaxed);
+    };
+    buildOptions.cancelContext = this;
+    buildOptions.cancellationObserved = &attemptCancelled;
+    // The page is already on the panel, so lend its framebuffer to miniz while
+    // preparing the next chapter. Without this, a large EPUB entry makes the
+    // inflater take its workspace from the same constrained heap as layout.
+    GfxRenderer::FrameBufferLoan loan(renderer);
     const bool succeeded = attemptSection->createSectionFile(
         readerRenderSpecForProfile(readerFontId, viewportWidth, viewportHeight, profile), nullptr, nullptr,
-        &attemptAbortedForLowMemory);
+        &attemptAbortedForLowMemory, buildOptions);
+    if (attemptCancelled) {
+      prefetchCancelled = true;
+      LOG_DBG("ERS", "Silent next-chapter indexing cancelled: chapter=%d", nextSpineIndex);
+      return false;
+    }
     layoutAbortedForLowMemory = attemptAbortedForLowMemory;
     if (succeeded) {
       usedRenderMode = profile.renderMode;
@@ -5678,13 +5722,21 @@ void EpubReaderActivity::silentIndexNextChapterIfNeeded(const uint16_t viewportW
         renderer, "ERS",
         profile.safeMode ? "silent next-chapter safe mode indexing" : "silent next-chapter fallback indexing");
   };
-  const SectionFallbackResult fallbackResult = runSectionBuildFallbacks(
-      selectedRenderMode, shouldAttemptSafeModeFallback(), buildWithFallback, beforeFallbackRetry);
-  buildSucceeded = fallbackResult.succeeded;
-  layoutAbortedForLowMemory = fallbackResult.lastAttemptLowMemory;
-  safeModeBuildSucceeded = fallbackResult.usedSafeMode;
+  SectionFallbackResult fallbackResult;
+  const SectionBuildAttempt initialAttempt = buildWithFallback(buildProfileForRenderMode(selectedRenderMode));
+  if (!prefetchCancelled) {
+    fallbackResult = runSectionBuildFallbacks(selectedRenderMode, shouldAttemptSafeModeFallback(), buildWithFallback,
+                                              beforeFallbackRetry, &initialAttempt);
+    buildSucceeded = fallbackResult.succeeded;
+    layoutAbortedForLowMemory = fallbackResult.lastAttemptLowMemory;
+    safeModeBuildSucceeded = fallbackResult.usedSafeMode;
+  }
 
   releaseReaderSdFontCachesForLowMemory(renderer, "ERS", "silent next-chapter indexing");
+
+  if (prefetchCancelled) {
+    return;
+  }
 
   if (!buildSucceeded) {
     LOG_ERR("ERS", "Failed silent indexing for chapter: %d", nextSpineIndex);
