@@ -7,12 +7,13 @@ fixed-size char buffer.
 
 ## `book.bin`
 
-### Version 8
+### Version 9
 
 `book.bin` stores EPUB metadata plus lookup tables for spine and TOC entries.
 The current firmware writes this version from `BookMetadataCache`.
-Version 8 stores book and TOC title strings NFC-composed so decomposed
-diacritics render correctly with device fonts.
+Version 9 stores book and TOC title strings NFC-composed so decomposed
+diacritics render correctly with device fonts. It also rebuilds metadata after
+the EPUB guide start-reference handling changed.
 
 ImHex pattern:
 
@@ -21,7 +22,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 8
+#define EXPECTED_VERSION 9
 #define MAX_STRING_LENGTH 65535
 
 struct String {
@@ -93,7 +94,7 @@ if (parsedSize != fileSize) {
 
 ## `reader_settings.bin`
 
-### Version 2
+### Version 5
 
 Each EPUB cache directory may contain `reader_settings.bin`. Missing files mean
 the book uses global Reader settings and the default auto-page-turn interval.
@@ -103,7 +104,12 @@ Version 1 stored only:
 - `u8 version`
 - `u16 autoPageTurnSeconds`
 
-Version 2 stores flags before the full reader-settings snapshot. This lets the
+Version 2 stores flags before the full reader-settings snapshot. Version 3 adds
+the EPUB word-spacing level to that snapshot. Version 4 adds the EPUB indexing
+method (`0` = incremental, `1` = full section). Version 5 appends a per-book
+dictionary SD-font family name. Version 6 stores reader font sizes as physical
+point sizes, and version 7 appends the dictionary font's selected point size.
+This lets the
 file preserve an auto-page-turn interval without forcing custom font/layout
 settings for the book. It also stores a per-book EPUB render mode override,
 which can be changed from book action menus before opening the book so a
@@ -114,14 +120,15 @@ fallback successfully opens a difficult book.
 
 ```c++
 struct ReaderSettingsBin {
-    u8 version; // 2
-    u8 flags;   // bit 0 = custom reader settings, bit 1 = custom auto-page-turn interval, bit 2 = render mode override
+    u8 version; // 7
+    u8 flags;   // bit 0 = custom reader settings, bit 1 = custom auto-page-turn interval, bit 2 = render mode override, bit 3 = dictionary font override
     u16 autoPageTurnSeconds;
     u8 renderMode; // 0 = CrossInk Default, 1 = Balanced, 2 = Light
 
     u8 fontFamily;
-    u8 fontSize;
+    u8 readerFontPointSize; // physical point size; versions 2-5 stored a size slot
     u8 lineHeightPercent;
+    u8 wordSpacing; // 0 = natural font spacing; 1-4 widen each gap by ~75% per level
     u8 orientation;
     u8 screenMargin;
     u8 publisherPageNumbers;
@@ -136,13 +143,16 @@ struct ReaderSettingsBin {
     u8 bionicReadingEnabled;
     u8 guideReadingEnabled;
     u8 snapshotRenderMode;
+    u8 indexingMethod; // 0 = incremental, 1 = full section
     char sdFontFamilyName[64];
+    char dictionarySdFontFamilyName[64]; // meaningful only when flag bit 3 is set
+    u8 dictionaryFontPointSize; // 0 = follow reader size
 };
 ```
 
 ## `/.crosspoint/clippings/<bookType>_<crc32(path)>.bin`
 
-### Version 1
+### Versions 1-3
 
 Clipping files store the per-book EPUB clipping list used by the reader. A
 saved clipping is also what CrossInk renders as an in-reader highlight; there is
@@ -160,8 +170,8 @@ example:
 
 Binary layout:
 
-- `[0]` version (`1`)
-- `[1-2]` clipping count (`uint16_t` LE, maximum `64`)
+- `[0]` version (`1`, `2`, or current version `3`)
+- `[1-2]` clipping count (`uint16_t` LE, maximum `256`)
 - book title (`String`)
 - book author (`String`)
 - book path (`String`)
@@ -175,14 +185,26 @@ Binary layout:
   - `wordCount` (`uint16_t` LE)
   - `paragraphIndex` (`uint16_t` LE, `UINT16_MAX` when unavailable)
   - `timestamp` (`uint32_t` LE, seconds since firmware boot when saved)
+  - version 3 only: reader layout signature (`uint32_t` LE; font, spacing,
+    viewport, and other section-layout inputs)
   - `chapterTitle` (`char[48]`, null-terminated/truncated)
-  - selected text (`String`, truncated to `512` bytes for the in-app store)
+  - version 1: selected text (`String`, truncated for the in-app store)
+  - versions 2-3: selected-text length (`uint16_t` LE) followed by that many
+    UTF-8 bytes (maximum `2048`; builds before highlight sync wrote at most
+    `512` and treat a longer record as corrupt on read)
 
 CrossInk uses the stored spine/page/paragraph fields as anchors, then searches
 near that location for the stored clipping text after relayout. This is similar
 to keeping both a DOM position and a text quote in a web app: the numeric
 position gives a fast starting point, while the text makes jumps and highlights
 survive font, layout, or page-count changes when possible.
+
+Version 3 records which reader layout produced the numeric page/word anchor.
+When that signature differs, CrossInk ignores the stale numeric range and
+matches the saved text instead, including when both layouts happen to have the
+same total page count. Versions 1-2 retain their numeric fast path until the
+reader sees a relayout, when it stamps the previously active layout before
+rebuilding.
 
 Creating a clipping also appends a Kindle-style export entry to
 `/My Clippings.txt` on the SD-card root. That text export can keep up to `2000`
@@ -226,6 +248,131 @@ Binary layout:
 - `[25-40]` `timeOfDaySeconds[4]` (`uint32_t` LE each)
 - `[41-68]` `dayOfWeekSeconds[7]` (`uint32_t` LE each)
 - `[69-72]` `estimatedTimeLeftSeconds` (`uint32_t` LE, `0` means unavailable)
+
+## `bookorbit_annotations.bin`
+
+### Version 1
+
+`bookorbit_annotations.bin` sits beside a book's clipping file in the book's cache
+directory and holds what BookOrbit needs to identify each highlight: the KOReader
+xpointer the server keys on, plus the upload watermark.
+
+The xpointers are minted when the highlight is created, not when it is synced. Building
+them streams and parses the whole chapter (`ChapterXPathResolver`), which is nearly free
+while the reader already has that chapter open but would mean parsing every affected
+chapter with 55 KB already committed to a TLS handshake if it were left to sync time.
+Minting once also keeps identity stable: the server keys annotations by
+`md5(datetime | pos0)`, and a position rebuilt under a different layout would make every
+highlight reappear as new.
+
+`pos0` and `pos1` delimit the highlighted text, `pos1` exclusive, as KOReader does.
+A paragraph-level position is not a usable substitute: a server that resolves the range
+and reads the text back finds nothing in an empty range and flags the annotation as
+repaired, which reads to the user as a failure. Offsets count codepoints in the
+whitespace-collapsed view of a single text node -- the crengine convention BookOrbit
+resolves against, where whitespace runs (Unicode spaces included) become one space --
+so a highlight starting inside inline markup gets that element's node
+(`/p[4]/em[1]/text()[1].3`) rather than the paragraph's.
+
+Minting a precise position also replaces the clipping's stored text with the matched
+span's exact source text: the clipping was built from rendered words, whose justified
+spacing around detached punctuation differs from the source, and the server rejects an
+upload whose text does not read back from its own copy.
+
+When the stored text no longer matches the chapter -- hyphenation, an entity that decoded
+differently, an edited book -- the reader falls back to a paragraph-level range and logs
+it, rather than writing an offset it cannot justify.
+
+Records join back to their `Clipping` by `timestamp` **plus** `spineIndex` and
+`paragraphIndex`. `Clipping::timestamp` is `millis()/1000` — seconds since boot, not a date —
+so two highlights made at the same offset in different sessions share it; the chapter and
+paragraph make a remaining collision mean the same highlight in practice.
+
+`identityEpoch` is the datetime the server hashes into the annotation's key, and it is a real
+UTC epoch taken from `wallclock.bin`. It is deliberately *not* derived from `timestamp`:
+seconds-since-boot dated every highlight 1970 on the server and made the upload watermark
+non-monotonic, so a highlight created early in a session looked older than one from a previous
+session and was skipped as already sent. For a highlight received *from* the server it holds
+that server's own datetime, without which the server saw a foreign key, re-offered the
+highlight on every sync, and never reported its deletion.
+
+Kept separate from the clipping format because several screens read that one: highlight
+sync can gain fields without any of them caring. A file whose magic does not match is
+discarded on read and rewritten on the next write, costing only the minted xpointers,
+which the reader re-stamps as chapters are opened. Capped at 256 records, matching
+`CLIPPING_MAX_PER_BOOK`.
+
+Binary layout (all little-endian):
+
+- `[0-3]` magic + version: ASCII `BOA1`
+- `[4-7]` `watermark` (`uint32_t`, newest highlight timestamp the server has accepted, `0` when nothing has been sent)
+- Repeated variable-length records:
+  - `[0-3]` `timestamp` (`uint32_t`, `Clipping::timestamp`, seconds since boot; part of the join key)
+  - `[4-7]` `identityEpoch` (`uint32_t`, the datetime the server keys on, real UTC epoch seconds)
+  - `[8-9]` `spineIndex` (`uint16_t`)
+  - `[10-11]` `paragraphIndex` (`uint16_t`)
+  - `[12-13]` `pos0Length` (`uint16_t`, 1-512)
+  - `[14-15]` `pos1Length` (`uint16_t`, 1-512)
+  - `[16…]` `pos0` then `pos1` (that many bytes each, KOReader xpointers, not null-terminated)
+
+## `bookorbit_bookmarks.bin`
+
+### Version 1
+
+`bookorbit_bookmarks.bin` sits beside a book's bookmark file in the book's cache directory
+and holds what BookOrbit needs to identify each bookmark: the KOReader xpointer the server
+keys on (`md5(datetime | pos)`), plus the upload watermark. Positions are minted when the
+bookmark is created, from the page's first visible codepoint (the layout-independent
+coordinate the section cache stores per page), and never recomputed.
+
+Records join back to their `Bookmark` by `timestamp` plus `spineIndex`; `timestamp` is a
+real UTC epoch, stamped by `BookmarkStore::addBookmark` from WallClock (bookmarks from
+older builds carry 0 and gain a timestamp through the reader's backfill). `identityEpoch`
+is the datetime the server keys on: equal to `timestamp` for a bookmark made on the
+device, and the identity this device MINTED at apply time for one received from the
+server -- bookmarks invert the annotation convention, the device owns the identity and
+reports it in the exchange acknowledgment.
+
+Binary layout (all little-endian):
+
+- `[0-3]` magic + version: ASCII `BOB1`
+- `[4-7]` `watermark` (`uint32_t`, newest identityEpoch the server has accepted)
+- Repeated variable-length records:
+  - `[0-3]` `timestamp` (`uint32_t`, the bookmark's creation epoch; part of the join key)
+  - `[4-7]` `identityEpoch` (`uint32_t`)
+  - `[8-9]` `spineIndex` (`uint16_t`)
+  - `[10-11]` `posLength` (`uint16_t`, 1-512)
+  - `[12…]` `pos` (`posLength` bytes, KOReader xpointer, not null-terminated)
+
+## `bookorbit_bookmarks.bin`
+
+### Version 1
+
+Sits beside a book's cache like `bookorbit_annotations.bin` and plays the same role for
+bookmarks: the KOReader xpointer the server keys each bookmark by, plus the upload watermark.
+Positions are minted when the bookmark is created (the reader has the section and its page
+offsets open) from the bookmarked page's first visible codepoint, and never recomputed.
+
+Records join back to their `Bookmark` by `timestamp` plus `spineIndex`. Bookmark timestamps
+are real UTC epochs stamped by `BookmarkStore::addBookmark` from `wallclock.bin`; bookmarks
+from before that stamping carry 0, are invisible to sync, and gain a timestamp through the
+reader's backfill (one per chapter visit).
+
+`identityEpoch` follows the INVERSE of the annotation convention for server-created entries:
+the device mints a local identity when it applies a web bookmark and reports
+`{key, datetime, pos}` in the acknowledgment -- the server has nothing else to link its copy
+to. For bookmarks made on the device the two fields are equal.
+
+Binary layout (all little-endian):
+
+- `[0-3]` magic + version: ASCII `BOB1`
+- `[4-7]` `watermark` (`uint32_t`, newest identityEpoch the server has accepted)
+- Repeated variable-length records:
+  - `[0-3]` `timestamp` (`uint32_t`, the bookmark's creation epoch; part of the join key)
+  - `[4-7]` `identityEpoch` (`uint32_t`, the datetime the server keys on)
+  - `[8-9]` `spineIndex` (`uint16_t`)
+  - `[10-11]` `posLength` (`uint16_t`, 1-512)
+  - `[12…]` `pos` (`posLength` bytes, KOReader xpointer, not null-terminated)
 
 ## `bookorbit_stats.bin`
 
@@ -303,25 +450,65 @@ Then `ERA_HISTORY` (6) correction records of 24 bytes each:
 
 ## `section.bin`
 
-### Version 44
+### Version 59
 
 Each file in `sections/*.bin` stores one laid-out spine section. The header is
 also the cache-busting key: if any layout-affecting setting differs from the
 current reader settings, the section is discarded and rebuilt.
 
-Version 44 invalidates older section caches so `TextBlock` word data can be
-stored as one flat arena. It includes:
+Version 59 adds a compact page-start visible-text-offset lookup table. The
+offset is a Unicode codepoint coordinate in the spine XHTML, so reader progress
+and KOReader sync can return to the same content after a font, orientation, or
+indexing-method change instead of relying on a page percentage. Suspended
+incremental caches store the same table for their readable prefix; a target
+beyond that prefix must continue indexing before it can be resolved.
+
+Version 57 is binary-identical to version 56. The version was bumped because
+word-gap suppression now applies only to tokens glued together in the source.
+Older caches could collapse explicit spaces between Hangul words, so full and
+suspended partial section caches rebuild together. Version 58 recalculates
+Bionic Reading split-run offsets with the renderer's combined advance and
+kerning rounding, so old cached page positions rebuild.
+
+Version 56 changes `<br>` layout: a line break after text no longer reapplies
+the containing block's top or bottom spacing, while an empty `<br>` block keeps
+the existing scene-break gap. Full and suspended partial section caches rebuild
+together. Version 55 assigns compact IDs to internal EPUB links. The ID is
+stored in the existing per-word flags byte and in each page's footnote entry so
+touch devices can map tapped text to the existing fragment-navigation path
+without retaining another per-word data structure. Version 54 adds compact
+ruby-text annotations to serialized text blocks. Only words that begin a ruby
+group store annotation text; continuation words use a dedicated style bit. This
+keeps books without ruby markup unchanged apart from the cache version while
+avoiding an empty string allocation for every word.
+Version 53 stores each image's EPUB-internal source path so section indexing can
+read only its header and defer full extraction until the page is shown. Version
+52 keeps Guide Dots centered when extra word spacing is enabled. Version 51
+preserves continuation state for oversized CJK word fragments. Version 50
+paginates chapter-heading image runs within the reader viewport so they do not
+overflow into the reserved status-bar area. Version 49 stores Bionic Reading
+split-run offsets in visual order so RTL word prefixes render on the right.
+Version 48 changed Arabic contextual shaping and text measurement, so cached
+word positions from version 47 no longer match what `drawText` renders.
+
+Version 48 makes the EPUB word-spacing level widen the natural inter-word gap
+(each level adds 10 pixels), which changes laid-out word positions, so
+older sections must rebuild. Version 46 added the EPUB word-spacing level to the
+cache-busting header. It retains the flat `TextBlock` arena and chapter-opener
+anchor behavior introduced in version 45. It includes:
 
 - cache-busting fields for font, line compression, extra paragraph spacing,
   forced paragraph indents, paragraph alignment, viewport size, hyphenation,
-  embedded CSS, image rendering mode, Bionic Reading, Guide Dots, and EPUB
-  render mode
+  embedded CSS, image rendering mode, Bionic Reading, Guide Dots, word spacing,
+  and EPUB render mode
 - page offset LUT
 - anchor-to-page map for fragment and footnote navigation
 - paragraph and list-item LUTs used by KOReader sync page refinement
+- visible-text-offset LUT used to resolve page positions across reflow and sync
 - optional per-word Bionic Reading split metadata
 - optional per-word Guide Dot x-offset metadata
-- optional per-word text flags for CSS backgrounds and layout-inserted hyphens
+- optional per-word text flags for CSS backgrounds, layout-inserted hyphens,
+  and internal-link IDs
 - reading-aid layout that stores Bionic Reading and Guide Dots as per-word metadata instead of temporary layout words
 - publisher CSS page-break handling and adjusted justification spacing baked into page layout
 - table fragments
@@ -341,7 +528,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 44
+#define EXPECTED_VERSION 59
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
 #define FOOTNOTE_HREF_LEN 96
@@ -432,6 +619,7 @@ struct TextBlock {
 
 struct ImageBlock {
     String imagePath;
+    String sourcePath;
     s16 width;
     s16 height;
 };
@@ -497,6 +685,7 @@ struct PageElement {
 struct FootnoteEntry {
     char number[FOOTNOTE_NUMBER_LEN];
     char href[FOOTNOTE_HREF_LEN];
+    u8 linkId;
 };
 
 struct PublisherPageMarker {
@@ -548,6 +737,7 @@ struct SectionBin {
     u8 imageRendering;
     bool bionicReadingEnabled;
     bool guideReadingEnabled;
+    u8 wordSpacing;
     u8 renderMode; // 0 = CrossInk Default, 1 = Balanced, 2 = Light
 
     u16 pageCount;

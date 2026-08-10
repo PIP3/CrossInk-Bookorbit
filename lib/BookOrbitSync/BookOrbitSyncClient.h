@@ -1,6 +1,9 @@
 #pragma once
 #include <string>
+#include <vector>
 
+#include "BookOrbitAnnotations.h"
+#include "BookOrbitBookmarks.h"
 #include "BookOrbitStatsQueue.h"
 #include "KOReaderSyncClient.h"
 
@@ -46,6 +49,27 @@ class BookOrbitSyncClient {
   static constexpr Error LOW_MEMORY = KOReaderSyncClient::LOW_MEMORY;
 
   /**
+   * Keeps one TLS connection open across the requests of a single sync.
+   *
+   * A sync makes several requests to the same host in a row, and a handshake costs a second
+   * or two on this hardware. Hold a Session around the sequence and they share one:
+   *
+   *   BookOrbitSyncClient::Session session;
+   *   getProgress(...);
+   *   uploadPageStats(...);
+   *
+   * Requests made with no Session open behave exactly as before, one connection each. Do
+   * not hold one across a user decision — it would keep a socket open while the screen waits.
+   */
+  class Session {
+   public:
+    Session();
+    ~Session();
+    Session(const Session&) = delete;
+    Session& operator=(const Session&) = delete;
+  };
+
+  /**
    * Authenticate with the BookOrbit server (validate credentials).
    * @return OK on success, error code on failure
    */
@@ -78,6 +102,73 @@ class BookOrbitSyncClient {
    */
   static Error uploadPageStats(const std::string& documentHash, const std::string& deviceModel,
                                const BookOrbitStatEvent* events, size_t count);
+
+  /**
+   * Send one batch of local highlight changes to BookOrbit's annotation exchange
+   * (POST /plugin/annotations/exchange).
+   *
+   * Two-way: local changes go up, and whatever the server wants applied locally comes back in
+   * outIncoming. Pass nullptr to ignore that half -- the server keeps every change it offered
+   * pending until ackAnnotations names it, so nothing is lost by not reading it.
+   *
+   * Send `keys` on the first request of a sync only, and empty on the ones that follow --
+   * the server reads it as the device's complete set and deletes what is missing from it.
+   * Keep batches at BOOKORBIT_ANNOTATION_BATCH; the payload has to fit beside an open TLS
+   * session.
+   *
+   * @param documentHash The binary partial-MD5 document hash
+   * @param deviceModel Human-readable device name reported alongside the annotations
+   * @param keys The device's full key set, or count=0/complete=false to suppress deletions
+   * @param changes Annotations to send (may be empty when only `keys` needs to go out)
+   * @param changeCount Number of annotations
+   * @param outUnmatched Set when the server does not recognise this document at all
+   * @param outIncoming Receives the server's own changes, capped at BOOKORBIT_ANNOTATION_BATCH;
+   *                    entries already present (same serverId) are not appended twice, so the
+   *                    same vector can accumulate across pull rounds
+   * @param outMorePending Set when the server holds more changes than this response carried,
+   *                       or converted positions this round that ship on the next request
+   * @return OK on success, error code on failure
+   */
+  static Error exchangeAnnotations(const std::string& documentHash, const std::string& deviceModel,
+                                   const BookOrbitAnnotationKeys& keys, const BookOrbitAnnotation* changes,
+                                   size_t changeCount, bool& outUnmatched,
+                                   std::vector<BookOrbitIncomingAnnotation>* outIncoming = nullptr,
+                                   bool* outMorePending = nullptr);
+
+  /**
+   * Acknowledge server-side annotation changes that landed on the device
+   * (POST /plugin/annotations/exchange-ack).
+   *
+   * The server keeps every change it offered pending until this call names it, which is what
+   * stops a highlight created on the web from being lost when applying it fails halfway. Only
+   * acknowledge what actually landed: an entry left out simply comes back next sync.
+   *
+   * @param applied Entries that landed locally, with the serverId and version the server sent
+   * @return OK on success, error code on failure
+   */
+  static Error ackAnnotations(const std::string& documentHash, const std::string& deviceModel,
+                              const std::vector<BookOrbitAckEntry>& applied,
+                              const std::vector<BookOrbitAckEntry>& deleted);
+
+  /**
+   * Two-way bookmark exchange (POST /plugin/bookmarks/exchange). Same envelope and key
+   * semantics as exchangeAnnotations; entries are position-only. Never skipped when there is
+   * nothing to send -- this request is what brings the server's bookmark changes down.
+   */
+  static Error exchangeBookmarks(const std::string& documentHash, const std::string& deviceModel,
+                                 const BookOrbitAnnotationKeys& keys, const BookOrbitBookmark* changes,
+                                 size_t changeCount, bool& outUnmatched,
+                                 std::vector<BookOrbitIncomingBookmark>* outIncoming = nullptr,
+                                 bool* outMorePending = nullptr);
+
+  /**
+   * Acknowledge applied bookmark changes (POST /plugin/bookmarks/exchange-ack). An applied
+   * add carries the LOCAL identity this device minted for it ({key, datetime, pos}) -- the
+   * server has nothing else to link its copy to. Deletions acknowledge by serverId alone.
+   */
+  static Error ackBookmarks(const std::string& documentHash, const std::string& deviceModel,
+                            const std::vector<BookOrbitBookmarkAck>& applied,
+                            const std::vector<uint32_t>& deletedServerIds);
 
   /**
    * Get human-readable error message for the last error.

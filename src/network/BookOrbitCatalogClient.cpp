@@ -74,12 +74,17 @@ bool fetchJson(const std::string& url, const JsonDocument& filter, JsonDocument&
   // Two attempts: TLS on the C3 runs with a few KB of headroom, so a fetch can fail
   // on a transient allocation race; a fresh connection usually succeeds.
   HttpDownloader::DownloadOptions options;
-  // Small client RX buffer: body bytes arriving with the headers get cached via
-  // realloc in steps of this size, concurrently with the 16KB TLS record buffer.
+  // wolfSSL rather than mbedTLS: the latter needs more heap than this chip has to spare
+  // while parsing a modern certificate chain, which is what makes catalog fetches fail with
+  // MBEDTLS_ERR_X509_FATAL_ERROR against servers on Let's Encrypt's four-certificate path.
+  options.transport = HttpDownloader::Transport::WOLFSSL;
+  // Only meaningful on the esp_http_client path, kept for the fallback: body bytes arriving
+  // with the headers get cached via realloc in steps of this size.
   options.clientRxBufferSize = 2048;
   HttpDownloader::DownloadError err = HttpDownloader::HTTP_ERROR;
   for (int attempt = 0; attempt < 2; attempt++) {
-    err = HttpDownloader::downloadToFile(url, TMP_PATH, nullptr, nullptr, "", "", options, authHeaders());
+    options.extraHeaders = authHeaders();
+    err = HttpDownloader::downloadToFile(url, TMP_PATH, nullptr, nullptr, "", "", options);
     if (err == HttpDownloader::OK) break;
     LOG_ERR("BookOrbit", "Catalog fetch attempt %d failed (err=%d, http=%d)", attempt + 1, static_cast<int>(err),
             HttpDownloader::lastHttpStatus);
@@ -311,6 +316,9 @@ HttpDownloader::DownloadError BookOrbitCatalogClient::downloadFile(const int64_t
 
   const std::string url =
       BOOKORBIT_STORE.getBaseUrl() + "/plugin/catalog/files/" + std::to_string(fileId) + "/download";
-  return HttpDownloader::downloadToFile(url, destPath, std::move(progress), cancelFlag, "", "", std::move(options),
-                                        authHeaders());
+  options.extraHeaders = authHeaders();
+  // Same transport and trust as the JSON endpoints: this request carries the same
+  // credentials, and mbedTLS cannot complete the handshake on this hardware.
+  options.transport = HttpDownloader::Transport::WOLFSSL;
+  return HttpDownloader::downloadToFile(url, destPath, std::move(progress), cancelFlag, "", "", std::move(options));
 }

@@ -12,6 +12,7 @@
 #include "MappedInputManager.h"
 #include "SdCardFontSystem.h"
 #include "activities/network/WifiSelectionActivity.h"
+#include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -103,7 +104,14 @@ void ClockSyncActivity::loop() {
     return;
   }
 
-  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+  if (TouchHeaderBackButton::wasTapped(mappedInput, renderer)) {
+    finish();
+    return;
+  }
+
+  int x = 0;
+  int y = 0;
+  if (mappedInput.wasPressed(MappedInputManager::Button::Back) || mappedInput.wasScreenTapped(x, y)) {
     finish();
   }
 }
@@ -115,7 +123,12 @@ void ClockSyncActivity::render(RenderLock&&) {
 
   renderer.clearScreen();
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_CLOCK_SYNC));
+  const Rect header = TouchHeaderBackButton::headerRect(renderer, mappedInput);
+  if (mappedInput.hasTouchHardware()) {
+    TouchHeaderBackButton::draw(renderer, header, tr(STR_CLOCK_SYNC), false);
+  } else {
+    GUI.drawHeader(renderer, header, tr(STR_CLOCK_SYNC));
+  }
 
   const int midY = pageHeight / 2;
 
@@ -126,7 +139,9 @@ void ClockSyncActivity::render(RenderLock&&) {
     case SUCCESS: {
       renderer.drawCenteredText(UI_12_FONT_ID, midY - 20, tr(STR_CLOCK_SYNC_OK), true, EpdFontFamily::BOLD);
       if (syncedTime[0] != '\0') {
-        char line[32];
+        // Sized for the longest translated label plus a 12-hour time. UTF-8
+        // translations can use multiple bytes per displayed character.
+        char line[64];
         snprintf(line, sizeof(line), "%s %s", tr(STR_CURRENT_TIME), syncedTime);
         renderer.drawCenteredText(UI_10_FONT_ID, midY + 10, line);
       }
@@ -147,5 +162,5 @@ void ClockSyncActivity::render(RenderLock&&) {
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   }
 
-  renderer.displayBuffer();
+  renderer.displayBuffer(screenTransitionRefresh.modeFor(static_cast<uint8_t>(state)));
 }
