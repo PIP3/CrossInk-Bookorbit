@@ -5,6 +5,34 @@ records only its own additions. Each release states the CrossInk version it is b
 on; for everything inherited from upstream, see the
 [CrossInk changelog](https://github.com/uxjulia/CrossInk/blob/main/CHANGELOG.md).
 
+## [v1.5.0+bookorbit.1] - 2026-08-10
+
+Based on CrossInk v1.5.0.
+
+### Added
+
+- Bookmarks now sync with BookOrbit too, alongside highlights, on each BookOrbit sync of a book: bookmarks placed on the device appear in the web reader, bookmarks created on the web land in the book (at the right page when that chapter's cache exists, at the chapter start otherwise, refined on jump), and deletions propagate both ways. Bookmarks placed before this release gain sync identities progressively as you read. The sync screen reports the exchange ("Bookmarks: N sent, N added, N removed").
+- Highlights now sync with BookOrbit, in both directions, on each BookOrbit sync of a book. Highlights made on the device appear in BookOrbit's web reader at their exact position; highlights created on the web come down and are drawn in the book; deletions propagate both ways. The sync screen reports what the exchange did ("Highlights: N sent, N added, N removed"). New highlights upload in batches of 8 per sync — this hardware bounds the payload that can share a TLS session — so a large backlog drains over a few syncs, and highlights made before this feature gain sync positions progressively as you read (one per chapter visited). A highlight's stored text is capped at 2048 bytes, so the drawn span of an extremely long web highlight ends where that cap cuts its text.
+
+### Changed
+
+- The BookOrbit catalog browser now draws its lists with the active theme (contextual title in the header, author under each book title, on-device marker right-aligned), and scrolling past the bottom of a listing loads the next page in place of the previous "Previous page"/"Next page" entries. Listings already fetched during the session are kept on the SD card, so navigating back up re-opens them instantly instead of asking the server again (contributed by CaptainFrito).
+- A clipping saved with BookOrbit sync configured now stores the book's exact source text for the highlighted span (including the French non-breaking spaces before punctuation, kept as plain spaces). Clipping text used to be rebuilt from the rendered words, whose justified spacing could differ from the source ("mot ." for "mot.") -- visible in the clippings list and exports, and rejected by BookOrbit's text verification.
+- Saved highlights and clippings keep up to 2048 bytes of text (previously 512), so long web-created highlights survive sync in full. Downgrading to an older release after saving a longer one makes that older firmware treat the book's clippings file as corrupt and drop it.
+
+### Fixed
+
+- The power-button sync shortcut (BookOrbit or KOReader) is now ignored while a highlight selection, dictionary lookup or another reader screen is open on top of the book. It used to start the sync on top of everything the reader still held in memory — book, chapter and selection included — which left far too little for WiFi and crashed the device. The same shortcut from the book itself or outside the reader works as before.
+- Turning WiFi on with very little free memory no longer crashes the device: the WiFi driver needs a large burst of RAM to start, and when that allocation failed halfway through, the network stack's own error cleanup crashed instead of reporting the failure. Connection attempts now check the available memory first and show "Memory error" instead — going back to the book and retrying the sync then works.
+- Starting a BookOrbit or KOReader sync no longer crashes the device. Both ask an internet time server for the current time before syncing, and they did so from the wrong thread — harmless on earlier firmware, but the network stack CrossInk 1.5.0 builds against checks for this and aborts on the spot. It only happened when the time server's address was not already known, which is why a sync could work one minute and crash the next.
+- Reopening a book returns to the page you left instead of the one before it. CrossInk 1.5.0 restores your position from a position in the text rather than a page number, so it survives a change of font or margins that repaginates the chapter — but the lookup stopped one page short whenever that position fell exactly on a page boundary, which is every time, since what gets saved is the start of the page you were on. Applying a position received from KOReader Sync was affected the same way.
+- BookOrbit sync, statistics and the catalog work again against servers whose certificate chain has grown. Both had started failing at the TLS handshake: the certificate authorities now used by most hosts issue longer chains than this hardware can parse with the previous TLS library, whatever the free memory. All BookOrbit requests now use the same TLS transport CrossInk 1.5.0 introduced for its own downloads, which handles those chains comfortably — the catalog is also noticeably faster for it.
+- Saved highlights are drawn again after a font or layout change in real-world text. The reader re-finds a highlight by matching its text word-by-word against the page, but the layout splits punctuation and hyphens into words of their own ("toilettes", ".") and hyphenation splits words at line breaks ("Bi-", "zarre"), so any highlight containing punctuation — in French, nearly all of them — silently stopped being drawn. A character-level match that ignores whitespace and hyphens on both sides now takes over when the word-by-word one fails, and it also draws highlights that span a page turn on both of their pages.
+
+### Security
+
+- BookOrbit connections no longer verify the server's certificate. The TLS transport that can complete these handshakes has no access to the root-certificate store the previous one used, so it cannot confirm that the server answering is really yours. Your credentials and reading data are still encrypted in transit; what is no longer checked is the identity at the other end, which matters on a network you do not control — a café or airport hotspot rather than your home WiFi. The same limitation applies to the OPDS catalog since CrossInk 1.5.0, and has always applied to KOReader Sync. It will be lifted once the SDK exposes a certificate store to that transport; until then, sync from a network you trust.
+
 ## [v1.4.1+bookorbit.3] - 2026-08-02
 
 Based on CrossInk v1.4.0.

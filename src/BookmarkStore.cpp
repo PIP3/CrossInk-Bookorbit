@@ -3,6 +3,7 @@
 #include <HalStorage.h>
 #include <Logging.h>
 #include <Serialization.h>
+#include <WallClock.h>
 #include <uzlib.h>
 
 #include <algorithm>
@@ -257,7 +258,6 @@ bool BookmarkStore::loadForBook(const std::string& filePath, const std::string& 
       }
     }
 
-    LOG_DBG("BKS", "No bookmark file for this book");
     return true;
   }
 
@@ -343,7 +343,12 @@ BookmarkStore::AddResult BookmarkStore::addBookmark(uint16_t spineIndex, float p
   Bookmark bm{};
   bm.spineIndex = spineIndex;
   bm.progress = progress;
-  bm.timestamp = 0;  // ESP32-C3 has no battery-backed RTC; reserved for future use
+  // Real UTC epoch when the clock is plausible (WallClock corrects RTC-less devices), 0
+  // otherwise. BookOrbit sync keys a bookmark's identity on its creation datetime and joins
+  // its position record back through this field; the on-disk format always had it.
+  if (!WallClock::now(bm.timestamp)) {
+    bm.timestamp = 0;
+  }
   snprintf(bm.chapterTitle, sizeof(bm.chapterTitle), "%s", chapterTitle ? chapterTitle : "");
   bm.paragraphIndex = paragraphIndex;
   snprintf(bm.snippet, sizeof(bm.snippet), "%s", snippet ? snippet : "");
@@ -368,6 +373,14 @@ void BookmarkStore::removeBookmarkForPage(uint16_t spineIndex, float pageProgres
   bookmarks.erase(it);
   dirty = true;
   saveToFile();
+}
+
+bool BookmarkStore::stampMissingTimestamp(const size_t index, const uint32_t timestamp) {
+  if (index >= bookmarks.size() || timestamp == 0 || bookmarks[index].timestamp != 0) return false;
+  bookmarks[index].timestamp = timestamp;
+  dirty = true;
+  saveToFile();
+  return true;
 }
 
 bool BookmarkStore::removeBookmarkAt(size_t index) {
@@ -406,7 +419,6 @@ void BookmarkStore::clearAll() {
       LOG_ERR("BKS", "Failed to delete bookmark file");
       return;
     }
-    LOG_DBG("BKS", "Bookmark file deleted");
   }
   bookmarks.clear();
   dirty = false;
@@ -423,7 +435,6 @@ bool BookmarkStore::readFromFile() {
     saveToFile();
     LOG_DBG("BKS", "Migrated bookmark file to version %u", VERSION);
   }
-  LOG_DBG("BKS", "Loaded %u bookmark(s)", static_cast<unsigned>(bookmarks.size()));
   return true;
 }
 
@@ -552,7 +563,6 @@ bool BookmarkStore::writeToFile() const {
   }
 
   f.close();
-  LOG_DBG("BKS", "Saved %u bookmark(s)", count);
   return true;
 }
 
@@ -569,7 +579,6 @@ void BookmarkStore::deleteForFilePath(const std::string& filePath, const std::st
   }
 
   if (deletedAny) {
-    LOG_DBG("BKS", "Deleted bookmark file for: %s", filePath.c_str());
   }
 }
 
