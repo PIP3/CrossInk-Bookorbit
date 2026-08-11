@@ -10,6 +10,7 @@
 
 ### Fixed
 
+- Compact EPUB table cells now retain their full final-column width so wrapped text is not clipped.
 - Nearby Position Sync now leaves the sending device with a single Back action after the position is shared.
 - Clearing an EPUB's reading cache now returns Home so the book can rebuild its cache safely when reopened.
 - Nearby Position Sync now tolerates repeated nearby position packets while a reader is preparing the received location.
