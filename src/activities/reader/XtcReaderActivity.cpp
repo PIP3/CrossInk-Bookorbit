@@ -379,11 +379,13 @@ void XtcReaderActivity::loop() {
     return;
   }
 
+  const unsigned long heldMs = (touch.prev || touch.next) ? touch.heldMs : mappedInput.getHeldTime();
+
   // XTC pages are fixed-size bitmaps, so the orientation long-press action is
   // consumed here instead of rotating/clipping the pre-rendered page image.
   if (fromSideBtn &&
       SETTINGS.sideButtonLongPress == CrossPointSettings::SIDE_LONG_PRESS::SIDE_LONG_ORIENTATION_CHANGE &&
-      mappedInput.getHeldTime() > ReaderUtils::SKIP_HOLD_MS) {
+      heldMs > ReaderUtils::SKIP_HOLD_MS) {
     return;
   }
 
@@ -398,7 +400,7 @@ void XtcReaderActivity::loop() {
   lastPageTurnTime = now;
 
   const bool skipPages =
-      !fromTilt && !powerPageTurn && mappedInput.getHeldTime() > ReaderUtils::SKIP_HOLD_MS &&
+      !fromTilt && !powerPageTurn && heldMs > ReaderUtils::SKIP_HOLD_MS &&
       (fromSideBtn ? SETTINGS.sideButtonLongPress == CrossPointSettings::SIDE_LONG_PRESS::SIDE_LONG_CHAPTER_SKIP
                    : SETTINGS.longPressButtonBehavior == CrossPointSettings::CHAPTER_SKIP);
   const int skipAmount = skipPages ? 10 : 1;
