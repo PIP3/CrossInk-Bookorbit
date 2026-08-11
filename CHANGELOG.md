@@ -11,16 +11,10 @@
 
 ### Fixed
 
-- Go to % action buttons now stay within the touch screen's side borders.
 - Long-pressing Up or Down in long popup lists now advances by a full page.
-- Compact EPUB table cells now retain their full final-column width so wrapped text is not clipped.
-- Dense eight-column EPUB tables now give their leading label column enough space for readable wrapped text.
-- Narrow EPUB table cells now split oversized words instead of clipping them.
-- Nearby Position Sync now leaves the sending device with a single Back action after the position is shared.
+- EPUB table fixes now preserve final-column widths, give dense tables enough space for leading labels, and split oversized words instead of clipping them.
+- Nearby Position Sync now leaves the sending device with a single Back action after sharing a position and tolerates repeated packets while the receiving reader prepares the location.
 - Clearing an EPUB's reading cache now returns Home so the book can rebuild its cache safely when reopened.
-- Nearby Position Sync now tolerates repeated nearby position packets while a reader is preparing the received location.
-- Large EPUB tables now use a bounded row-streaming grid on low-memory devices, preserving readable styled cells and falling back explicitly for unsupported table structures.
-- Dictionary definition popups no longer leave an empty white button-hint block over the reader page.
 - Large EPUB tables now use a bounded row-streaming grid on low-memory devices, preserving readable styled cells and falling back explicitly for unsupported table structures.
 - Dictionary definition popups no longer leave an empty white button-hint block over the reader page.
 - Recent Books and KOReader Sync settings now remain intact after returning from lightweight network screens.

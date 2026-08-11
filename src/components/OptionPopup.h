@@ -331,8 +331,10 @@ class OptionPopup {
     layout.footer = TouchActionButtons::Layout();
     if (confirmationMode) {
       const int footerY = dialogY + dialogH - footerSpace;
-      layout.cancel = Rect{dialogX, footerY, dialogW / 2, footerHeight};
-      layout.save = Rect{dialogX + dialogW / 2, footerY, dialogW - dialogW / 2, footerHeight};
+      const bool showCancelButton = gpio.hasTouch();
+      layout.cancel = showCancelButton ? Rect{dialogX, footerY, dialogW / 2, footerHeight} : Rect();
+      layout.save = showCancelButton ? Rect{dialogX + dialogW / 2, footerY, dialogW - dialogW / 2, footerHeight}
+                                     : Rect{dialogX, footerY, dialogW, footerHeight};
     } else {
       layout.cancel = Rect();
       layout.save = Rect();

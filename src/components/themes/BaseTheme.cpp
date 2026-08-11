@@ -1261,14 +1261,23 @@ void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, 
     const int footerY = dialogY + dialogH - footerHeight;
     const char* leftLabel = cancelLabel ? cancelLabel : "";
     const char* rightLabel = saveLabel ? saveLabel : "";
-    const int dividerX = dialogX + dialogW / 2;
+    // Button devices already map Back to cancel, so the on-screen action can
+    // use the full footer width for Save.
+    const bool showCancelButton = gpio.hasTouch();
     renderer.drawLine(dialogX, footerY, dialogX + dialogW, footerY, true);
-    renderer.drawLine(dividerX, footerY, dividerX, dialogY + dialogH, true);
     const int labelY = footerY + (footerHeight - renderer.getLineHeight(UI_12_FONT_ID)) / 2;
-    if (saveFocused) renderer.fillRect(dividerX, footerY + 1, dialogX + dialogW - dividerX, footerHeight - 1, true);
-    renderer.drawText(UI_12_FONT_ID, dialogX + (dialogW / 2 - renderer.getTextWidth(UI_12_FONT_ID, leftLabel)) / 2,
-                      labelY, leftLabel, true, EpdFontFamily::REGULAR);
-    renderer.drawText(UI_12_FONT_ID, dividerX + (dialogW / 2 - renderer.getTextWidth(UI_12_FONT_ID, rightLabel)) / 2,
-                      labelY, rightLabel, !saveFocused, EpdFontFamily::BOLD);
+    if (showCancelButton) {
+      const int dividerX = dialogX + dialogW / 2;
+      renderer.drawLine(dividerX, footerY, dividerX, dialogY + dialogH, true);
+      if (saveFocused) renderer.fillRect(dividerX, footerY + 1, dialogX + dialogW - dividerX, footerHeight - 1, true);
+      renderer.drawText(UI_12_FONT_ID, dialogX + (dialogW / 2 - renderer.getTextWidth(UI_12_FONT_ID, leftLabel)) / 2,
+                        labelY, leftLabel, true, EpdFontFamily::REGULAR);
+      renderer.drawText(UI_12_FONT_ID, dividerX + (dialogW / 2 - renderer.getTextWidth(UI_12_FONT_ID, rightLabel)) / 2,
+                        labelY, rightLabel, !saveFocused, EpdFontFamily::BOLD);
+    } else {
+      if (saveFocused) renderer.fillRect(dialogX, footerY + 1, dialogW, footerHeight - 1, true);
+      renderer.drawText(UI_12_FONT_ID, dialogX + (dialogW - renderer.getTextWidth(UI_12_FONT_ID, rightLabel)) / 2,
+                        labelY, rightLabel, !saveFocused, EpdFontFamily::BOLD);
+    }
   }
 }
