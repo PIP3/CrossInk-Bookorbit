@@ -1878,6 +1878,11 @@ void HomeActivity::loop() {
 }
 
 bool HomeActivity::handleShortcutAction(const CrossPointSettings::SHORT_PWRBTN action) {
+  if (action == CrossPointSettings::SHORT_PWRBTN::FILE_BROWSER) {
+    onFileBrowserOpen();
+    return true;
+  }
+
   if (action != CrossPointSettings::SHORT_PWRBTN::QUICK_ACTIONS) {
     return false;
   }
@@ -1893,6 +1898,10 @@ bool HomeActivity::handleShortcutAction(const CrossPointSettings::SHORT_PWRBTN a
           return;
         }
         dispatchShortcutAction(selectedAction);
+      },
+      [](const auto selectedAction) {
+        return isPowerButtonActionAvailableOutsideReader(selectedAction) ||
+               selectedAction == CrossPointSettings::SHORT_PWRBTN::FILE_BROWSER;
       });
   return true;
 }

@@ -72,6 +72,8 @@ class XtcReaderActivity final : public Activity {
   void openReaderMenu();
   void onReaderMenuConfirm(int action);
   void toggleHomeButtonInReader();
+  static bool supportsQuickAction(CrossPointSettings::SHORT_PWRBTN action);
+  bool executeReaderShortcutAction(CrossPointSettings::SHORT_PWRBTN action);
   bool executeLongPressBackAction();
 
  public:

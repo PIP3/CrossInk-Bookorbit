@@ -3280,9 +3280,8 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
           }
           if (!fullText.empty()) {
             pauseReadingPaceTimer("qr_display");
-            startActivityForResult(
-                std::make_unique<QrDisplayActivity>(renderer, mappedInput, fullText),
-                [this](const ActivityResult&) { openReaderMenu(); });
+            startActivityForResult(std::make_unique<QrDisplayActivity>(renderer, mappedInput, fullText),
+                                   [this](const ActivityResult&) { openReaderMenu(); });
             break;
           }
         }
@@ -4244,14 +4243,23 @@ bool EpubReaderActivity::handleShortcutAction(const CrossPointSettings::SHORT_PW
     case CrossPointSettings::SHORT_PWRBTN::TOGGLE_BOOKMARK:
       executeReaderQuickAction(CrossPointSettings::LONG_MENU_TOGGLE_BOOKMARK);
       return true;
+    case CrossPointSettings::SHORT_PWRBTN::SYNC_PROGRESS:
+      executeReaderQuickAction(CrossPointSettings::LONG_MENU_SYNC_PROGRESS);
+      return true;
     case CrossPointSettings::SHORT_PWRBTN::MARK_FINISHED:
       executeReaderQuickAction(CrossPointSettings::LONG_MENU_MARK_FINISHED);
       return true;
     case CrossPointSettings::SHORT_PWRBTN::READING_STATS:
       executeReaderQuickAction(CrossPointSettings::LONG_MENU_READING_STATS);
       return true;
+    case CrossPointSettings::SHORT_PWRBTN::SCREENSHOT:
+      executeReaderQuickAction(CrossPointSettings::LONG_MENU_SCREENSHOT);
+      return true;
     case CrossPointSettings::SHORT_PWRBTN::CYCLE_PAGE_TURN:
       executeReaderQuickAction(CrossPointSettings::LONG_MENU_CYCLE_PAGE_TURN);
+      return true;
+    case CrossPointSettings::SHORT_PWRBTN::FILE_TRANSFER:
+      executeReaderQuickAction(CrossPointSettings::LONG_MENU_FILE_TRANSFER);
       return true;
     case CrossPointSettings::SHORT_PWRBTN::TOGGLE_TILT_PAGE_TURN:
       executeReaderQuickAction(CrossPointSettings::LONG_MENU_TOGGLE_TILT_PAGE_TURN);
@@ -4261,6 +4269,15 @@ bool EpubReaderActivity::handleShortcutAction(const CrossPointSettings::SHORT_PW
       return true;
     case CrossPointSettings::SHORT_PWRBTN::FILE_BROWSER:
       executeReaderQuickAction(CrossPointSettings::LONG_MENU_FILE_BROWSER);
+      return true;
+    case CrossPointSettings::SHORT_PWRBTN::CALIBRE_WIRELESS:
+      executeReaderQuickAction(CrossPointSettings::LONG_MENU_CALIBRE_WIRELESS);
+      return true;
+    case CrossPointSettings::SHORT_PWRBTN::JOIN_NETWORK:
+      executeReaderQuickAction(CrossPointSettings::LONG_MENU_JOIN_NETWORK);
+      return true;
+    case CrossPointSettings::SHORT_PWRBTN::CREATE_HOTSPOT:
+      executeReaderQuickAction(CrossPointSettings::LONG_MENU_CREATE_HOTSPOT);
       return true;
     case CrossPointSettings::SHORT_PWRBTN::CREATE_CLIPPING:
       executeReaderQuickAction(CrossPointSettings::LONG_MENU_CREATE_CLIPPING);
@@ -6576,8 +6593,7 @@ bool EpubReaderActivity::resolveChapterGroupPageProgress(int& currentPage, int& 
 
   const auto estimateUnknownUnits = [knownNonImageUnits, knownBytes](const uint32_t bytes, const uint16_t itemCount) {
     if (bytes == 0 || itemCount == 0) return uint64_t{0};
-    const uint64_t projected =
-        PageCountEstimator::projectNonImageUnits(knownNonImageUnits, bytes, knownBytes);
+    const uint64_t projected = PageCountEstimator::projectNonImageUnits(knownNonImageUnits, bytes, knownBytes);
     const uint64_t minimum = static_cast<uint64_t>(itemCount) * PageCountEstimator::kUnitsPerPage;
     return std::max(minimum, projected);
   };

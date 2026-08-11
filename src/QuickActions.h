@@ -116,7 +116,8 @@ inline void settingChanged(CrossPointSettings& settings, uint8_t CrossPointSetti
 }
 
 using ActionHandler = std::function<void(CrossPointSettings::SHORT_PWRBTN)>;
+using ActionFilter = std::function<bool(CrossPointSettings::SHORT_PWRBTN)>;
 
 void showConfiguredPopup(OptionPopup& popup, const std::function<void()>& requestUpdate,
-                         ActionHandler actionHandler = {});
+                         ActionHandler actionHandler = {}, ActionFilter actionFilter = {});
 }  // namespace QuickActions

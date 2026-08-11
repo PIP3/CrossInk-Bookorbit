@@ -37,6 +37,9 @@ ClipSelectionActivity::ClipSelectionActivity(GfxRenderer& renderer, MappedInputM
 
 void ClipSelectionActivity::onEnter() {
   Activity::onEnter();
+  // Clipping needs direct word selection even when touch is disabled for the
+  // reader. onExit() restores the reader's configured touch state.
+  mappedInput.setReaderTouchscreenOverride(true);
 
   if (wordStore.words.empty()) {
     LOG_ERR("CLIP", "No words available for selection");
@@ -70,6 +73,7 @@ void ClipSelectionActivity::onEnter() {
 }
 
 void ClipSelectionActivity::onExit() {
+  mappedInput.setReaderTouchscreenOverride(false);
   section.currentPage = savedSectionPage;
   resetSavedBufferChunks();
   hasSavedBuffer = false;

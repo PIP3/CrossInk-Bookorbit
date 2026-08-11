@@ -54,6 +54,8 @@ class TxtReaderActivity final : public Activity {
   void toggleHomeButtonInReader();
   bool consumeLongPowerButtonRelease();
   bool consumeLongPowerButtonHold();
+  static bool supportsQuickAction(CrossPointSettings::SHORT_PWRBTN action);
+  bool executeReaderShortcutAction(CrossPointSettings::SHORT_PWRBTN action);
   bool executePowerButtonAction();
   bool executeLongPressBackAction();
   void openReaderMenu();

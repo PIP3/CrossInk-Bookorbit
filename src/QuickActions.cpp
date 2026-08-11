@@ -8,13 +8,16 @@
 #include "components/OptionPopup.h"
 
 namespace QuickActions {
-void showConfiguredPopup(OptionPopup& popup, const std::function<void()>& requestUpdate, ActionHandler actionHandler) {
+void showConfiguredPopup(OptionPopup& popup, const std::function<void()>& requestUpdate, ActionHandler actionHandler,
+                         ActionFilter actionFilter) {
   std::vector<std::string> labels;
   std::vector<uint8_t> actions;
   labels.reserve(std::size(SETTINGS.quickActionSlots));
   actions.reserve(std::size(SETTINGS.quickActionSlots));
   for (const uint8_t action : SETTINGS.quickActionSlots) {
-    if (action == CrossPointSettings::IGNORE || !isActionAvailable(action)) {
+    const auto shortcutAction = static_cast<CrossPointSettings::SHORT_PWRBTN>(action);
+    if (action == CrossPointSettings::IGNORE || !isActionAvailable(action) ||
+        (actionFilter && !actionFilter(shortcutAction))) {
       continue;
     }
     labels.emplace_back(I18N.get(actionLabel(action)));
