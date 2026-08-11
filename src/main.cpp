@@ -569,8 +569,7 @@ bool handleGlobalPowerButtonAction(const CrossPointSettings::SHORT_PWRBTN action
       if (!gpio.hasTouch()) return false;
       SETTINGS.disableReaderTouchscreen = SETTINGS.disableReaderTouchscreen ? 0 : 1;
       SETTINGS.saveToFile();
-      LOG_INF("TOUCH", "Reader touchscreen %s by shortcut",
-              SETTINGS.disableReaderTouchscreen ? "disabled" : "enabled");
+      LOG_INF("TOUCH", "Reader touchscreen %s by shortcut", SETTINGS.disableReaderTouchscreen ? "disabled" : "enabled");
       return true;
     default:
       return false;

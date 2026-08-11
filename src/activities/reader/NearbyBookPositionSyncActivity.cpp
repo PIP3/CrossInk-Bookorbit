@@ -115,11 +115,9 @@ void NearbyBookPositionSyncActivity::loop() {
     const uint8_t actionCount = senderSynced ? 1 : 2;
     const auto actions = touchActionLayout(screen, metrics, actionCount);
     int touchedAction = -1;
-    const auto touch = mappedInput.rowTouch(touchedAction, actions.buttons[0].y,
-                                            TouchActionButtons::kDefaultHeight + TouchActionButtons::kDefaultGap,
-                                            actionCount, actions.buttons[0].x,
-                                            actions.buttons[0].x + actions.buttons[0].width,
-                                            actions.buttons[0].height);
+    const auto touch = mappedInput.rowTouch(
+        touchedAction, actions.buttons[0].y, TouchActionButtons::kDefaultHeight + TouchActionButtons::kDefaultGap,
+        actionCount, actions.buttons[0].x, actions.buttons[0].x + actions.buttons[0].width, actions.buttons[0].height);
     if (touch == MappedInputManager::RowTouch::Down) return;
     if (touch == MappedInputManager::RowTouch::Tap) {
       if (senderSynced) {
@@ -767,11 +765,9 @@ void NearbyBookPositionSyncActivity::loop() {
     const uint8_t actionCount = senderSynced ? 1 : 2;
     const auto actions = touchActionLayout(screen, metrics, actionCount);
     int touchedAction = -1;
-    const auto touch = mappedInput.rowTouch(touchedAction, actions.buttons[0].y,
-                                            TouchActionButtons::kDefaultHeight + TouchActionButtons::kDefaultGap,
-                                            actionCount, actions.buttons[0].x,
-                                            actions.buttons[0].x + actions.buttons[0].width,
-                                            actions.buttons[0].height);
+    const auto touch = mappedInput.rowTouch(
+        touchedAction, actions.buttons[0].y, TouchActionButtons::kDefaultHeight + TouchActionButtons::kDefaultGap,
+        actionCount, actions.buttons[0].x, actions.buttons[0].x + actions.buttons[0].width, actions.buttons[0].height);
     if (touch == MappedInputManager::RowTouch::Down) return;
     if (touch == MappedInputManager::RowTouch::Tap) {
       if (senderSynced) {
