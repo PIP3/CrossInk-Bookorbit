@@ -16,16 +16,17 @@
 
 namespace {
 constexpr uint32_t SECTION_CACHE_MAGIC = 0x535843FF;  // bytes: 0xFF, "CXS"
+// v63: dense eight-column tables use a wider leading label column.
 // v62: protect image-height page units from byte-density extrapolation.
 // v61: compact low-memory table rows and colspan-aware table fragments change
 // the serialized page payload; it also clamps inline-image top margins after
 // page decisions, invalidating layouts that can extend viewport-height images
 // beyond the page.
-constexpr uint8_t SECTION_FILE_VERSION = 62;
+constexpr uint8_t SECTION_FILE_VERSION = 63;
 // Suspended incremental build: valid pages plus LUTs and a parse-watermark trailer.
 // Change this with layout or payload changes so stale partial pages cannot resume
 // under a different layout contract.
-constexpr uint8_t SECTION_FILE_PARTIAL_VERSION = 0xFA;
+constexpr uint8_t SECTION_FILE_PARTIAL_VERSION = 0xF9;
 constexpr uint16_t INITIAL_SECTION_PAGE_LUT_ENTRIES = 1024;
 constexpr uint32_t HEADER_SIZE =
     sizeof(SECTION_CACHE_MAGIC) + sizeof(uint8_t) + sizeof(int) + sizeof(float) + sizeof(bool) + sizeof(bool) +
