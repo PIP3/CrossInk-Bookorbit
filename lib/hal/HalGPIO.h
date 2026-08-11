@@ -85,6 +85,9 @@ class HalGPIO {
 #else
   constexpr bool hasTouch() const { return false; }
   constexpr bool hasHomeKey() const { return false; }
+  constexpr bool wasHomeKeyPressed() const { return false; }
+  constexpr bool wasHomeKeyTapped() const { return false; }
+  constexpr bool wasHomeKeyLongPressed() const { return false; }
 #endif
   void setSharedConfirmPowerShortPressEmitsPower(bool enabled);
 
