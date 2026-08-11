@@ -2,6 +2,8 @@
 
 ### Added
 
+- Power-button shortcuts and Quick Actions can now toggle the frontlight or reader touchscreen when supported.
+
 ### Changed
 
 - Font Family choices now identify built-in and SD-card fonts by their available point-size ranges.
