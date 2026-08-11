@@ -3388,10 +3388,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
             } else {
               LOG_ERR("ERS", "Failed to delete book cache");
             }
-            // Keep this consistent with the other book-menu settings actions:
-            // render() rebuilds the cleared section cache in place.
-            resumeReadingPaceTimer("delete_cache_return");
-            requestUpdate();
+            onGoHome();
           });
       break;
     }
