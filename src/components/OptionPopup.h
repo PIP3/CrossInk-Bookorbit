@@ -13,6 +13,7 @@
 #include "components/UIScale.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/ButtonNavigator.h"
 
 class OptionPopup {
  public:
@@ -179,32 +180,40 @@ class OptionPopup {
       return true;
     }
 
-    if (input.wasPressed(MappedInputManager::Button::Up) || input.wasPressed(MappedInputManager::Button::Left)) {
+    const auto& buttonLayout = getLayout(input.getRenderer());
+    const int visibleCount = static_cast<int>(buttonLayout.options.size());
+    const auto movePrevious = [&](const bool page) {
       if (confirmationMode && footerFocused) {
         footerFocused = false;
         selectedIndex = count - 1;
       } else if (confirmationMode && selectedIndex == 0) {
         footerFocused = true;
       } else {
-        selectedIndex = (selectedIndex - 1 + count) % count;
+        selectedIndex = page ? ButtonNavigator::previousPageIndex(selectedIndex, count, visibleCount)
+                             : ButtonNavigator::previousIndex(selectedIndex, count);
       }
       layoutValid = false;
       requestUpdate();
-      return true;
-    } else if (input.wasPressed(MappedInputManager::Button::Down) ||
-               input.wasPressed(MappedInputManager::Button::Right)) {
+    };
+    const auto moveNext = [&](const bool page) {
       if (confirmationMode && footerFocused) {
         footerFocused = false;
         selectedIndex = 0;
       } else if (confirmationMode && selectedIndex == count - 1) {
         footerFocused = true;
       } else {
-        selectedIndex = (selectedIndex + 1) % count;
+        selectedIndex = page ? ButtonNavigator::nextPageIndex(selectedIndex, count, visibleCount)
+                             : ButtonNavigator::nextIndex(selectedIndex, count);
       }
       layoutValid = false;
       requestUpdate();
-      return true;
-    } else if (input.wasPressed(MappedInputManager::Button::Confirm)) {
+    };
+    buttonNavigator.onPreviousRelease([&movePrevious] { movePrevious(false); });
+    buttonNavigator.onNextRelease([&moveNext] { moveNext(false); });
+    buttonNavigator.onPreviousContinuous([&movePrevious] { movePrevious(true); });
+    buttonNavigator.onNextContinuous([&moveNext] { moveNext(true); });
+
+    if (input.wasPressed(MappedInputManager::Button::Confirm)) {
       if (confirmationMode && !footerFocused) {
         activateSelection(input, requestUpdate, true);
       } else if (confirmationMode) {
