@@ -10,6 +10,7 @@
 
 ### Fixed
 
+- Nearby Position Sync now leaves the sending device with a single Back action after the position is shared.
 - Clearing an EPUB's reading cache now returns Home so the book can rebuild its cache safely when reopened.
 - Nearby Position Sync now tolerates repeated nearby position packets while a reader is preparing the received location.
 - Large EPUB tables now use a bounded row-streaming grid on low-memory devices, preserving readable styled cells and falling back explicitly for unsupported table structures.

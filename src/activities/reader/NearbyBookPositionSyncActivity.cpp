@@ -12,8 +12,10 @@
 
 namespace {
 
-TouchActionButtons::Layout touchActionLayout(const Rect& screen, const ThemeMetrics& metrics) {
-  constexpr int totalHeight = TouchActionButtons::kDefaultHeight * 2 + TouchActionButtons::kDefaultGap;
+TouchActionButtons::Layout touchActionLayout(const Rect& screen, const ThemeMetrics& metrics,
+                                             const uint8_t buttonCount = 2) {
+  const int totalHeight = TouchActionButtons::kDefaultHeight * buttonCount +
+                          TouchActionButtons::kDefaultGap * (buttonCount > 0 ? buttonCount - 1 : 0);
   const Rect container{screen.x + metrics.contentSidePadding,
                        screen.y + screen.height - metrics.verticalSpacing - totalHeight,
                        std::max(1, screen.width - metrics.contentSidePadding * 2), totalHeight};
@@ -21,9 +23,9 @@ TouchActionButtons::Layout touchActionLayout(const Rect& screen, const ThemeMetr
 }
 
 void drawTouchActionButtons(GfxRenderer& renderer, const Rect& screen, const ThemeMetrics& metrics,
-                            const char* confirmLabel) {
-  const auto actions = touchActionLayout(screen, metrics);
-  const char* labels[] = {confirmLabel, tr(STR_CANCEL)};
+                            const char* confirmLabel, const bool backOnly = false) {
+  const auto actions = touchActionLayout(screen, metrics, backOnly ? 1 : 2);
+  const char* labels[] = {backOnly ? tr(STR_BACK) : confirmLabel, backOnly ? nullptr : tr(STR_CANCEL)};
   TouchActionButtons::draw(renderer, actions, labels, 0, -1, UI_10_FONT_ID);
 }
 
@@ -104,23 +106,29 @@ void NearbyBookPositionSyncActivity::loop() {
     return;
   }
 
-  const bool canShare = state_ == State::READY || state_ == State::SYNCED || state_ == State::ERROR;
+  const bool senderSynced = state_ == State::SYNCED && sourceMode_;
+  const bool canShare = state_ == State::READY || (state_ == State::SYNCED && !sourceMode_) || state_ == State::ERROR;
   const bool canApplyReceivedPosition = state_ == State::SHOWING_RESULT && !sourceMode_;
-  if (mappedInput.hasTouch() && (canShare || canApplyReceivedPosition)) {
+  if (mappedInput.hasTouch() && (canShare || canApplyReceivedPosition || senderSynced)) {
     const auto& metrics = UITheme::getInstance().getMetrics();
     const Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
-    const auto actions = touchActionLayout(screen, metrics);
+    const uint8_t actionCount = senderSynced ? 1 : 2;
+    const auto actions = touchActionLayout(screen, metrics, actionCount);
     int touchedAction = -1;
     const auto touch = mappedInput.rowTouch(touchedAction, actions.buttons[0].y,
-                                            actions.buttons[1].y - actions.buttons[0].y, 2, actions.buttons[0].x,
-                                            actions.buttons[0].x + actions.buttons[0].width, actions.buttons[0].height);
+                                            TouchActionButtons::kDefaultHeight + TouchActionButtons::kDefaultGap,
+                                            actionCount, actions.buttons[0].x,
+                                            actions.buttons[0].x + actions.buttons[0].width,
+                                            actions.buttons[0].height);
     if (touch == MappedInputManager::RowTouch::Down) return;
     if (touch == MappedInputManager::RowTouch::Tap) {
-      if (touchedAction == 0 && canShare) {
+      if (senderSynced) {
+        returnToReader(true);
+      } else if (touchedAction == 0 && canShare) {
         startSync();
       } else if (touchedAction == 0) {
         applyPeerPosition();
-      } else {
+      } else if (touchedAction == 1) {
         returnToReader(true);
       }
       return;
@@ -199,12 +207,15 @@ void NearbyBookPositionSyncActivity::render(RenderLock&&) {
       break;
   }
 
-  if (state_ == State::READY || state_ == State::SYNCED || state_ == State::ERROR) {
+  if (state_ == State::READY || (state_ == State::SYNCED && !sourceMode_) || state_ == State::ERROR) {
     renderReady(primary, detail, detailSecondary);
     if (mappedInput.hasTouch()) {
-      drawTouchActionButtons(renderer, screen, metrics, tr(STR_NEARBY_POSITION_SHARE_BUTTON));
+      drawTouchActionButtons(renderer, screen, metrics, tr(STR_NEARBY_POSITION_SHARE_BUTTON),
+                             state_ == State::SYNCED && sourceMode_);
     } else {
-      const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_NEARBY_POSITION_SHARE_BUTTON), "", "");
+      const auto labels = state_ == State::SYNCED && sourceMode_
+                              ? mappedInput.mapLabels(tr(STR_BACK), "", "", "")
+                              : mappedInput.mapLabels(tr(STR_BACK), tr(STR_NEARBY_POSITION_SHARE_BUTTON), "", "");
       GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4, true);
     }
     renderer.displayBuffer(screenTransitionRefresh_.modeFor(static_cast<uint8_t>(state_)));
@@ -747,19 +758,25 @@ void NearbyBookPositionSyncActivity::loop() {
     return;
   }
 
-  const bool canShare = state_ == State::READY || state_ == State::SYNCED || state_ == State::ERROR;
+  const bool senderSynced = state_ == State::SYNCED && sourceMode_;
+  const bool canShare = state_ == State::READY || (state_ == State::SYNCED && !sourceMode_) || state_ == State::ERROR;
   const bool canApplyReceivedPosition = state_ == State::SHOWING_RESULT && !sourceMode_;
-  if (mappedInput.hasTouch() && (canShare || canApplyReceivedPosition)) {
+  if (mappedInput.hasTouch() && (canShare || canApplyReceivedPosition || senderSynced)) {
     const auto& metrics = UITheme::getInstance().getMetrics();
     const Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
-    const auto actions = touchActionLayout(screen, metrics);
+    const uint8_t actionCount = senderSynced ? 1 : 2;
+    const auto actions = touchActionLayout(screen, metrics, actionCount);
     int touchedAction = -1;
     const auto touch = mappedInput.rowTouch(touchedAction, actions.buttons[0].y,
-                                            actions.buttons[1].y - actions.buttons[0].y, 2, actions.buttons[0].x,
-                                            actions.buttons[0].x + actions.buttons[0].width, actions.buttons[0].height);
+                                            TouchActionButtons::kDefaultHeight + TouchActionButtons::kDefaultGap,
+                                            actionCount, actions.buttons[0].x,
+                                            actions.buttons[0].x + actions.buttons[0].width,
+                                            actions.buttons[0].height);
     if (touch == MappedInputManager::RowTouch::Down) return;
     if (touch == MappedInputManager::RowTouch::Tap) {
-      if (touchedAction == 0 && canShare) {
+      if (senderSynced) {
+        returnToReader(true);
+      } else if (touchedAction == 0 && canShare) {
         startSync();
       } else if (touchedAction == 0 && applyPeerPosition()) {
         sendAck(peerSourceMac_.data());
@@ -776,7 +793,7 @@ void NearbyBookPositionSyncActivity::loop() {
     return;
   }
 
-  if (state_ == State::READY || state_ == State::SYNCED || state_ == State::ERROR) {
+  if (state_ == State::READY || (state_ == State::SYNCED && !sourceMode_) || state_ == State::ERROR) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
       startSync();
       return;
@@ -1288,9 +1305,12 @@ void NearbyBookPositionSyncActivity::render(RenderLock&&) {
   if (state_ == State::READY || state_ == State::SYNCED || state_ == State::ERROR) {
     renderReady(primary, detail, detailSecondary);
     if (mappedInput.hasTouch()) {
-      drawTouchActionButtons(renderer, screen, metrics, tr(STR_NEARBY_POSITION_SHARE_BUTTON));
+      drawTouchActionButtons(renderer, screen, metrics, tr(STR_NEARBY_POSITION_SHARE_BUTTON),
+                             state_ == State::SYNCED && sourceMode_);
     } else {
-      const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_NEARBY_POSITION_SHARE_BUTTON), "", "");
+      const auto labels = state_ == State::SYNCED && sourceMode_
+                              ? mappedInput.mapLabels(tr(STR_BACK), "", "", "")
+                              : mappedInput.mapLabels(tr(STR_BACK), tr(STR_NEARBY_POSITION_SHARE_BUTTON), "", "");
       GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4, true);
     }
     renderer.displayBuffer(screenTransitionRefresh_.modeFor(static_cast<uint8_t>(state_)));
