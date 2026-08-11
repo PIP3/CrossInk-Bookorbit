@@ -84,6 +84,7 @@ class HalGPIO {
   bool wasTouchActivity() const;
 #else
   constexpr bool hasTouch() const { return false; }
+  constexpr bool hasHomeKey() const { return false; }
 #endif
   void setSharedConfirmPowerShortPressEmitsPower(bool enabled);
 
