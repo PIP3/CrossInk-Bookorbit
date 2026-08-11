@@ -9,6 +9,7 @@
 ### Fixed
 
 - Large EPUB tables now use a bounded row-streaming grid on low-memory devices, preserving readable styled cells and falling back explicitly for unsupported table structures.
+- Dictionary definition popups no longer leave an empty white button-hint block over the reader page.
 - XTCH cover and thumbnail generation now stays within the available memory on X3/X4 after its cache is cleared.
 - Change Font shortcuts now switch away from an active SD-card font instead of reindexing with the same font.
 - Network connections no longer trigger repeated full-panel flashes.
