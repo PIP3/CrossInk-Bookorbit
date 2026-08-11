@@ -232,6 +232,12 @@ void EpubReaderPercentSelectionActivity::buildPercentScreen(UiApp::ScreenType& s
     const int16_t actionHeight = std::max<int16_t>(theme.rowHeight, 56);
     const int16_t actionBandHeight = static_cast<int16_t>(actionHeight * 2 + actionGap);
     const fui::Rect actionBand = screen.takeBottom(actionBandHeight, theme.spaceLg);
+    // Keep these explicit full-width actions aligned with the inset used by
+    // every TouchActionButtons group, rather than drawing against the bezel.
+    const int16_t actionSideInset = static_cast<int16_t>(metrics.contentSidePadding);
+    const fui::Rect actionArea{static_cast<int16_t>(actionBand.x + actionSideInset), actionBand.y,
+                               std::max<int16_t>(1, static_cast<int16_t>(actionBand.width - actionSideInset * 2)),
+                               actionBand.height};
     fui::ButtonProps action;
     action.inputMask = fui::InputTouch;
     action.styles = fui::outlinedButtonStyles();
@@ -241,12 +247,12 @@ void EpubReaderPercentSelectionActivity::buildPercentScreen(UiApp::ScreenType& s
     action.label = tr(STR_CONFIRM);
     action.action = ACTION_CONFIRM;
     action.text.bold = true;
-    screen.button(action, fui::Rect{actionBand.x, actionBand.y, actionBand.width, actionHeight});
+    screen.button(action, fui::Rect{actionArea.x, actionArea.y, actionArea.width, actionHeight});
     action.label = tr(STR_CANCEL);
     action.action = ACTION_CANCEL;
     action.text.bold = false;
-    screen.button(action, fui::Rect{actionBand.x, static_cast<int16_t>(actionBand.y + actionHeight + actionGap),
-                                    actionBand.width, actionHeight});
+    screen.button(action, fui::Rect{actionArea.x, static_cast<int16_t>(actionArea.y + actionHeight + actionGap),
+                                    actionArea.width, actionHeight});
     return;
   }
 

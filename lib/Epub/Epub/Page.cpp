@@ -4,6 +4,8 @@
 #include <Logging.h>
 #include <Serialization.h>
 
+#include "tables/TableColumnLayout.h"
+
 namespace {
 
 constexpr uint16_t MAX_PAGE_ELEMENTS = 1024;
@@ -273,11 +275,11 @@ void PageTableFragment::render(GfxRenderer& renderer, const int fontId, const in
 
   std::vector<int16_t> columnStarts(columnCount + 1);
   for (uint8_t i = 0; i < columnCount; i++) {
-    columnStarts[i] = static_cast<int16_t>((static_cast<uint32_t>(width) * i) / columnCount);
+    columnStarts[i] = static_cast<int16_t>(TableColumnLayout::columnStart(width, columnCount, i));
   }
   // Text clips use a half-open right edge; keep the final cell's full width
   // available while the border itself remains one pixel inside the table.
-  columnStarts[columnCount] = static_cast<int16_t>(width);
+  columnStarts[columnCount] = static_cast<int16_t>(TableColumnLayout::columnStart(width, columnCount, columnCount));
 
   renderer.drawRect(drawX, drawY, width, totalHeight, foregroundBlack);
 
