@@ -62,7 +62,8 @@ int IntervalSelectionActivity::clampedValue(const int candidate) const {
 }
 
 bool IntervalSelectionActivity::usesTextTouchStepControls() const {
-  return titleId == StrId::STR_TIME_TO_SLEEP || titleId == StrId::STR_AUTO_TURN_INTERVAL_SECONDS;
+  return titleId == StrId::STR_TIME_TO_SLEEP || titleId == StrId::STR_AUTO_TURN_INTERVAL_SECONDS ||
+         titleId == StrId::STR_LINE_SPACING;
 }
 
 void IntervalSelectionActivity::onEnter() {

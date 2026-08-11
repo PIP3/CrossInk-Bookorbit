@@ -499,8 +499,8 @@ bool DictionaryDefinitionActivity::dictionarySwitchButtonContains(const int x, c
 
 bool DictionaryDefinitionActivity::modalContains(const int x, const int y) const {
   const int frameThickness = UITheme::getInstance().getMetrics().popupFrameThickness;
-  return x >= modalX_ - frameThickness && x < modalX_ + modalWidth_ + frameThickness &&
-         y >= modalY_ - frameThickness && y < modalY_ + modalHeight_ + frameThickness;
+  return x >= modalX_ - frameThickness && x < modalX_ + modalWidth_ + frameThickness && y >= modalY_ - frameThickness &&
+         y < modalY_ + modalHeight_ + frameThickness;
 }
 #endif
 

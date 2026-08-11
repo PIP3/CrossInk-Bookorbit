@@ -8,8 +8,8 @@
 #include <utility>
 
 #include "ActivityManager.h"  // for using the ActivityManager singleton
-#include "CrossPointSettings.h"
 #include "ActivityResult.h"
+#include "CrossPointSettings.h"
 #include "GfxRenderer.h"
 #include "MappedInputManager.h"
 #include "RenderLock.h"

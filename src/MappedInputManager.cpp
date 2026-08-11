@@ -265,8 +265,7 @@ bool MappedInputManager::isScreenTouchLongPress(int& x, int& y, const unsigned l
 bool MappedInputManager::wasScreenLongPress(int& x, int& y) const {
   if (!touchInputEnabled()) return false;
 #ifdef SIMULATOR
-  if (simulatorTouch.pressed && !simulatorTouch.longPressFired &&
-      millis() - simulatorTouch.startedAt >= 500UL) {
+  if (simulatorTouch.pressed && !simulatorTouch.longPressFired && millis() - simulatorTouch.startedAt >= 500UL) {
     simulatorTouch.longPressFired = true;
     x = simulatorTouch.startX;
     y = simulatorTouch.startY;

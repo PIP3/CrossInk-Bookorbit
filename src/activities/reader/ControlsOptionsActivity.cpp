@@ -8,8 +8,8 @@
 #include <iterator>
 
 #include "CrossPointSettings.h"
-#include "QuickActions.h"
 #include "MappedInputManager.h"
+#include "QuickActions.h"
 #include "SettingsList.h"
 #include "activities/settings/ButtonRemapActivity.h"
 #include "activities/settings/QuickActionsActivity.h"
