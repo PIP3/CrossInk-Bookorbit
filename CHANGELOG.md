@@ -11,6 +11,9 @@
 - Nearby Position Sync now tolerates repeated nearby position packets while a reader is preparing the received location.
 - Large EPUB tables now use a bounded row-streaming grid on low-memory devices, preserving readable styled cells and falling back explicitly for unsupported table structures.
 - Dictionary definition popups no longer leave an empty white button-hint block over the reader page.
+- Large EPUB tables now use a bounded row-streaming grid on low-memory devices, preserving readable styled cells and falling back explicitly for unsupported table structures.
+- Dictionary definition popups no longer leave an empty white button-hint block over the reader page.
+- Recent Books and KOReader Sync settings now remain intact after returning from lightweight network screens.
 - XTCH cover and thumbnail generation now stays within the available memory on X3/X4 after its cache is cleared.
 - Change Font shortcuts now switch away from an active SD-card font instead of reindexing with the same font.
 - Network connections no longer trigger repeated full-panel flashes.
@@ -28,6 +31,7 @@
 - Cancelling a chapter, footnote, location, or QR screen opened from the EPUB menu returns to that menu.
 - EPUB and XTC readers retain less memory during ordinary reading by loading end-of-book suggestions only when needed.
 - Long inherited dictionary-font names no longer overlap or extend beyond Font Options rows at Large UI size.
+- KOReader Sync progress no longer remains interleaved with EPUB image pages after returning to the reader.
 
 ## [v1.5.0] - 2026-08-08
 

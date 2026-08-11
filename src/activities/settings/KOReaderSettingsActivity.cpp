@@ -50,6 +50,7 @@ void KOReaderSettingsActivity::onEnter() {
   applySharedUiTheme(app, uiTarget);
   app.on(ACTION_ROW, &KOReaderSettingsActivity::onRowEvent, this);
   app.setScreen(&KOReaderSettingsActivity::listScreen, this);
+  KOREADER_STORE.ensureLoaded();
   requestUpdate();
 }
 

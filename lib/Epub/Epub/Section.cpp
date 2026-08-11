@@ -17,8 +17,10 @@
 namespace {
 constexpr uint32_t SECTION_CACHE_MAGIC = 0x535843FF;  // bytes: 0xFF, "CXS"
 // v62: protect image-height page units from byte-density extrapolation.
-// v61: clamp inline-image top margins after page decisions, invalidating page
-// placements that can otherwise extend a viewport-height image beyond the page.
+// v61: compact low-memory table rows and colspan-aware table fragments change
+// the serialized page payload; it also clamps inline-image top margins after
+// page decisions, invalidating layouts that can extend viewport-height images
+// beyond the page.
 constexpr uint8_t SECTION_FILE_VERSION = 62;
 // Suspended incremental build: valid pages plus LUTs and a parse-watermark trailer.
 // Change this with layout or payload changes so stale partial pages cannot resume
