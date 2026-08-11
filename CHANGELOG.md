@@ -6,6 +6,7 @@
 
 ### Changed
 
+- Reader menu settings now group Controls and Mark as Finished with the gear-tab actions in a consistent order.
 - Font Family choices now identify built-in and SD-card fonts by their available point-size ranges.
 
 ### Fixed
