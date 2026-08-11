@@ -275,7 +275,9 @@ void PageTableFragment::render(GfxRenderer& renderer, const int fontId, const in
   for (uint8_t i = 0; i < columnCount; i++) {
     columnStarts[i] = static_cast<int16_t>((static_cast<uint32_t>(width) * i) / columnCount);
   }
-  columnStarts[columnCount] = static_cast<int16_t>(width - 1);
+  // Text clips use a half-open right edge; keep the final cell's full width
+  // available while the border itself remains one pixel inside the table.
+  columnStarts[columnCount] = static_cast<int16_t>(width);
 
   renderer.drawRect(drawX, drawY, width, totalHeight, foregroundBlack);
 

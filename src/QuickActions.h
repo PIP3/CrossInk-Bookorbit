@@ -1,5 +1,6 @@
 #pragma once
 
+#include <CrossInkHalFrontlight.h>
 #include <HalGPIO.h>
 #include <HalTiltSensor.h>
 #include <I18n.h>
@@ -45,6 +46,8 @@ inline constexpr std::array<StrId, CrossPointSettings::QUICK_ACTION_SLOT_ACTION_
 inline bool supportsTiltPageTurn() { return halTiltSensor.isAvailable(); }
 
 inline bool isActionAvailable(const uint8_t action) {
+  if (action == CrossPointSettings::TOGGLE_FRONTLIGHT) return Frontlight.present();
+  if (action == CrossPointSettings::TOGGLE_TOUCHSCREEN) return gpio.hasTouch();
   if (action < CrossPointSettings::QUICK_ACTION_SLOT_ACTION_COUNT) {
     return action != CrossPointSettings::TOGGLE_TILT_PAGE_TURN || supportsTiltPageTurn();
   }
@@ -53,6 +56,8 @@ inline bool isActionAvailable(const uint8_t action) {
 
 inline StrId actionLabel(const uint8_t action) {
   if (action < CrossPointSettings::QUICK_ACTION_SLOT_ACTION_COUNT) return actionLabels[action];
+  if (action == CrossPointSettings::TOGGLE_FRONTLIGHT) return StrId::STR_TOGGLE_FRONTLIGHT;
+  if (action == CrossPointSettings::TOGGLE_TOUCHSCREEN) return StrId::STR_TOGGLE_TOUCHSCREEN;
   return StrId::STR_HOME_BUTTON_LOCK;
 }
 

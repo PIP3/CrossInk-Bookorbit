@@ -586,7 +586,9 @@ inline const std::vector<SettingInfo>& getBaseSettingsList() {
                            StrId::STR_SAVE_CLIPPING,
                            StrId::STR_LOOKUP,
                            StrId::STR_HOME_BUTTON_LOCK,
-                           StrId::STR_QUICK_ACTIONS},
+                           StrId::STR_QUICK_ACTIONS,
+                           StrId::STR_TOGGLE_FRONTLIGHT,
+                           StrId::STR_TOGGLE_TOUCHSCREEN},
                           "shortPwrBtn", StrId::STR_CAT_CONTROLS)
             .withEnumRawValues({CrossPointSettings::IGNORE,
                                 CrossPointSettings::SLEEP,
@@ -611,7 +613,9 @@ inline const std::vector<SettingInfo>& getBaseSettingsList() {
                                 CrossPointSettings::CREATE_CLIPPING,
                                 CrossPointSettings::LOOKUP_WORD,
                                 CrossPointSettings::TOGGLE_HOME_BUTTON_IN_READER,
-                                CrossPointSettings::QUICK_ACTIONS}));
+                                CrossPointSettings::QUICK_ACTIONS,
+                                CrossPointSettings::TOGGLE_FRONTLIGHT,
+                                CrossPointSettings::TOGGLE_TOUCHSCREEN}));
     add(SettingInfo::Enum(StrId::STR_LONG_PRESS_ACTION, &CrossPointSettings::longPwrBtn,
                           {StrId::STR_IGNORE,
                            StrId::STR_SLEEP,
@@ -636,7 +640,9 @@ inline const std::vector<SettingInfo>& getBaseSettingsList() {
                            StrId::STR_SAVE_CLIPPING,
                            StrId::STR_LOOKUP,
                            StrId::STR_HOME_BUTTON_LOCK,
-                           StrId::STR_QUICK_ACTIONS},
+                           StrId::STR_QUICK_ACTIONS,
+                           StrId::STR_TOGGLE_FRONTLIGHT,
+                           StrId::STR_TOGGLE_TOUCHSCREEN},
                           "longPwrBtn", StrId::STR_CAT_CONTROLS)
             .withEnumRawValues({CrossPointSettings::IGNORE,
                                 CrossPointSettings::SLEEP,
@@ -661,7 +667,9 @@ inline const std::vector<SettingInfo>& getBaseSettingsList() {
                                 CrossPointSettings::CREATE_CLIPPING,
                                 CrossPointSettings::LOOKUP_WORD,
                                 CrossPointSettings::TOGGLE_HOME_BUTTON_IN_READER,
-                                CrossPointSettings::QUICK_ACTIONS}));
+                                CrossPointSettings::QUICK_ACTIONS,
+                                CrossPointSettings::TOGGLE_FRONTLIGHT,
+                                CrossPointSettings::TOGGLE_TOUCHSCREEN}));
     add(SettingInfo::Enum(StrId::STR_IN_READER, &CrossPointSettings::homeButtonInReaderEnabled,
                           {StrId::STR_ENABLED, StrId::STR_DISABLED}, "homeButtonInReaderEnabled",
                           StrId::STR_CAT_CONTROLS)
@@ -988,6 +996,13 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
       if (setting.nameId == StrId::STR_SHORT_PWR_BTN || setting.nameId == StrId::STR_LONG_PRESS_ACTION) {
         removeEnumRawValue(setting, CrossPointSettings::TOGGLE_HOME_BUTTON_IN_READER);
       }
+    }
+  }
+  if (!Frontlight.present() || !gpio.hasTouch()) {
+    for (auto& setting : v) {
+      if (setting.nameId != StrId::STR_SHORT_PWR_BTN && setting.nameId != StrId::STR_LONG_PRESS_ACTION) continue;
+      if (!Frontlight.present()) removeEnumRawValue(setting, CrossPointSettings::TOGGLE_FRONTLIGHT);
+      if (!gpio.hasTouch()) removeEnumRawValue(setting, CrossPointSettings::TOGGLE_TOUCHSCREEN);
     }
   }
   if (registry && registry->getFamilyCount() > 0) {

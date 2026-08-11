@@ -2,12 +2,18 @@
 
 ### Added
 
+- Power-button shortcuts and Quick Actions can now toggle the frontlight or reader touchscreen when supported.
+
 ### Changed
 
+- Reader menu settings now group Controls and Mark as Finished with the gear-tab actions in a consistent order.
 - Font Family choices now identify built-in and SD-card fonts by their available point-size ranges.
 
 ### Fixed
 
+- Long-pressing Up or Down in long popup lists now advances by a full page.
+- Compact EPUB table cells now retain their full final-column width so wrapped text is not clipped.
+- Nearby Position Sync now leaves the sending device with a single Back action after the position is shared.
 - Clearing an EPUB's reading cache now returns Home so the book can rebuild its cache safely when reopened.
 - Nearby Position Sync now tolerates repeated nearby position packets while a reader is preparing the received location.
 - Large EPUB tables now use a bounded row-streaming grid on low-memory devices, preserving readable styled cells and falling back explicitly for unsupported table structures.

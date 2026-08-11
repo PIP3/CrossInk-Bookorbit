@@ -233,6 +233,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     // Keep Quick Actions separate so existing Home-key mappings retain their meaning.
     TOGGLE_HOME_BUTTON_IN_READER = 26,
     QUICK_ACTIONS = 27,
+    TOGGLE_FRONTLIGHT = 28,
+    TOGGLE_TOUCHSCREEN = 29,
     SHORT_PWRBTN_COUNT
   };
 
