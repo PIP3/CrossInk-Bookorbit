@@ -251,6 +251,12 @@ Binary layout:
 
 ## `section.bin`
 
+### Version 64
+
+Version 64 lets narrow table cells split an oversized word at a safe UTF-8
+boundary when normal hyphenation cannot fit it. Complete and suspended section
+caches rebuild together; suspended partial caches use version `0xF7`.
+
 ### Version 63
 
 Version 63 changes dense eight-column table geometry so the leading label

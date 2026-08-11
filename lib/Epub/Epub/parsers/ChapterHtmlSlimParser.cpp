@@ -1050,7 +1050,7 @@ bool ChapterHtmlSlimParser::streamCurrentTableRow() {
             renderer, fontId,
             TableColumnLayout::innerWidth(tableWidth, columnCount, static_cast<uint8_t>(cellIndex), 1,
                                           TABLE_CELL_PADDING),
-            [&destCell](const std::shared_ptr<TextBlock>& textBlock) { destCell.lines.push_back(textBlock); })) {
+            [&destCell](const std::shared_ptr<TextBlock>& textBlock) { destCell.lines.push_back(textBlock); }, true)) {
       fallbackStreamingTableToParagraphs("cell layout failed");
       return !lowMemoryAbort;
     }
@@ -1302,7 +1302,8 @@ void ChapterHtmlSlimParser::emitBufferedTableAsFragments(BufferedTable& table) {
                 renderer, fontId,
                 TableColumnLayout::innerWidth(tableWidth, columnCount, static_cast<uint8_t>(colIndex), 1,
                                               TABLE_CELL_PADDING),
-                [&destCell](const std::shared_ptr<TextBlock>& textBlock) { destCell.lines.push_back(textBlock); })) {
+                [&destCell](const std::shared_ptr<TextBlock>& textBlock) { destCell.lines.push_back(textBlock); },
+                true)) {
           LOG_DBG("EHP", "Table layout fallback: cell text layout failed");
           return false;
         }
