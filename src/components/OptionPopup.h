@@ -373,6 +373,7 @@ class OptionPopup {
   std::function<void()> onSaveCallback;
   std::function<void()> onCancelCallback;
   int primaryOptionIndex = -1;
+  ButtonNavigator buttonNavigator;
   mutable Layout layout;
   mutable bool layoutValid = false;
 
