@@ -19,13 +19,13 @@ TouchActionButtons::Layout touchActionLayout(const Rect& screen, const ThemeMetr
   const Rect container{screen.x + metrics.contentSidePadding,
                        screen.y + screen.height - metrics.verticalSpacing - totalHeight,
                        std::max(1, screen.width - metrics.contentSidePadding * 2), totalHeight};
-  return TouchActionButtons::vertical(container, 2);
+  return TouchActionButtons::vertical(container, buttonCount);
 }
 
 void drawTouchActionButtons(GfxRenderer& renderer, const Rect& screen, const ThemeMetrics& metrics,
                             const char* confirmLabel, const bool backOnly = false) {
   const auto actions = touchActionLayout(screen, metrics, backOnly ? 1 : 2);
-  const char* labels[] = {backOnly ? tr(STR_BACK) : confirmLabel, backOnly ? nullptr : tr(STR_CANCEL)};
+  const char* labels[] = {backOnly ? tr(STR_DONE) : confirmLabel, backOnly ? nullptr : tr(STR_CANCEL)};
   TouchActionButtons::draw(renderer, actions, labels, 0, -1, UI_10_FONT_ID);
 }
 
