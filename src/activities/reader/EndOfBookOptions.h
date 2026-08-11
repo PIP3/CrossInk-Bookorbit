@@ -72,8 +72,6 @@ class EndOfBookOptions {
   // render() rebuilds the app's interaction table; handleMenuInput() only routes touch
   // snapshots against it while this is true (the two run on different tasks).
   std::atomic<bool> uiReady{false};
-  // Row index dispatched by onRowEvent during the current route() call; -1 otherwise.
-  int tappedRow = -1;
 
   std::string fullPath(size_t index) const;
 };

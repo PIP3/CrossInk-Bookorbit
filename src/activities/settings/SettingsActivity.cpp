@@ -764,12 +764,16 @@ void SettingsActivity::loop() {
   // Swipes scroll the viewport; the selection stays put (it may scroll
   // off-screen) and button navigation pulls the view back to it.
   const auto swipe = mappedInput.wasSwipe();
+#if CROSSINK_APP_CAP_TOUCH
   const bool landscapeTouch = useLandscapeTouchLayout(renderer);
   // The frontlight shortcut keeps its quick exit in landscape, but only from
   // the X4 Pro's lower-edge gesture band. Other upward swipes scroll the list.
   const bool dismissLandscapeFromBottomEdge = landscapeTouch && mappedInput.wasBottomEdgeUpSwipe();
   if (dismissOnUpSwipe && swipe == MappedInputManager::SwipeDir::Up &&
       (!landscapeTouch || dismissLandscapeFromBottomEdge)) {
+#else
+  if (dismissOnUpSwipe && swipe == MappedInputManager::SwipeDir::Up) {
+#endif
     SETTINGS.saveToFile();
     finish();
     return;
@@ -1120,7 +1124,9 @@ void SettingsActivity::settingsScreen(UiApp::ScreenType& screen, void* user) {
 
 void SettingsActivity::buildSettingsScreen(UiApp::ScreenType& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
+#if CROSSINK_APP_CAP_TOUCH
   const bool landscapeTouch = useLandscapeTouchLayout(renderer);
+#endif
   // Content starts directly below the compact header divider.
   screen.setContentMargin(fui::Insets{static_cast<int16_t>(settingsTabBarTop(metrics)), 0,
                                       static_cast<int16_t>(metrics.buttonHintsHeight), 0});
@@ -1191,6 +1197,7 @@ void SettingsActivity::buildSettingsScreen(UiApp::ScreenType& screen) {
     tabStyles.active = tabStyles.selected;
     tabProps.tabStyles = tabStyles;
   }
+#if CROSSINK_APP_CAP_TOUCH
   if (landscapeTouch) {
     // Landscape has width to spare but little vertical room. Keep categories
     // in a left rail so the settings list can use the full remaining height.
@@ -1213,7 +1220,9 @@ void SettingsActivity::buildSettingsScreen(UiApp::ScreenType& screen) {
     screen.target().fill(fui::Rect{static_cast<int16_t>(body.x + railWidth - 1), body.y, 1, body.height},
                          fui::Paint::solid(fui::Color::Black));
     screen.insetContent(fui::Insets{0, 0, 0, static_cast<int16_t>(railWidth + metrics.verticalSpacing)});
-  } else {
+  } else
+#endif
+  {
     const fui::Rect tabRect = screen.takeTop(tabBand);
     if (!roundedRaffTabs && !borderedTabs && tabsFocused) {
       screen.target().fill(tabRect, fui::Paint::dither(fui::Color::LightGray));

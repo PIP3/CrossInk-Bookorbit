@@ -4,6 +4,9 @@
 #include <GfxRenderer.h>
 #include <I18n.h>
 
+#include <algorithm>
+#include <iterator>
+
 #include "CrossPointSettings.h"
 #include "ReaderUtils.h"
 #include "components/UITheme.h"
@@ -37,9 +40,7 @@ void EndOfBookOptions::loadOnce(const std::string& currentBookPath) {
   selector = 0;
   if (!names.empty()) {
     rowLabels.reserve(names.size() + 1);
-    for (const auto& name : names) {
-      rowLabels.push_back(displayName(name));
-    }
+    std::transform(names.begin(), names.end(), std::back_inserter(rowLabels), displayName);
     rowLabels.emplace_back(tr(STR_EOB_HOME));
     rowCount = static_cast<uint16_t>(rowLabels.size());
     for (uint16_t index = 0; index < rowCount; ++index) {
@@ -75,19 +76,18 @@ void EndOfBookOptions::onRowEvent(const fui::ActionEvent& event, void* user) {
   // The tapped row leaves this screen (open book or home); a lingering flash
   // would gray an unrelated element on the next render.
   self->app.clearTapFlash();
-  self->tappedRow = event.value;
 }
 
 EndOfBookOptions::Action EndOfBookOptions::handleMenuInput(const MappedInputManager& input, std::string* openPath) {
   // Touch goes through the FreeInkApp: render() registered the row hit rects;
-  // route the snapshot and let onRowEvent record the tapped row.
+  // route the snapshot and consume the dispatched row from the returned event.
   if (uiReady.load(std::memory_order_acquire)) {
     const fui::InputSnapshot snap = touchSnapshotFrom(input);
     if (snap.touchPressed || snap.touchReleased) {
-      tappedRow = -1;
       const auto event = app.route(snap);
-      if (event && tappedRow >= 0) {
-        if (tappedRow < static_cast<int>(names.size())) {
+      if (event.action == ACTION_ROW && event.value >= 0 && event.value <= static_cast<int16_t>(names.size())) {
+        const auto tappedRow = static_cast<size_t>(event.value);
+        if (tappedRow < names.size()) {
           if (openPath) {
             *openPath = fullPath(tappedRow);
           }

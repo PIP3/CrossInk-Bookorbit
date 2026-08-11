@@ -4,7 +4,9 @@
 #include <I18n.h>
 
 #include <algorithm>
+#include <iterator>
 
+#include "AppCapabilities.h"
 #include "CrossPointSettings.h"
 #include "QuickActions.h"
 
@@ -15,10 +17,15 @@ constexpr StrId triggerLabels[] = {StrId::STR_NONE_OPT, StrId::STR_SHORT_PRESS_P
 std::vector<QuickActions::Trigger> availableTriggers() {
   std::vector<QuickActions::Trigger> triggers = {QuickActions::Trigger::None, QuickActions::Trigger::ShortPower,
                                                  QuickActions::Trigger::LongPower};
+#if CROSSINK_APP_CAP_TOUCH
   if (!gpio.hasTouch()) {
     triggers.push_back(QuickActions::Trigger::LongBack);
     triggers.push_back(QuickActions::Trigger::LongMenu);
   }
+#else
+  triggers.push_back(QuickActions::Trigger::LongBack);
+  triggers.push_back(QuickActions::Trigger::LongMenu);
+#endif
   return triggers;
 }
 
@@ -88,7 +95,8 @@ void QuickActionsActivity::editSlot(uint8_t slot) {
   const auto actions = availableActions();
   std::vector<std::string> labels;
   labels.reserve(actions.size());
-  for (const uint8_t action : actions) labels.emplace_back(I18N.get(QuickActions::actionLabel(action)));
+  std::transform(actions.begin(), actions.end(), std::back_inserter(labels),
+                 [](const uint8_t action) { return I18N.get(QuickActions::actionLabel(action)); });
   const auto currentIt = std::find(actions.begin(), actions.end(), draftSlots[slot]);
   const uint8_t current = currentIt == actions.end() ? 0 : static_cast<uint8_t>(currentIt - actions.begin());
   popup.show(StrId::STR_QUICK_ACTIONS, labels, current, [this, slot, actions](int selected) {

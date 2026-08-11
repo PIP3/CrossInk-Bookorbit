@@ -1100,16 +1100,24 @@ void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, 
   const EpdFontFamily::Style optionStyle =
       metrics.optionPopupOptionFontBold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR;
 
+#if CROSSINK_APP_CAP_TOUCH
   const bool touchActionStyle = gpio.hasTouch() && primaryOptionIndex >= 0 && options.size() == 2;
   const int itemSpacing = touchActionStyle ? TouchActionButtons::kDefaultGap : metrics.optionPopupItemSpacing;
+#else
+  const int itemSpacing = metrics.optionPopupItemSpacing;
+#endif
   const int innerPadding = metrics.optionPopupInnerPadding;
   const int selectionHPadding = metrics.optionPopupSelectionHPadding;
   const int selectionVPadding = metrics.optionPopupSelectionVPadding;
 
   const int optionLineHeight = renderer.getLineHeight(optionFontId);
   const int titleLineHeight = renderer.getLineHeight(UI_12_FONT_ID);
+#if CROSSINK_APP_CAP_TOUCH
   const int rowHeight =
       touchActionStyle ? TouchActionButtons::kDefaultHeight : optionLineHeight + selectionVPadding * 2;
+#else
+  const int rowHeight = optionLineHeight + selectionVPadding * 2;
+#endif
 
   int maxTextWidth = renderer.getTextWidth(UI_12_FONT_ID, title, EpdFontFamily::BOLD);
   for (size_t i = 0; i < options.size(); ++i) {
@@ -1125,7 +1133,6 @@ void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, 
   }
 
   constexpr int footerHeight = 56;
-  const bool touch = gpio.hasTouch();
   const int footerSpace = showConfirmationFooter ? footerHeight : 0;
   const int maxDialogH =
       std::max(rowHeight + titleLineHeight + metrics.optionPopupTitleGap + innerPadding * 2 + footerSpace,
@@ -1205,6 +1212,7 @@ void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, 
     renderer.fillRect(scrollBarX - metrics.scrollBarWidth, scrollBarY, metrics.scrollBarWidth, scrollBarHeight, true);
   }
 
+#if CROSSINK_APP_CAP_TOUCH
   if (touchActionStyle && visibleCount == 2) {
     const auto actionLayout = TouchActionButtons::vertical(Rect{itemRectX, y, itemRectW, listHeight},
                                                            static_cast<uint8_t>(visibleCount), rowHeight, itemSpacing);
@@ -1214,7 +1222,9 @@ void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, 
                             options[visibleStart + secondaryOffset].c_str()};
     const int selectedVisualIndex = safeSelectedIndex == primaryOptionIndex ? 0 : 1;
     TouchActionButtons::draw(renderer, actionLayout, labels, 0, saveFocused ? -1 : selectedVisualIndex, optionFontId);
-  } else {
+  } else
+#endif
+  {
     for (int visibleIndex = 0; visibleIndex < visibleCount; visibleIndex++) {
       const int optionIndex = visibleStart + visibleIndex;
       const int itemY = y + visibleIndex * (rowHeight + itemSpacing);
