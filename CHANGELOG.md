@@ -6,6 +6,7 @@
 
 ### Changed
 
+- Waking from deep sleep now keeps the selected sleep screen visible until Home or the reader is ready, removing the boot-up splash screen.
 - Reader menu settings now group Controls and Mark as Finished with the gear-tab actions in a consistent order.
 - Font Family choices now identify built-in and SD-card fonts by their available point-size ranges.
 
