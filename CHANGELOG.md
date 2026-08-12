@@ -3,6 +3,7 @@
 ### Added
 
 - Power-button shortcuts and Quick Actions can now toggle the frontlight or reader touchscreen when supported.
+- On one-cover Lyra, Dashboard, and Minimal Home screens, swipe left to switch between the two most recent books.
 
 ### Changed
 
