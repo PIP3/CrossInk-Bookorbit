@@ -61,6 +61,8 @@ jobs:
           config.read('platformio.ini')
           default_envs = config.get('platformio', 'default_envs', fallback='')
           envs = [part.strip() for part in default_envs.split(',') if part.strip()]
+          if 'x4-pro' not in envs:
+              envs.append('x4-pro')
           print(' '.join(envs))
           PY
           )
@@ -75,7 +77,7 @@ jobs:
         run: |
           VERSION="${RC_BRANCH_RAW}-RC"
           escaped_version=$(printf '%s\n' "$VERSION" | sed 's/[&|]/\\&/g')
-          sed -i "s|^crossink_version = .*|crossink_version = ${escaped_version}|" platformio.ini
+          sed -i "/^\[crossink\]$/,/^\[/s|^version = .*|version = ${escaped_version}|" platformio.ini
 
       - name: Build CrossInk
         shell: bash
@@ -84,11 +86,9 @@ jobs:
           CROSSINK_RC_BRANCH: ${{ env.RC_BRANCH_RAW }}
           CROSSINK_RC_HASH: ${{ env.RC_HASH_SHORT }}
         run: |
-          build_args=()
           for env_name in $RC_ENVS; do
-            build_args+=(-e "$env_name")
+            pio run -j1 -e "$env_name"
           done
-          pio run -j1 "${build_args[@]}"
 
       - name: Create GitHub RC Prerelease
         uses: softprops/action-gh-release@v3
@@ -104,3 +104,4 @@ jobs:
           files: |
             .pio/build/default/firmware-x3-x4-${{ env.RC_BRANCH_SAFE }}-${{ env.RC_HASH_SHORT }}-RC.bin
             .pio/build/sticky/firmware-sticky-${{ env.RC_BRANCH_SAFE }}-${{ env.RC_HASH_SHORT }}-RC.bin
+            .pio/build/x4-pro/firmware-x4-pro-${{ env.RC_BRANCH_SAFE }}-${{ env.RC_HASH_SHORT }}-RC.bin

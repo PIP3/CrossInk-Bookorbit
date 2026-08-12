@@ -50,6 +50,8 @@ jobs:
             firmware: firmware-x3-x4
           - environment: sticky
             firmware: firmware-sticky
+          - environment: x4-pro
+            firmware: firmware-x4-pro
     steps:
       - uses: actions/checkout@v6
         with:
@@ -125,6 +127,7 @@ jobs:
             --repo "${{ github.repository }}" \
             --firmware "release-firmware/firmware-x3-x4-v${{ env.RELEASE_VERSION }}.bin" \
             --firmware "release-firmware/firmware-sticky-v${{ env.RELEASE_VERSION }}.bin" \
+            --firmware "release-firmware/firmware-x4-pro-v${{ env.RELEASE_VERSION }}.bin" \
             --output ".pio/build/catalog"
 
       - name: Publish catalog to GitHub Pages source
@@ -169,3 +172,4 @@ jobs:
           files: |
             release-firmware/firmware-x3-x4-v${{ env.RELEASE_VERSION }}.bin
             release-firmware/firmware-sticky-v${{ env.RELEASE_VERSION }}.bin
+            release-firmware/firmware-x4-pro-v${{ env.RELEASE_VERSION }}.bin

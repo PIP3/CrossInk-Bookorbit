@@ -1,7 +1,9 @@
-## [Unreleased]
+## [1.5.1] - 2026-08-12
 
 ### Added
 
+- Full X4 Pro support
+- New Quick Actions menu
 - Power-button shortcuts and Quick Actions can now toggle the frontlight or reader touchscreen when supported.
 - On one-cover Lyra, Dashboard, and Minimal Home screens, swipe left to switch between the two most recent books.
 
