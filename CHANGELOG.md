@@ -9,6 +9,7 @@
 
 ### Changed
 
+- Wi-Fi passwords are now shown while entering them, making corrections easier on-device.
 - EPUB progress calculations now reuse a bounded in-memory spine-size index while reading, reducing repeated SD-card seeks.
 - Waking from deep sleep now keeps the selected sleep screen visible until Home or the reader is ready, removing the boot-up splash screen.
 - Reader menu settings now group Controls and Mark as Finished with the gear-tab actions in a consistent order.
