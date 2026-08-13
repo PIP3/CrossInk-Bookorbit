@@ -9,6 +9,7 @@
 
 ### Changed
 
+- Wi-Fi passwords are now shown while entering them, making corrections easier on-device.
 - EPUB progress calculations now reuse a bounded in-memory spine-size index while reading, reducing repeated SD-card seeks.
 - Waking from deep sleep now keeps the selected sleep screen visible until Home or the reader is ready, removing the boot-up splash screen.
 - Reader menu settings now group Controls and Mark as Finished with the gear-tab actions in a consistent order.
@@ -16,11 +17,13 @@
 
 ### Fixed
 
+- Fixed an X4 Pro startup crash in debug and USB-enabled builds.
 - Long-pressing Up or Down in long popup lists now advances by a full page.
 - EPUB table fixes now preserve final-column widths, give dense tables enough space for leading labels, and split oversized words instead of clipping them.
 - Nearby Position Sync now leaves the sending device with a single Back action after sharing a position and tolerates repeated packets while the receiving reader prepares the location.
 - Clearing an EPUB's reading cache now returns Home so the book can rebuild its cache safely when reopened.
 - Large EPUB tables now use a bounded row-streaming grid on low-memory devices, preserving readable styled cells and falling back explicitly for unsupported table structures.
+- Large EPUBs with thousands of chapters can now finish indexing on X3/X4 without running out of memory.
 - Dictionary definition popups no longer leave an empty white button-hint block over the reader page.
 - Recent Books and KOReader Sync settings now remain intact after returning from lightweight network screens.
 - XTCH cover and thumbnail generation now stays within the available memory on X3/X4 after its cache is cleared.

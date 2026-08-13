@@ -382,7 +382,8 @@ class EpubReaderActivity final : public Activity {
   void jumpToPercent(int percent);
   void reindexCurrentSection();
   void prepareCurrentSectionForRelayout();
-  void executeReaderQuickAction(CrossPointSettings::LONG_PRESS_MENU_ACTION action);
+  void executeReaderQuickAction(CrossPointSettings::LONG_PRESS_MENU_ACTION action,
+                                bool dictionaryLookupFramebufferContainsPage = true);
   void openQuickActionsPopup();
   bool quickActionUsesConfirmRelease(CrossPointSettings::LONG_PRESS_MENU_ACTION action) const;
   bool quickActionUsesPowerRelease(CrossPointSettings::LONG_PRESS_MENU_ACTION action) const;

@@ -4031,7 +4031,8 @@ void EpubReaderActivity::resetCurrentBookStatsAfterDelete() {
   initializeCompletionPromptTrigger();
 }
 
-void EpubReaderActivity::executeReaderQuickAction(CrossPointSettings::LONG_PRESS_MENU_ACTION action) {
+void EpubReaderActivity::executeReaderQuickAction(CrossPointSettings::LONG_PRESS_MENU_ACTION action,
+                                                  const bool dictionaryLookupFramebufferContainsPage) {
   switch (action) {
     case CrossPointSettings::LONG_MENU_SLEEP:
       enterDeepSleep();
@@ -4129,7 +4130,7 @@ void EpubReaderActivity::executeReaderQuickAction(CrossPointSettings::LONG_PRESS
       break;
     case CrossPointSettings::LONG_MENU_LOOKUP_WORD:
       if (epub && Dictionary::exists(epub->getCachePath().c_str())) {
-        openWordSelect(/*framebufferContainsPage=*/true);
+        openWordSelect(dictionaryLookupFramebufferContainsPage);
       } else {
         drawToast(renderer, tr(STR_DICT_NO_DICT_SET));
         delay(1000);
@@ -4304,7 +4305,18 @@ bool EpubReaderActivity::handleShortcutAction(const CrossPointSettings::SHORT_PW
 }
 
 void EpubReaderActivity::openQuickActionsPopup() {
-  QuickActions::showConfiguredPopup(quickActionsPopup, [this] { requestUpdate(); });
+  QuickActions::showConfiguredPopup(
+      quickActionsPopup, [this] { requestUpdate(); },
+      [this](const auto action) {
+        if (action == CrossPointSettings::SHORT_PWRBTN::LOOKUP_WORD) {
+          // The popup was the most recent render, so word selection must redraw
+          // the reader page instead of reusing the popup framebuffer.
+          executeReaderQuickAction(CrossPointSettings::LONG_MENU_LOOKUP_WORD,
+                                   /*dictionaryLookupFramebufferContainsPage=*/false);
+          return;
+        }
+        dispatchShortcutAction(action);
+      });
 }
 
 bool EpubReaderActivity::quickActionUsesConfirmRelease(const CrossPointSettings::LONG_PRESS_MENU_ACTION action) const {

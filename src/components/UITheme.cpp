@@ -40,8 +40,10 @@ std::string addBmpSuffix(const std::string& path, const char* suffix) {
 UITheme UITheme::instance;
 
 UITheme::UITheme() {
-  auto themeType = static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme);
-  setTheme(themeType);
+  // Static construction must not log or depend on cross-TU serial initialization;
+  // main.cpp reloads the saved theme after setup.
+  currentTheme = std::make_unique<LyraTheme>();
+  currentMetrics = &LyraMetrics::values;
 }
 
 void UITheme::reload() {

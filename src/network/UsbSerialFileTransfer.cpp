@@ -27,6 +27,7 @@ constexpr size_t LINE_BUFFER_SIZE = 80;
 constexpr size_t REMOVE_RECURSIVE_MAX_DEPTH = 8;
 constexpr uint32_t SHORT_TIMEOUT_MS = 1000;
 constexpr uint32_t HEADER_TIMEOUT_MS = 2000;
+constexpr uint32_t CHECKSUM_TIMEOUT_MS = 10000;
 constexpr uint32_t CHUNK_TIMEOUT_MS = 45000;
 constexpr const char* TEMP_UPLOAD_PATH = "/.crosspoint/usb-upload.tmp";
 constexpr const char* INTERNAL_DIR = "/.crosspoint";
@@ -415,7 +416,9 @@ void handleWrite() {
       writeLine("ERR:write\n");
       return;
     }
-    writeAck();
+    if (remaining > 0) {
+      writeAck();
+    }
     esp_task_wdt_reset();
     yield();
   }
@@ -428,8 +431,15 @@ void handleWrite() {
   }
   file.close();
 
+  if (expectedSize > 0) {
+    // Tell the host the file is saved and ready for its separately written CRC.
+    writeAck();
+  }
+
   uint8_t crcBytes[4];
-  if (!readExact(crcBytes, sizeof(crcBytes), HEADER_TIMEOUT_MS)) {
+  size_t crcBytesReceived = 0;
+  if (!readExact(crcBytes, sizeof(crcBytes), CHECKSUM_TIMEOUT_MS, &crcBytesReceived)) {
+    LOG_ERR("USB", "CRC read timed out after %zu/%zu bytes", crcBytesReceived, sizeof(crcBytes));
     Storage.remove(TEMP_UPLOAD_PATH);
     writeLine("ERR:crc_missing\n");
     return;

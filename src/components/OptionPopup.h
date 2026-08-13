@@ -222,8 +222,10 @@ class OptionPopup {
         save(input, requestUpdate, true);
       }
       return true;
-    } else if (input.wasPressed(MappedInputManager::Button::Back)) {
-      cancel(input, requestUpdate, true);
+    } else if (input.wasReleased(MappedInputManager::Button::Back)) {
+      // Consume the release that closes the popup so a reader does not also
+      // treat it as its Back-to-Home action on the following frame.
+      cancel(input, requestUpdate, false);
       return true;
     }
     return true;
