@@ -249,9 +249,19 @@ void NearbyStatsSyncActivity::loop() {
 
 bool NearbyStatsSyncActivity::beginEspNow() {
   WiFi.mode(WIFI_STA);
-  WiFi.disconnect(false);
+  // A saved station can begin reconnecting as soon as STA mode starts. ESP-IDF
+  // cannot change channels while it is associating, which is especially easy
+  // to hit on the X4 Pro's faster S3 radio.
+  if (!WiFi.disconnect(false, false, 1000)) {
+    LOG_DBG(LOG_TAG, "Disconnect before ESP-NOW setup timed out");
+  }
+  delay(100);
   WiFi.setSleep(false);
-  if (esp_wifi_set_channel(ESPNOW_CHANNEL, WIFI_SECOND_CHAN_NONE) != ESP_OK) return false;
+  const esp_err_t channelResult = esp_wifi_set_channel(ESPNOW_CHANNEL, WIFI_SECOND_CHAN_NONE);
+  if (channelResult != ESP_OK) {
+    LOG_ERR(LOG_TAG, "Could not select ESP-NOW channel: %d", static_cast<int>(channelResult));
+    return false;
+  }
   esp_wifi_set_ps(WIFI_PS_NONE);
 
   if (esp_now_init() != ESP_OK) return false;
