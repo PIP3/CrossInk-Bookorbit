@@ -2,13 +2,15 @@
 
 ### Added
 
-- Full X4 Pro support
+- Full Xteink X4 Pro support, including USB Drive access to its SD card and direct USB file transfers.
+- New "Quick Lock" shortcut that locks the device without putting it to sleep. It can be assigned to Power + Up, long-press Back, or long-press Menu shortcuts and uses the regular sleep timeout.
 - New Quick Actions menu
 - Power-button shortcuts and Quick Actions can now toggle the frontlight or reader touchscreen when supported.
 - On one-cover Lyra, Dashboard, and Minimal Home screens, swipe left to switch between the two most recent books.
 
 ### Changed
 
+- Shortcut action pickers now use a consistent option order while hiding actions unsupported by the selected trigger or device.
 - Wi-Fi passwords are now shown while entering them, making corrections easier on-device.
 - EPUB progress calculations now reuse a bounded in-memory spine-size index while reading, reducing repeated SD-card seeks.
 - Waking from deep sleep now keeps the selected sleep screen visible until Home or the reader is ready, removing the boot-up splash screen.
@@ -17,7 +19,8 @@
 
 ### Fixed
 
-- Fixed an X4 Pro startup crash in debug and USB-enabled builds.
+- Sleep screens now reuse a compact SD-card index for custom wallpaper folders, avoiding a full folder scan on every sleep while rebuilding safely after file changes.
+- Touch taps and on-screen keyboard presses now route reliably while UI screens redraw.
 - Long-pressing Up or Down in long popup lists now advances by a full page.
 - EPUB table fixes now preserve final-column widths, give dense tables enough space for leading labels, and split oversized words instead of clipping them.
 - Nearby Position Sync now leaves the sending device with a single Back action after sharing a position and tolerates repeated packets while the receiving reader prepares the location.
@@ -201,6 +204,7 @@
 
 ### Fixed
 
+- Quick Resume no longer shows a blank page after EPUB next-chapter indexing.
 - Calibre Wireless transfer status no longer stacks the last received-file message on top of the upload percentage.
 - X3 Tilt Direction now labels left/right choices as `Left-Right` and `Right-Left`, with existing left/right preferences migrated to keep the same physical tilt behavior.
 - EPUB layout now honors publisher page-break CSS, avoids stretching justified spaces before closing punctuation, and keeps large CSS rule sets in a smaller disk-backed lookup cache.

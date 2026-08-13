@@ -43,6 +43,39 @@ inline constexpr std::array<StrId, CrossPointSettings::QUICK_ACTION_SLOT_ACTION_
     StrId::STR_SAVE_CLIPPING,
     StrId::STR_LOOKUP};
 
+// Shared display order for shortcut pickers. The values remain the persisted
+// SHORT_PWRBTN IDs; only their presentation order is centralized here.
+inline constexpr std::array<CrossPointSettings::SHORT_PWRBTN, 28> shortcutActionOrder = {
+    CrossPointSettings::IGNORE,
+    CrossPointSettings::SLEEP,
+    CrossPointSettings::PAGE_TURN,
+    CrossPointSettings::TOGGLE_BOOKMARK,
+    CrossPointSettings::READING_STATS,
+    CrossPointSettings::MARK_FINISHED,
+    CrossPointSettings::FORCE_REFRESH,
+    CrossPointSettings::TOGGLE_FONT,
+    CrossPointSettings::TOGGLE_GUIDE_DOTS,
+    CrossPointSettings::TOGGLE_BIONIC_READING,
+    CrossPointSettings::CYCLE_PAGE_TURN,
+    CrossPointSettings::TOGGLE_TILT_PAGE_TURN,
+    CrossPointSettings::SYNC_PROGRESS,
+    CrossPointSettings::FILE_TRANSFER,
+    CrossPointSettings::CALIBRE_WIRELESS,
+    CrossPointSettings::JOIN_NETWORK,
+    CrossPointSettings::CREATE_HOTSPOT,
+    CrossPointSettings::SCREENSHOT,
+    CrossPointSettings::TOGGLE_DARK_MODE,
+    CrossPointSettings::FOOTNOTES,
+    CrossPointSettings::FILE_BROWSER,
+    CrossPointSettings::CREATE_CLIPPING,
+    CrossPointSettings::LOOKUP_WORD,
+    CrossPointSettings::TOGGLE_HOME_BUTTON_IN_READER,
+    CrossPointSettings::QUICK_ACTIONS,
+    CrossPointSettings::QUICK_LOCK,
+    CrossPointSettings::TOGGLE_FRONTLIGHT,
+    CrossPointSettings::TOGGLE_TOUCHSCREEN,
+};
+
 inline bool supportsTiltPageTurn() { return halTiltSensor.isAvailable(); }
 
 inline bool isActionAvailable(const uint8_t action) {
@@ -56,8 +89,10 @@ inline bool isActionAvailable(const uint8_t action) {
 
 inline StrId actionLabel(const uint8_t action) {
   if (action < CrossPointSettings::QUICK_ACTION_SLOT_ACTION_COUNT) return actionLabels[action];
+  if (action == CrossPointSettings::QUICK_ACTIONS) return StrId::STR_QUICK_ACTIONS;
   if (action == CrossPointSettings::TOGGLE_FRONTLIGHT) return StrId::STR_TOGGLE_FRONTLIGHT;
   if (action == CrossPointSettings::TOGGLE_TOUCHSCREEN) return StrId::STR_TOGGLE_TOUCHSCREEN;
+  if (action == CrossPointSettings::QUICK_LOCK) return StrId::STR_QUICK_LOCK;
   return StrId::STR_HOME_BUTTON_LOCK;
 }
 
