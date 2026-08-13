@@ -303,6 +303,7 @@ class EpubReaderActivity final : public Activity {
   std::string footnotePreviewCacheSuffix(EpubRenderMode renderMode, const std::string& anchor) const;
   void clearFootnotePreviewState();
   void silentIndexNextChapterIfNeeded(uint16_t viewportWidth, uint16_t viewportHeight);
+  bool restoreCurrentPageBufferAfterSilentIndex();
   // Larger batches are reserved for non-interactive work such as sleep-page preparation.
   static constexpr int BUILD_PAGES_PER_CHUNK = 8;
   // Interactive builds stop as soon as the requested page is ready and give the

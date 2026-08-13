@@ -204,6 +204,7 @@
 
 ### Fixed
 
+- Quick Resume no longer shows a blank page after EPUB next-chapter indexing.
 - Calibre Wireless transfer status no longer stacks the last received-file message on top of the upload percentage.
 - X3 Tilt Direction now labels left/right choices as `Left-Right` and `Right-Left`, with existing left/right preferences migrated to keep the same physical tilt behavior.
 - EPUB layout now honors publisher page-break CSS, avoids stretching justified spaces before closing punctuation, and keeps large CSS rule sets in a smaller disk-backed lookup cache.

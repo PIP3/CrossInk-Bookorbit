@@ -5764,6 +5764,13 @@ void EpubReaderActivity::silentIndexNextChapterIfNeeded(const uint16_t viewportW
   }
 
   releaseReaderSdFontCachesForLowMemory(renderer, "ERS", "silent next-chapter indexing");
+  // FrameBufferLoan restores the storage as a blank frame. Rebuild the visible
+  // page in RAM without refreshing the panel; the panel still holds the page.
+  if (!restoreCurrentPageBufferAfterSilentIndex()) {
+    renderer.clearScreen(ReaderUtils::readerBackgroundColor());
+    renderer.drawCenteredText(UI_12_FONT_ID, renderer.getScreenHeight() / 2, tr(STR_PAGE_LOAD_ERROR),
+                              ReaderUtils::readerForegroundBlack(), EpdFontFamily::BOLD);
+  }
 
   if (prefetchCancelled) {
     return;
@@ -5796,6 +5803,27 @@ void EpubReaderActivity::silentIndexNextChapterIfNeeded(const uint16_t viewportW
   preparedNextSpineIndex = nextSpineIndex;
   preparedNextViewportWidth = viewportWidth;
   preparedNextViewportHeight = viewportHeight;
+}
+
+bool EpubReaderActivity::restoreCurrentPageBufferAfterSilentIndex() {
+  if (!section || section->pageCount == 0 || section->currentPage < 0 ||
+      section->currentPage >= static_cast<int>(section->pageCount)) {
+    LOG_ERR("ERS", "Cannot restore reader frame after silent indexing: invalid current page");
+    return false;
+  }
+
+  auto page = section->loadPage(section->currentPage);
+  if (!page) {
+    LOG_ERR("ERS", "Failed to load current page for silent-index framebuffer restore");
+    return false;
+  }
+
+  const ReaderViewportLayout layout = computeReaderViewportLayout(renderer, automaticPageTurnActive);
+  renderer.clearScreen(ReaderUtils::readerBackgroundColor());
+  const int renderFontId = activeSectionFontId != 0 ? activeSectionFontId : SETTINGS.getReaderFontId();
+  renderContents(std::move(page), renderFontId, layout.marginTop, layout.marginRight, layout.marginBottom,
+                 layout.marginLeft, /*updatePanel=*/false);
+  return true;
 }
 
 bool EpubReaderActivity::isRelayoutCatchUpComplete() const {
