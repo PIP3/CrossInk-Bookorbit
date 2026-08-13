@@ -64,6 +64,15 @@ class MappedInputManager {
   bool wasScreenTouchDown(int& x, int& y) const;
   bool isScreenTouchTapCandidate(int& x, int& y, unsigned long& heldMs) const;
   bool isScreenTouchHeld(int& x, int& y) const;
+  // Ignore the remainder of the active contact when a touch-down action
+  // replaces the current activity before the finger lifts.
+  void suppressCurrentTouchContact() {
+    suppressNextTouchTap();
+    gpio.suppressTouchContact();
+#ifdef SIMULATOR
+    suppressSimulatedTouchContact = true;
+#endif
+  }
   bool wasItemTapped(int& id) const;
   bool wasItemTouchedDown(int& id) const;
   bool wasTabTapped(int& id) const;
@@ -124,6 +133,7 @@ class MappedInputManager {
   constexpr bool wasScreenTouchDown(int&, int&) const { return false; }
   constexpr bool isScreenTouchTapCandidate(int&, int&, unsigned long&) const { return false; }
   constexpr bool isScreenTouchHeld(int&, int&) const { return false; }
+  constexpr void suppressCurrentTouchContact() {}
   constexpr bool wasItemTapped(int&) const { return false; }
   constexpr bool wasItemTouchedDown(int&) const { return false; }
   constexpr bool wasTabTapped(int&) const { return false; }
@@ -215,6 +225,7 @@ class MappedInputManager {
     unsigned long startedAt = 0;
   };
   mutable SimulatorTouch simulatorTouch;
+  mutable bool suppressSimulatedTouchContact = false;
 #endif
 #endif
 
