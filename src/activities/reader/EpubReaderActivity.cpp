@@ -6726,15 +6726,15 @@ void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool s
   // be tapped. A destination declared in the book TOC is a chapter jump,
   // though: it must replace the current chapter instead of opening a preview.
   const bool chapterDestination = isTocChapterDestination(targetSpineIndex, anchor);
-  const bool saveFootnotePosition = savePosition && !chapterDestination;
-  if (saveFootnotePosition && section && footnoteDepth < MAX_FOOTNOTE_DEPTH) {
+  const bool saveReturnPosition = savePosition;
+  if (saveReturnPosition && section && footnoteDepth < MAX_FOOTNOTE_DEPTH) {
     savedPositions[footnoteDepth] = {currentSpineIndex, section->currentPage};
     footnoteDepth++;
   }
 
   {
     RenderLock lock(*this);
-    const bool useFootnotePreview = saveFootnotePosition && !anchor.empty() &&
+    const bool useFootnotePreview = saveReturnPosition && !chapterDestination && !anchor.empty() &&
                                     (preferFootnotePreview || shouldUseFootnotePreview(targetSpineIndex, anchor));
     pendingAnchor = anchor;
     pendingFootnotePreviewAnchor = useFootnotePreview ? anchor : std::string{};
@@ -6743,7 +6743,7 @@ void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool s
     nextPageNumber = 0;
     section.reset();
   }
-  armReadingPaceWarmup(saveFootnotePosition ? "href_navigation" : "chapter_link_navigation");
+  armReadingPaceWarmup(saveReturnPosition ? "href_navigation" : "chapter_link_navigation");
   requestUpdate();
 }
 
