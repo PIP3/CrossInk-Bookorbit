@@ -141,21 +141,13 @@ class OptionPopup {
       if (touchDownTarget == TouchTarget::Option && touchDownOptionIndex >= 0) {
         selectedIndex = touchDownOptionIndex;
         touchDownOptionIndex = -1;
-        if (confirmationMode) {
-          activateSelection(input, requestUpdate, false);
-          return true;
-        }
-        save(input, requestUpdate, false);
+        selectTouchOption(input, requestUpdate);
         return true;
       }
       for (int i = 0; i < static_cast<int>(hitLayout.options.size()); i++) {
         if (contains(hitLayout.options[i], tx, ty)) {
           selectedIndex = hitLayout.firstOptionIndex + i;
-          if (confirmationMode) {
-            activateSelection(input, requestUpdate, false);
-            return true;
-          }
-          save(input, requestUpdate, false);
+          selectTouchOption(input, requestUpdate);
           return true;
         }
       }
@@ -432,6 +424,17 @@ class OptionPopup {
     if (suppressRelease) input.suppressNextConfirmRelease();
     if (onSelectCallback) onSelectCallback(selectedIndex);
     requestUpdate();
+  }
+
+  void selectTouchOption(MappedInputManager& input, const std::function<void()>& requestUpdate) {
+    // A popup action can push a new activity before this tap release disappears
+    // from the input queue. Do not let that activity receive the popup's tap.
+    input.suppressNextTouchTap();
+    if (confirmationMode) {
+      activateSelection(input, requestUpdate, false);
+    } else {
+      save(input, requestUpdate, false);
+    }
   }
 
   void cancel(MappedInputManager& input, const std::function<void()>& requestUpdate, const bool suppressRelease) {
