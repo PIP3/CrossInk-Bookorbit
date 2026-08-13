@@ -49,9 +49,9 @@ class MappedInputManager {
   bool hasTouchHardware() const;
   // True on boards with a capacitive home key (X4 Pro), where the bottom-edge
   // up-swipe is the reader-menu gesture rather than the exit-to-home gesture.
-  // The capacitive Home key is part of the touch controller.  Treat it like
-  // screen touch so "Disable Touchscreen" also disables the key in readers.
-  bool hasHomeKey() const { return touchInputEnabled() && hasHomeKeyHardware(); }
+  // The Home key has its own reader lock setting, so it remains available when
+  // "Disable Touchscreen" turns off only screen touch input.
+  bool hasHomeKey() const { return hasHomeKeyHardware(); }
   // Capability is deliberately separate from this reader-only input gate so
   // Home-key layouts remain available while the key is locked on reader pages.
   bool isHomeButtonLockedInReader() const;
