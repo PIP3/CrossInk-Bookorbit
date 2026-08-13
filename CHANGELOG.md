@@ -2,7 +2,7 @@
 
 ### Added
 
-- Full X4 Pro support
+- Full Xteink X4 Pro support, including USB Drive access to its SD card and direct USB file transfers.
 - New Quick Actions menu
 - Power-button shortcuts and Quick Actions can now toggle the frontlight or reader touchscreen when supported.
 - On one-cover Lyra, Dashboard, and Minimal Home screens, swipe left to switch between the two most recent books.

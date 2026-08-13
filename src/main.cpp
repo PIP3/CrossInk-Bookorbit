@@ -901,11 +901,20 @@ void setup() {
   // worked without the delay because USB was already enumerated.
   delay(250);
   // Web Serial sends file data in 256-byte chunks and waits for a 1-byte ACK.
-  // HWCDC defaults to a 256-byte RX queue, which is fine for logs but too small
-  // for chunked file transfer.
+  // Native USB CDC needs a larger queue because TinyUSB can deliver several
+  // chunks before the cooperative transfer loop runs.
+#if !defined(SIMULATOR) && FREEINK_DEVICE_X4PRO && !ARDUINO_USB_MODE
+  logSerial.setRxBufferSize(4096);
+#else
   logSerial.setRxBufferSize(1024);
+#endif
+#if ARDUINO_USB_MODE
   logSerial.setTxBufferSize(1024);
+#endif
   Serial.begin(115200);
+#if !defined(SIMULATOR) && FREEINK_DEVICE_X4PRO && !ARDUINO_USB_MODE
+  UsbSerialFileTransfer::registerUsbCdcOverflowHandler();
+#endif
 #if !defined(SIMULATOR) && LOG_SERIAL_HAS_TX_TIMEOUT
   logSerial.setTxTimeoutMs(1);  // This is a load-bearing 1. Do not modify.
 #endif
@@ -1234,6 +1243,16 @@ void loop() {
 #ifdef SIMULATOR
   simulatorHomeKeyInput.update();
 #endif
+
+  if (activityManager.requiresExclusiveStorageLoop()) {
+    // Keep the serial endpoint responsive so Inky receives ERR:not_on_home,
+    // while every filesystem/UI/global path remains suspended by the activity.
+    (void)UsbSerialFileTransfer::process(false);
+    activityManager.loop();
+    delay(10);
+    return;
+  }
+
   halTiltSensor.update(SETTINGS.tiltPageTurn, SETTINGS.tiltPageTurnDirection, SETTINGS.orientation,
                        activityManager.isReaderActivity());
 

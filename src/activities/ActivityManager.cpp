@@ -26,6 +26,7 @@
 #include "network/CrossPointWebServerActivity.h"
 #include "network/NearbyBookTransferActivity.h"
 #include "network/NearbyStatsSyncActivity.h"
+#include "network/UsbDriveActivity.h"
 #include "reader/ReaderActivity.h"
 #include "settings/OpdsServerListActivity.h"
 #include "settings/SettingsActivity.h"
@@ -92,6 +93,18 @@ void ActivityManager::renderTaskLoop() {
 }
 
 void ActivityManager::loop() {
+  if (currentActivity && currentActivity->requiresExclusiveStorageLoop()) {
+    currentActivity->loop();
+    // USB Drive normally restarts the device rather than replacing itself. The
+    // pending-action fallthrough keeps the simulator's stub lifecycle usable.
+    if (pendingAction == PendingAction::None) {
+      if (requestedUpdate.exchange(false) && renderTaskHandle) {
+        xTaskNotify(renderTaskHandle, 1, eIncrement);
+      }
+      return;
+    }
+  }
+
   if (currentActivity) {
     mappedInput.setPowerAsConfirmInReaderMode(currentActivity->allowPowerAsConfirmInReaderMode());
 
@@ -341,6 +354,14 @@ void ActivityManager::goToHotspotFileTransfer(const std::string& returnBookPath)
   restartToFileTransfer(NetworkMode::CREATE_HOTSPOT, returnBookPath);
 }
 
+void ActivityManager::goToUsbDrive() {
+#if CROSSINK_APP_CAP_USB_DRIVE
+  replaceActivity(std::make_unique<UsbDriveActivity>(renderer, mappedInput));
+#else
+  LOG_ERR("ACT", "USB Drive requested in a build without USB Drive capability");
+#endif
+}
+
 bool ActivityManager::resumeFileTransferFromNetworkBoot(const uint32_t payload) {
   const uint32_t rawMode = payload & FILE_TRANSFER_MODE_MASK;
   if (rawMode > static_cast<uint32_t>(NetworkMode::CREATE_HOTSPOT)) {
@@ -497,6 +518,10 @@ void ActivityManager::popActivity() {
 }
 
 bool ActivityManager::preventAutoSleep() const { return currentActivity && currentActivity->preventAutoSleep(); }
+
+bool ActivityManager::requiresExclusiveStorageLoop() const {
+  return currentActivity && currentActivity->requiresExclusiveStorageLoop();
+}
 
 bool ActivityManager::isHomeActivity() const { return currentActivity && currentActivity->name == "Home"; }
 

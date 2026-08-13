@@ -40,8 +40,10 @@ std::string addBmpSuffix(const std::string& path, const char* suffix) {
 UITheme UITheme::instance;
 
 UITheme::UITheme() {
-  auto themeType = static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme);
-  setTheme(themeType);
+  // Static construction must not log or depend on cross-TU serial initialization;
+  // main.cpp reloads the saved theme after setup.
+  currentTheme = std::make_unique<LyraTheme>();
+  currentMetrics = &LyraMetrics::values;
 }
 
 void UITheme::reload() {
@@ -267,4 +269,16 @@ void UITheme::drawCenteredText(const GfxRenderer& renderer, Rect screen, int fon
                                bool black, EpdFontFamily::Style style) {
   const int x = screen.x + (screen.width - renderer.getTextWidth(fontId, text, style)) / 2;
   renderer.drawText(fontId, x, y, text, black, style);
+}
+
+int UITheme::drawCenteredWrappedText(const GfxRenderer& renderer, const Rect screen, const int fontId, int y,
+                                     const char* text, const int maxLines, const bool black,
+                                     const EpdFontFamily::Style style) {
+  const auto lines = renderer.wrappedText(fontId, text, screen.width, maxLines, style);
+  const int lineHeight = renderer.getLineHeight(fontId);
+  for (const auto& line : lines) {
+    drawCenteredText(renderer, screen, fontId, y, line.c_str(), black, style);
+    y += lineHeight;
+  }
+  return lineHeight * static_cast<int>(lines.size());
 }

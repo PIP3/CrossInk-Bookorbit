@@ -101,6 +101,7 @@ class ActivityManager {
   void goToCalibreWireless(const std::string& returnBookPath = {});
   void goToJoinNetworkFileTransfer(const std::string& returnBookPath = {});
   void goToHotspotFileTransfer(const std::string& returnBookPath = {});
+  void goToUsbDrive();
   bool resumeFileTransferFromNetworkBoot(uint32_t payload);
   void goToNearbyStatsSync();
   void goToNearbyBookSend(std::string path, bool returnToReader);
@@ -126,6 +127,7 @@ class ActivityManager {
   void popActivity();
 
   bool preventAutoSleep() const;
+  bool requiresExclusiveStorageLoop() const;
   bool isHomeActivity() const;
   bool isReaderActivity() const;
   bool readerPowerButtonOpensSettings() const;
