@@ -16,6 +16,7 @@
 
 ### Fixed
 
+- Fixed an X4 Pro startup crash in debug and USB-enabled builds.
 - Long-pressing Up or Down in long popup lists now advances by a full page.
 - EPUB table fixes now preserve final-column widths, give dense tables enough space for leading labels, and split oversized words instead of clipping them.
 - Nearby Position Sync now leaves the sending device with a single Back action after sharing a position and tolerates repeated packets while the receiving reader prepares the location.
