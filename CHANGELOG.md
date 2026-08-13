@@ -22,6 +22,7 @@
 - Sleep screens now reuse a compact SD-card index for custom wallpaper folders, avoiding a full folder scan on every sleep while rebuilding safely after file changes.
 - Touch taps and on-screen keyboard presses now route reliably while UI screens redraw.
 - Long-pressing Up or Down in long popup lists now advances by a full page.
+- Lyra Carousel now keeps navigation touch-only and activates bottom menu icons only on completed taps.
 - EPUB table fixes now preserve final-column widths, give dense tables enough space for leading labels, and split oversized words instead of clipping them.
 - Nearby Position Sync now leaves the sending device with a single Back action after sharing a position and tolerates repeated packets while the receiving reader prepares the location.
 - Clearing an EPUB's reading cache now returns Home so the book can rebuild its cache safely when reopened.
