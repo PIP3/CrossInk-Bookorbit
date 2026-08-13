@@ -1433,6 +1433,14 @@ void EpubReaderActivity::resumeReadingPaceTimer(const char*) {
   }
 }
 
+void EpubReaderActivity::onInputLockChanged(const bool locked) {
+  if (locked) {
+    pauseReadingPaceTimer("quick_lock");
+  } else {
+    resumeReadingPaceTimer("quick_lock");
+  }
+}
+
 void EpubReaderActivity::armReadingPaceWarmup(const char*) { paceSampleWarmupPending = true; }
 
 bool EpubReaderActivity::forwardPageReadElapsed(uint32_t& seconds, const char*) const {
@@ -4140,6 +4148,9 @@ void EpubReaderActivity::executeReaderQuickAction(CrossPointSettings::LONG_PRESS
     case CrossPointSettings::LONG_MENU_QUICK_ACTIONS:
       openQuickActionsPopup();
       break;
+    case CrossPointSettings::LONG_MENU_QUICK_LOCK:
+      handleGlobalPowerButtonAction(CrossPointSettings::SHORT_PWRBTN::QUICK_LOCK);
+      break;
     case CrossPointSettings::LONG_MENU_OFF:
     default:
       break;
@@ -4217,6 +4228,7 @@ bool EpubReaderActivity::handleShortcutAction(const uint8_t rawAction) {
     case CrossPointSettings::SHORT_PWRBTN::QUICK_ACTIONS:
       openQuickActionsPopup();
       return true;
+    case CrossPointSettings::SHORT_PWRBTN::QUICK_LOCK:
     case CrossPointSettings::SHORT_PWRBTN::TOGGLE_FRONTLIGHT:
     case CrossPointSettings::SHORT_PWRBTN::TOGGLE_TOUCHSCREEN:
       return handleGlobalPowerButtonAction(action);

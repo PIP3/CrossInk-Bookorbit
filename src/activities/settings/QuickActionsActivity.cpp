@@ -31,9 +31,10 @@ std::vector<QuickActions::Trigger> availableTriggers() {
 
 std::vector<uint8_t> availableActions() {
   std::vector<uint8_t> actions;
-  actions.reserve(CrossPointSettings::SHORT_PWRBTN_COUNT);
-  for (uint8_t action = CrossPointSettings::IGNORE; action < CrossPointSettings::SHORT_PWRBTN_COUNT; ++action) {
-    if (QuickActions::isActionAvailable(action)) actions.push_back(action);
+  actions.reserve(QuickActions::shortcutActionOrder.size());
+  for (const auto action : QuickActions::shortcutActionOrder) {
+    const auto rawAction = static_cast<uint8_t>(action);
+    if (QuickActions::isActionAvailable(rawAction)) actions.push_back(rawAction);
   }
   return actions;
 }

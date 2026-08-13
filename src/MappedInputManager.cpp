@@ -687,6 +687,9 @@ bool MappedInputManager::wasPressed(const Button button) const {
 }
 
 bool MappedInputManager::wasReleased(const Button button) const {
+  if (injectedReleases[static_cast<size_t>(button)]) {
+    return true;
+  }
 #ifdef SIMULATOR
   if (simulatorReleased[buttonIndex(button)]) {
     return true;

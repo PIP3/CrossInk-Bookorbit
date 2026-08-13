@@ -276,6 +276,13 @@ bool ActivityManager::handleShortcutAction(const uint8_t action) {
   return currentActivity && pendingAction == PendingAction::None && currentActivity->handleShortcutAction(action);
 }
 
+void ActivityManager::notifyInputLockChanged(const bool locked) {
+  if (currentActivity) currentActivity->onInputLockChanged(locked);
+  for (const auto& activity : stackActivities) {
+    activity->onInputLockChanged(locked);
+  }
+}
+
 bool ActivityManager::handleReaderPowerButtonSettingsOverride() {
   if (!readerPowerButtonOpensSettings()) {
     return false;

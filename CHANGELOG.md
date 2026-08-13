@@ -3,12 +3,14 @@
 ### Added
 
 - Full Xteink X4 Pro support, including USB Drive access to its SD card and direct USB file transfers.
+- New "Quick Lock" shortcut that locks the device without putting it to sleep. It can be assigned to Power + Up, long-press Back, or long-press Menu shortcuts and uses the regular sleep timeout.
 - New Quick Actions menu
 - Power-button shortcuts and Quick Actions can now toggle the frontlight or reader touchscreen when supported.
 - On one-cover Lyra, Dashboard, and Minimal Home screens, swipe left to switch between the two most recent books.
 
 ### Changed
 
+- Shortcut action pickers now use a consistent option order while hiding actions unsupported by the selected trigger or device.
 - Wi-Fi passwords are now shown while entering them, making corrections easier on-device.
 - EPUB progress calculations now reuse a bounded in-memory spine-size index while reading, reducing repeated SD-card seeks.
 - Waking from deep sleep now keeps the selected sleep screen visible until Home or the reader is ready, removing the boot-up splash screen.

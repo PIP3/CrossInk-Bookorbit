@@ -39,6 +39,8 @@ class MappedInputManager {
   bool isPowerReleaseSuppressed() const { return suppressPowerRelease; }
   bool wasPressed(Button button) const;
   bool wasReleased(Button button) const;
+  void injectRelease(Button button) const { injectedReleases[static_cast<size_t>(button)] = true; }
+  void clearInjectedReleases() const { injectedReleases.fill(false); }
   bool isPressed(Button button) const;
   const GfxRenderer& getRenderer() const { return renderer; }
   enum class RowTouch : uint8_t { None, Down, Tap };
@@ -188,6 +190,9 @@ class MappedInputManager {
   mutable bool suppressConfirmRelease = false;
   mutable bool suppressPowerRelease = false;
   mutable bool suppressPowerConfirmRelease = false;
+  // One-frame synthetic releases let a chord route through the existing
+  // activity navigation path without allocating an event object.
+  mutable std::array<bool, BUTTON_COUNT> injectedReleases{};
 #if CROSSINK_APP_CAP_TOUCH
   mutable bool suppressTouchTap = false;
   mutable bool deferredHomeGesture = false;

@@ -142,6 +142,7 @@ class ActivityManager {
   bool canSnapshotForSleepOverlay() const;
   bool requestManualReaderRefresh();
   bool handleShortcutAction(CrossPointSettings::SHORT_PWRBTN action);
+  void notifyInputLockChanged(bool locked);
   bool skipLoopDelay() const;
   std::string getCurrentBookPath() const;
   ScreenshotInfo getScreenshotInfo() const;
