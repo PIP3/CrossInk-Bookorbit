@@ -1329,24 +1329,17 @@ void FontDownloadActivity::render(RenderLock&&) {
   } else if (state_ == ERROR) {
     renderer.drawCenteredText(UI_10_FONT_ID, centerY - lineHeight, tr(STR_FONT_INSTALL_FAILED), true,
                               EpdFontFamily::BOLD);
-    const int messageWidth = pageWidth - metrics.contentSidePadding * 2;
+    const Rect textArea{metrics.contentSidePadding, 0, pageWidth - metrics.contentSidePadding * 2, pageHeight};
     int messageY = centerY + metrics.verticalSpacing;
     if (!errorMessage_.empty()) {
-      const auto messageLines = renderer.wrappedText(SMALL_FONT_ID, errorMessage_.c_str(), messageWidth, 2);
-      const int smallLineHeight = renderer.getLineHeight(SMALL_FONT_ID);
-      for (const auto& line : messageLines) {
-        renderer.drawCenteredText(SMALL_FONT_ID, messageY, line.c_str());
-        messageY += smallLineHeight + 2;
-      }
+      messageY += UITheme::drawCenteredWrappedText(renderer, textArea, SMALL_FONT_ID, messageY, errorMessage_.c_str(),
+                                                   2, true, EpdFontFamily::REGULAR, 2) +
+                  2;
     }
     if (!errorHint_.empty()) {
-      const auto hintLines = renderer.wrappedText(SMALL_FONT_ID, errorHint_.c_str(), messageWidth, 2);
-      const int smallLineHeight = renderer.getLineHeight(SMALL_FONT_ID);
       messageY += metrics.verticalSpacing / 2;
-      for (const auto& line : hintLines) {
-        renderer.drawCenteredText(SMALL_FONT_ID, messageY, line.c_str());
-        messageY += smallLineHeight + 2;
-      }
+      UITheme::drawCenteredWrappedText(renderer, textArea, SMALL_FONT_ID, messageY, errorHint_.c_str(), 2, true,
+                                       EpdFontFamily::REGULAR, 2);
     }
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_RETRY), "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
