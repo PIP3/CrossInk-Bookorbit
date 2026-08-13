@@ -22,6 +22,7 @@
 - Nearby Position Sync now leaves the sending device with a single Back action after sharing a position and tolerates repeated packets while the receiving reader prepares the location.
 - Clearing an EPUB's reading cache now returns Home so the book can rebuild its cache safely when reopened.
 - Large EPUB tables now use a bounded row-streaming grid on low-memory devices, preserving readable styled cells and falling back explicitly for unsupported table structures.
+- Large EPUBs with thousands of chapters can now finish indexing on X3/X4 without running out of memory.
 - Dictionary definition popups no longer leave an empty white button-hint block over the reader page.
 - Recent Books and KOReader Sync settings now remain intact after returning from lightweight network screens.
 - XTCH cover and thumbnail generation now stays within the available memory on X3/X4 after its cache is cleared.
