@@ -19,6 +19,7 @@
 #include "activities/reader/EpubReaderActivity.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "activities/util/OptionSelectionActivity.h"
+#include "boot_sleep/SleepImageIndex.h"
 #include "components/CompactHeader.h"
 #include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
@@ -401,6 +402,7 @@ void FileBrowserActivity::promptDeleteFile(const std::string& fullPath, const st
       LOG_ERR("FileBrowser", "Failed to delete file: %s", fullPath.c_str());
       return;
     }
+    SleepImageIndex::invalidateForPath(fullPath.c_str());
 
     if (isPinnedSleepFavorite(fullPath)) {
       unpinSleepFavorite();
@@ -435,6 +437,7 @@ void FileBrowserActivity::promptDeleteDirectory(const std::string& fullPath, con
       LOG_ERR("FileBrowser", "Failed to delete directory: %s", dirPath.c_str());
       return;
     }
+    SleepImageIndex::invalidateForPath(dirPath.c_str());
 
     for (const auto& metadataPath : metadataPaths) {
       BookActions::clearFileMetadata(metadataPath);
@@ -547,6 +550,7 @@ void FileBrowserActivity::setPreferredSleepFolder(const std::string& fullPath) {
 
   APP_STATE.preferredSleepFolderPath = nextPath;
   APP_STATE.clearRecentSleepHistory();
+  SleepImageIndex::invalidate();
   if (!APP_STATE.saveToFile()) {
     LOG_ERR("FileBrowser", "Failed to save preferred sleep folder path: %s", normalizedPath.c_str());
     return;
@@ -563,6 +567,7 @@ void FileBrowserActivity::clearPreferredSleepFolder() {
 
   APP_STATE.preferredSleepFolderPath.clear();
   APP_STATE.clearRecentSleepHistory();
+  SleepImageIndex::invalidate();
   if (!APP_STATE.saveToFile()) {
     LOG_ERR("FileBrowser", "Failed to clear preferred sleep folder path");
     return;

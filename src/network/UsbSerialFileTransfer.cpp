@@ -13,6 +13,7 @@
 #include <string>
 
 #include "CrossPointSettings.h"
+#include "activities/boot_sleep/SleepImageIndex.h"
 #include "util/BookCacheUtils.h"
 
 namespace UsbSerialFileTransfer {
@@ -315,7 +316,9 @@ void handleMkdir() {
     return;
   }
 
-  if (Storage.mkdir(path, true) || Storage.exists(path)) {
+  const bool created = Storage.mkdir(path, true);
+  if (created || Storage.exists(path)) {
+    if (created) SleepImageIndex::invalidateForPath(path);
     writeLine("OK\n");
   } else {
     writeLine("ERR:mkdir_failed\n");
@@ -452,6 +455,7 @@ void handleWrite() {
   }
 
   clearCachesForPath(path);
+  SleepImageIndex::invalidateForPath(path);
   writeLine("OK\n");
 }
 
@@ -469,6 +473,7 @@ void handleRemove() {
   }
 
   if (removeRecursive(path)) {
+    SleepImageIndex::invalidateForPath(path);
     writeLine("OK\n");
   } else {
     writeLine("ERR:remove_failed\n");
@@ -504,6 +509,8 @@ void handleRename() {
   if (Storage.rename(src, dst)) {
     clearCachesForPath(src);
     clearCachesForPath(dst);
+    SleepImageIndex::invalidateForPath(src);
+    SleepImageIndex::invalidateForPath(dst);
     writeLine("OK\n");
   } else {
     writeLine("ERR:rename_failed\n");
