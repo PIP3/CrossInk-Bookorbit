@@ -5,6 +5,18 @@ records only its own additions. Each release states the CrossInk version it is b
 on; for everything inherited from upstream, see the
 [CrossInk changelog](https://github.com/uxjulia/CrossInk/blob/main/CHANGELOG.md).
 
+## [Unreleased]
+
+Based on CrossInk v1.5.1-rc.
+
+### Added
+
+- Releases of this fork now also carry an X4 Pro build, alongside the X3/X4 and Sticky ones. CrossInk had dropped that device from its release builds in 1.5.0 and brings it back in 1.5.1; the fork's release workflow follows, building each device in parallel instead of one after the other.
+
+### Changed
+
+- A power-button or long-press-menu shortcut set to BookOrbit Sync has to be picked again, once, after this update. Shortcut choices are stored as numbers, and CrossInk 1.5.1 gave its own new actions (Quick Actions, frontlight and touchscreen toggles) the numbers this fork had used for BookOrbit Sync; the fork's action moved above them rather than change the meaning of what CrossInk persists. A shortcut left pointing at the old number now runs one of CrossInk's actions instead.
+
 ## [v1.5.0+bookorbit.2] - 2026-08-12
 
 Based on CrossInk v1.5.0.

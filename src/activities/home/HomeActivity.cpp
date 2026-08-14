@@ -28,6 +28,7 @@
 #include "ClippingStore.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "GlobalActions.h"
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
 #include "RecentBookProgress.h"
@@ -884,6 +885,7 @@ void HomeActivity::onEnter() {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int recentBooksToLoad =
       std::min(kMaxCachedBooks, std::max(metrics.homeRecentBooksCount, HOME_BOOK_SWAP_RECENT_COUNT));
+  RECENT_BOOKS.ensureLoaded();
   loadRecentBooks(recentBooksToLoad);
 
   if (!APP_STATE.openEpubPath.empty()) {
@@ -1404,6 +1406,8 @@ bool HomeActivity::preRenderCarouselFrames(bool showProgressPopup) {
 }
 
 void HomeActivity::loop() {
+  if (quickActionsPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
+
   if (usesMinimalHomeInteraction()) {
     const int pressedFrontButton = mappedInput.getPressedFrontButton();
     const int releasedFrontButton = mappedInput.getReleasedFrontButton();
@@ -1529,6 +1533,11 @@ void HomeActivity::loop() {
         requestUpdate();
         return;
       case MappedInputManager::SwipeDir::Left:
+        if (mappedInput.hasTouch() && canSwapHomeBook()) {
+          showNextRecentBookOnHome();
+          return;
+        }
+        break;
       case MappedInputManager::SwipeDir::None:
         break;
     }
@@ -1713,6 +1722,12 @@ void HomeActivity::loop() {
     return;
   }
 
+  if (static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme) == CrossPointSettings::UI_THEME::LYRA &&
+      mappedInput.hasTouch() && canSwapHomeBook() && mappedInput.wasSwipe() == MappedInputManager::SwipeDir::Left) {
+    showNextRecentBookOnHome();
+    return;
+  }
+
   if (isCarousel) {
     const int bookCount = visibleBookCount;
     const int menuItemCount =
@@ -1892,7 +1907,40 @@ void HomeActivity::loop() {
   }
 }
 
+bool HomeActivity::handleShortcutAction(const CrossPointSettings::SHORT_PWRBTN action) {
+  if (action == CrossPointSettings::SHORT_PWRBTN::FILE_BROWSER) {
+    onFileBrowserOpen();
+    return true;
+  }
+
+  if (action != CrossPointSettings::SHORT_PWRBTN::QUICK_ACTIONS) {
+    return false;
+  }
+
+  QuickActions::showConfiguredPopup(
+      quickActionsPopup, [this] { requestUpdate(); },
+      [this](const auto selectedAction) {
+        if (selectedAction == CrossPointSettings::SHORT_PWRBTN::FORCE_REFRESH) {
+          // OptionPopup has already dismissed itself. Repaint Home before flushing
+          // so the full refresh cannot preserve the popup in the panel image.
+          initialFullRefresh = true;
+          requestUpdate();
+          return;
+        }
+        dispatchShortcutAction(selectedAction);
+      },
+      [](const auto selectedAction) {
+        return isPowerButtonActionAvailableOutsideReader(selectedAction) ||
+               selectedAction == CrossPointSettings::SHORT_PWRBTN::FILE_BROWSER;
+      });
+  return true;
+}
+
 void HomeActivity::render(RenderLock&&) {
+  if (quickActionsPopup.processRender(renderer, mappedInput)) {
+    return;
+  }
+
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
