@@ -235,8 +235,10 @@ bool ActivityManager::handleGlobalHomeGesture() {
     return false;
   }
 
-  const bool homeGesture = currentActivity->usesFullScreenReaderVerticalSwipes() ? mappedInput.wasReaderHomeGesture()
-                                                                                 : mappedInput.wasHomeGesture();
+  const bool homeGesture = currentActivity->usesFullScreenReaderVerticalSwipes()
+                               ? mappedInput.wasReaderHomeGesture()
+                               : (currentActivity->allowGlobalHomeSwipeGesture() || mappedInput.hasHomeKey()) &&
+                                     mappedInput.wasHomeGesture();
   if (!homeGesture) {
     return false;
   }
