@@ -62,7 +62,7 @@ void ClearCacheActivity::render(RenderLock&&) {
 
     if (mappedInput.hasTouch()) {
       const auto actions = touchActionLayout(renderer);
-      const char* labels[] = {tr(STR_CLEAR_BUTTON), tr(STR_BACK)};
+      const char* labels[] = {tr(STR_CLEAR_BUTTON), tr(STR_CANCEL)};
       TouchActionButtons::draw(renderer, actions, labels, 0, -1, UI_10_FONT_ID);
     } else {
       const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), tr(STR_CLEAR_BUTTON), "", "");
