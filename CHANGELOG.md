@@ -9,6 +9,10 @@ on; for everything inherited from upstream, see the
 
 Based on CrossInk v1.5.1-rc-2.
 
+### Fixed
+
+- A BookOrbit sync no longer restarts the device when a book has a long backlog of reading sessions waiting to be uploaded — one report had 967 of them queued. Draining the queue held every queued session in memory at once and then assembled a single request for a hundred of them; the memory check that guards a request only accounts for the connection it needs, not for the body being built, so on a connection already open the device could pass that check and then run out of memory while assembling the upload — which restarts it rather than reporting a failure. The queue is now read and sent 25 sessions at a time, and every request body is allocated as one measured block, so an upload that no longer fits reports a memory error and is retried on the next sync. No reading session is lost: a queue that fails to upload is kept.
+
 ### Added
 
 - BookOrbit Sync can now be picked as a Quick Action, and on the X4 Pro assigned to the Home key (tap, long press or double tap). It used to be offered only on the power button and on long-press Menu/Back — the other pickers each kept their own list of actions, and the fork's action had never been added to them. Wherever it is triggered from, it behaves like the power-button shortcut already did: it syncs the book you have open, the last EPUB you opened when you are outside the reader, and opens the BookOrbit settings screen when there is no book to sync.

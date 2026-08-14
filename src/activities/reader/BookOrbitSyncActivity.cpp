@@ -187,10 +187,11 @@ void BookOrbitSyncActivity::performSync() {
   }
 
   // Highlights get their own connection rather than sharing the one above. Draining the stats
-  // queue takes up to ~32KB (see BookOrbitStatsQueue::MAX_QUEUED_EVENTS) and an annotation batch
-  // with its key set another ~8KB; held at the same time inside a 55KB TLS floor, on the ~65KB
-  // WiFi leaves, the two starved each other and the stats upload was the one that failed. An
-  // extra handshake costs a second; losing a feature's payload costs the feature.
+  // queue used to hold every queued event at once (~32KB for a full queue) and an annotation
+  // batch with its key set another ~8KB; held at the same time inside a 55KB TLS floor, on the
+  // ~65KB WiFi leaves, the two starved each other and the stats upload was the one that failed.
+  // The drain reads a batch at a time now, but the split stands: an extra handshake costs a
+  // second, losing a feature's payload costs the feature.
   if (result == BookOrbitSyncClient::OK || result == BookOrbitSyncClient::NOT_FOUND) {
     {
       RenderLock lock(*this);
@@ -992,15 +993,17 @@ void BookOrbitSyncActivity::uploadQueuedStats() {
   // Reading-session events queued by the reader (see BookOrbitStatsQueue), pushed
   // while WiFi is already up for the progress sync. Upload-only: BookOrbit has no
   // stats download API, so stats flow CrossInk -> BookOrbit.
-  std::vector<BookOrbitStatEvent> events;
   const std::string cachePath = Epub::cachePathForFilePath(epubPath, "/.crosspoint");
-  if (!BookOrbitStatsQueue::readAll(cachePath, events) || events.empty()) {
+  // The queue is drained one upload batch at a time. Reading it whole cost 16 bytes
+  // per event -- 32KB for a full queue -- and held them for the length of the upload,
+  // beside the TLS session and every body built for it; a long backlog left too
+  // little for the batch that was supposed to clear it.
+  const size_t total = std::min(BookOrbitStatsQueue::queuedCount(cachePath), BookOrbitStatsQueue::MAX_QUEUED_EVENTS);
+  if (total == 0) {
     LOG_INF("BookOrbit", "No queued reading stats for this book");
     return;
   }
-  LOG_INF("BookOrbit", "Draining %u queued events (era now %u)", (unsigned)events.size(), (unsigned)WallClock::era());
-  // Field-verifiable upload manifest: one line per event (post-correction, below)
-  // would miss the corrections, so log after the correction pass instead.
+  LOG_INF("BookOrbit", "Draining %u queued events (era now %u)", (unsigned)total, (unsigned)WallClock::era());
 
   // Events stamped by the system clock (all of them on RTC-less devices) are
   // re-resolved against NTP: each event gets the correction WallClock measured for ITS
@@ -1011,63 +1014,74 @@ void BookOrbitSyncActivity::uploadQueuedStats() {
   // their checkpoint-approximate stamp unless outright implausible.
   uint32_t syncInstant = 0;                           // real time (NTP set the clock moments ago), 0 if it failed
   if (!WallClock::now(syncInstant)) syncInstant = 0;  // implausible: no upper bound to enforce
-  size_t dropped = 0;
-  uint32_t previousStart = 0;
-  for (auto& event : events) {
-    if (event.flags & BookOrbitStatEvent::FLAG_CLOCK_APPROXIMATE) {
-      int64_t delta = 0;
-      if (WallClock::correctionForEvent(event.era, event.startTime, delta)) {
-        int64_t corrected = static_cast<int64_t>(event.startTime) + delta;
-        // Nothing queued can have happened after the sync that is uploading it, and the
-        // queue is chronological: keep both invariants whatever the measured error was.
-        if (syncInstant != 0 && corrected > static_cast<int64_t>(syncInstant)) corrected = syncInstant;
-        if (corrected < static_cast<int64_t>(previousStart)) corrected = previousStart;
-        if (corrected > 0 && corrected < static_cast<int64_t>(WallClock::MAX_PLAUSIBLE_EPOCH)) {
-          event.startTime = static_cast<uint32_t>(corrected);
-        }
-      } else if (event.startTime < WallClock::MIN_PLAUSIBLE_EPOCH) {
-        event.durationSeconds = 0;  // unresolvable (old era, never had a checkpoint): drop below
-        dropped++;
-      }
-    }
-    previousStart = event.startTime;
-  }
-  if (dropped > 0) {
-    events.erase(std::remove_if(events.begin(), events.end(),
-                                [](const BookOrbitStatEvent& e) { return e.durationSeconds == 0; }),
-                 events.end());
-    LOG_ERR("BookOrbit", "Dropped %u stat events with unresolvable timestamps", (unsigned)dropped);
-    if (events.empty()) {
-      BookOrbitStatsQueue::clear(cachePath);
-      return;
-    }
-  }
 
+  // One batch per request. 25 events is ~2KB of JSON: small enough that building the
+  // body cannot exhaust what the kept-session heap floor admits, which a 100-event
+  // batch could (measured: abort() while serializing, with a 967-event backlog).
+  constexpr size_t BATCH_SIZE = 25;
   // Upload manifest: the corrected, as-sent timestamps, so "which session is
   // missing" is answerable from serial logs. Capped to keep log volume sane.
   constexpr size_t MAX_MANIFEST_LINES = 16;
-  const size_t manifestCount = std::min(events.size(), MAX_MANIFEST_LINES);
-  for (size_t i = 0; i < manifestCount; i++) {
-    char isoTime[24];
-    const time_t start = static_cast<time_t>(events[i].startTime);
-    struct tm startUtc = {};
-    gmtime_r(&start, &startUtc);
-    strftime(isoTime, sizeof(isoTime), "%Y-%m-%d %H:%M:%SZ", &startUtc);
-    LOG_INF("BookOrbit", "  event %u/%u: start=%s dur=%us pos=%u.%02u%%", (unsigned)(i + 1), (unsigned)events.size(),
-            isoTime, (unsigned)events[i].durationSeconds, (unsigned)(events[i].page / 100),
-            (unsigned)(events[i].page % 100));
-  }
-  if (events.size() > MAX_MANIFEST_LINES) {
-    LOG_INF("BookOrbit", "  ... %u more events", (unsigned)(events.size() - MAX_MANIFEST_LINES));
-  }
 
-  // Batch to keep each JSON body small (~100 events = ~7KB) next to the TLS buffers;
-  // the JsonDocument itself is freed before each TLS session starts (see client).
-  constexpr size_t BATCH_SIZE = 100;
-  for (size_t i = 0; i < events.size(); i += BATCH_SIZE) {
-    const size_t n = std::min(BATCH_SIZE, events.size() - i);
-    const auto result =
-        BookOrbitSyncClient::uploadPageStats(documentHash, SETTINGS.getEffectiveDeviceName(), &events[i], n);
+  std::vector<BookOrbitStatEvent> batch;
+  uint32_t previousStart = 0;  // carried across batches: the queue is chronological
+  size_t dropped = 0;
+  size_t uploaded = 0;
+  size_t manifestLines = 0;
+
+  for (size_t offset = 0; offset < total; offset += BATCH_SIZE) {
+    if (!BookOrbitStatsQueue::readRange(cachePath, offset, BATCH_SIZE, batch)) {
+      LOG_ERR("BookOrbit", "Failed to read queued stats at event %u; keeping the queue", (unsigned)offset);
+      return;
+    }
+    if (batch.empty()) {
+      // The file is shorter than its size implied: a truncated queue. Clearing it
+      // below is the self-heal; leaving it would stall every future sync here.
+      LOG_ERR("BookOrbit", "Stats queue ended early at event %u of %u", (unsigned)offset, (unsigned)total);
+      break;
+    }
+
+    size_t droppedInBatch = 0;
+    for (auto& event : batch) {
+      if (event.flags & BookOrbitStatEvent::FLAG_CLOCK_APPROXIMATE) {
+        int64_t delta = 0;
+        if (WallClock::correctionForEvent(event.era, event.startTime, delta)) {
+          int64_t corrected = static_cast<int64_t>(event.startTime) + delta;
+          // Nothing queued can have happened after the sync that is uploading it, and the
+          // queue is chronological: keep both invariants whatever the measured error was.
+          if (syncInstant != 0 && corrected > static_cast<int64_t>(syncInstant)) corrected = syncInstant;
+          if (corrected < static_cast<int64_t>(previousStart)) corrected = previousStart;
+          if (corrected > 0 && corrected < static_cast<int64_t>(WallClock::MAX_PLAUSIBLE_EPOCH)) {
+            event.startTime = static_cast<uint32_t>(corrected);
+          }
+        } else if (event.startTime < WallClock::MIN_PLAUSIBLE_EPOCH) {
+          event.durationSeconds = 0;  // unresolvable (old era, never had a checkpoint): drop below
+          droppedInBatch++;
+        }
+      }
+      previousStart = event.startTime;
+    }
+    if (droppedInBatch > 0) {
+      batch.erase(std::remove_if(batch.begin(), batch.end(),
+                                 [](const BookOrbitStatEvent& e) { return e.durationSeconds == 0; }),
+                  batch.end());
+      dropped += droppedInBatch;
+    }
+    if (batch.empty()) continue;
+
+    for (size_t i = 0; i < batch.size() && manifestLines < MAX_MANIFEST_LINES; i++, manifestLines++) {
+      char isoTime[24];
+      const time_t start = static_cast<time_t>(batch[i].startTime);
+      struct tm startUtc = {};
+      gmtime_r(&start, &startUtc);
+      strftime(isoTime, sizeof(isoTime), "%Y-%m-%d %H:%M:%SZ", &startUtc);
+      LOG_INF("BookOrbit", "  event %u/%u: start=%s dur=%us pos=%u.%02u%%", (unsigned)(manifestLines + 1),
+              (unsigned)total, isoTime, (unsigned)batch[i].durationSeconds, (unsigned)(batch[i].page / 100),
+              (unsigned)(batch[i].page % 100));
+    }
+
+    const auto result = BookOrbitSyncClient::uploadPageStats(documentHash, SETTINGS.getEffectiveDeviceName(),
+                                                             batch.data(), batch.size());
     if (result != BookOrbitSyncClient::OK) {
       const int httpCode = BookOrbitSyncClient::lastHttpCode;
       if (httpCode == 404 || httpCode == 405 || httpCode == 501) {
@@ -1080,13 +1094,17 @@ void BookOrbitSyncActivity::uploadQueuedStats() {
       }
       // Transient failure: keep the whole queue for a later attempt; re-sending an
       // already-accepted batch next time is harmless compared to losing sessions.
-      LOG_ERR("BookOrbit", "Stats upload failed after %u/%u events (http=%d)", (unsigned)i, (unsigned)events.size(),
+      LOG_ERR("BookOrbit", "Stats upload failed after %u/%u events (http=%d)", (unsigned)uploaded, (unsigned)total,
               httpCode);
       return;
     }
+    uploaded += batch.size();
   }
 
-  LOG_INF("BookOrbit", "Uploaded %u reading-session events", (unsigned)events.size());
+  if (dropped > 0) {
+    LOG_ERR("BookOrbit", "Dropped %u stat events with unresolvable timestamps", (unsigned)dropped);
+  }
+  LOG_INF("BookOrbit", "Uploaded %u reading-session events", (unsigned)uploaded);
   BookOrbitStatsQueue::clear(cachePath);
 }
 
