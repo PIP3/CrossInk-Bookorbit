@@ -135,8 +135,12 @@ constexpr uint32_t MIN_HEAP_FOR_TLS = 55000;
 // full floor would double-count the memory that live TLS session already holds -- it
 // refused affordable uploads whenever a request followed another in the same session
 // (stats after the progress fetch, bookmarks after highlights: measured 54804 free
-// against the 55000 floor). Such a request only needs its JSON bodies and framing; the
-// largest, an annotation batch with its key set, stays under half of this.
+// against the 55000 floor). Such a request only needs its JSON body and framing.
+//
+// This floor bounds the connection's cost, NOT the body's: a caller that builds a body
+// too large for what is left still has to fail gracefully, which is why bodies are
+// measured and allocated without throwing (see JsonBody). Callers keep their batches
+// small for the same reason -- 25 stat events, 8 annotations.
 constexpr uint32_t MIN_HEAP_FOR_KEPT_SESSION = 20000;
 
 // True from the first completed request on the shared session until the Session ends.
@@ -147,6 +151,50 @@ constexpr uint32_t MIN_HEAP_FOR_KEPT_SESSION = 20000;
 bool s_sessionHandshakePaid = false;
 
 uint32_t requiredHeapFloor() { return s_sessionHandshakePaid ? MIN_HEAP_FOR_KEPT_SESSION : MIN_HEAP_FOR_TLS; }
+
+/**
+ * One exactly-sized request body, allocated without throwing.
+ *
+ * Serializing into a std::string costs more than the body: its growth doubles, so
+ * the last reallocation holds both halves at once, and with exceptions disabled a
+ * failed allocation inside it calls abort() rather than returning -- the firmware
+ * dies where it could have reported a failure. That is the measured crash on a
+ * 100-event stats batch: ~8KB of body plus the doubling, admitted by the
+ * kept-session floor and then unaffordable.
+ *
+ * Measuring first costs one pass over the document and turns the same situation
+ * into a LOW_MEMORY return. Build inside the JsonDocument's scope so the node pool
+ * is freed before the request runs; only this buffer stays alive through it.
+ */
+class JsonBody {
+ public:
+  bool build(const JsonDocument& doc) {
+    const size_t length = measureJson(doc);
+    data_ = makeUniqueNoThrow<char[]>(length + 1);
+    if (!data_) {
+      LOG_ERR("BookOrbit", "Out of memory for a %u byte request body (heap: %u free, %u max alloc)",
+              (unsigned)(length + 1), (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMaxAllocHeap());
+      return false;
+    }
+    length_ = serializeJson(doc, data_.get(), length + 1);
+    return true;
+  }
+
+  const char* c_str() const { return data_ ? data_.get() : ""; }
+  const uint8_t* bytes() const { return reinterpret_cast<const uint8_t*>(c_str()); }
+  size_t length() const { return length_; }
+
+  // Frees the body once it has been sent: the response still has to be parsed, and
+  // an exchange's request and response should not be held at once on this hardware.
+  void release() {
+    data_.reset();
+    length_ = 0;
+  }
+
+ private:
+  std::unique_ptr<char[]> data_;
+  size_t length_ = 0;
+};
 
 #ifdef SIMULATOR
 void addAuthHeaders(HTTPClient& http) {
@@ -191,7 +239,7 @@ void configureClient(freeink::SecureHttpClient& http, const bool reuse) {
   http.setInsecure();
 }
 
-int sendBookOrbitRequest(const char* method, const std::string& url, const std::string* payload, std::string& outBody) {
+int sendBookOrbitRequest(const char* method, const std::string& url, const JsonBody* payload, std::string& outBody) {
   outBody.clear();
   const bool pooled = s_session != nullptr;
   freeink::SecureHttpClient oneShot;
@@ -212,7 +260,7 @@ int sendBookOrbitRequest(const char* method, const std::string& url, const std::
   if (payload != nullptr) {
     http.addHeader("Content-Type", "application/json");
   }
-  const int code = payload != nullptr ? http.sendRequest(method, *payload) : http.GET();
+  const int code = payload != nullptr ? http.sendRequest(method, payload->bytes(), payload->length()) : http.GET();
   outBody = http.getString();
   // An HTTP status, even an error one, proves the session's handshake is up and paid
   // for; a transport failure may have closed the socket, so the next request assumes
@@ -449,8 +497,8 @@ BookOrbitSyncClient::Error BookOrbitSyncClient::updateProgress(const KOReaderPro
     doc["timestamp"] = progress.timestamp;
   }
 
-  std::string body;
-  serializeJson(doc, body);
+  JsonBody body;
+  if (!body.build(doc)) return LOW_MEMORY;
 
   LOG_DBG("BookOrbit", "Request body: %s", body.c_str());
 
@@ -526,7 +574,7 @@ BookOrbitSyncClient::Error BookOrbitSyncClient::uploadPageStats(const std::strin
   // payload shape changes.
   // The JsonDocument is scoped so its node pool is freed before the TLS session
   // starts: only the serialized body stays alive through the handshake.
-  std::string body;
+  JsonBody body;
   {
     JsonDocument doc;
     doc["deviceId"] = DEVICE_ID;
@@ -547,7 +595,7 @@ BookOrbitSyncClient::Error BookOrbitSyncClient::uploadPageStats(const std::strin
       event["durationSeconds"] = events[i].durationSeconds;
       event["totalPages"] = events[i].totalPages;
     }
-    serializeJson(doc, body);
+    if (!body.build(doc)) return LOW_MEMORY;
   }
 
 #ifdef SIMULATOR
@@ -619,7 +667,7 @@ BookOrbitSyncClient::Error BookOrbitSyncClient::exchangeAnnotations(
   // Scoped so the node pool is freed before the TLS session opens: the key list alone can
   // reach a few hundred entries, and only the serialized body has to survive the handshake.
   // See uploadPageStats for why pluginVersion is a literal.
-  std::string body;
+  JsonBody body;
   {
     JsonDocument doc;
     doc["deviceId"] = DEVICE_ID;
@@ -655,7 +703,7 @@ BookOrbitSyncClient::Error BookOrbitSyncClient::exchangeAnnotations(
       if (!annotation.chapter.empty()) entry["chapter"] = annotation.chapter;
       if (annotation.pageno > 0) entry["pageno"] = annotation.pageno;
     }
-    serializeJson(doc, body);
+    if (!body.build(doc)) return LOW_MEMORY;
   }
 
 #ifdef SIMULATOR
@@ -683,8 +731,7 @@ BookOrbitSyncClient::Error BookOrbitSyncClient::exchangeAnnotations(
 #endif
   lastHttpCode = httpCode > 0 ? httpCode : 0;
   lastTransportError = httpCode < 0 ? httpCode : 0;
-  body.clear();
-  body.shrink_to_fit();
+  body.release();
   LOG_DBG("BookOrbit", "Annotation exchange response: %d", httpCode);
 
   if (httpCode < 0) return NETWORK_ERROR;
@@ -792,7 +839,7 @@ BookOrbitSyncClient::Error BookOrbitSyncClient::ackAnnotations(const std::string
     return LOW_MEMORY;
   }
 
-  std::string body;
+  JsonBody body;
   {
     JsonDocument doc;
     doc["deviceId"] = DEVICE_ID;
@@ -815,7 +862,7 @@ BookOrbitSyncClient::Error BookOrbitSyncClient::ackAnnotations(const std::string
       // No version here: the deletion ack schema does not define the field.
       entry["status"] = "applied";
     }
-    serializeJson(doc, body);
+    if (!body.build(doc)) return LOW_MEMORY;
   }
 
 #ifdef SIMULATOR
@@ -871,7 +918,7 @@ BookOrbitSyncClient::Error BookOrbitSyncClient::exchangeBookmarks(
     return LOW_MEMORY;
   }
 
-  std::string body;
+  JsonBody body;
   {
     JsonDocument doc;
     doc["deviceId"] = DEVICE_ID;
@@ -898,7 +945,7 @@ BookOrbitSyncClient::Error BookOrbitSyncClient::exchangeBookmarks(
       if (!bookmark.chapter.empty()) entry["chapter"] = bookmark.chapter;
       if (bookmark.pageno > 0) entry["pageno"] = bookmark.pageno;
     }
-    serializeJson(doc, body);
+    if (!body.build(doc)) return LOW_MEMORY;
   }
 
 #ifdef SIMULATOR
@@ -926,8 +973,7 @@ BookOrbitSyncClient::Error BookOrbitSyncClient::exchangeBookmarks(
 #endif
   lastHttpCode = httpCode > 0 ? httpCode : 0;
   lastTransportError = httpCode < 0 ? httpCode : 0;
-  body.clear();
-  body.shrink_to_fit();
+  body.release();
   LOG_DBG("BookOrbit", "Bookmark exchange response: %d", httpCode);
 
   if (httpCode < 0) return NETWORK_ERROR;
@@ -1016,7 +1062,7 @@ BookOrbitSyncClient::Error BookOrbitSyncClient::ackBookmarks(const std::string& 
     return LOW_MEMORY;
   }
 
-  std::string body;
+  JsonBody body;
   {
     JsonDocument doc;
     doc["deviceId"] = DEVICE_ID;
@@ -1043,7 +1089,7 @@ BookOrbitSyncClient::Error BookOrbitSyncClient::ackBookmarks(const std::string& 
       entry["serverId"] = serverId;
       entry["status"] = "applied";
     }
-    serializeJson(doc, body);
+    if (!body.build(doc)) return LOW_MEMORY;
   }
 
 #ifdef SIMULATOR
