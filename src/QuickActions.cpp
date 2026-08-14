@@ -17,7 +17,7 @@ void showConfiguredPopup(OptionPopup& popup, const std::function<void()>& reques
   actions.reserve(std::size(SETTINGS.quickActionSlots));
   for (const uint8_t action : SETTINGS.quickActionSlots) {
     const auto shortcutAction = static_cast<CrossPointSettings::SHORT_PWRBTN>(action);
-    if (action == CrossPointSettings::IGNORE || !isActionAvailable(action) ||
+    if (action == CrossPointSettings::IGNORE || !isQuickActionSlotActionAvailable(action) ||
         (actionFilter && !actionFilter(shortcutAction))) {
       continue;
     }
