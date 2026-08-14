@@ -85,6 +85,7 @@ inline esp_sleep_wakeup_cause_t esp_sleep_get_wakeup_cause() { return ESP_SLEEP_
 #include "SilentRestart.h"
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
+#include "activities/home/BookActions.h"
 #include "activities/reader/KOReaderSyncActivity.h"
 #include "activities/reader/ReadingStatsUtils.h"
 #include "activities/reader/StatsBackup.h"
@@ -599,6 +600,13 @@ bool handleGlobalPowerButtonAction(const CrossPointSettings::SHORT_PWRBTN action
       SETTINGS.disableReaderTouchscreen = SETTINGS.disableReaderTouchscreen ? 0 : 1;
       SETTINGS.saveToFile();
       LOG_INF("TOUCH", "Reader touchscreen %s by shortcut", SETTINGS.disableReaderTouchscreen ? "disabled" : "enabled");
+      {
+        RenderLock lock;
+        BookActions::drawToast(
+            renderer, SETTINGS.disableReaderTouchscreen ? tr(STR_TOUCHSCREEN_DISABLED) : tr(STR_TOUCHSCREEN_ENABLED));
+      }
+      delay(1000);
+      activityManager.requestUpdate();
       return true;
     default:
       return false;
