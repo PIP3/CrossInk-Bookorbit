@@ -153,7 +153,9 @@ bool HalStorage::beginUsbDrive() {
 }
 
 void HalStorage::endUsbDrive() {
+#if FREEINK_CAP_USB_MSC
   if (usbDriveContext) usbDriveContext->massStorage.end();
+#endif
 }
 
 UsbDriveState HalStorage::usbDriveState() const {
