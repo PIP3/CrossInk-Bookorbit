@@ -116,7 +116,10 @@ jobs:
       - name: Create GitHub RC Prerelease
         uses: softprops/action-gh-release@v3
         with:
-          token: ${{ secrets.RELEASE_PAT }}
+          # No token: the action defaults to this workflow's GITHUB_TOKEN, which
+          # the permissions block above already grants write access to releases.
+          # Upstream passes its own RELEASE_PAT here so that publishing can push
+          # to its default branch; this fork does not publish a release catalog.
           tag_name: ${{ env.RC_TAG }}
           target_commitish: ${{ github.sha }}
           name: RC ${{ env.RC_BRANCH_SAFE }} ${{ env.RC_HASH_SHORT }}
