@@ -621,7 +621,10 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   }
   const uint8_t persistedQuickActionsTrigger =
       doc["quickActionsTrigger"] | static_cast<uint8_t>(QuickActions::Trigger::None);
-  if (persistedQuickActionsTrigger <= static_cast<uint8_t>(QuickActions::Trigger::DoubleTapHome)) {
+  const bool unavailableHomeTrigger =
+      !gpio.hasHomeKey() && persistedQuickActionsTrigger >= static_cast<uint8_t>(QuickActions::Trigger::TapHome);
+  if (persistedQuickActionsTrigger <= static_cast<uint8_t>(QuickActions::Trigger::DoubleTapHome) &&
+      !unavailableHomeTrigger) {
     quickActionsTrigger = persistedQuickActionsTrigger;
   } else {
     quickActionsTrigger = static_cast<uint8_t>(QuickActions::Trigger::None);
