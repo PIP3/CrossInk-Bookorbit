@@ -122,8 +122,9 @@ while reading.
 
 Quick Lock can be assigned to **Power + Up**, short- or long-press **Power**,
 or long-press **Back** or **Menu**. Trigger the assigned action to toggle the
-lock. While locked, a short press and release of **Power** also unlocks the
-device.
+lock. While locked, repeat that same shortcut to unlock; all other buttons,
+including **Power + Volume Down** screenshots, and touchscreen input stay
+locked.
 
 Quick Lock still follows the regular **Time to Sleep** setting. If the timeout
 expires, the device sleeps and restores the lock when it wakes. Reading timers

@@ -531,13 +531,19 @@ void notifyQuickLockChanged() {
   }
 }
 
-bool handleGlobalPowerButtonAction(const CrossPointSettings::SHORT_PWRBTN action) {
+bool handleGlobalPowerButtonAction(const CrossPointSettings::SHORT_PWRBTN action,
+                                   const QuickLockTrigger quickLockTrigger) {
   switch (action) {
     case CrossPointSettings::SHORT_PWRBTN::SLEEP:
       enterDeepSleep();
       return true;
     case CrossPointSettings::SHORT_PWRBTN::QUICK_LOCK:
-      buttonShortcutController.toggleQuickLock(millis());
+      if (quickLockTrigger == QuickLockTrigger::None) {
+        LOG_ERR("MAIN", "Quick Lock requested without an input trigger");
+        return false;
+      }
+      buttonShortcutController.toggleQuickLock(millis(), quickLockTrigger,
+                                               quickLockTrigger == QuickLockTrigger::LongPower);
       notifyQuickLockChanged();
       return true;
     case CrossPointSettings::SHORT_PWRBTN::FORCE_REFRESH: {
@@ -1227,10 +1233,12 @@ void setup() {
   const bool isSleepWake = wakeupReason == HalGPIO::WakeupReason::PowerButton;
   const bool restoreQuickLockAfterWake = APP_STATE.quickLockResumePending && isSleepWake && !recoveryFirmwareMode &&
                                          !rebootedFromPanic && !isNetworkResume && !isSilentReboot;
+  const auto quickLockResumeTrigger = static_cast<QuickLockTrigger>(APP_STATE.quickLockResumeTrigger);
   if (APP_STATE.quickLockResumePending) {
     // Consume this before routing so a later cold boot cannot inherit a stale
     // lock if reader restoration itself fails.
     APP_STATE.quickLockResumePending = false;
+    APP_STATE.quickLockResumeTrigger = static_cast<uint8_t>(QuickLockTrigger::None);
     APP_STATE.saveToFile();
     mirrorWakeShortPressToNvs();
   }
@@ -1389,7 +1397,7 @@ void setup() {
     // wake release stays swallowed by the main loop, so it cannot unlock the
     // restored lock immediately.
     (void)activityManager.requestUpdateAndWait();
-    buttonShortcutController.restoreQuickLock(millis());
+    buttonShortcutController.restoreQuickLock(millis(), quickLockResumeTrigger);
     notifyQuickLockChanged();
   }
 
@@ -1458,8 +1466,8 @@ void loop() {
   // so it cannot replace or double-fire this one.
   static bool screenshotButtonsReleased = true;
   static bool screenshotComboActive = false;
-  if (!activityManager.readerPowerButtonOpensSettings() && gpio.isPressed(HalGPIO::BTN_POWER) &&
-      gpio.isPressed(HalGPIO::BTN_DOWN)) {
+  if (!buttonShortcutController.isQuickLocked() && !activityManager.readerPowerButtonOpensSettings() &&
+      gpio.isPressed(HalGPIO::BTN_POWER) && gpio.isPressed(HalGPIO::BTN_DOWN)) {
     screenshotComboActive = true;
     if (screenshotButtonsReleased) {
       screenshotButtonsReleased = false;
@@ -1495,10 +1503,22 @@ void loop() {
   }
 
   if (buttonShortcutController.isQuickLocked()) {
+    const bool longPowerPressed =
+        powerPressed && gpio.getPowerButtonHeldTime() >= SETTINGS.getPowerButtonLongPressDuration();
+    if (buttonShortcutController.tryUnlockLongPower(millis(), longPowerPressed)) {
+      notifyQuickLockChanged();
+      lastActivityTime = millis();
+      return;
+    }
+    if (activityManager.handleQuickLockUnlock(buttonShortcutController.quickLockTrigger())) {
+      lastActivityTime = millis();
+      return;
+    }
     const unsigned long sleepTimeoutMs = SETTINGS.getSleepTimeoutMs();
     if (sleepTimeoutMs > 0 && buttonShortcutController.shouldQuickLockSleep(millis(), sleepTimeoutMs)) {
       LOG_DBG("SLP", "Quick Lock timeout triggered after %lu ms", sleepTimeoutMs);
       APP_STATE.quickLockResumePending = true;
+      APP_STATE.quickLockResumeTrigger = static_cast<uint8_t>(buttonShortcutController.quickLockTrigger());
       enterDeepSleep(true);
       // The simulator's deep sleep returns, unlike hardware. Keep its next
       // test loop from treating the marker as a real reboot restore.
@@ -1546,9 +1566,19 @@ void loop() {
     if (!gpio.isPressed(HalGPIO::BTN_POWER)) {
       powerButtonReleasedSinceWake = true;
     }
-  } else if (millis() >= allowSleepAt && dispatchShortcutAction(getPowerButtonAction())) {
-    lastActivityTime = millis();
-    return;
+  } else if (millis() >= allowSleepAt) {
+    const auto powerAction = getPowerButtonAction();
+    if (powerAction == CrossPointSettings::SHORT_PWRBTN::QUICK_LOCK) {
+      const bool longPower = gpio.getPowerButtonHeldTime() >= SETTINGS.getPowerButtonLongPressDuration();
+      if (handleGlobalPowerButtonAction(powerAction,
+                                        longPower ? QuickLockTrigger::LongPower : QuickLockTrigger::ShortPower)) {
+        lastActivityTime = millis();
+        return;
+      }
+    } else if (dispatchShortcutAction(powerAction)) {
+      lastActivityTime = millis();
+      return;
+    }
   }
 
   // Refresh the battery icon when USB is plugged or unplugged.
