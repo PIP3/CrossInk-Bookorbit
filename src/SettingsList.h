@@ -489,7 +489,6 @@ inline uint8_t shortcutRawValue(const ShortcutOptionCatalog catalog, const Cross
       switch (action) {
         case Action::TOGGLE_TILT_PAGE_TURN:
         case Action::TOGGLE_HOME_BUTTON_IN_READER:
-        case Action::QUICK_ACTIONS:
         case Action::TOGGLE_FRONTLIGHT:
         case Action::TOGGLE_TOUCHSCREEN:
         case Action::QUICK_LOCK:

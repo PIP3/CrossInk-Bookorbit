@@ -94,6 +94,14 @@ The shortcut can run many of the same actions available for the Power button,
 including **Quick Lock**. The existing **Power + Volume Down** screenshot
 shortcut is unchanged.
 
+## Quick Actions Triggers
+
+In **Settings > Quick Actions**, assign the menu to one shortcut. Available
+triggers include short- or long-press Power, **Power + Up**, and on X4 Pro,
+**Tap Home**, **Long-Press Home**, or **Double Tap Home**. Selecting a trigger
+there replaces any previous Quick Actions trigger; it does not change the five
+actions in the menu.
+
 ## Quick Lock
 
 **Quick Lock** temporarily disables normal button and touchscreen input while
