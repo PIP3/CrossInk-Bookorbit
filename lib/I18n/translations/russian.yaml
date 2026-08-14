@@ -430,7 +430,7 @@ STR_LOW_MEMORY_IMAGES_TITLE: "Глава загружена без некото�
 STR_LOW_MEMORY_IMAGES_BODY: "Доступной памяти было недостаточно для извлечения всех изображений этой главы."
 STR_BOOKMARK_LIMIT_REACHED: "Достигнут лимит закладок"
 STR_AUTO_TURN_PAGES_PER_MIN: "Автоперелистывание (стр./мин)"
-STR_MANAGE_FONTS: "Управление шрифтами"
+STR_DOWNLOAD_FONTS: "Управление шрифтами"
 STR_FONT_BROWSER: "Обзор шрифтов"
 STR_LOADING_FONT_LIST: "Загрузка списка шрифтов..."
 STR_NO_FONTS_AVAILABLE: "Шрифты недоступны"

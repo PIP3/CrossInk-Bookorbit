@@ -11,6 +11,7 @@
 
 ### Changed
 
+- Font settings now label the downloadable-font manager as “Download Fonts”.
 - Shortcut action pickers now use a consistent option order while hiding actions unsupported by the selected trigger or device.
 - Wi-Fi passwords are now shown while entering them, making corrections easier on-device.
 - EPUB progress calculations now reuse a bounded in-memory spine-size index while reading, reducing repeated SD-card seeks.
@@ -20,6 +21,7 @@
 
 ### Fixed
 
+- Touch readers can now cancel a font download from the progress screen or its header Back button.
 - Sleep screens now reuse a compact SD-card index for custom wallpaper folders, avoiding a full folder scan on every sleep while rebuilding safely after file changes.
 - Touch taps and on-screen keyboard presses now route reliably while UI screens redraw.
 - Long-pressing Up or Down in long popup lists now advances by a full page.
