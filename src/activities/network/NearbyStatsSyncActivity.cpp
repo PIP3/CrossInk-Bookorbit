@@ -363,6 +363,17 @@ void NearbyStatsSyncActivity::enqueueEspNowPacket(const uint8_t* sourceMac, cons
   }
 
   if (xSemaphoreTake(eventMutex_, 0) != pdTRUE) return;
+  for (uint8_t offset = 0; offset < eventCount_; ++offset) {
+    const uint8_t eventIndex = static_cast<uint8_t>((eventHead_ + offset) % MAX_SYNC_EVENTS);
+    SyncEvent& queuedEvent = events_[eventIndex];
+    if (queuedEvent.type == event.type && queuedEvent.sourceMac == event.sourceMac &&
+        queuedEvent.deviceMac == event.deviceMac) {
+      queuedEvent = event;
+      xSemaphoreGive(eventMutex_);
+      return;
+    }
+  }
+
   if (eventOverflow_ || eventCount_ >= MAX_SYNC_EVENTS) {
     eventOverflow_ = true;
     eventHead_ = 0;
@@ -408,6 +419,12 @@ void NearbyStatsSyncActivity::processEvents() {
 
 void NearbyStatsSyncActivity::handleEvent(const SyncEvent& event) {
   if (state_ == State::ERROR) return;
+
+  if (event.type == PacketType::ACK) {
+    if (state_ != State::SYNCING || !localStatsSent_ || event.deviceMac != peerDeviceMac_) return;
+    localStatsAcked_ = true;
+    return;
+  }
 
   if (event.type == PacketType::NAME) {
     if (event.deviceMac == peerDeviceMac_ || isZeroMac(peerDeviceMac_)) {
@@ -462,12 +479,8 @@ void NearbyStatsSyncActivity::handleEvent(const SyncEvent& event) {
     }
     peerStatsSaved_ = true;
     sendAck(peerSourceMac_.data());
-    if (!localStatsSent_ || !localStatsAcked_) sendLocalStats();
+    if (!localStatsSent_) sendLocalStats();
     return;
-  }
-
-  if (event.type == PacketType::ACK) {
-    localStatsAcked_ = true;
   }
 }
 
