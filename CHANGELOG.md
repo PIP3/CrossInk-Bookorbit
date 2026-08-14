@@ -23,7 +23,7 @@
 
 ### Fixed
 
-- Quick Lock now unlocks only when you repeat the shortcut that activated it.
+- Dictionary word selection is now visible when Reader Dark Mode is enabled.
 - Touch readers can now cancel a font download from the progress screen or its header Back button.
 - Sleep screens now reuse a compact SD-card index for custom wallpaper folders, avoiding a full folder scan on every sleep while rebuilding safely after file changes.
 - Touch taps and on-screen keyboard presses now route reliably while UI screens redraw.
