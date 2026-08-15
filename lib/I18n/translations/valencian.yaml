@@ -1,6 +1,7 @@
 _language_name: "Valencià"
 _language_code: "CAV"
 _order: "22"
+_base_language: "CA"
 
 STR_PAGE_TURN_GESTURE: "Gest de canvi de pàgina"
 STR_TAP_AND_SWIPE: "Toc i lliscament"
