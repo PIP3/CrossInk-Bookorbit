@@ -102,12 +102,9 @@ inline bool isActionAvailable(const uint8_t action) {
 }
 
 // Quick Lock needs a single physical shortcut to unlock. Quick Actions are a
-// menu, so they cannot provide that one-to-one input contract. BookOrbit Sync is
-// out for a storage reason instead: isValidQuickActionSlot() only accepts the
-// upstream slot range, so a slot set to it would be reset on the next load.
+// menu, so they cannot provide that one-to-one input contract.
 inline bool isQuickActionSlotActionAvailable(const uint8_t action) {
-  return action != CrossPointSettings::QUICK_LOCK && action != CrossPointSettings::BOOKORBIT_SYNC &&
-         isActionAvailable(action);
+  return action != CrossPointSettings::QUICK_LOCK && isActionAvailable(action);
 }
 
 inline StrId actionLabel(const uint8_t action) {

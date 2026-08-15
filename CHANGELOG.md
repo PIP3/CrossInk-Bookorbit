@@ -11,7 +11,7 @@ Based on CrossInk v1.5.1-rc-2.
 
 ### Added
 
-- On the X4 Pro, BookOrbit Sync can now be assigned to the Home key (tap, long press or double tap), alongside the power-button and long-press shortcuts it already offered. CrossInk 1.5.1 builds every shortcut picker from one shared list of actions, so the fork's action reaches the Home key with it.
+- BookOrbit Sync can now be picked as a Quick Action, and on the X4 Pro assigned to the Home key (tap, long press or double tap). It used to be offered only on the power button and on long-press Menu/Back — the other pickers each kept their own list of actions, and the fork's action had never been added to them. Wherever it is triggered from, it behaves like the power-button shortcut already did: it syncs the book you have open, the last EPUB you opened when you are outside the reader, and opens the BookOrbit settings screen when there is no book to sync.
 - Releases of this fork now also carry an X4 Pro build, alongside the X3/X4 and Sticky ones. CrossInk had dropped that device from its release builds in 1.5.0 and brings it back in 1.5.1; the fork's release workflow follows, building each device in parallel instead of one after the other.
 
 ### Changed
