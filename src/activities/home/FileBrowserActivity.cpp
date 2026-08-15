@@ -254,6 +254,11 @@ bool FileBrowserActivity::loadFilesIntoVector(size_t cap, bool& overflow) {
 }
 
 void FileBrowserActivity::loadFiles() {
+  RenderLock lock(*this);
+  loadFilesLocked();
+}
+
+void FileBrowserActivity::loadFilesLocked() {
   usingIndex = false;
   clearIndexNameCache();
   fileListMemoryLimited = false;
@@ -275,16 +280,12 @@ void FileBrowserActivity::loadFiles() {
   if (!fileIndex) fileIndex = makeUniqueNoThrow<FileIndex>();
   if (!indexEntry) indexEntry = makeUniqueNoThrow<FileIndex::Entry>();
   if (fileIndex && indexEntry) {
-    {
-      RenderLock lock(*this);
-      GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
-    }
+    GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
 
     const auto accept =
         mode == Mode::PickFirmware ? acceptFirmware : (mode == Mode::PickDirectory ? acceptDirectory : acceptCommon);
     if (fileIndex->open(basepath.c_str(), accept)) {
       usingIndex = true;
-      requestUpdate(true);
       return;
     }
   } else {
@@ -296,7 +297,6 @@ void FileBrowserActivity::loadFiles() {
   overflow = false;
   loadFilesIntoVector(INDEX_THRESHOLD, overflow);
   FsHelpers::sortFileList(files);
-  requestUpdate(true);
 }
 
 size_t FileBrowserActivity::entryCount() const {
@@ -410,11 +410,16 @@ void FileBrowserActivity::promptDeleteFile(const std::string& fullPath, const st
       unpinSleepFavorite();
     }
 
-    loadFiles();
-    if (entryCount() == 0) {
-      selectorIndex = 0;
-    } else if (selectorIndex >= entryCount()) {
-      selectorIndex = entryCount() - 1;
+    {
+      // The render task reads the file list and base path while it builds the
+      // FreeInkUI rows. Do not replace their backing strings mid-build.
+      RenderLock lock(*this);
+      loadFilesLocked();
+      if (entryCount() == 0) {
+        selectorIndex = 0;
+      } else if (selectorIndex >= entryCount()) {
+        selectorIndex = entryCount() - 1;
+      }
     }
     requestUpdate(true);
   };
@@ -453,11 +458,15 @@ void FileBrowserActivity::promptDeleteDirectory(const std::string& fullPath, con
       clearPreferredSleepFolder();
     }
 
-    loadFiles();
-    if (entryCount() == 0) {
-      selectorIndex = 0;
-    } else if (selectorIndex >= entryCount()) {
-      selectorIndex = entryCount() - 1;
+    {
+      // buildListScreen() dereferences the list entries on the render task.
+      RenderLock lock(*this);
+      loadFilesLocked();
+      if (entryCount() == 0) {
+        selectorIndex = 0;
+      } else if (selectorIndex >= entryCount()) {
+        selectorIndex = entryCount() - 1;
+      }
     }
     requestUpdate(true);
   };
@@ -674,8 +683,11 @@ void FileBrowserActivity::showFileActionMenu(const std::string& entry, bool igno
               pendingCompletedFeedback = true;
               completedFeedbackShowTime = millis();
             }
-            loadFiles();
-            selectorIndex = entryCount() == 0 ? 0 : std::min(selectorIndex, entryCount() - 1);
+            {
+              RenderLock lock(*this);
+              loadFilesLocked();
+              selectorIndex = entryCount() == 0 ? 0 : std::min(selectorIndex, entryCount() - 1);
+            }
             requestUpdate(true);
             return;
           case FileBrowserAction::EpubRenderMode: {
@@ -734,25 +746,32 @@ void FileBrowserActivity::toggleHiddenFiles() {
     LOG_ERR("FileBrowser", "Failed to save showHiddenFiles=%u", SETTINGS.showHiddenFiles);
   }
 
-  if (!SETTINGS.showHiddenFiles && containsHiddenPathSegment(basepath)) {
-    basepath = "/";
-  }
+  {
+    RenderLock lock(*this);
+    if (!SETTINGS.showHiddenFiles && containsHiddenPathSegment(basepath)) {
+      basepath = "/";
+    }
 
-  loadFiles();
-  selectorIndex = currentEntry.empty() ? 0 : findEntry(currentEntry);
-  if (entryCount() > 0 && selectorIndex >= entryCount()) {
-    selectorIndex = entryCount() - 1;
+    loadFilesLocked();
+    selectorIndex = currentEntry.empty() ? 0 : findEntry(currentEntry);
+    if (entryCount() > 0 && selectorIndex >= entryCount()) {
+      selectorIndex = entryCount() - 1;
+    }
   }
   requestUpdate();
 }
 
 void FileBrowserActivity::onRowEvent(const fui::ActionEvent& event, void* user) {
   auto* self = static_cast<FileBrowserActivity*>(user);
-  if (event.value < 0 || static_cast<size_t>(event.value) >= self->entryCount()) return;
-  self->selectorIndex = static_cast<size_t>(event.value);
+  std::string entry;
+  {
+    RenderLock lock(*self);
+    if (event.value < 0 || static_cast<size_t>(event.value) >= self->entryCount()) return;
+    self->selectorIndex = static_cast<size_t>(event.value);
+    entry = self->entryNameAt(self->selectorIndex);
+  }
   if (event.longPress && self->mode == Mode::Books) {
     self->showFileSelection = true;
-    const std::string entry = self->entryNameAt(self->selectorIndex);
     self->app.clearTapFlash();
     if (entry.back() == '/') {
       self->showDirectoryActionMenu(entry);
@@ -788,16 +807,26 @@ void FileBrowserActivity::activateSelected() {
     return;
   }
 
-  if (basepath.back() != '/') basepath += "/";
+  std::string fullPath;
+  {
+    // listScreen() reads basepath and file entry storage on the render task.
+    // Keep their mutation together so it never sees freed row strings.
+    RenderLock lock(*this);
+    if (basepath.back() != '/') basepath += "/";
+    if (isDirectory) {
+      basepath += entry.substr(0, entry.length() - 1);
+      loadFilesLocked();
+      selectorIndex = 0;
+      topIndex = 0;
+      showFileSelection = true;
+    } else {
+      fullPath = basepath + entry;
+    }
+  }
   if (isDirectory) {
-    basepath += entry.substr(0, entry.length() - 1);
-    loadFiles();
-    selectorIndex = 0;
-    topIndex = 0;
-    showFileSelection = true;
     requestUpdate();
   } else {
-    onSelectBook(basepath + entry);
+    onSelectBook(fullPath);
   }
 }
 
@@ -899,19 +928,29 @@ void FileBrowserActivity::loop() {
   // pulls the view back to it.
   const auto swipe = mappedInput.wasSwipe();
   if (swipe == MappedInputManager::SwipeDir::Up || swipe == MappedInputManager::SwipeDir::Down) {
-    const int delta = swipe == MappedInputManager::SwipeDir::Up ? visibleRows : -visibleRows;
-    const int next = scrollListBy(topIndex, delta, visibleRows, listSize);
-    if (next != topIndex) {
-      topIndex = next;
+    bool moved = false;
+    {
+      RenderLock lock(*this);
+      const int delta = swipe == MappedInputManager::SwipeDir::Up ? visibleRows : -visibleRows;
+      const int next = scrollListBy(topIndex, delta, visibleRows, listSize);
+      if (next != topIndex) {
+        topIndex = next;
+        moved = true;
+      }
+    }
+    if (moved) {
       requestUpdate();
     }
     return;
   }
 
   const auto moveSelection = [this, listSize](const int index) {
-    selectorIndex = static_cast<size_t>(index);
-    showFileSelection = true;
-    topIndex = followListSelection(static_cast<int>(selectorIndex), topIndex, visibleRows, listSize);
+    {
+      RenderLock lock(*this);
+      selectorIndex = static_cast<size_t>(index);
+      showFileSelection = true;
+      topIndex = followListSelection(static_cast<int>(selectorIndex), topIndex, visibleRows, listSize);
+    }
     requestUpdate();
   };
   const auto moveNext = [this, listSize, &moveSelection] {
@@ -943,15 +982,18 @@ void FileBrowserActivity::loop() {
 
 void FileBrowserActivity::navigateBack() {
   if (basepath != "/") {
-    const std::string oldPath = basepath;
-    basepath.replace(basepath.find_last_of('/'), std::string::npos, "");
-    if (basepath.empty()) basepath = "/";
-    loadFiles();
+    {
+      RenderLock lock(*this);
+      const std::string oldPath = basepath;
+      basepath.replace(basepath.find_last_of('/'), std::string::npos, "");
+      if (basepath.empty()) basepath = "/";
+      loadFilesLocked();
 
-    const std::string dirName = oldPath.substr(oldPath.find_last_of('/') + 1) + "/";
-    selectorIndex = findEntry(dirName);
-    showFileSelection = true;
-    topIndex = followListSelection(static_cast<int>(selectorIndex), 0, visibleRows, static_cast<int>(entryCount()));
+      const std::string dirName = oldPath.substr(oldPath.find_last_of('/') + 1) + "/";
+      selectorIndex = findEntry(dirName);
+      showFileSelection = true;
+      topIndex = followListSelection(static_cast<int>(selectorIndex), 0, visibleRows, static_cast<int>(entryCount()));
+    }
     requestUpdate();
   } else if (mode != Mode::Books) {
     ActivityResult result;

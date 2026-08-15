@@ -85,6 +85,9 @@ class FileBrowserActivity final : public Activity {
   // Data loading
   void clearIndexNameCache();
   void loadFiles();
+  // Caller holds RenderLock while replacing the list backing storage together
+  // with its associated navigation state.
+  void loadFilesLocked();
   bool loadFilesIntoVector(size_t cap, bool& overflow);
   size_t entryCount() const;
   const char* entryNameAt(size_t row);
