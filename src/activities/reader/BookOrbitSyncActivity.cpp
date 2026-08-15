@@ -29,6 +29,8 @@
 #include "SilentRestart.h"
 #include "activities/ActivityManager.h"
 #include "activities/network/WifiSelectionActivity.h"
+#include "components/TouchActionButtons.h"
+#include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -38,6 +40,61 @@
 // support cannot regress the existing generic KOReader sync path.
 
 namespace {
+// Result-screen action geometry, mirroring KOReaderSyncActivity's. The two
+// screens ask the same question with the same two answers, and this file already
+// tracks that one deliberately (see the class comment): a shared helper would
+// have to live in KOReaderSyncActivity.cpp, which is upstream's, and would
+// conflict on every sync.
+constexpr int RESULT_LOCAL_PAGE_Y_OFFSET = 200;
+constexpr int RESULT_ACTION_MARGIN_TOP = 20;
+constexpr int RESULT_ACTION_HEIGHT = 48;
+constexpr int RESULT_ACTION_GAP = 10;
+constexpr int RESULT_NON_TOUCH_ACTION_MARGIN_TOP = 8;
+constexpr int RESULT_NON_TOUCH_ACTION_HEIGHT = 40;
+constexpr int RESULT_NON_TOUCH_ACTION_GAP = 8;
+
+struct ResultActionLayout {
+  Rect buttons[2];
+  int rowStep;
+  int rowHeight;
+  TouchActionButtons::Layout touchLayout;
+};
+
+// One layout for the draw and for the hit test, so a translated label cannot
+// make the two drift apart. Buttons sit under the local-progress line, but ride
+// up when the screen is too short to hold both below it.
+ResultActionLayout resultActionLayout(const Rect& screen, const ThemeMetrics& metrics, const int contentTop,
+                                      const int lineHeight, const bool hasTouch) {
+  const int buttonX = screen.x + metrics.contentSidePadding;
+  const int buttonWidth = std::max(1, screen.width - metrics.contentSidePadding * 2);
+  const int buttonHeight = hasTouch ? RESULT_ACTION_HEIGHT : RESULT_NON_TOUCH_ACTION_HEIGHT;
+  const int buttonGap = hasTouch ? RESULT_ACTION_GAP : RESULT_NON_TOUCH_ACTION_GAP;
+  const int marginTop = hasTouch ? RESULT_ACTION_MARGIN_TOP : RESULT_NON_TOUCH_ACTION_MARGIN_TOP;
+  const int desiredButtonY = contentTop + RESULT_LOCAL_PAGE_Y_OFFSET + lineHeight + marginTop;
+  // Touch devices spend the button-hint band on content: nothing reads it there.
+  const int reservedBottom = hasTouch ? metrics.verticalSpacing : metrics.buttonHintsHeight + metrics.verticalSpacing;
+  const int latestButtonY = screen.y + screen.height - reservedBottom - buttonHeight * 2 - buttonGap;
+  const int firstButtonY = std::min(desiredButtonY, latestButtonY);
+  ResultActionLayout result{{Rect{buttonX, firstButtonY, buttonWidth, buttonHeight},
+                             Rect{buttonX, firstButtonY + buttonHeight + buttonGap, buttonWidth, buttonHeight}},
+                            buttonHeight + buttonGap,
+                            buttonHeight,
+                            {}};
+  if (hasTouch) {
+    constexpr int touchHeight = TouchActionButtons::kDefaultHeight;
+    constexpr int touchGap = TouchActionButtons::kDefaultGap;
+    constexpr int touchTotal = touchHeight * 2 + touchGap;
+    const Rect touchContainer{buttonX, std::min(firstButtonY, screen.y + screen.height - reservedBottom - touchTotal),
+                              buttonWidth, touchTotal};
+    result.touchLayout = TouchActionButtons::vertical(touchContainer, 2);
+    result.buttons[0] = result.touchLayout.buttons[0];
+    result.buttons[1] = result.touchLayout.buttons[1];
+    result.rowStep = touchHeight + touchGap;
+    result.rowHeight = touchHeight;
+  }
+  return result;
+}
+
 // The SNTP client lives behind halClock, whose esp-netif implementation routes every lwIP
 // interaction through the core-lock-safe execution path -- this file and KOReaderSyncActivity
 // used to carry hand-rolled copies of that discipline.
@@ -1225,14 +1282,29 @@ void BookOrbitSyncActivity::onExit() {
   }
 }
 
+Rect BookOrbitSyncActivity::headerBandRect() const {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+  // Touch devices get the compact band the back button is drawn into, which is
+  // not metrics.headerHeight: content below it starts lower.
+  return Rect{screen.x, screen.y + metrics.topPadding, screen.width,
+              TouchHeaderBackButton::height(metrics, mappedInput)};
+}
+
 void BookOrbitSyncActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   auto metrics = UITheme::getInstance().getMetrics();
   Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
 
-  GUI.drawHeader(renderer, Rect{screen.x, screen.y + metrics.topPadding, screen.width, metrics.headerHeight},
-                 tr(STR_BOOKORBIT_SYNC));
+  // On touch devices the title band carries the way back: the result screen's
+  // choices are the only other tap targets, and the rest have none at all.
+  const Rect header = headerBandRect();
+  if (mappedInput.hasTouchHardware()) {
+    TouchHeaderBackButton::draw(renderer, header, tr(STR_BOOKORBIT_SYNC), /*readerContext=*/true);
+  } else {
+    GUI.drawHeader(renderer, header, tr(STR_BOOKORBIT_SYNC));
+  }
 
   int top = screen.y + screen.height / 2 - 40;
   if (state == NO_CREDENTIALS) {
@@ -1264,7 +1336,7 @@ void BookOrbitSyncActivity::render(RenderLock&&) {
   }
 
   if (state == SHOWING_RESULT) {
-    top = screen.y + metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+    top = header.y + header.height + metrics.verticalSpacing;
     renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_PROGRESS_FOUND), true, EpdFontFamily::BOLD);
 
     const int remoteTocIndex = epub->getTocIndexForSpineIndex(remotePosition.spineIndex);
@@ -1297,22 +1369,28 @@ void BookOrbitSyncActivity::render(RenderLock&&) {
     char localPageStr[64];
     snprintf(localPageStr, sizeof(localPageStr), tr(STR_PAGE_TOTAL_OVERALL_FORMAT), currentPage + 1, totalPagesInSpine,
              localProgress.percentage * 100);
-    renderer.drawText(UI_10_FONT_ID, screen.x + metrics.contentSidePadding, top + 200, localPageStr);
+    renderer.drawText(UI_10_FONT_ID, screen.x + metrics.contentSidePadding, top + RESULT_LOCAL_PAGE_Y_OFFSET,
+                      localPageStr);
 
-    const int optionY = top + 230;
-    const int optionHeight = 30;
-
-    if (selectedOption == 0) {
-      renderer.fillRect(screen.x, optionY - 2, screen.width - 1, optionHeight);
+    const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
+    const auto actions = resultActionLayout(screen, metrics, top, lineHeight, mappedInput.hasTouch());
+    const char* actionLabels[] = {tr(STR_APPLY_REMOTE), tr(STR_UPLOAD_LOCAL)};
+    if (mappedInput.hasTouch()) {
+      TouchActionButtons::draw(renderer, actions.touchLayout, actionLabels, selectedOption, selectedOption,
+                               UI_10_FONT_ID);
+    } else {
+      for (int option = 0; option < 2; ++option) {
+        const Rect& button = actions.buttons[option];
+        const bool selected = selectedOption == option;
+        if (selected) {
+          renderer.fillRect(button.x, button.y, button.width, button.height);
+        }
+        renderer.drawRect(button.x, button.y, button.width, button.height, true);
+        const int textX = button.x + (button.width - renderer.getTextWidth(UI_10_FONT_ID, actionLabels[option])) / 2;
+        const int textY = button.y + (button.height - lineHeight) / 2;
+        renderer.drawText(UI_10_FONT_ID, textX, textY, actionLabels[option], !selected);
+      }
     }
-    renderer.drawText(UI_10_FONT_ID, screen.x + metrics.contentSidePadding, optionY, tr(STR_APPLY_REMOTE),
-                      selectedOption != 0);
-
-    if (selectedOption == 1) {
-      renderer.fillRect(screen.x, optionY + optionHeight - 2, screen.width - 1, optionHeight);
-    }
-    renderer.drawText(UI_10_FONT_ID, screen.x + metrics.contentSidePadding, optionY + optionHeight,
-                      tr(STR_UPLOAD_LOCAL), selectedOption != 1);
 
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4, true);
@@ -1362,14 +1440,49 @@ void BookOrbitSyncActivity::loop() {
     return;
   }
 
+  // The title band's back button, on the devices that have touch.
+  const bool backRequested = mappedInput.wasReleased(MappedInputManager::Button::Back) ||
+                             TouchHeaderBackButton::wasTapped(mappedInput, headerBandRect());
+
   if (state == NO_CREDENTIALS || state == SYNC_FAILED || state == UPLOAD_COMPLETE) {
-    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    if (backRequested) {
       returnToReader();
     }
     return;
   }
 
   if (state == SHOWING_RESULT) {
+    // Touch: pressing a button highlights it, releasing on it takes the choice.
+    // The same layout the draw used, so a translated label cannot move one
+    // without the other.
+    if (mappedInput.hasTouch()) {
+      const auto& metrics = UITheme::getInstance().getMetrics();
+      const Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+      const Rect header = headerBandRect();
+      const auto actions = resultActionLayout(screen, metrics, header.y + header.height + metrics.verticalSpacing,
+                                              renderer.getLineHeight(UI_10_FONT_ID), true);
+      int touchedOption = -1;
+      const auto touch =
+          mappedInput.rowTouch(touchedOption, actions.buttons[0].y, actions.rowStep, 2, actions.buttons[0].x,
+                               actions.buttons[0].x + actions.buttons[0].width, actions.rowHeight);
+      if (touch == MappedInputManager::RowTouch::Down) {
+        if (selectedOption != touchedOption) {
+          selectedOption = touchedOption;
+          requestUpdate();
+        }
+        return;
+      }
+      if (touch == MappedInputManager::RowTouch::Tap) {
+        selectedOption = touchedOption;
+        if (selectedOption == 0) {
+          saveProgressAndReturn(remotePosition);
+        } else {
+          performUpload();
+        }
+        return;
+      }
+    }
+
     if (mappedInput.wasReleased(MappedInputManager::Button::Up) ||
         mappedInput.wasReleased(MappedInputManager::Button::Left)) {
       selectedOption = (selectedOption + 1) % 2;
@@ -1388,7 +1501,7 @@ void BookOrbitSyncActivity::loop() {
       }
     }
 
-    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    if (backRequested) {
       returnToReader();
     }
     return;
@@ -1402,7 +1515,7 @@ void BookOrbitSyncActivity::loop() {
       performUpload();
     }
 
-    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    if (backRequested) {
       returnToReader();
     }
     return;

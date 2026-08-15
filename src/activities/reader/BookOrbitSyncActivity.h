@@ -11,6 +11,8 @@
 #include "ProgressMapper.h"
 #include "activities/Activity.h"
 
+struct Rect;
+
 /**
  * Activity for syncing reading progress with a BookOrbit server.
  *
@@ -140,6 +142,10 @@ class BookOrbitSyncActivity final : public Activity {
   // Above this, the key set and its JSON stop fitting beside a TLS session, so it is not sent
   // and the server is told the set is incomplete instead of being left to infer deletions.
   static constexpr size_t MAX_KEYS_PER_SYNC = 64;
+  // The title band, whose height differs on touch devices: content below it
+  // starts from this rect, never from metrics.headerHeight.
+  Rect headerBandRect() const;
+
   bool consumeInitialConfirmRelease();
   void ensureEpubLoaded();
   void saveProgressAndReturn(const CrossPointPosition& position);
