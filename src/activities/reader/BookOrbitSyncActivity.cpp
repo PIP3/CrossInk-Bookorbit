@@ -1005,6 +1005,24 @@ void BookOrbitSyncActivity::uploadQueuedStats() {
   }
   LOG_INF("BookOrbit", "Draining %u queued events (era now %u)", (unsigned)total, (unsigned)WallClock::era());
 
+  // The bar belongs to this phase: clear it on every exit path, or the next
+  // phase's status message is drawn over a stale one.
+  struct ProgressScope {
+    BookOrbitSyncActivity* self;
+    ~ProgressScope() {
+      RenderLock lock(*self);
+      self->statsUploaded = 0;
+      self->statsTotal = 0;
+    }
+  } progressScope{this};
+  {
+    RenderLock lock(*this);
+    statsUploaded = 0;
+    statsTotal = total;
+    statusMessage = tr(STR_SYNCING_READING_SESSIONS);
+  }
+  requestUpdate(true);
+
   // Events stamped by the system clock (all of them on RTC-less devices) are
   // re-resolved against NTP: each event gets the correction WallClock measured for ITS
   // era, interpolated along the era's drift ramp when the clock ran continuously since
@@ -1028,6 +1046,7 @@ void BookOrbitSyncActivity::uploadQueuedStats() {
   size_t dropped = 0;
   size_t uploaded = 0;
   size_t manifestLines = 0;
+  size_t shownTenth = 0;
 
   for (size_t offset = 0; offset < total; offset += BATCH_SIZE) {
     if (!BookOrbitStatsQueue::readRange(cachePath, offset, BATCH_SIZE, batch)) {
@@ -1099,6 +1118,18 @@ void BookOrbitSyncActivity::uploadQueuedStats() {
       return;
     }
     uploaded += batch.size();
+
+    // A batch is a ~half-second round trip and a panel refresh costs about as
+    // much, so repaint on each tenth of the queue rather than on each batch.
+    const size_t tenth = uploaded * 10 / total;
+    if (tenth != shownTenth || uploaded >= total) {
+      shownTenth = tenth;
+      {
+        RenderLock lock(*this);
+        statsUploaded = uploaded;
+      }
+      requestUpdate(true);
+    }
   }
 
   if (dropped > 0) {
@@ -1218,6 +1249,16 @@ void BookOrbitSyncActivity::render(RenderLock&&) {
 
   if (state == SYNCING || state == UPLOADING) {
     UITheme::drawCenteredText(renderer, screen, UI_10_FONT_ID, top, statusMessage.c_str(), true, EpdFontFamily::BOLD);
+    if (statsTotal > 0) {
+      const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
+      char counts[32];
+      snprintf(counts, sizeof(counts), "%u / %u", (unsigned)statsUploaded, (unsigned)statsTotal);
+      UITheme::drawCenteredText(renderer, screen, UI_10_FONT_ID, top + lineHeight + metrics.verticalSpacing, counts);
+      const int barWidth = screen.width / 2;
+      const int barY = top + 2 * (lineHeight + metrics.verticalSpacing);
+      GUI.drawProgressBar(renderer, Rect{screen.x + (screen.width - barWidth) / 2, barY, barWidth, 16}, statsUploaded,
+                          statsTotal);
+    }
     renderer.displayBuffer();
     return;
   }
