@@ -18,6 +18,10 @@ Based on CrossInk v1.5.1-rc-2.
 
 - A power-button or long-press-menu shortcut set to BookOrbit Sync has to be picked again, once, after this update. Shortcut choices are stored as numbers, and CrossInk 1.5.1 gave its own new actions (Quick Actions, Quick Lock, frontlight and touchscreen toggles) the numbers this fork had used for BookOrbit Sync; the fork's action moved above them rather than change the meaning of what CrossInk persists. A shortcut left pointing at the old number now runs one of CrossInk's actions instead.
 
+### Fixed
+
+- Settings > BookOrbit Sync now answers to touch on the devices that have it: tapping a line opens it, and the title bar carries a back button. The screen drew its list with the older painter, which puts rows on the panel without registering anything to tap, so only the physical buttons worked — they still do, unchanged.
+
 ## [v1.5.0+bookorbit.2] - 2026-08-12
 
 Based on CrossInk v1.5.0.
