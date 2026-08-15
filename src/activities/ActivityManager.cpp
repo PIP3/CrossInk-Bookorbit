@@ -27,6 +27,7 @@
 #include "network/CrossPointWebServerActivity.h"
 #include "network/NearbyBookTransferActivity.h"
 #include "network/NearbyStatsSyncActivity.h"
+#include "network/UsbDriveActivity.h"
 #include "reader/ReaderActivity.h"
 #include "settings/BookOrbitAuthActivity.h"
 #include "settings/OpdsServerListActivity.h"
@@ -94,6 +95,18 @@ void ActivityManager::renderTaskLoop() {
 }
 
 void ActivityManager::loop() {
+  if (currentActivity && currentActivity->requiresExclusiveStorageLoop()) {
+    currentActivity->loop();
+    // USB Drive normally restarts the device rather than replacing itself. The
+    // pending-action fallthrough keeps the simulator's stub lifecycle usable.
+    if (pendingAction == PendingAction::None) {
+      if (requestedUpdate.exchange(false) && renderTaskHandle) {
+        xTaskNotify(renderTaskHandle, 1, eIncrement);
+      }
+      return;
+    }
+  }
+
   if (currentActivity) {
     mappedInput.setPowerAsConfirmInReaderMode(currentActivity->allowPowerAsConfirmInReaderMode());
 
@@ -224,8 +237,10 @@ bool ActivityManager::handleGlobalHomeGesture() {
     return false;
   }
 
-  const bool homeGesture = currentActivity->usesFullScreenReaderVerticalSwipes() ? mappedInput.wasReaderHomeGesture()
-                                                                                 : mappedInput.wasHomeGesture();
+  const bool homeGesture = currentActivity->usesFullScreenReaderVerticalSwipes()
+                               ? mappedInput.wasReaderHomeGesture()
+                               : (currentActivity->allowGlobalHomeSwipeGesture() || mappedInput.hasHomeKey()) &&
+                                     mappedInput.wasHomeGesture();
   if (!homeGesture) {
     return false;
   }
@@ -263,6 +278,17 @@ bool ActivityManager::openReaderMenuAfterClosingOverlay() {
 
 bool ActivityManager::handleShortcutAction(const uint8_t action) {
   return currentActivity && pendingAction == PendingAction::None && currentActivity->handleShortcutAction(action);
+}
+
+bool ActivityManager::handleQuickLockUnlock(const QuickLockTrigger trigger) {
+  return currentActivity && pendingAction == PendingAction::None && currentActivity->handleQuickLockUnlock(trigger);
+}
+
+void ActivityManager::notifyInputLockChanged(const bool locked) {
+  if (currentActivity) currentActivity->onInputLockChanged(locked);
+  for (const auto& activity : stackActivities) {
+    activity->onInputLockChanged(locked);
+  }
 }
 
 bool ActivityManager::handleReaderPowerButtonSettingsOverride() {
@@ -343,6 +369,14 @@ void ActivityManager::goToHotspotFileTransfer(const std::string& returnBookPath)
   restartToFileTransfer(NetworkMode::CREATE_HOTSPOT, returnBookPath);
 }
 
+void ActivityManager::goToUsbDrive() {
+#if CROSSINK_APP_CAP_USB_DRIVE
+  replaceActivity(std::make_unique<UsbDriveActivity>(renderer, mappedInput));
+#else
+  LOG_ERR("ACT", "USB Drive requested in a build without USB Drive capability");
+#endif
+}
+
 bool ActivityManager::resumeFileTransferFromNetworkBoot(const uint32_t payload) {
   const uint32_t rawMode = payload & FILE_TRANSFER_MODE_MASK;
   if (rawMode > static_cast<uint32_t>(NetworkMode::CREATE_HOTSPOT)) {
@@ -378,6 +412,15 @@ void ActivityManager::goToNearbyStatsSync() {
 }
 
 void ActivityManager::goToSettings(const bool dismissOnUpSwipe) {
+  preferredHomeBookPath.clear();
+  returningHomeThroughSettings = false;
+  if (currentActivity && currentActivity->isHomeActivity()) {
+    preferredHomeBookPath = currentActivity->getCurrentBookPath();
+    returningHomeThroughSettings = true;
+  } else if (!stackActivities.empty() && stackActivities.back()->isHomeActivity()) {
+    preferredHomeBookPath = stackActivities.back()->getCurrentBookPath();
+    returningHomeThroughSettings = true;
+  }
   replaceActivity(std::make_unique<SettingsActivity>(renderer, mappedInput, dismissOnUpSwipe));
 }
 
@@ -472,6 +515,13 @@ void ActivityManager::goToFullScreenMessage(std::string message, EpdFontFamily::
 }
 
 void ActivityManager::goHome(HomeMenuItem initialMenuItem, const bool initialFullRefresh) {
+  std::string initialBookPath;
+  if (returningHomeThroughSettings) {
+    initialBookPath = std::move(preferredHomeBookPath);
+  }
+  preferredHomeBookPath.clear();
+  returningHomeThroughSettings = false;
+
   if (initialMenuItem == HomeMenuItem::NONE && currentActivity) {
     const auto& activityName = currentActivity->name;
     if (activityName == "FileBrowser") {
@@ -490,7 +540,8 @@ void ActivityManager::goHome(HomeMenuItem initialMenuItem, const bool initialFul
       initialMenuItem = HomeMenuItem::SETTINGS_MENU;
     }
   }
-  replaceActivity(std::make_unique<HomeActivity>(renderer, mappedInput, initialMenuItem, initialFullRefresh));
+  replaceActivity(std::make_unique<HomeActivity>(renderer, mappedInput, initialMenuItem, initialFullRefresh,
+                                                 std::move(initialBookPath)));
 }
 void ActivityManager::goToCrashReport() { replaceActivity(std::make_unique<CrashActivity>(renderer, mappedInput)); }
 
@@ -516,6 +567,10 @@ void ActivityManager::popActivity() {
 }
 
 bool ActivityManager::preventAutoSleep() const { return currentActivity && currentActivity->preventAutoSleep(); }
+
+bool ActivityManager::requiresExclusiveStorageLoop() const {
+  return currentActivity && currentActivity->requiresExclusiveStorageLoop();
+}
 
 bool ActivityManager::isHomeActivity() const { return currentActivity && currentActivity->name == "Home"; }
 

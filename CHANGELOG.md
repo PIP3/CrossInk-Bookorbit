@@ -7,15 +7,16 @@ on; for everything inherited from upstream, see the
 
 ## [Unreleased]
 
-Based on CrossInk v1.5.1-rc.
+Based on CrossInk v1.5.1-rc-2.
 
 ### Added
 
+- On the X4 Pro, BookOrbit Sync can now be assigned to the Home key (tap, long press or double tap), alongside the power-button and long-press shortcuts it already offered. CrossInk 1.5.1 builds every shortcut picker from one shared list of actions, so the fork's action reaches the Home key with it.
 - Releases of this fork now also carry an X4 Pro build, alongside the X3/X4 and Sticky ones. CrossInk had dropped that device from its release builds in 1.5.0 and brings it back in 1.5.1; the fork's release workflow follows, building each device in parallel instead of one after the other.
 
 ### Changed
 
-- A power-button or long-press-menu shortcut set to BookOrbit Sync has to be picked again, once, after this update. Shortcut choices are stored as numbers, and CrossInk 1.5.1 gave its own new actions (Quick Actions, frontlight and touchscreen toggles) the numbers this fork had used for BookOrbit Sync; the fork's action moved above them rather than change the meaning of what CrossInk persists. A shortcut left pointing at the old number now runs one of CrossInk's actions instead.
+- A power-button or long-press-menu shortcut set to BookOrbit Sync has to be picked again, once, after this update. Shortcut choices are stored as numbers, and CrossInk 1.5.1 gave its own new actions (Quick Actions, Quick Lock, frontlight and touchscreen toggles) the numbers this fork had used for BookOrbit Sync; the fork's action moved above them rather than change the meaning of what CrossInk persists. A shortcut left pointing at the old number now runs one of CrossInk's actions instead.
 
 ## [v1.5.0+bookorbit.2] - 2026-08-12
 
