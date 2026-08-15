@@ -21,6 +21,10 @@
 - Reader menu settings now group Controls and Mark as Finished with the gear-tab actions in a consistent order.
 - Font Family choices now identify built-in and SD-card fonts by their available point-size ranges.
 
+### Removed
+
+- The undocumented X4 Pro power-button double-click frontlight toggle.
+
 ### Fixed
 
 - Long-pressing Power to toggle Reader Dark Mode now changes it once and keeps the selected state after release.
