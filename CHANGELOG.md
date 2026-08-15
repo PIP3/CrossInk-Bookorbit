@@ -27,6 +27,7 @@
 
 ### Fixed
 
+- The Refresh Screen shortcut on X4 now uses its less disruptive clean refresh waveform.
 - Long-pressing Power to toggle Reader Dark Mode now changes it once and keeps the selected state after release.
 - Dictionary word selection is now visible when Reader Dark Mode is enabled.
 - Touch readers can now cancel a font download from the progress screen or its header Back button.

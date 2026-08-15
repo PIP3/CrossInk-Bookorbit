@@ -549,7 +549,7 @@ bool handleGlobalPowerButtonAction(const CrossPointSettings::SHORT_PWRBTN action
         return true;
       }
       RenderLock lock;
-      renderer.displayBuffer(HalDisplay::FULL_REFRESH);
+      renderer.displayBuffer(manualScreenRefreshMode());
       return true;
     }
     case CrossPointSettings::SHORT_PWRBTN::SCREENSHOT: {
