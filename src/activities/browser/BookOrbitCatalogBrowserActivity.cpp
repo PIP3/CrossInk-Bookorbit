@@ -23,13 +23,19 @@
 #include "activities/reader/BookReadingStats.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/CompactHeader.h"
+#include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
+#include "components/UIThemeTokens.h"
+#include "components/UiAppHelpers.h"
 #include "fontIds.h"
 #include "network/HttpDownloader.h"
 #include "util/BookCacheUtils.h"
 #include "util/StringUtils.h"
 
+namespace fui = freeink::ui;
+
 namespace {
+constexpr fui::ActionId ACTION_ROW = 1;
 constexpr size_t BOOKORBIT_DOWNLOAD_BUFFER_SIZE = 2048;
 constexpr char READ_FOLDER_PREFIX[] = "/Read";
 constexpr size_t MAX_LOCAL_ENTRIES = 200;
@@ -66,10 +72,32 @@ bool hasEpubFile(const BookOrbitBookDetail& detail, BookOrbitCatalogFile& outFil
 }
 }  // namespace
 
+BookOrbitCatalogBrowserActivity::BookOrbitCatalogBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
+    : Activity("BookOrbitCatalogBrowser", renderer, mappedInput),
+      uiTarget(makeUiTarget(renderer)),
+      app(uiTarget, uiTarget.deviceContext()) {}
+
+void BookOrbitCatalogBrowserActivity::onRowEvent(const fui::ActionEvent& event, void* user) {
+  auto* self = static_cast<BookOrbitCatalogBrowserActivity*>(user);
+  if (event.value < 0 || event.value >= static_cast<int>(self->entries.size())) return;
+  self->selectorIndex = event.value;
+  // Activation loads a new listing or starts a download; a lingering flash
+  // would gray an unrelated row of whatever comes next.
+  self->app.clearTapFlash();
+  self->activateSelected();
+}
+
 void BookOrbitCatalogBrowserActivity::onEnter() {
   Activity::onEnter();
 
   sdFontSystem.releaseLoadedFont(renderer);
+
+  uiReady = false;
+  visibleRows = 1;
+  topIndex = 0;
+  applySharedUiTheme(app, uiTarget);
+  app.on(ACTION_ROW, &BookOrbitCatalogBrowserActivity::onRowEvent, this);
+  app.setScreen(&BookOrbitCatalogBrowserActivity::listScreen, this);
 
   entries.clear();
   selectorIndex = 0;
@@ -552,6 +580,78 @@ bool BookOrbitCatalogBrowserActivity::preventAutoSleep() {
   return false;
 }
 
+void BookOrbitCatalogBrowserActivity::activateSelected() {
+  if (entries.empty()) return;
+  const auto& entry = entries[selectorIndex];
+  switch (entry.type) {
+    case EntryType::SECTION: {
+      BookOrbitBookQuery query;
+      query.sort = entry.sectionId == "continue-reading" ? "recently_read"
+                   : entry.sectionId == "all-books"      ? "title"
+                                                         : "recently_added";
+      if (!loadBooks(query, entry.title, 1, /*fromFacet=*/false, /*append=*/false, /*allowNetwork=*/false)) {
+        showLoadingBeforeFetch();
+        loadBooks(query, entry.title, 1, /*fromFacet=*/false);
+      }
+      break;
+    }
+    case EntryType::FACET_SECTION:
+      if (!loadFacetEntries(entry.sectionId, entry.title, 1, /*append=*/false, /*allowNetwork=*/false)) {
+        showLoadingBeforeFetch();
+        loadFacetEntries(entry.sectionId, entry.title, 1);
+      }
+      break;
+    case EntryType::LOCAL_SECTION:
+      loadLocalBooks(entry.sectionId);
+      break;
+    case EntryType::LOCAL_BOOK:
+      activityManager.goToReader(entry.path);
+      break;
+    case EntryType::FACET: {
+      // Mirror BookOrbit's own plugin: author filters by the entry id; series
+      // prefers the numeric seriesId and sorts by series order.
+      BookOrbitBookQuery query;
+      if (facetSectionId == "series") {
+        query.sort = "series";
+        if (!entry.seriesId.empty()) {
+          query.seriesId = entry.seriesId;
+        } else {
+          query.series = entry.sectionId;
+        }
+      } else {
+        query.author = entry.sectionId;
+      }
+      if (!loadBooks(query, entry.title, 1, /*fromFacet=*/true, /*append=*/false, /*allowNetwork=*/false)) {
+        showLoadingBeforeFetch();
+        loadBooks(query, entry.title, 1, /*fromFacet=*/true);
+      }
+      break;
+    }
+    case EntryType::SEARCH:
+      launchSearch();
+      break;
+    case EntryType::BOOK:
+      downloadBook(entry.bookId, entry.title);
+      break;
+  }
+}
+
+void BookOrbitCatalogBrowserActivity::navigateBack() {
+  if (navLevel == NavLevel::Root) {
+    onGoHome();
+  } else if (navLevel == NavLevel::Books && booksFromFacet) {
+    if (!loadFacetEntries(facetSectionId, facetTitle, facetPage, /*append=*/false, /*allowNetwork=*/false)) {
+      showLoadingBeforeFetch();
+      loadFacetEntries(facetSectionId, facetTitle, facetPage);
+    }
+  } else {
+    if (!loadRoot(/*allowNetwork=*/false)) {
+      showLoadingBeforeFetch();
+      loadRoot();
+    }
+  }
+}
+
 void BookOrbitCatalogBrowserActivity::loop() {
   if (state == BrowserState::WIFI_SELECTION || state == BrowserState::SEARCH_INPUT) {
     return;
@@ -562,11 +662,17 @@ void BookOrbitCatalogBrowserActivity::loop() {
     return;
   }
 
+  // The compact header carries a back button on touch devices. It sits above the
+  // app's content margin, so no list row can claim the same tap.
+  const bool backRequested =
+      mappedInput.wasReleased(MappedInputManager::Button::Back) ||
+      TouchHeaderBackButton::wasTapped(mappedInput, TouchHeaderBackButton::compactHeaderRect(renderer));
+
   if (state == BrowserState::ERROR) {
     // Catalog browsing is a secondary feature: errors here just return you to the
     // previous list (or home from the root) rather than offering a retry, matching
     // the "no code beyond what's needed" scope decision for this feature.
-    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    if (backRequested) {
       if (!BOOKORBIT_STORE.hasCredentials() || navLevel == NavLevel::Root) {
         onGoHome();
       } else if (entries.empty()) {
@@ -588,7 +694,7 @@ void BookOrbitCatalogBrowserActivity::loop() {
   }
 
   if (state == BrowserState::CHECK_WIFI || state == BrowserState::LOADING) {
-    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    if (backRequested) {
       onGoHome();
     }
     return;
@@ -598,80 +704,30 @@ void BookOrbitCatalogBrowserActivity::loop() {
 
   if (state == BrowserState::BROWSING) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      if (!entries.empty()) {
-        const auto& entry = entries[selectorIndex];
-        switch (entry.type) {
-          case EntryType::SECTION: {
-            BookOrbitBookQuery query;
-            query.sort = entry.sectionId == "continue-reading" ? "recently_read"
-                         : entry.sectionId == "all-books"      ? "title"
-                                                               : "recently_added";
-            if (!loadBooks(query, entry.title, 1, /*fromFacet=*/false, /*append=*/false, /*allowNetwork=*/false)) {
-              showLoadingBeforeFetch();
-              loadBooks(query, entry.title, 1, /*fromFacet=*/false);
-            }
-            break;
-          }
-          case EntryType::FACET_SECTION:
-            if (!loadFacetEntries(entry.sectionId, entry.title, 1, /*append=*/false, /*allowNetwork=*/false)) {
-              showLoadingBeforeFetch();
-              loadFacetEntries(entry.sectionId, entry.title, 1);
-            }
-            break;
-          case EntryType::LOCAL_SECTION:
-            loadLocalBooks(entry.sectionId);
-            break;
-          case EntryType::LOCAL_BOOK:
-            activityManager.goToReader(entry.path);
-            break;
-          case EntryType::FACET: {
-            // Mirror BookOrbit's own plugin: author filters by the entry id; series
-            // prefers the numeric seriesId and sorts by series order.
-            BookOrbitBookQuery query;
-            if (facetSectionId == "series") {
-              query.sort = "series";
-              if (!entry.seriesId.empty()) {
-                query.seriesId = entry.seriesId;
-              } else {
-                query.series = entry.sectionId;
-              }
-            } else {
-              query.author = entry.sectionId;
-            }
-            if (!loadBooks(query, entry.title, 1, /*fromFacet=*/true, /*append=*/false, /*allowNetwork=*/false)) {
-              showLoadingBeforeFetch();
-              loadBooks(query, entry.title, 1, /*fromFacet=*/true);
-            }
-            break;
-          }
-          case EntryType::SEARCH:
-            launchSearch();
-            break;
-          case EntryType::BOOK:
-            downloadBook(entry.bookId, entry.title);
-            break;
-        }
-      }
-    } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-      if (navLevel == NavLevel::Root) {
-        onGoHome();
-      } else if (navLevel == NavLevel::Books && booksFromFacet) {
-        if (!loadFacetEntries(facetSectionId, facetTitle, facetPage, /*append=*/false, /*allowNetwork=*/false)) {
-          showLoadingBeforeFetch();
-          loadFacetEntries(facetSectionId, facetTitle, facetPage);
-        }
-      } else {
-        if (!loadRoot(/*allowNetwork=*/false)) {
-          showLoadingBeforeFetch();
-          loadRoot();
-        }
+      activateSelected();
+      return;
+    }
+    if (backRequested) {
+      navigateBack();
+      return;
+    }
+
+    // Touch goes through the FreeInkApp: render() registered the row hit rects;
+    // route the snapshot and let onRowEvent dispatch.
+    if (uiReady) {
+      const fui::InputSnapshot snap = touchSnapshotFrom(mappedInput);
+      if (snap.touchPressed || snap.touchReleased) {
+        const auto event = app.route(snap);
+        if (app.invalidated()) requestUpdate();
+        if (event) return;  // dispatched to onRowEvent
+        if (state != BrowserState::BROWSING) return;
       }
     }
 
     if (!entries.empty()) {
-      // Same rows-per-page the themed list draws, so page jumps land where the
-      // display pages; a fixed constant would drift from the theme's row height.
-      const int pageItems = listPageItems();
+      // Rows the list actually drew, so page jumps land where the display pages;
+      // a fixed constant would drift from the theme's row height.
+      const int pageItems = visibleRows;
       // More content on the server than is loaded? Then the loaded end is a
       // phantom boundary mid-listing: never wrap onto or past it.
       const auto hasMorePages = [this] {
@@ -679,6 +735,29 @@ void BookOrbitCatalogBrowserActivity::loop() {
         if (navLevel == NavLevel::Books) return static_cast<long>(listPage) * listPageSize < listTotal;
         return false;
       };
+      // Button navigation moves the selection; the viewport follows it.
+      const auto followSelection = [this] {
+        topIndex = followListSelection(selectorIndex, topIndex, visibleRows, static_cast<int>(entries.size()));
+      };
+      // Swipes do the opposite: they move the viewport and leave the selection
+      // where it is. Reaching the end of what is loaded pulls the next page in,
+      // so a finger can walk a long listing the way the buttons already do.
+      const auto swipe = mappedInput.wasSwipe();
+      if (swipe == MappedInputManager::SwipeDir::Up || swipe == MappedInputManager::SwipeDir::Down) {
+        if (swipe == MappedInputManager::SwipeDir::Up) {
+          const int wantedCount = topIndex + 2 * visibleRows;
+          while (static_cast<int>(entries.size()) < wantedCount && hasMorePages()) {
+            if (!appendNextPageForCurrentList()) break;
+          }
+        }
+        const int delta = swipe == MappedInputManager::SwipeDir::Up ? visibleRows : -visibleRows;
+        const int next = scrollListBy(topIndex, delta, visibleRows, static_cast<int>(entries.size()));
+        if (next != topIndex) {
+          topIndex = next;
+          requestUpdate();
+        }
+        return;
+      }
       // Prefetch at the page turn: after a forward move onto the last loaded
       // screen-page, append until that page is fully backed by loaded entries
       // (server pages are not screen-page multiples, and can even be smaller
@@ -693,7 +772,7 @@ void BookOrbitCatalogBrowserActivity::loop() {
           if (!appendNextPageForCurrentList()) break;
         }
       };
-      buttonNavigator.onNextRelease([this, extendIfOnLastPage, hasMorePages] {
+      buttonNavigator.onNextRelease([this, extendIfOnLastPage, followSelection, hasMorePages] {
         if (selectorIndex + 1 >= static_cast<int>(entries.size()) && hasMorePages() &&
             !appendNextPageForCurrentList()) {
           requestUpdate();  // could not load past the end (e.g. network); hold position, no wrap
@@ -701,6 +780,7 @@ void BookOrbitCatalogBrowserActivity::loop() {
         }
         selectorIndex = ButtonNavigator::nextIndex(selectorIndex, entries.size());
         extendIfOnLastPage();
+        followSelection();
         requestUpdate();
       });
       // Backward from the very top: when the session cache holds the rest of the
@@ -711,12 +791,13 @@ void BookOrbitCatalogBrowserActivity::loop() {
         }
         return !hasMorePages();
       };
-      buttonNavigator.onPreviousRelease([this, hasMorePages, materialiseFromCache] {
+      buttonNavigator.onPreviousRelease([this, followSelection, hasMorePages, materialiseFromCache] {
         if (selectorIndex == 0 && hasMorePages() && !materialiseFromCache()) return;
         selectorIndex = ButtonNavigator::previousIndex(selectorIndex, entries.size());
+        followSelection();
         requestUpdate();
       });
-      buttonNavigator.onNextContinuous([this, pageItems, extendIfOnLastPage, hasMorePages] {
+      buttonNavigator.onNextContinuous([this, pageItems, extendIfOnLastPage, followSelection, hasMorePages] {
         const int count = static_cast<int>(entries.size());
         if (selectorIndex / pageItems == (count - 1) / pageItems && hasMorePages() && !appendNextPageForCurrentList()) {
           requestUpdate();
@@ -724,9 +805,10 @@ void BookOrbitCatalogBrowserActivity::loop() {
         }
         selectorIndex = ButtonNavigator::nextPageIndex(selectorIndex, entries.size(), pageItems);
         extendIfOnLastPage();
+        followSelection();
         requestUpdate();
       });
-      buttonNavigator.onPreviousContinuous([this, pageItems, hasMorePages, materialiseFromCache] {
+      buttonNavigator.onPreviousContinuous([this, pageItems, followSelection, hasMorePages, materialiseFromCache] {
         if (selectorIndex / pageItems == 0 && hasMorePages()) {
           if (selectorIndex > 0) {
             selectorIndex = 0;  // finish the backward run at the top first
@@ -736,9 +818,65 @@ void BookOrbitCatalogBrowserActivity::loop() {
           if (!materialiseFromCache()) return;
         }
         selectorIndex = ButtonNavigator::previousPageIndex(selectorIndex, entries.size(), pageItems);
+        followSelection();
         requestUpdate();
       });
     }
+  }
+}
+
+void BookOrbitCatalogBrowserActivity::listScreen(UiApp::ScreenType& screen, void* user) {
+  static_cast<BookOrbitCatalogBrowserActivity*>(user)->buildListScreen(screen);
+}
+
+void BookOrbitCatalogBrowserActivity::buildListScreen(UiApp::ScreenType& screen) {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  // Content below the compact header band, above the button hints. The header
+  // is painted by render(), so the app must not claim its rows.
+  screen.setContentMargin(fui::Insets{static_cast<int16_t>(CompactHeader::contentTop(metrics)), 0,
+                                      static_cast<int16_t>(metrics.buttonHintsHeight), 0});
+
+  // Transient per-render: points into `entries`, freed on scope exit.
+  std::vector<fui::ListItem> items;
+  items.reserve(entries.size());
+  for (size_t i = 0; i < entries.size(); i++) {
+    const auto& entry = entries[i];
+    fui::ListItem item;
+    item.label = entry.title.c_str();
+    // The subtitle carries the author; without it two same-title search results
+    // are indistinguishable.
+    if (!entry.subtitle.empty()) item.subtitle = entry.subtitle.c_str();
+    if (entry.onDevice) item.value = ON_DEVICE_MARKER;
+    item.actionValue = static_cast<int16_t>(i);
+    items.push_back(item);
+  }
+
+  fui::ListProps props;
+  props.items = items.data();
+  props.count = static_cast<uint16_t>(items.size());
+  props.selectedIndex = static_cast<int16_t>(selectorIndex);
+  props.action = ACTION_ROW;
+  props.inputMask = fui::InputTouch;  // physical buttons stay in loop()
+  props.valueInset = 8;               // air between the on-device dot and the row edge
+  const auto rows = configureUiList(props, screen.theme(), screen.body(), UiListRowType::WithSubtitle);
+  visibleRows = rows > 0 ? rows : 1;
+  topIndex = scrollListBy(topIndex, 0, visibleRows, static_cast<int>(entries.size()));  // clamp to range
+  props.topIndex = static_cast<uint16_t>(topIndex);
+
+  const fui::Rect listRect = screen.body();
+  screen.list(props);
+
+  // A book listing loads a page at a time, so the entries in memory are only a
+  // prefix of what the server holds. The list sized its indicator on that
+  // prefix, which would make a 500-book listing look like it ends one swipe
+  // away; repaint the same track against the server's total instead. Only when
+  // the list already drew one: that is what shrank the rows to clear the track.
+  const int scrollTotal = navLevel == NavLevel::Books ? listTotal : 0;
+  if (scrollTotal > static_cast<int>(entries.size()) && static_cast<int>(entries.size()) > visibleRows) {
+    const auto& theme = screen.theme();
+    fui::drawListScrollIndicator(screen.target(), listRect, static_cast<uint32_t>(scrollTotal),
+                                 static_cast<uint32_t>(visibleRows), static_cast<uint32_t>(topIndex),
+                                 theme.listScrollWidth, theme.listScrollSide, theme.listScrollInset);
   }
 }
 
@@ -755,7 +893,11 @@ void BookOrbitCatalogBrowserActivity::render(RenderLock&&) {
   } else if (navLevel == NavLevel::Books && !listTitle.empty()) {
     headerTitle = listTitle;
   }
-  CompactHeader::drawTitle(renderer, headerTitle.c_str());
+  if (mappedInput.hasTouchHardware()) {
+    TouchHeaderBackButton::drawCompact(renderer, headerTitle.c_str());
+  } else {
+    CompactHeader::drawTitle(renderer, headerTitle.c_str());
+  }
 
   if (state == BrowserState::CHECK_WIFI || state == BrowserState::LOADING) {
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, statusMessage.c_str());
@@ -805,29 +947,9 @@ void BookOrbitCatalogBrowserActivity::render(RenderLock&&) {
   if (entries.empty()) {
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, tr(STR_NO_ENTRIES));
   } else {
-    const auto entryCount = static_cast<int>(entries.size());
-
-    const int contentTop = CompactHeader::contentTop(metrics);
-    const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight;
-    // The subtitle carries the author; without it two same-title search results
-    // are indistinguishable. Passing the lambda also selects the taller row
-    // height every themed list with subtitles uses.
-    // Book listings tell the scroll indicator the server's total, so its size
-    // and position are right from the first draw of a partially loaded list.
-    const int scrollTotal = navLevel == NavLevel::Books ? listTotal : -1;
-    GUI.drawList(
-        renderer, Rect{0, contentTop, pageWidth, contentHeight}, entryCount, selectorIndex,
-        [this](int i) { return entries[i].title; }, [this](int i) { return entries[i].subtitle; },
-        nullptr,  // rowIcon
-        [this](int i) { return entries[i].onDevice ? ON_DEVICE_MARKER : ""; },
-        /*highlightValue=*/false, /*rowDimmed=*/nullptr, /*isHeader=*/nullptr, /*rowHeightScale=*/1,
-        /*showSelection=*/true, scrollTotal);
+    uiReady = false;
+    app.render();
+    uiReady = true;
   }
   renderer.displayBuffer();
-}
-
-int BookOrbitCatalogBrowserActivity::listPageItems() const {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const int contentHeight = renderer.getScreenHeight() - CompactHeader::contentTop(metrics) - metrics.buttonHintsHeight;
-  return std::max(1, GUI.getListPageItems(contentHeight, /*hasSubtitle=*/true));
 }

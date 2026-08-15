@@ -1,4 +1,8 @@
 #pragma once
+#include <FreeInkApp.h>
+#include <FreeInkUIGfxRenderer.h>
+
+#include <atomic>
 #include <memory>
 #include <string>
 #include <vector>
@@ -34,8 +38,7 @@ class BookOrbitCatalogBrowserActivity final : public Activity {
     bool onDevice = false;  // BOOK entries: a matching file already exists on the device
   };
 
-  explicit BookOrbitCatalogBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : Activity("BookOrbitCatalogBrowser", renderer, mappedInput) {}
+  explicit BookOrbitCatalogBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput);
 
   void onEnter() override;
   void onExit() override;
@@ -43,6 +46,11 @@ class BookOrbitCatalogBrowserActivity final : public Activity {
   void render(RenderLock&&) override;
 
  private:
+  // FreeInkApp hosts the entry list (themed rows, touch routing); the compact
+  // header keeps its own painter so the catalog's chrome stays as it was.
+  // 24 interaction slots cover the densest page at the smallest UI scale.
+  using UiApp = freeink::ui::FreeInkApp<24, 4>;
+
   ButtonNavigator buttonNavigator;
   BrowserState state = BrowserState::LOADING;
   std::vector<Entry> entries;
@@ -70,6 +78,20 @@ class BookOrbitCatalogBrowserActivity final : public Activity {
   int facetPage = 1;
   bool facetHasNext = false;
 
+  freeink::ui::GfxRendererTarget uiTarget;  // must precede `app`: the app holds a reference to it
+  UiApp app;
+  // render() rebuilds the app's interaction table; loop() only routes touch
+  // snapshots against it while this is true (the two run on different tasks).
+  std::atomic<bool> uiReady{false};
+  int visibleRows = 1;  // rows per page at the current scale; set by the screen builder
+  int topIndex = 0;     // viewport scroll position, decoupled from the selection
+
+  static void listScreen(UiApp::ScreenType& screen, void* user);
+  static void onRowEvent(const freeink::ui::ActionEvent& event, void* user);
+  void buildListScreen(UiApp::ScreenType& screen);
+  void activateSelected();
+  void navigateBack();
+
   void checkAndConnectWifi();
   void launchWifiSelection();
   void onWifiSelectionComplete(bool connected);
@@ -82,7 +104,6 @@ class BookOrbitCatalogBrowserActivity final : public Activity {
                  bool append = false, bool allowNetwork = true);
   bool appendNextPageForCurrentList(bool allowNetwork = true);
   void restoreBookListAfterDownload();
-  int listPageItems() const;
   void launchSearch();
   void performSearch(const std::string& query);
   void downloadBook(int64_t bookId, const std::string& title);
