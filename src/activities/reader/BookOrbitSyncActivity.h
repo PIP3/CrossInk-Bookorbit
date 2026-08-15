@@ -75,6 +75,12 @@ class BookOrbitSyncActivity final : public Activity {
   std::string statusMessage;
   std::string documentHash;
 
+  // Reading-session drain progress, drawn under the status message. A long
+  // backlog uploads 25 sessions per request, so without this the screen holds a
+  // single unchanging line for a minute and looks stalled. 0 total = no bar.
+  size_t statsUploaded = 0;
+  size_t statsTotal = 0;
+
   // Remote progress data
   bool hasRemoteProgress = false;
   KOReaderProgress remoteProgress;
