@@ -20,7 +20,7 @@ Based on CrossInk v1.5.1-rc-2.
 
 ### Fixed
 
-- Settings > BookOrbit Sync now answers to touch on the devices that have it: tapping a line opens it, and the title bar carries a back button. The screen drew its list with the older painter, which puts rows on the panel without registering anything to tap, so only the physical buttons worked — they still do, unchanged.
+- The BookOrbit screens now answer to touch on the devices that have it. Tapping a line opens it in Settings > BookOrbit Sync and in the catalog, swiping scrolls the catalog — loading the next page when you reach the end of what is loaded, as the buttons already did — and every one of the three screens, authentication included, carries a back button in its title bar. They all drew with the older painter, which puts rows on the panel without registering anything to tap; the authentication screen, having no list at all, offered a finger nothing whatsoever. Physical buttons work exactly as before.
 
 ## [v1.5.0+bookorbit.2] - 2026-08-12
 
