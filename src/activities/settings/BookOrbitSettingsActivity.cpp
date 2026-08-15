@@ -4,6 +4,8 @@
 #include <I18n.h>
 
 #include <cstring>
+#include <string>
+#include <vector>
 
 #include "BookOrbitCredentialStore.h"
 #include "MappedInputManager.h"
@@ -11,25 +13,56 @@
 #include "activities/browser/BookOrbitCatalogBrowserActivity.h"
 #include "activities/settings/BookOrbitAuthActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
+#include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
+#include "components/UIThemeTokens.h"
+#include "components/UiAppHelpers.h"
 #include "fontIds.h"
+
+namespace fui = freeink::ui;
 
 namespace {
 constexpr int MENU_ITEMS = 5;
 const StrId menuNames[MENU_ITEMS] = {StrId::STR_USERNAME, StrId::STR_PASSWORD, StrId::STR_BOOKORBIT_SERVER_URL,
                                      StrId::STR_AUTHENTICATE, StrId::STR_BOOKORBIT_CATALOG};
+constexpr fui::ActionId ACTION_ROW = 1;
 }  // namespace
+
+BookOrbitSettingsActivity::BookOrbitSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
+    : Activity("BookOrbitSettings", renderer, mappedInput),
+      uiTarget(makeUiTarget(renderer)),
+      app(uiTarget, uiTarget.deviceContext()) {}
+
+void BookOrbitSettingsActivity::onRowEvent(const fui::ActionEvent& event, void* user) {
+  auto* self = static_cast<BookOrbitSettingsActivity*>(user);
+  if (event.value < 0 || event.value >= MENU_ITEMS) return;
+  self->selectedIndex = static_cast<size_t>(event.value);
+  // Activation opens a keyboard/sub-activity or repaints a new value; a
+  // lingering flash would gray an unrelated row.
+  self->app.clearTapFlash();
+  self->handleSelection();
+}
 
 void BookOrbitSettingsActivity::onEnter() {
   Activity::onEnter();
 
   selectedIndex = 0;
+  uiReady = false;
+  visibleRows = 1;
+  topIndex = 0;
+  applySharedUiTheme(app, uiTarget);
+  app.on(ACTION_ROW, &BookOrbitSettingsActivity::onRowEvent, this);
+  app.setScreen(&BookOrbitSettingsActivity::listScreen, this);
   requestUpdate();
 }
 
 void BookOrbitSettingsActivity::onExit() { Activity::onExit(); }
 
 void BookOrbitSettingsActivity::loop() {
+  if (TouchHeaderBackButton::wasTapped(mappedInput, renderer)) {
+    finishAfterBackPress();
+    return;
+  }
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     finishAfterBackPress();
     return;
@@ -40,13 +73,26 @@ void BookOrbitSettingsActivity::loop() {
     return;
   }
 
+  // Touch goes through the FreeInkApp: render() registered the row hit rects;
+  // route the snapshot and let onRowEvent dispatch.
+  if (uiReady) {
+    const fui::InputSnapshot snap = touchSnapshotFrom(mappedInput);
+    if (snap.touchPressed || snap.touchReleased) {
+      const auto event = app.route(snap);
+      if (app.invalidated()) requestUpdate();
+      if (event) return;  // dispatched to onRowEvent
+    }
+  }
+
   buttonNavigator.onNext([this] {
     selectedIndex = (selectedIndex + 1) % MENU_ITEMS;
+    topIndex = followListSelection(static_cast<int>(selectedIndex), topIndex, visibleRows, MENU_ITEMS);
     requestUpdate();
   });
 
   buttonNavigator.onPrevious([this] {
     selectedIndex = (selectedIndex + MENU_ITEMS - 1) % MENU_ITEMS;
+    topIndex = followListSelection(static_cast<int>(selectedIndex), topIndex, visibleRows, MENU_ITEMS);
     requestUpdate();
   });
 }
@@ -108,38 +154,75 @@ void BookOrbitSettingsActivity::handleSelection() {
   }
 }
 
+void BookOrbitSettingsActivity::listScreen(UiApp::ScreenType& screen, void* user) {
+  static_cast<BookOrbitSettingsActivity*>(user)->buildListScreen(screen);
+}
+
+void BookOrbitSettingsActivity::buildListScreen(UiApp::ScreenType& screen) {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  // Content below the GUI.drawHeader band, above the button hints.
+  screen.setContentMargin(
+      fui::Insets{static_cast<int16_t>(metrics.topPadding + TouchHeaderBackButton::height(metrics, mappedInput)), 0,
+                  static_cast<int16_t>(metrics.buttonHintsHeight), 0});
+  screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
+
+  // Per-render owned value strings; items point into them for the draw only.
+  std::vector<std::string> values(MENU_ITEMS);
+  const bool hasCredentials = BOOKORBIT_STORE.hasCredentials();
+  for (int i = 0; i < MENU_ITEMS; i++) {
+    if (i == 0) {
+      const auto username = BOOKORBIT_STORE.getUsername();
+      values[i] = username.empty() ? tr(STR_NOT_SET) : username;
+    } else if (i == 1) {
+      values[i] = BOOKORBIT_STORE.getPassword().empty() ? tr(STR_NOT_SET) : "******";
+    } else if (i == 2) {
+      const auto serverUrl = BOOKORBIT_STORE.getServerUrl();
+      values[i] = serverUrl.empty() ? tr(STR_NOT_SET) : serverUrl;
+    } else {
+      // Authenticate and Browse Catalog both need credentials to do anything.
+      values[i] = hasCredentials ? "" : std::string("[") + tr(STR_SET_CREDENTIALS_FIRST) + "]";
+    }
+  }
+
+  std::vector<fui::ListItem> items;
+  items.reserve(MENU_ITEMS);
+  for (int i = 0; i < MENU_ITEMS; i++) {
+    fui::ListItem item;
+    item.label = I18N.get(menuNames[i]);
+    if (!values[i].empty()) item.value = values[i].c_str();
+    item.actionValue = static_cast<int16_t>(i);
+    items.push_back(item);
+  }
+
+  fui::ListProps props;
+  props.items = items.data();
+  props.count = static_cast<uint16_t>(items.size());
+  props.selectedIndex = static_cast<int16_t>(selectedIndex);
+  props.action = ACTION_ROW;
+  props.inputMask = fui::InputTouch;  // physical buttons stay in loop()
+  props.valueInset = 8;               // air between the value and the row edge
+  const auto rows = configureUiList(props, screen.theme(), screen.body());
+  visibleRows = rows > 0 ? rows : 1;
+  topIndex = scrollListBy(topIndex, 0, visibleRows, MENU_ITEMS);  // clamp to range
+  props.topIndex = static_cast<uint16_t>(topIndex);
+  screen.list(props);
+}
+
 void BookOrbitSettingsActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto pageWidth = renderer.getScreenWidth();
-  const auto pageHeight = renderer.getScreenHeight();
+  // Header via GUI.drawHeader (already FreeInkUI-themed) for the battery
+  // indicator; the rest of the screen renders through the app.
+  const Rect header = TouchHeaderBackButton::headerRect(renderer, mappedInput);
+  if (mappedInput.hasTouchHardware()) {
+    TouchHeaderBackButton::draw(renderer, uiTarget, header, tr(STR_BOOKORBIT_SYNC), false);
+  } else {
+    GUI.drawHeader(renderer, header, tr(STR_BOOKORBIT_SYNC));
+  }
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_BOOKORBIT_SYNC));
-
-  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
-  GUI.drawList(
-      renderer, Rect{0, contentTop, pageWidth, contentHeight}, static_cast<int>(MENU_ITEMS),
-      static_cast<int>(selectedIndex), [](int index) { return std::string(I18N.get(menuNames[index])); }, nullptr,
-      nullptr,
-      [this](int index) {
-        if (index == 0) {
-          auto username = BOOKORBIT_STORE.getUsername();
-          return username.empty() ? std::string(tr(STR_NOT_SET)) : username;
-        } else if (index == 1) {
-          return BOOKORBIT_STORE.getPassword().empty() ? std::string(tr(STR_NOT_SET)) : std::string("******");
-        } else if (index == 2) {
-          auto serverUrl = BOOKORBIT_STORE.getServerUrl();
-          return serverUrl.empty() ? std::string(tr(STR_NOT_SET)) : serverUrl;
-        } else if (index == 3) {
-          return BOOKORBIT_STORE.hasCredentials() ? "" : std::string("[") + tr(STR_SET_CREDENTIALS_FIRST) + "]";
-        } else if (index == 4) {
-          return BOOKORBIT_STORE.hasCredentials() ? "" : std::string("[") + tr(STR_SET_CREDENTIALS_FIRST) + "]";
-        }
-        return std::string(tr(STR_NOT_SET));
-      },
-      true);
+  uiReady = false;
+  app.render();
+  uiReady = true;
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
