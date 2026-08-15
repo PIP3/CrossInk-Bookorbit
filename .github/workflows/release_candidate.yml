@@ -10,6 +10,16 @@ jobs:
   build-release-candidate:
     if: startsWith(github.ref_name, 'release/')
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - environment: default
+            firmware: firmware-x3-x4
+          - environment: sticky
+            firmware: firmware-sticky
+          - environment: x4-pro
+            firmware: firmware-x4-pro
     env:
       RC_BRANCH: ${{ github.ref_name }}
       RC_HASH: ${{ github.sha }}
@@ -36,7 +46,7 @@ jobs:
           path: |
             ~/.platformio/packages
             ~/.platformio/platforms
-          key: ${{ runner.os }}-platformio-py3.14-core6.1.19-${{ hashFiles('platformio.ini', 'platformio.local.example.ini') }}
+          key: ${{ runner.os }}-platformio-py3.14-core6.1.19-${{ matrix.environment }}-${{ hashFiles('platformio.ini', 'platformio.local.example.ini') }}
 
       - name: Install PlatformIO Core
         run: uv pip install --system -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
@@ -53,26 +63,6 @@ jobs:
           echo "RC_HASH_SHORT=$hash_short" >> "$GITHUB_ENV"
           echo "RC_TAG=$rc_tag" >> "$GITHUB_ENV"
           echo "VERSION=${branch_safe}-RC" >> "$GITHUB_ENV"
-
-      - name: Resolve default PlatformIO envs
-        shell: bash
-        run: |
-          envs=$(python3 - <<'PY'
-          import configparser
-          config = configparser.ConfigParser()
-          config.read('platformio.ini')
-          default_envs = config.get('platformio', 'default_envs', fallback='')
-          envs = [part.strip() for part in default_envs.split(',') if part.strip()]
-          if 'x4-pro' not in envs:
-              envs.append('x4-pro')
-          print(' '.join(envs))
-          PY
-          )
-          if [ -z "$envs" ]; then
-            echo "No default_envs found in platformio.ini" >&2
-            exit 1
-          fi
-          echo "RC_ENVS=$envs" >> "$GITHUB_ENV"
 
       - name: Set version from branch
         shell: bash
@@ -108,10 +98,41 @@ jobs:
           CROSSINK_RELEASE_VERSION: "1"
           CROSSINK_RC_BRANCH: ${{ env.RC_BRANCH_RAW }}
           CROSSINK_RC_HASH: ${{ env.RC_HASH_SHORT }}
+        run: pio run -j1 -e ${{ matrix.environment }}
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-candidate-firmware-${{ matrix.environment }}
+          path: .pio/build/${{ matrix.environment }}/${{ matrix.firmware }}-${{ env.RC_BRANCH_SAFE }}-${{ env.RC_HASH_SHORT }}-RC.bin
+          if-no-files-found: error
+
+  publish-release-candidate:
+    if: startsWith(github.ref_name, 'release/')
+    needs: build-release-candidate
+    runs-on: ubuntu-latest
+    env:
+      RC_BRANCH: ${{ github.ref_name }}
+      RC_HASH: ${{ github.sha }}
+    steps:
+      - name: Resolve release-candidate metadata
+        shell: bash
         run: |
-          for env_name in $RC_ENVS; do
-            pio run -j1 -e "$env_name"
-          done
+          branch_without_prefix="${RC_BRANCH#release/}"
+          branch_safe=$(printf '%s\n' "$branch_without_prefix" | sed -E 's/[^A-Za-z0-9._-]+/-/g; s/^-+//; s/-+$//')
+          hash_short="${RC_HASH::7}"
+          rc_tag="rc-${branch_safe}-${hash_short}"
+          echo "RC_BRANCH_RAW=$branch_without_prefix" >> "$GITHUB_ENV"
+          echo "RC_BRANCH_SAFE=$branch_safe" >> "$GITHUB_ENV"
+          echo "RC_HASH_SHORT=$hash_short" >> "$GITHUB_ENV"
+          echo "RC_TAG=$rc_tag" >> "$GITHUB_ENV"
+
+      - name: Download firmware artifacts
+        uses: actions/download-artifact@v7
+        with:
+          pattern: release-candidate-firmware-*
+          merge-multiple: true
+          path: release-candidate-firmware
 
       - name: Create GitHub RC Prerelease
         uses: softprops/action-gh-release@v3
@@ -128,6 +149,6 @@ jobs:
           draft: true
           prerelease: true
           files: |
-            .pio/build/default/firmware-x3-x4-${{ env.RC_BRANCH_SAFE }}-${{ env.RC_HASH_SHORT }}-RC.bin
-            .pio/build/sticky/firmware-sticky-${{ env.RC_BRANCH_SAFE }}-${{ env.RC_HASH_SHORT }}-RC.bin
-            .pio/build/x4-pro/firmware-x4-pro-${{ env.RC_BRANCH_SAFE }}-${{ env.RC_HASH_SHORT }}-RC.bin
+            release-candidate-firmware/firmware-x3-x4-${{ env.RC_BRANCH_SAFE }}-${{ env.RC_HASH_SHORT }}-RC.bin
+            release-candidate-firmware/firmware-sticky-${{ env.RC_BRANCH_SAFE }}-${{ env.RC_HASH_SHORT }}-RC.bin
+            release-candidate-firmware/firmware-x4-pro-${{ env.RC_BRANCH_SAFE }}-${{ env.RC_HASH_SHORT }}-RC.bin
