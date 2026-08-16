@@ -186,6 +186,13 @@ void TxtReaderActivity::openReaderMenu() {
 
 void TxtReaderActivity::loop() {
   if (quickActionsPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
+  const auto touch = ReaderUtils::detectTouchPageTurn(renderer, mappedInput);
+  if (touch.tapped &&
+      ReaderUtils::isBottomStatusBarTap(renderer, touch.y, UITheme::getInstance().getStatusBarHeight())) {
+    statusBarVisible = !statusBarVisible;
+    requestUpdate();
+    return;
+  }
   if (consumeLongPowerButtonRelease()) {
     return;
   }
@@ -722,8 +729,10 @@ void TxtReaderActivity::renderPage() {
   // BW rendering
   renderLines();
   renderStatusBar();
-  GUI.drawTopStatusBarClock(renderer, UITheme::getInstance().getMetrics().topPadding, nullptr, true, 0,
-                            ReaderUtils::readerDarkModeEnabled());
+  if (statusBarVisible) {
+    GUI.drawTopStatusBarClock(renderer, UITheme::getInstance().getMetrics().topPadding, nullptr, true, 0,
+                              ReaderUtils::readerDarkModeEnabled());
+  }
 
   ReaderUtils::displayWithRefreshCycle(renderer, pagesUntilFullRefresh);
 
@@ -734,6 +743,10 @@ void TxtReaderActivity::renderPage() {
 }
 
 void TxtReaderActivity::renderStatusBar() const {
+  if (!statusBarVisible) {
+    return;
+  }
+
   const float progress = totalPages > 0 ? (currentPage + 1) * 100.0f / totalPages : 0;
   std::string title;
   if (SETTINGS.statusBarSpec().showsTitle()) {

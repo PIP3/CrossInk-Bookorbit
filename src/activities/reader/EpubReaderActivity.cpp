@@ -2457,6 +2457,12 @@ void EpubReaderActivity::loop() {
 #endif
 
   const auto touch = ReaderUtils::detectTouchPageTurn(renderer, mappedInput);
+  if (touch.tapped &&
+      ReaderUtils::isBottomStatusBarTap(renderer, touch.y, UITheme::getInstance().getStatusBarHeight())) {
+    statusBarVisible = !statusBarVisible;
+    requestUpdate();
+    return;
+  }
   // A popup selection suppresses the Confirm release that follows its press.
   // Read it once: wasReleased() consumes that suppression, and a second read
   // in this loop would otherwise turn the same release into a reader-menu open.
@@ -6609,6 +6615,10 @@ void EpubReaderActivity::drawClippingHighlights(const Page& page, const int font
 }
 
 void EpubReaderActivity::renderStatusBar() const {
+  if (!statusBarVisible) {
+    return;
+  }
+
   const int estimatedPageCount = section->estimatedTotalPages();
   int currentPage = section->currentPage + 1;
   int pageCount = estimatedPageCount;

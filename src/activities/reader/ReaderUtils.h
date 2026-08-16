@@ -10,6 +10,7 @@
 
 #include "GlobalActions.h"
 #include "MappedInputManager.h"
+#include "ReaderStatusBarTapTarget.h"
 #include "components/UITheme.h"
 
 namespace ReaderUtils {
@@ -149,6 +150,20 @@ inline TouchPageTurn detectTouchPageTurn(const GfxRenderer& renderer, const Mapp
   result.next = x >= previousZoneWidth;
   return result;
 #endif
+}
+
+inline bool isBottomStatusBarTap(const GfxRenderer& renderer, const int y, const int statusBarHeight) {
+  int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
+  renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
+                                   &orientedMarginLeft);
+  return ReaderStatusBarTapTarget::containsBottom(y, renderer.getScreenHeight(), orientedMarginBottom, statusBarHeight);
+}
+
+inline bool isTopStatusBarTap(const GfxRenderer& renderer, const int y, const int statusBarHeight) {
+  int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
+  renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
+                                   &orientedMarginLeft);
+  return ReaderStatusBarTapTarget::containsTop(y, renderer.getScreenHeight(), orientedMarginTop, statusBarHeight);
 }
 
 // Reader menu opens on its board-specific vertical swipe anywhere on the open

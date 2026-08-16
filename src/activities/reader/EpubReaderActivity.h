@@ -178,6 +178,9 @@ class EpubReaderActivity final : public Activity {
   bool pendingSyncSaveError = false;
   bool skipNextButtonCheck = false;  // Skip button processing for one frame after subactivity exit
   bool automaticPageTurnActive = false;
+  // Session-only display toggle. Layout continues to reserve the same status
+  // lane, so switching it never changes the EPUB's page breaks.
+  bool statusBarVisible = true;
   bool longPressMenuHandled = false;
   bool longPressBackHandled = false;
   bool longPowerButtonHandled = false;

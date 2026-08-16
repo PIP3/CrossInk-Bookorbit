@@ -2,6 +2,7 @@
 
 ### Added
 
+- Tapping the reader status bar on touch devices now toggles it for the current reading session without changing the page layout.
 - Touchscreen readers can choose tap, swipe, inverted tap, or disabled page-turn gestures from Settings > Controls.
 - Full Xteink X4 Pro support, including USB Drive access to its SD card and direct USB file transfers.
 - New "Quick Lock" shortcut that locks the device without putting it to sleep. It can be assigned to Power + Up, long-press Back, or long-press Menu shortcuts and uses the regular sleep timeout.
