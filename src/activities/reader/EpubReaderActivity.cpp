@@ -2427,6 +2427,10 @@ void EpubReaderActivity::loop() {
   }
 
   const auto touch = ReaderUtils::detectTouchPageTurn(renderer, mappedInput);
+  // A popup selection suppresses the Confirm release that follows its press.
+  // Read it once: wasReleased() consumes that suppression, and a second read
+  // in this loop would otherwise turn the same release into a reader-menu open.
+  const bool confirmReleased = mappedInput.wasReleased(MappedInputManager::Button::Confirm);
   const bool userInputPending = mappedInput.wasAnyPressed() || mappedInput.wasAnyReleased() || touch.tapped ||
                                 touch.prev || touch.next || mappedInput.wasScreenTouchReleased();
   if (userInputPending) {
@@ -2644,8 +2648,7 @@ void EpubReaderActivity::loop() {
   }
 
   if (automaticPageTurnActive) {
-    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) ||
-        (!touch.prev && !touch.next && mappedInput.wasReleased(MappedInputManager::Button::Back)) ||
+    if (confirmReleased || (!touch.prev && !touch.next && mappedInput.wasReleased(MappedInputManager::Button::Back)) ||
         ReaderUtils::isTouchMenuGesture(mappedInput)) {
       automaticPageTurnActive = false;
       // updates chapter title space to indicate page turn disabled
@@ -2678,14 +2681,13 @@ void EpubReaderActivity::loop() {
 
   // Long-press Confirm: execute the configured reader action without opening the menu
   if (longPressMenuHandled) {
-    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) ||
-        !mappedInput.isPressed(MappedInputManager::Button::Confirm)) {
+    if (confirmReleased || !mappedInput.isPressed(MappedInputManager::Button::Confirm)) {
       longPressMenuHandled = false;
     }
     return;
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  if (confirmReleased) {
     if (SETTINGS.longPressMenuAction != CrossPointSettings::LONG_MENU_OFF &&
         mappedInput.getHeldTime() >= longPressMenuMs) {
       const auto action = static_cast<CrossPointSettings::LONG_PRESS_MENU_ACTION>(SETTINGS.longPressMenuAction);
@@ -2730,7 +2732,7 @@ void EpubReaderActivity::loop() {
   }
 
   // Enter reader menu activity.
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) || ReaderUtils::isTouchMenuGesture(mappedInput)) {
+  if (confirmReleased || ReaderUtils::isTouchMenuGesture(mappedInput)) {
     openReaderMenu();
   }
 
