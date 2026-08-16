@@ -1,6 +1,8 @@
 _language_name: "Valencià"
 _language_code: "CAV"
 _order: "22"
+STR_DICTIONARY: "Diccionari"
+STR_NOT_FOUND: "No s'ha trobat"
 
 STR_TAP_AND_SWIPE: "Toc i lliscament"
 STR_TAP_ONLY: "Només toc"

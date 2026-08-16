@@ -1,6 +1,8 @@
 _language_name: "Lietuvių"
 _language_code: "LT"
 _order: "20"
+STR_DICTIONARY: "Žodynas"
+STR_NOT_FOUND: "Nerasta"
 
 STR_TAP_AND_SWIPE: "Bakstelėjimas ir braukimas"
 STR_TAP_ONLY: "Tik bakstelėjimas"

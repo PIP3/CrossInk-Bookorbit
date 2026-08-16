@@ -1,6 +1,8 @@
 _language_name: "Deutsch"
 _language_code: "DE"
 _order: "3"
+STR_DICTIONARY: "Wörterbuch"
+STR_NOT_FOUND: "Nicht gefunden"
 
 STR_TAP_AND_SWIPE: "Tippen und Wischen"
 STR_TAP_ONLY: "Nur Tippen"

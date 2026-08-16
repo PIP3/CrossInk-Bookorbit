@@ -1,6 +1,8 @@
 _language_name: "Español"
 _language_code: "ES"
 _order: "1"
+STR_DICTIONARY: "Diccionario"
+STR_NOT_FOUND: "No encontrado"
 
 STR_TAP_AND_SWIPE: "Toque y deslizamiento"
 STR_TAP_ONLY: "Solo toque"

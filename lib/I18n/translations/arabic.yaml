@@ -1,6 +1,8 @@
 _language_name: "العربية"
 _language_code: "AR"
 _order: "28"
+STR_DICTIONARY: "قاموس"
+STR_NOT_FOUND: "غير موجود"
 
 STR_TAP_AND_SWIPE: "نقر وسحب"
 STR_TAP_ONLY: "النقر فقط"

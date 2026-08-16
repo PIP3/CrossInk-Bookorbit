@@ -1,6 +1,8 @@
 _language_name: "Slovenčina"
 _language_code: "SK"
 _order: "25"
+STR_DICTIONARY: "Slovník"
+STR_NOT_FOUND: "Nenájdené"
 
 STR_TAP_AND_SWIPE: "Ťuknutie a potiahnutie"
 STR_TAP_ONLY: "Len ťuknutie"

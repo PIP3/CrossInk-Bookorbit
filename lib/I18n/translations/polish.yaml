@@ -1,6 +1,8 @@
 _language_name: "Polski"
 _language_code: "PL"
 _order: "13"
+STR_DICTIONARY: "Słownik"
+STR_NOT_FOUND: "Nie znaleziono"
 
 STR_TAP_AND_SWIPE: "Dotknij i przesuń"
 STR_TAP_ONLY: "Tylko dotknięcie"

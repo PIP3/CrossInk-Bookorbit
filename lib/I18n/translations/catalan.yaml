@@ -1,6 +1,8 @@
 _language_name: "Català"
 _language_code: "CA"
 _order: "9"
+STR_DICTIONARY: "Diccionari"
+STR_NOT_FOUND: "No s'ha trobat"
 
 STR_TAP_AND_SWIPE: "Toc i lliscament"
 STR_TAP_ONLY: "Només toc"

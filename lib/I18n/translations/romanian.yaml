@@ -1,6 +1,8 @@
 _language_name: "Română"
 _language_code: "RO"
 _order: "8"
+STR_DICTIONARY: "Dicționar"
+STR_NOT_FOUND: "Nu a fost găsit"
 
 STR_TAP_AND_SWIPE: "Atingere și glisare"
 STR_TAP_ONLY: "Doar atingere"

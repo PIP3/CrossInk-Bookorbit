@@ -3326,7 +3326,12 @@ void EpubReaderActivity::openWordSelect(bool framebufferContainsPage, int initia
     requestUpdate();
     return;
   }
-  startActivityForResult(std::move(wordSelect), [this](const ActivityResult&) {
+  startActivityForResult(std::move(wordSelect), [this](const ActivityResult& result) {
+    if (const auto* request = std::get_if<DictionaryClippingRequest>(&result.data)) {
+      resumeReadingPaceTimer("dictionary_lookup_to_clip");
+      startClipSelection(request);
+      return;
+    }
     resumeReadingPaceTimer("dictionary_lookup_return");
     MemoryBudget::logHeapShape("dict.child_destroyed");
     // Dictionary lookup warms multiple SD-font styles and large definition glyph
@@ -3873,7 +3878,7 @@ void EpubReaderActivity::openAutoPageTurnIntervalPicker(const bool ignoreInitial
       });
 }
 
-void EpubReaderActivity::startClipSelection() {
+void EpubReaderActivity::startClipSelection(const DictionaryClippingRequest* dictionaryRequest) {
   if (!section || !epub) {
     requestUpdate();
     return;
@@ -4100,7 +4105,7 @@ void EpubReaderActivity::startClipSelection() {
   pauseReadingPaceTimer("clip_selection");
   auto clipSelection =
       makeUniqueNoThrow<ClipSelectionActivity>(renderer, mappedInput, std::move(wordStore), readerFontId, *section,
-                                               startPage, layout.marginTop, layout.marginLeft);
+                                               startPage, layout.marginTop, layout.marginLeft, dictionaryRequest);
   if (!clipSelection) {
     LOG_ERR("CLIP", "OOM: failed to allocate clip selection activity");
     resumeReadingPaceTimer("clip_selection_alloc_failed");

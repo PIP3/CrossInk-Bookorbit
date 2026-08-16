@@ -1,6 +1,8 @@
 _language_name: "Türkçe"
 _language_code: "TR"
 _order: "17"
+STR_DICTIONARY: "Sözlük"
+STR_NOT_FOUND: "Bulunamadı"
 
 STR_TAP_AND_SWIPE: "Dokun ve kaydır"
 STR_TAP_ONLY: "Yalnızca dokun"

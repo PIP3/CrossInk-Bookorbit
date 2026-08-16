@@ -1,6 +1,8 @@
 _language_name: "Čeština"
 _language_code: "CS"
 _order: "4"
+STR_DICTIONARY: "Slovník"
+STR_NOT_FOUND: "Nenalezeno"
 
 STR_TAP_AND_SWIPE: "Klepnutí a přejetí"
 STR_TAP_ONLY: "Pouze klepnutí"

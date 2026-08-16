@@ -1,6 +1,8 @@
 _language_name: "Suomi"
 _language_code: "FI"
 _order: "14"
+STR_DICTIONARY: "Sanakirja"
+STR_NOT_FOUND: "Ei löytynyt"
 
 STR_TAP_AND_SWIPE: "Napauta ja pyyhkäise"
 STR_TAP_ONLY: "Vain napautus"

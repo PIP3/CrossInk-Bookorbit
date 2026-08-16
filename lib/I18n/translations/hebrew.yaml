@@ -1,6 +1,8 @@
 _language_name: "עברית"
 _language_code: "HE"
 _order: "23"
+STR_DICTIONARY: "מילון"
+STR_NOT_FOUND: "לא נמצא"
 
 STR_TAP_AND_SWIPE: "הקשה והחלקה"
 STR_TAP_ONLY: "הקשה בלבד"

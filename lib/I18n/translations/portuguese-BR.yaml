@@ -1,6 +1,8 @@
 _language_name: "Português (Brasil)"
 _language_code: "PT"
 _order: "5"
+STR_DICTIONARY: "Dicionário"
+STR_NOT_FOUND: "Não encontrado"
 
 STR_TAP_AND_SWIPE: "Toque e deslize"
 STR_TAP_ONLY: "Somente toque"

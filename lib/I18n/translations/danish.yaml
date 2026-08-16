@@ -1,6 +1,8 @@
 _language_name: "Dansk"
 _language_code: "DA"
 _order: "15"
+STR_DICTIONARY: "Ordbog"
+STR_NOT_FOUND: "Ikke fundet"
 
 STR_TAP_AND_SWIPE: "Tryk og stryg"
 STR_TAP_ONLY: "Kun tryk"

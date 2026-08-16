@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Added
+
+- Dictionary lookups can now save the selected word or phrase directly as a clipping.
+
 ### Fixed
 
 - Dismissing a dictionary definition with Back or an outside tap now returns directly to the reader instead of reopening word selection.
