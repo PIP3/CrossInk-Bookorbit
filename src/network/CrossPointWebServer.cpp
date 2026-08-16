@@ -92,6 +92,19 @@ bool isWebSettingAvailable(const SettingInfo& setting) {
   }
 #endif
 
+  const bool isFrontlightWakeSetting = setting.nameId == StrId::STR_RESTORE_LIGHT_ON_WAKE ||
+                                       setting.nameId == StrId::STR_FRONTLIGHT_SCHEDULE ||
+                                       setting.nameId == StrId::STR_START || setting.nameId == StrId::STR_END;
+  if (isFrontlightWakeSetting && !Frontlight.present()) {
+    return false;
+  }
+
+  const bool isFrontlightScheduleSetting = setting.nameId == StrId::STR_FRONTLIGHT_SCHEDULE ||
+                                           setting.nameId == StrId::STR_START || setting.nameId == StrId::STR_END;
+  if (isFrontlightScheduleSetting && !halClock.isAvailable()) {
+    return false;
+  }
+
   if (!halClock.isAvailable()) {
     switch (setting.nameId) {
       case StrId::STR_HIDE_CLOCK:
