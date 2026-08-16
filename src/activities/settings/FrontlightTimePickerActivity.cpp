@@ -1,36 +1,35 @@
 #include "FrontlightTimePickerActivity.h"
 
-#include <FreeInkUICore.h>
+#include <FreeInkUIGfxRenderer.h>
 #include <GfxRenderer.h>
 #include <I18n.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <utility>
 
 #include "MappedInputManager.h"
 #include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
-#include "components/icons/listIcons.h"
 #include "fontIds.h"
 #include "util/FrontlightSchedule.h"
 
 namespace {
+namespace fui = freeink::ui;
+
 constexpr int kFieldHeight = 60;
 constexpr int kHourWidth = 76;
 constexpr int kMinuteWidth = 88;
 constexpr int kPeriodWidth = 96;
 constexpr int kFieldGap = 14;
 constexpr int kColonGap = 8;
-constexpr int kTouchButtonSize = 60;
-constexpr int kTouchButtonGap = 12;
-constexpr int kTouchButtonOffset = 24;
+constexpr int kKeyboardRows = 5;
+constexpr fui::ActionId kKeyboardAction = 1;
 
 struct PickerLayout {
   Rect hourRect;
   Rect minuteRect;
   Rect periodRect;
-  Rect incrementRect;
-  Rect decrementRect;
   int colonX;
   int textY;
 };
@@ -39,16 +38,24 @@ bool contains(const Rect& rect, const int x, const int y) {
   return x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height;
 }
 
-PickerLayout getPickerLayout(const GfxRenderer& renderer, const bool showTouchControls) {
+fui::Rect keyboardRect(const GfxRenderer& renderer) {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const int gap = metrics.keyboardKeySpacing;
+  const int height = kKeyboardRows * metrics.keyboardKeyHeight + (kKeyboardRows - 1) * gap;
+  const int width = renderer.getScreenWidth() * metrics.keyboardWidthPercent / 100;
+  const int x = (renderer.getScreenWidth() - width) / 2;
+  const int y = renderer.getScreenHeight() - metrics.buttonHintsHeight - metrics.verticalSpacing - height +
+                metrics.keyboardVerticalOffset;
+  return {static_cast<int16_t>(x), static_cast<int16_t>(y), static_cast<int16_t>(width), static_cast<int16_t>(height)};
+}
+
+PickerLayout getPickerLayout(const GfxRenderer& renderer, const bool showKeyboard) {
   const int colonWidth = renderer.getTextWidth(UI_12_FONT_ID, ":", EpdFontFamily::BOLD);
   const int fieldsWidth =
       kHourWidth + kFieldGap + kColonGap + colonWidth + kColonGap + kMinuteWidth + kFieldGap + kPeriodWidth;
-  const int controlsWidth = showTouchControls ? kTouchButtonOffset + kTouchButtonSize : 0;
-  const int totalWidth = fieldsWidth + controlsWidth;
-  const int startX = (renderer.getScreenWidth() - totalWidth) / 2;
-  const int controlsHeight = kTouchButtonSize * 2 + kTouchButtonGap;
-  const int controlsY = renderer.getScreenHeight() / 2 - controlsHeight / 2;
-  const int fieldY = controlsY + (controlsHeight - kFieldHeight) / 2;
+  const int startX = (renderer.getScreenWidth() - fieldsWidth) / 2;
+  const int fieldY = showKeyboard ? std::max(90, static_cast<int>(keyboardRect(renderer).y) - kFieldHeight - 48)
+                                  : renderer.getScreenHeight() / 2 - kFieldHeight / 2;
 
   int x = startX;
   const Rect hourRect{x, fieldY, kHourWidth, kFieldHeight};
@@ -58,28 +65,8 @@ PickerLayout getPickerLayout(const GfxRenderer& renderer, const bool showTouchCo
   const Rect minuteRect{x, fieldY, kMinuteWidth, kFieldHeight};
   x += kMinuteWidth + kFieldGap;
   const Rect periodRect{x, fieldY, kPeriodWidth, kFieldHeight};
-  x += kPeriodWidth + kTouchButtonOffset;
-
-  const Rect incrementRect{x, controlsY, kTouchButtonSize, kTouchButtonSize};
-  const Rect decrementRect{x, controlsY + kTouchButtonSize + kTouchButtonGap, kTouchButtonSize, kTouchButtonSize};
-  return {hourRect,
-          minuteRect,
-          periodRect,
-          incrementRect,
-          decrementRect,
-          colonX,
+  return {hourRect, minuteRect, periodRect, colonX,
           fieldY + (kFieldHeight - renderer.getLineHeight(UI_12_FONT_ID)) / 2};
-}
-
-void drawChevronButton(const GfxRenderer& renderer, const Rect& rect, const freeink::Icon& icon) {
-  renderer.fillRectDither(rect.x, rect.y, rect.width, rect.height, Color::White);
-  renderer.drawRect(rect.x, rect.y, rect.width, rect.height, true);
-  const freeink::ui::BitmapRef bitmap{icon.bits, icon.w, icon.h, freeink::ui::BitmapFormat::Mask1, true};
-  freeink::ui::forEachBitmapPixel(
-      freeink::ui::Rect{static_cast<int16_t>(rect.x), static_cast<int16_t>(rect.y), static_cast<int16_t>(rect.width),
-                        static_cast<int16_t>(rect.height)},
-      bitmap, freeink::ui::BitmapMode::Center,
-      [&renderer](const int16_t x, const int16_t y) { renderer.drawPixel(x, y, true); });
 }
 }  // namespace
 
@@ -94,10 +81,14 @@ void FrontlightTimePickerActivity::onEnter() {
   minuteQuarter = time.minuteQuarter;
   isPm = time.isPm;
   activeField = Field::Hour;
+  clearNumericEntry();
+  keyboardTouchRouter.reset();
+  keyboardInteractionsReady.store(false, std::memory_order_release);
   requestUpdate();
 }
 
 void FrontlightTimePickerActivity::adjustActiveField(const int delta) {
+  clearNumericEntry();
   switch (activeField) {
     case Field::Hour:
       hour12 = static_cast<uint8_t>((static_cast<int>(hour12) - 1 + delta + 12) % 12 + 1);
@@ -116,6 +107,7 @@ void FrontlightTimePickerActivity::adjustActiveField(const int delta) {
 void FrontlightTimePickerActivity::selectNextField(const int delta) {
   constexpr int fieldCount = static_cast<int>(Field::Count);
   activeField = static_cast<Field>((static_cast<int>(activeField) + delta + fieldCount) % fieldCount);
+  clearNumericEntry();
 }
 
 void FrontlightTimePickerActivity::complete() {
@@ -135,8 +127,57 @@ bool FrontlightTimePickerActivity::selectFieldAt(const int x, const int y, const
   } else {
     return false;
   }
+  clearNumericEntry();
   requestUpdate();
   return true;
+}
+
+void FrontlightTimePickerActivity::clearNumericEntry() {
+  numericEntry = 0;
+  numericEntryDigits = 0;
+}
+
+void FrontlightTimePickerActivity::enterDigit(const uint8_t digit) {
+  if (activeField == Field::Period) return;
+
+  if (activeField == Field::Hour) {
+    if (numericEntryDigits == 0) {
+      if (digit == 0) {
+        hour12 = 12;
+      } else {
+        hour12 = digit;
+        numericEntry = digit;
+        numericEntryDigits = digit == 1 ? 1 : 0;
+      }
+    } else {
+      const uint8_t candidate = static_cast<uint8_t>(numericEntry * 10 + digit);
+      if (candidate >= 10 && candidate <= 12) {
+        hour12 = candidate;
+      }
+      clearNumericEntry();
+    }
+  } else if (numericEntryDigits == 0) {
+    numericEntry = digit;
+    numericEntryDigits = 1;
+  } else {
+    const uint8_t candidate = static_cast<uint8_t>(numericEntry * 10 + digit);
+    if (candidate <= 45 && candidate % 15 == 0) {
+      minuteQuarter = candidate / 15;
+    }
+    clearNumericEntry();
+  }
+  requestUpdate();
+}
+
+void FrontlightTimePickerActivity::handleKeyboardValue(const int16_t value) {
+  if (value >= '0' && value <= '9') {
+    enterDigit(static_cast<uint8_t>(value - '0'));
+  } else if (value == fui::QWERTY_KEY_BACKSPACE) {
+    clearNumericEntry();
+    requestUpdate();
+  } else if (value == fui::QWERTY_KEY_ENTER) {
+    complete();
+  }
 }
 
 void FrontlightTimePickerActivity::loop() {
@@ -155,25 +196,34 @@ void FrontlightTimePickerActivity::loop() {
   }
 
   if (mappedInput.hasTouch()) {
-    int tx = 0;
-    int ty = 0;
-    const PickerLayout layout = getPickerLayout(renderer, true);
-    if (mappedInput.wasScreenTouchDown(tx, ty)) {
-      if (contains(layout.incrementRect, tx, ty) || contains(layout.decrementRect, tx, ty)) return;
-      if (selectFieldAt(tx, ty, false)) return;
+    int touchDownX = 0;
+    int touchDownY = 0;
+    if (mappedInput.wasScreenTouchDown(touchDownX, touchDownY)) {
+      if (selectFieldAt(touchDownX, touchDownY, false)) return;
     }
-    if (mappedInput.wasScreenTapped(tx, ty)) {
-      if (contains(layout.incrementRect, tx, ty)) {
-        adjustActiveField(+1);
-        requestUpdate();
+    int tapX = 0;
+    int tapY = 0;
+    const bool tapped = mappedInput.wasScreenTapped(tapX, tapY);
+    if (tapped) {
+      if (selectFieldAt(tapX, tapY, true)) return;
+    }
+
+    if (keyboardInteractionsReady.load(std::memory_order_acquire)) {
+      unsigned long heldMs = 0;
+      int candidateX = 0;
+      int candidateY = 0;
+      const bool tapCandidate = mappedInput.isScreenTouchTapCandidate(candidateX, candidateY, heldMs);
+      int heldX = 0;
+      int heldY = 0;
+      const bool inContact = mappedInput.isScreenTouchHeld(heldX, heldY);
+      const fui::TouchHoldRouter::Result result = keyboardTouchRouter.update(
+          keyboardInteractions, tapCandidate, static_cast<int16_t>(candidateX), static_cast<int16_t>(candidateY),
+          tapped, static_cast<int16_t>(tapX), static_cast<int16_t>(tapY), inContact, millis());
+      if (result.event) {
+        handleKeyboardValue(result.event.value);
         return;
       }
-      if (contains(layout.decrementRect, tx, ty)) {
-        adjustActiveField(-1);
-        requestUpdate();
-        return;
-      }
-      if (selectFieldAt(tx, ty, true)) return;
+      if (result.activeChanged) requestUpdate();
     }
   }
 
@@ -220,7 +270,11 @@ void FrontlightTimePickerActivity::render(RenderLock&&) {
   char hourText[4];
   char minuteText[4];
   snprintf(hourText, sizeof(hourText), "%u", static_cast<unsigned>(hour12));
-  snprintf(minuteText, sizeof(minuteText), "%02u", static_cast<unsigned>(minuteQuarter * 15));
+  if (activeField == Field::Minute && numericEntryDigits == 1) {
+    snprintf(minuteText, sizeof(minuteText), "%u_", static_cast<unsigned>(numericEntry));
+  } else {
+    snprintf(minuteText, sizeof(minuteText), "%02u", static_cast<unsigned>(minuteQuarter * 15));
+  }
   const char* periodText = I18N.get(isPm ? StrId::STR_PM : StrId::STR_AM);
 
   auto drawField = [&](const char* text, const Rect& rect, const Field field) {
@@ -239,8 +293,34 @@ void FrontlightTimePickerActivity::render(RenderLock&&) {
   drawField(periodText, layout.periodRect, Field::Period);
 
   if (mappedInput.hasTouch()) {
-    drawChevronButton(renderer, layout.incrementRect, icon_chevron_up_32);
-    drawChevronButton(renderer, layout.decrementRect, icon_chevron_down_32);
+    const fui::KeyboardLayout& keyboardLayout =
+        fui::builtinKeyboardLayout(fui::KeyboardLayoutId::QwertyEn, false, false, /*numberRow=*/true);
+    fui::GfxRendererTarget target(renderer);
+    target.setFont(fui::GfxRendererTarget::FONT_SMALL, SMALL_FONT_ID);
+    target.setFont(fui::GfxRendererTarget::FONT_BODY, UI_12_FONT_ID);
+    const fui::DeviceContext device = target.deviceContext();
+    const fui::InputSnapshot noInput{};
+    keyboardInteractions.beginPublishCycle();
+    fui::Frame<48> frame(target, device, noInput, keyboardInteractions);
+
+    fui::KeyboardProps props;
+    props.layout = &keyboardLayout;
+    props.keyAction = kKeyboardAction;
+    props.okLabel = tr(STR_OK_BUTTON);
+    props.shiftLabel = tr(STR_KEY_SHIFT);
+    props.modeLabel = tr(STR_KEY_MODE_SYMBOLS);
+    props.inputMask = static_cast<uint16_t>(fui::InputTouch | fui::InputLongPress);
+    props.labelText.font = fui::GfxRendererTarget::FONT_BODY;
+    props.altText.font = fui::GfxRendererTarget::FONT_SMALL;
+    const auto& metrics = UITheme::getInstance().getMetrics();
+    props.gap = static_cast<int16_t>(metrics.keyboardKeySpacing);
+    props.padding = fui::Insets{0, 0, 0, 0};
+    const fui::Rect kbRect = keyboardRect(renderer);
+    const int hintsTop = renderer.getScreenHeight() - metrics.buttonHintsHeight;
+    props.bottomHitOverflow = static_cast<int16_t>(std::max(0, hintsTop - (kbRect.y + kbRect.height)));
+    fui::keyboard(frame, kbRect, props);
+    keyboardInteractions.publish();
+    keyboardInteractionsReady.store(true, std::memory_order_release);
   }
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));

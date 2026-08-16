@@ -1,7 +1,9 @@
 #pragma once
 
+#include <FreeInkUIGfxRenderer.h>
 #include <I18n.h>
 
+#include <atomic>
 #include <cstdint>
 
 #include "activities/Activity.h"
@@ -29,9 +31,17 @@ class FrontlightTimePickerActivity final : public Activity {
   bool isPm = true;
   Field activeField = Field::Hour;
   ButtonNavigator buttonNavigator;
+  freeink::ui::InteractionBuffer<48> keyboardInteractions;
+  freeink::ui::TouchHoldRouter keyboardTouchRouter;
+  std::atomic<bool> keyboardInteractionsReady{false};
+  uint8_t numericEntry = 0;
+  uint8_t numericEntryDigits = 0;
 
   void adjustActiveField(int delta);
   void selectNextField(int delta);
   void complete();
   bool selectFieldAt(int x, int y, bool togglePeriod);
+  void clearNumericEntry();
+  void enterDigit(uint8_t digit);
+  void handleKeyboardValue(int16_t value);
 };
