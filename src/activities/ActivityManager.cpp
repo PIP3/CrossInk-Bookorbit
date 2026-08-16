@@ -117,7 +117,9 @@ bool applyTwoFingerSwipeAction(Activity& activity, MappedInputManager& mappedInp
 bool applyTwoFingerRotation(Activity& activity, MappedInputManager& mappedInput) {
   MappedInputManager::CompletedRotation completed;
   if (!mappedInput.wasCompletedMultiTouchRotation(completed)) return false;
-  return activity.handleTwoFingerRotation(completed.degrees > 0.0f);
+  // Rotate the content opposite the physical gesture so it feels like the
+  // reader is turning the page under the user's fingers.
+  return activity.handleTwoFingerRotation(completed.degrees < 0.0f);
 }
 }  // namespace
 
