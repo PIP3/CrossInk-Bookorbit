@@ -3157,8 +3157,10 @@ bool EpubReaderActivity::handlePinchFontResize() {
   const auto action = pinchFontGesture.update(x1, y1, x2, y2);
 
   if (action == ReaderPinchGesture::Action::Increase) {
+    mappedInput.suppressCurrentTouchContact();
     if (sdFontSystem.changeReaderFontSize(/*larger=*/true, FontSizeStepMode::Clamp)) reindexCurrentSection();
   } else if (action == ReaderPinchGesture::Action::Decrease) {
+    mappedInput.suppressCurrentTouchContact();
     if (sdFontSystem.changeReaderFontSize(/*larger=*/false, FontSizeStepMode::Clamp)) reindexCurrentSection();
   }
   return true;
@@ -3166,6 +3168,12 @@ bool EpubReaderActivity::handlePinchFontResize() {
 
 void EpubReaderActivity::resetPinchFontGesture() { pinchFontGesture.reset(); }
 #endif
+
+bool EpubReaderActivity::handleTwoFingerRotation(const bool clockwise) {
+  applyOrientation(ReaderUtils::rotatedOrientation(SETTINGS.orientation, clockwise));
+  requestUpdate();
+  return true;
+}
 
 bool EpubReaderActivity::handleTouchDictionaryLookup() {
   if (!SETTINGS.touchReaderControls || !mappedInput.hasTouch() || RenderLock::peek() || activeFootnotePreview ||

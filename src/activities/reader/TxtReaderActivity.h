@@ -71,6 +71,7 @@ class TxtReaderActivity final : public Activity {
   void loop() override;
   void render(RenderLock&&) override;
   bool handleTwoFingerSwipeAction(CrossPointSettings::TWO_FINGER_SWIPE_ACTION action) override;
+  bool handleTwoFingerRotation(bool clockwise) override;
   bool prepareManualRefresh() override {
     pagesUntilFullRefresh = -1;
     return true;

@@ -335,6 +335,20 @@ bool TxtReaderActivity::handleTwoFingerSwipeAction(const CrossPointSettings::TWO
   return true;
 }
 
+bool TxtReaderActivity::handleTwoFingerRotation(const bool clockwise) {
+  SETTINGS.orientation = ReaderUtils::rotatedOrientation(SETTINGS.orientation, clockwise);
+  SETTINGS.saveToFile();
+  {
+    RenderLock lock(*this);
+    ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
+    pageOffsets.clear();
+    currentPageLines.clear();
+    initialized = false;
+  }
+  requestUpdate();
+  return true;
+}
+
 void TxtReaderActivity::toggleDarkMode() {
   SETTINGS.readerDarkMode = !SETTINGS.readerDarkMode;
   SETTINGS.saveToFile();

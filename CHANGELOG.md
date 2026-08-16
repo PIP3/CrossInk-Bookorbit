@@ -8,6 +8,7 @@
 - New Quick Actions menu
 - On supported touch readers, pinch-to-resize with two fingers now changes the EPUB reader font size by one step.
 - Touch readers can now assign two-finger swipe directions to frontlight, chapter, or font-size actions from Settings > Controls > Taps & Gestures.
+- Rotating two fingers clockwise or counterclockwise now turns supported reader layouts in the same direction.
 - Quick Actions can now be assigned to Power + Up and, on X4 Pro, tap, long-press, or double-tap Home.
 
 - Power-button shortcuts and Quick Actions can now toggle the frontlight or reader touchscreen when supported.
