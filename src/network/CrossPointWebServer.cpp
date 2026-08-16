@@ -1365,7 +1365,12 @@ void CrossPointWebServer::handleGetSettings() const {
       }
       case SettingType::STRING: {
         doc["type"] = "string";
-        if (s.stringGetter) {
+        // Passwords are write-only in the web UI. Returning the KOReader
+        // value can expose credentials and, for legacy invalid data, emit
+        // binary bytes that make the whole JSON response unparsable.
+        if (strcmp(s.key, "koPassword") == 0) {
+          doc["value"] = "";
+        } else if (s.stringGetter) {
           doc["value"] = s.stringGetter();
         } else if (s.stringMaxLen > 0) {
           doc["value"] = reinterpret_cast<const char*>(&SETTINGS) + s.stringOffset;
