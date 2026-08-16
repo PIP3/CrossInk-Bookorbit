@@ -21,6 +21,7 @@
 #include "QuickActions.h"
 #include "SettingsList.h"
 #include "fontIds.h"
+#include "util/FrontlightSchedule.h"
 #include "util/TwoFingerSwipe.h"
 
 void readAndValidate(FsFile& file, uint8_t& member, const uint8_t maxValue) {
@@ -567,6 +568,14 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
     }
     this->*(info.valuePtr) = value;
   }
+
+  const auto normalizeFrontlightScheduleTime = [&needsResave](uint8_t& timeSlot) {
+    if (FrontlightSchedule::isTimeSlotValid(timeSlot) || timeSlot == FrontlightSchedule::kUnsetTimeSlot) return;
+    timeSlot = FrontlightSchedule::kUnsetTimeSlot;
+    needsResave = true;
+  };
+  normalizeFrontlightScheduleTime(frontlightScheduleStart);
+  normalizeFrontlightScheduleTime(frontlightScheduleEnd);
 
   if (normalizeTwoFingerSwipeActions(*this)) needsResave = true;
 

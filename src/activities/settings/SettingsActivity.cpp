@@ -43,6 +43,7 @@
 #include "components/UiAppHelpers.h"
 #include "fontIds.h"
 #include "util/DictionaryRegistry.h"
+#include "util/FrontlightSchedule.h"
 
 namespace fui = freeink::ui;
 
@@ -63,6 +64,12 @@ constexpr size_t controlsPowerMinCount = 2;
 constexpr size_t controlsPowerMaxCount = 3;
 constexpr size_t controlsFrontButtonCount = 6;
 constexpr size_t controlsSideButtonCount = 3;
+
+void formatFrontlightScheduleTimeSlot(const int slot, char* const buf, const size_t len) {
+  const int hour = slot / 4;
+  const int minute = (slot % 4) * 15;
+  snprintf(buf, len, "%02d:%02d", hour, minute);
+}
 
 int settingsTabBarTop(const ThemeMetrics& metrics) { return CompactHeader::headerBottomY(metrics); }
 
@@ -174,6 +181,14 @@ void drawSystemVersionFooter(const GfxRenderer& renderer, const int pageWidth, c
 }
 
 std::string formatSettingValue(const SettingInfo& setting) {
+  if (setting.valuePtr == &CrossPointSettings::frontlightScheduleStart ||
+      setting.valuePtr == &CrossPointSettings::frontlightScheduleEnd) {
+    const uint8_t slot = SETTINGS.*(setting.valuePtr);
+    if (SETTINGS.frontlightScheduleEnabled == 0 || !FrontlightSchedule::isTimeSlotValid(slot)) return "--";
+    char valueBuffer[6];
+    formatFrontlightScheduleTimeSlot(slot, valueBuffer, sizeof(valueBuffer));
+    return valueBuffer;
+  }
   if (setting.nameId == StrId::STR_TIME_TO_SLEEP) {
     if (SETTINGS.sleepTimeoutMinutes >= CrossPointSettings::SLEEP_TIMEOUT_NEVER_MINUTES) {
       return tr(STR_SLEEP_NEVER);
@@ -238,6 +253,7 @@ SettingsActivity::SettingsActivity(GfxRenderer& renderer, MappedInputManager& ma
 void SettingsActivity::rebuildSettingsLists() {
   displaySettings.clear();
   displaySleepSettings.clear();
+  displayFrontlightSettings.clear();
   readerSettings.clear();
   readerFontSettings.clear();
   readerPageLayoutSettings.clear();
@@ -270,6 +286,7 @@ void SettingsActivity::rebuildSettingsLists() {
   }
 #endif
   displaySleepSettings = buildDisplaySleepSettingsList(allSettings);
+  displayFrontlightSettings = buildDisplayFrontlightSettingsList(allSettings);
   readerSettings = buildReaderSettingsParentList(allSettings);
   readerFontSettings = buildReaderFontSettingsList(allSettings);
   readerPageLayoutSettings = buildReaderPageLayoutSettingsList(allSettings);
@@ -326,7 +343,13 @@ void SettingsActivity::rebuildSettingsLists() {
 void SettingsActivity::setCurrentSettingsForCategory() {
   switch (selectedCategoryIndex) {
     case 0:
-      currentSettings = activeSubmenu == SettingAction::DisplaySleepScreen ? &displaySleepSettings : &displaySettings;
+      if (activeSubmenu == SettingAction::DisplaySleepScreen) {
+        currentSettings = &displaySleepSettings;
+      } else if (activeSubmenu == SettingAction::DisplayFrontlight) {
+        currentSettings = &displayFrontlightSettings;
+      } else {
+        currentSettings = &displaySettings;
+      }
       break;
     case 1:
       switch (activeSubmenu) {
@@ -404,6 +427,8 @@ StrId SettingsActivity::activeSubmenuTitleId() const {
   switch (activeSubmenu) {
     case SettingAction::DisplaySleepScreen:
       return StrId::STR_DISPLAY_SLEEP_SCREEN;
+    case SettingAction::DisplayFrontlight:
+      return StrId::STR_FRONTLIGHT;
     case SettingAction::ReaderFontOptions:
       return StrId::STR_READER_FONT_OPTIONS;
     case SettingAction::ReaderPageLayout:
@@ -879,6 +904,11 @@ void SettingsActivity::toggleCurrentSetting() {
     openSleepTimeoutPicker();
     return;
   }
+  if (setting.valuePtr == &CrossPointSettings::frontlightScheduleStart ||
+      setting.valuePtr == &CrossPointSettings::frontlightScheduleEnd) {
+    openFrontlightScheduleTimePicker(setting.valuePtr, setting.nameId);
+    return;
+  }
   if (setting.valuePtr == &CrossPointSettings::lineHeightPercent) {
     openLineHeightPicker();
     return;
@@ -1020,6 +1050,7 @@ void SettingsActivity::toggleCurrentSetting() {
       case SettingAction::SystemReadingStats:
       case SettingAction::SystemGlobalStats:
       case SettingAction::DisplaySleepScreen:
+      case SettingAction::DisplayFrontlight:
       case SettingAction::None:
         // Do nothing
         break;
@@ -1098,6 +1129,26 @@ void SettingsActivity::openLineHeightPicker() {
         if (!result.isCancelled) {
           SETTINGS.lineHeightPercent = CrossPointSettings::clampedLineHeightPercent(
               static_cast<uint8_t>(std::get<IntervalResult>(result.data).value));
+          SETTINGS.saveToFile();
+        }
+        requestUpdate();
+      });
+}
+
+void SettingsActivity::openFrontlightScheduleTimePicker(uint8_t CrossPointSettings::* const valuePtr,
+                                                        const StrId titleId) {
+  const uint8_t storedValue = SETTINGS.*valuePtr;
+  const uint8_t initialValue = FrontlightSchedule::isTimeSlotValid(storedValue) ? storedValue : 0;
+  startActivityForResult(
+      std::make_unique<IntervalSelectionActivity>(
+          renderer, mappedInput, "FrontlightScheduleTime", titleId, initialValue, 0,
+          FrontlightSchedule::kSlotsPerDay - 1, 1, 4, StrId::STR_NONE_OPT,
+          /*readerActivity=*/false, /*allowPowerAsConfirm=*/false, /*ignoreInitialConfirmRelease=*/false,
+          /*showPercentValue=*/false, StrId::STR_NONE_OPT, /*overrideDisabledReaderTouchscreen=*/false,
+          /*showTouchHeaderBackButton=*/true, formatFrontlightScheduleTimeSlot),
+      [this, valuePtr](const ActivityResult& result) {
+        if (!result.isCancelled) {
+          SETTINGS.*valuePtr = static_cast<uint8_t>(std::get<IntervalResult>(result.data).value);
           SETTINGS.saveToFile();
         }
         requestUpdate();
@@ -1353,7 +1404,11 @@ void SettingsActivity::render(RenderLock&&) {
                       (*currentSettings)[selectedSettingIndex - 1].valuePtr ==
                           &CrossPointSettings::screenMarginVertical ||
                       (*currentSettings)[selectedSettingIndex - 1].valuePtr ==
-                          &CrossPointSettings::screenMarginHorizontal)
+                          &CrossPointSettings::screenMarginHorizontal ||
+                      (*currentSettings)[selectedSettingIndex - 1].valuePtr ==
+                          &CrossPointSettings::frontlightScheduleStart ||
+                      (*currentSettings)[selectedSettingIndex - 1].valuePtr ==
+                          &CrossPointSettings::frontlightScheduleEnd)
                  ? tr(STR_SELECT)
                  : tr(STR_TOGGLE));
 

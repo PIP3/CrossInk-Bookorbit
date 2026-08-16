@@ -25,6 +25,7 @@ enum class SettingAction {
   KOReaderSync,
   OPDSBrowser,
   DisplaySleepScreen,
+  DisplayFrontlight,
   ReaderFontOptions,
   ReaderPageLayout,
   ScreenMargin,
@@ -237,6 +238,7 @@ class SettingsActivity final : public Activity {
   // Per-category settings derived from shared list + device-only actions
   std::vector<SettingInfo> displaySettings;
   std::vector<SettingInfo> displaySleepSettings;
+  std::vector<SettingInfo> displayFrontlightSettings;
   std::vector<SettingInfo> readerSettings;
   std::vector<SettingInfo> readerFontSettings;
   std::vector<SettingInfo> readerPageLayoutSettings;
@@ -304,6 +306,7 @@ class SettingsActivity final : public Activity {
   void toggleCurrentSetting();
   void openSleepTimeoutPicker();
   void openLineHeightPicker();
+  void openFrontlightScheduleTimePicker(uint8_t CrossPointSettings::* valuePtr, StrId titleId);
   void openStringEditor(const SettingInfo& setting);
   void rebuildSettingsLists();
   void syncQuickResumeTimeoutForSleepScreen(bool sleepScreenChanged, bool quickResumeTimeoutChanged);
