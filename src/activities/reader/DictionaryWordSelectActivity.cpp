@@ -824,27 +824,12 @@ void DictionaryWordSelectActivity::loop() {
           break;
         }
         suspendWorkingSet();
-        startActivityForResult(std::move(definition), [this](const ActivityResult& result) {
-          if (!result.isCancelled) {
-            setResult(ActivityResult{});
-            finish();
-          } else {
-            {
-              RenderLock lock(*this);
-              if (!restoreWorkingSet()) {
-                GUI.drawPopup(renderer, tr(STR_MEMORY_ERROR));
-                renderer.displayBuffer();
-                delay(1000);
-                ActivityResult parentResult;
-                parentResult.isCancelled = true;
-                setResult(std::move(parentResult));
-                finish();
-                return;
-              }
-            }
-            forceFullRepaintOnNextRender();
-            requestUpdate();
-          }
+        startActivityForResult(std::move(definition), [this](const ActivityResult&) {
+          // A definition is the terminal screen of reader-page lookup. Its
+          // dismiss paths (Back and an outside tap) must return to the reader,
+          // rather than restoring the word-selection highlight beneath it.
+          setResult(ActivityResult{});
+          finish();
         });
         break;
       }

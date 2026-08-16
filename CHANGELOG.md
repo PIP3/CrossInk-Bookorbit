@@ -1,3 +1,9 @@
+## [Unreleased]
+
+### Fixed
+
+- Dismissing a dictionary definition with Back or an outside tap now returns directly to the reader instead of reopening word selection.
+
 ## [v1.5.1] - 2026-08-12
 
 ### Added
