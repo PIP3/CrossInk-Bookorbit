@@ -16,6 +16,7 @@
 
 ### Changed
 
+- Screen Margin now has separate Top/Bottom and Left/Right controls, each adjustable in 5- and 10-pixel steps up to 200 pixels.
 - Font settings now label the downloadable-font manager as “Download Fonts”.
 - Shortcut action pickers now use a consistent option order while hiding actions unsupported by the selected trigger or device.
 - Wi-Fi passwords are now shown while entering them, making corrections easier on-device.

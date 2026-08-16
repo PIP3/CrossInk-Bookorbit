@@ -20,8 +20,8 @@ constexpr uint8_t STATUS_BAR_TEXT_PADDING = 3;
 // Gap between the top clock status bar band and the first line of book text.
 // Signed so negative values pull the text up toward the clock (unsigned would wrap
 // a negative to a huge positive). Note the book-text top margin is
-// std::max(screenMargin, reservedClockHeight + TOP_CLOCK_TEXT_PADDING), so this only
-// bites once reservedClockHeight + padding drops below the screen-margin setting.
+// std::max(screenMarginVertical, reservedClockHeight + TOP_CLOCK_TEXT_PADDING), so this only
+// bites once reservedClockHeight + padding drops below the vertical-margin setting.
 constexpr int8_t TOP_CLOCK_TEXT_PADDING = 0;
 
 inline GfxRenderer::Orientation toRendererOrientation(const uint8_t orientation) {
