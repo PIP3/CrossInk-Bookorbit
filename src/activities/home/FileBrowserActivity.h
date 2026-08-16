@@ -75,6 +75,10 @@ class FileBrowserActivity final : public Activity {
   std::atomic<bool> uiReady{false};
   int visibleRows = 1;  // rows per page at the current scale; set by the screen builder
   int topIndex = 0;     // viewport scroll position, decoupled from the selection
+  // The current FreeInkUI action payload is int16_t. For larger folders the
+  // renderer supplies a local row number and this records its absolute base.
+  size_t actionWindowFirst = 0;
+  freeink::ui::ListNav listNav;
 
   static void listScreen(UiApp::ScreenType& screen, void* user);
   static void onRowEvent(const freeink::ui::ActionEvent& event, void* user);

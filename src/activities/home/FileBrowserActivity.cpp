@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
 
 #include "BookActions.h"
 #include "CrossPointSettings.h"
@@ -37,6 +38,7 @@ constexpr int ROOT_HINT_GAP = 20;
 constexpr size_t NAME_BUFFER_SIZE = 500;
 constexpr fui::ActionId ACTION_ROW = 1;
 constexpr size_t INDEX_THRESHOLD = 200;
+constexpr size_t MAX_VIRTUAL_LIST_ENTRIES = static_cast<size_t>(std::numeric_limits<int16_t>::max());
 constexpr uint32_t FILE_BROWSER_APPEND_MIN_FREE_AFTER_ALLOC = 48U * 1024U;
 constexpr uint32_t FILE_BROWSER_APPEND_MIN_MAX_ALLOC_AFTER_ALLOC = 16U * 1024U;
 
@@ -377,6 +379,9 @@ void FileBrowserActivity::onEnter() {
   uiReady = false;
   visibleRows = 1;
   topIndex = followListSelection(static_cast<int>(selectorIndex), 0, visibleRows, static_cast<int>(entryCount()));
+  listNav.reset(static_cast<int>(selectorIndex));
+  listNav.top = topIndex;
+  listNav.visibleRows = visibleRows;
   applySharedUiTheme(app, uiTarget);
   app.on(ACTION_ROW, &FileBrowserActivity::onRowEvent, this);
   app.setScreen(&FileBrowserActivity::listScreen, this);
@@ -766,8 +771,10 @@ void FileBrowserActivity::onRowEvent(const fui::ActionEvent& event, void* user) 
   std::string entry;
   {
     RenderLock lock(*self);
-    if (event.value < 0 || static_cast<size_t>(event.value) >= self->entryCount()) return;
-    self->selectorIndex = static_cast<size_t>(event.value);
+    if (event.value < 0) return;
+    const size_t row = self->actionWindowFirst + static_cast<size_t>(event.value);
+    if (row >= self->entryCount()) return;
+    self->selectorIndex = row;
     entry = self->entryNameAt(self->selectorIndex);
   }
   if (event.longPress && self->mode == Mode::Books) {
@@ -932,10 +939,16 @@ void FileBrowserActivity::loop() {
     {
       RenderLock lock(*this);
       const int delta = swipe == MappedInputManager::SwipeDir::Up ? visibleRows : -visibleRows;
-      const int next = scrollListBy(topIndex, delta, visibleRows, listSize);
-      if (next != topIndex) {
-        topIndex = next;
-        moved = true;
+      if (static_cast<size_t>(listSize) > MAX_VIRTUAL_LIST_ENTRIES) {
+        const int nextTop = scrollListBy(topIndex, delta, visibleRows, listSize);
+        moved = nextTop != topIndex;
+        topIndex = nextTop;
+      } else {
+        listNav.selected = static_cast<int>(selectorIndex);
+        listNav.top = topIndex;
+        listNav.visibleRows = visibleRows;
+        moved = listNav.scrollBy(delta, listSize);
+        topIndex = listNav.top;
       }
     }
     if (moved) {
@@ -949,7 +962,15 @@ void FileBrowserActivity::loop() {
       RenderLock lock(*this);
       selectorIndex = static_cast<size_t>(index);
       showFileSelection = true;
-      topIndex = followListSelection(static_cast<int>(selectorIndex), topIndex, visibleRows, listSize);
+      if (static_cast<size_t>(listSize) > MAX_VIRTUAL_LIST_ENTRIES) {
+        topIndex = followListSelection(index, topIndex, visibleRows, listSize);
+      } else {
+        listNav.selected = index;
+        listNav.top = topIndex;
+        listNav.visibleRows = visibleRows;
+        listNav.follow(listSize);
+        topIndex = listNav.top;
+      }
     }
     requestUpdate();
   };
@@ -960,10 +981,24 @@ void FileBrowserActivity::loop() {
     moveSelection(ButtonNavigator::previousIndex(static_cast<int>(selectorIndex), listSize));
   };
   const auto pageNext = [this, listSize, &moveSelection] {
-    moveSelection(ButtonNavigator::nextPageIndex(static_cast<int>(selectorIndex), listSize, visibleRows));
+    int nextIndex;
+    {
+      RenderLock lock(*this);
+      nextIndex = ButtonNavigator::nextPageIndex(
+          static_cast<int>(selectorIndex), listSize,
+          static_cast<size_t>(listSize) > MAX_VIRTUAL_LIST_ENTRIES ? visibleRows : listNav.pageRows());
+    }
+    moveSelection(nextIndex);
   };
   const auto pagePrevious = [this, listSize, &moveSelection] {
-    moveSelection(ButtonNavigator::previousPageIndex(static_cast<int>(selectorIndex), listSize, visibleRows));
+    int previousIndex;
+    {
+      RenderLock lock(*this);
+      previousIndex = ButtonNavigator::previousPageIndex(
+          static_cast<int>(selectorIndex), listSize,
+          static_cast<size_t>(listSize) > MAX_VIRTUAL_LIST_ENTRIES ? visibleRows : listNav.pageRows());
+    }
+    moveSelection(previousIndex);
   };
   if (mode == Mode::PickDirectory) {
     // The front-right button selects this folder. Keep navigation on the side
@@ -1090,8 +1125,20 @@ void FileBrowserActivity::buildListScreen(UiApp::ScreenType& screen) {
   const fui::Rect listRect = screen.body();
   const auto rows = configureUiList(props, screen.theme(), listRect, rowType);
   visibleRows = rows > 0 ? rows : 1;
-  topIndex = scrollListBy(topIndex, 0, visibleRows, static_cast<int>(totalEntries));
+  const bool usesVirtualList = totalEntries <= MAX_VIRTUAL_LIST_ENTRIES;
+  if (usesVirtualList) {
+    listNav.selected = static_cast<int>(selectorIndex);
+    listNav.top = topIndex;
+    listNav.visibleRows = visibleRows;
+    listNav.syncToProps(listRect, props.rowHeight, props.rowGap, static_cast<int>(totalEntries), props);
+    topIndex = listNav.top;
+  } else {
+    // FreeInkUI's virtual list carries both its count and selection in 16-bit
+    // fields. Keep the proven local-window path for unusually large folders.
+    topIndex = scrollListBy(topIndex, 0, visibleRows, static_cast<int>(totalEntries));
+  }
   const size_t drawCount = std::min<size_t>(visibleRows, totalEntries - static_cast<size_t>(topIndex));
+  actionWindowFirst = usesVirtualList ? 0 : static_cast<size_t>(topIndex);
 
   // Only materialize the visible window. Large folders continue to use
   // FileIndex instead of duplicating every filename on the heap for UI rows.
@@ -1112,16 +1159,21 @@ void FileBrowserActivity::buildListScreen(UiApp::ScreenType& screen) {
     item.label = names[i].c_str();
     if (!values[i].empty()) item.value = values[i].c_str();
     item.icon = listIconFor(UITheme::getFileIcon(entry), twoLineRows ? 32 : 24);
-    item.actionValue = static_cast<int16_t>(entryIndex);
+    item.actionValue = static_cast<int16_t>(usesVirtualList ? entryIndex : i);
     items.push_back(item);
   }
 
   props.items = items.data();
-  props.count = static_cast<uint16_t>(items.size());
-  props.selectedIndex =
-      selectorIndex >= static_cast<size_t>(topIndex) && selectorIndex < static_cast<size_t>(topIndex) + drawCount
-          ? static_cast<int16_t>(selectorIndex - static_cast<size_t>(topIndex))
-          : -1;
+  props.count = static_cast<uint16_t>(usesVirtualList ? totalEntries : items.size());
+  props.itemsWindowFirst = usesVirtualList ? static_cast<uint16_t>(topIndex) : 0;
+  if (!usesVirtualList) {
+    props.selectedIndex =
+        selectorIndex >= static_cast<size_t>(topIndex) && selectorIndex < static_cast<size_t>(topIndex) + drawCount
+            ? static_cast<int16_t>(selectorIndex - static_cast<size_t>(topIndex))
+            : -1;
+    props.topIndex = 0;
+    props.nav = nullptr;
+  }
   props.action = ACTION_ROW;
   props.inputMask = mode == Mode::Books ? static_cast<uint16_t>(fui::InputTouch | fui::InputLongPress)
                                         : fui::InputTouch;  // physical buttons stay in loop()
@@ -1129,8 +1181,13 @@ void FileBrowserActivity::buildListScreen(UiApp::ScreenType& screen) {
   // A file extension is short, so do not sacrifice most of a two-line title
   // to visually balance it with the value column.
   props.balanceWrappedLabelWithValue = false;
-  props.topIndex = 0;
+  // The pinned FreeInkUI list computes its partial-row preview from
+  // `top + visibleRows`, which is not reliable when wrapped rows consume more
+  // than one line. Keep every rendered item contiguous until the SDK exposes
+  // the consumed index.
+  props.partialTrailingRow = false;
   screen.list(props);
+  if (usesVirtualList) topIndex = listNav.top;
   fui::drawListScrollIndicator(screen.target(), listRect, totalEntries, visibleRows, topIndex,
                                screen.theme().listScrollWidth, screen.theme().listScrollSide,
                                screen.theme().listScrollInset);
@@ -1158,7 +1215,10 @@ void FileBrowserActivity::render(RenderLock&&) {
   }
 
   uiReady = false;
-  app.render();
+  for (int pass = 0; pass < 8; ++pass) {
+    app.render();
+    if (!listNav.consumeRebuildNeeded()) break;
+  }
   uiReady = true;
 
   const size_t visibleEntries = entryCount();
