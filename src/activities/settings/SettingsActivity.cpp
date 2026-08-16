@@ -20,6 +20,7 @@
 #include "ClockSyncActivity.h"
 #include "CrossPointSettings.h"
 #include "FontSelectionActivity.h"
+#include "FrontlightTimePickerActivity.h"
 #include "KOReaderSettingsActivity.h"
 #include "MappedInputManager.h"
 #include "OpdsServerListActivity.h"
@@ -1138,21 +1139,14 @@ void SettingsActivity::openLineHeightPicker() {
 void SettingsActivity::openFrontlightScheduleTimePicker(uint8_t CrossPointSettings::* const valuePtr,
                                                         const StrId titleId) {
   const uint8_t storedValue = SETTINGS.*valuePtr;
-  const uint8_t initialValue = FrontlightSchedule::isTimeSlotValid(storedValue) ? storedValue : 0;
-  startActivityForResult(
-      std::make_unique<IntervalSelectionActivity>(
-          renderer, mappedInput, "FrontlightScheduleTime", titleId, initialValue, 0,
-          FrontlightSchedule::kSlotsPerDay - 1, 1, 4, StrId::STR_NONE_OPT,
-          /*readerActivity=*/false, /*allowPowerAsConfirm=*/false, /*ignoreInitialConfirmRelease=*/false,
-          /*showPercentValue=*/false, StrId::STR_NONE_OPT, /*overrideDisabledReaderTouchscreen=*/false,
-          /*showTouchHeaderBackButton=*/true, formatFrontlightScheduleTimeSlot),
-      [this, valuePtr](const ActivityResult& result) {
-        if (!result.isCancelled) {
-          SETTINGS.*valuePtr = static_cast<uint8_t>(std::get<IntervalResult>(result.data).value);
-          SETTINGS.saveToFile();
-        }
-        requestUpdate();
-      });
+  startActivityForResult(std::make_unique<FrontlightTimePickerActivity>(renderer, mappedInput, titleId, storedValue),
+                         [this, valuePtr](const ActivityResult& result) {
+                           if (!result.isCancelled) {
+                             SETTINGS.*valuePtr = static_cast<uint8_t>(std::get<IntervalResult>(result.data).value);
+                             SETTINGS.saveToFile();
+                           }
+                           requestUpdate();
+                         });
 }
 
 void SettingsActivity::openIdleTimeThresholdPicker() {

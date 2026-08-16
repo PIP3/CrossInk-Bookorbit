@@ -35,3 +35,21 @@ TEST(FrontlightSchedule, LocalTimeSlotAppliesQuarterHourOffset) {
   EXPECT_EQ(FrontlightSchedule::localTimeSlot(23, 45, 52), slot(0, 45));  // UTC+1
   EXPECT_EQ(FrontlightSchedule::localTimeSlot(0, 15, 44), slot(23, 15));  // UTC-1
 }
+
+TEST(FrontlightSchedule, UnsetTimeStartsAtNoonAndRoundTripsTwelveHourValues) {
+  const auto unset = FrontlightSchedule::timeOfDayFromSlot(FrontlightSchedule::kUnsetTimeSlot);
+  EXPECT_EQ(unset.hour12, 12);
+  EXPECT_EQ(unset.minuteQuarter, 0);
+  EXPECT_TRUE(unset.isPm);
+
+  const auto midnight = FrontlightSchedule::timeOfDayFromSlot(0);
+  EXPECT_EQ(midnight.hour12, 12);
+  EXPECT_FALSE(midnight.isPm);
+  EXPECT_EQ(FrontlightSchedule::slotFromTimeOfDay(midnight.hour12, midnight.minuteQuarter, midnight.isPm), 0);
+
+  const auto afternoon = FrontlightSchedule::timeOfDayFromSlot(67);  // 16:45
+  EXPECT_EQ(afternoon.hour12, 4);
+  EXPECT_EQ(afternoon.minuteQuarter, 3);
+  EXPECT_TRUE(afternoon.isPm);
+  EXPECT_EQ(FrontlightSchedule::slotFromTimeOfDay(afternoon.hour12, afternoon.minuteQuarter, afternoon.isPm), 67);
+}
