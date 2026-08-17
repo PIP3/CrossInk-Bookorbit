@@ -55,7 +55,16 @@ class FontCacheManager {
 
   enum class ScanMode : uint8_t { None, Scanning };
   ScanMode scanMode_ = ScanMode::None;
-  std::string scanText_;
-  uint32_t scanStyleCounts_[4] = {};
-  int scanFontId_ = -1;
+
+  // A page can mix reader, UI, and fallback fonts. Keep a small fixed set of
+  // per-font scan buffers so each participating SD font is warmed in one pass.
+  // Extra font ids still render correctly through the existing per-string path.
+  static constexpr uint8_t MAX_SCAN_FONTS = 4;
+  struct ScanEntry {
+    int fontId = -1;
+    std::string text;
+    uint8_t styleMask = 0;
+  };
+  ScanEntry scanEntries_[MAX_SCAN_FONTS];
+  void resetScanEntries();
 };

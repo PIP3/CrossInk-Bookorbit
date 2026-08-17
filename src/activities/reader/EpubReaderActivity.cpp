@@ -6280,6 +6280,9 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int fo
   auto* fcm = renderer.getFontCacheManager();
   auto scope = fcm->createPrewarmScope();
   page->renderText(renderer, fontId, orientedMarginLeft, orientedMarginTop);  // scan pass
+  // The status-bar title can route to the same SD fallback as the page. Scan
+  // it into this batch before rendering so it does not evict page glyphs.
+  renderStatusBar();
   scope.endScanAndPrewarm();
 
 #if CROSSINK_APP_CAP_TOUCH
