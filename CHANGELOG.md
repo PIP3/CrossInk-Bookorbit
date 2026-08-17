@@ -12,6 +12,7 @@
 
 ### Fixed
 
+- OPDS book lists now use the standard Back header without obscuring its divider, while keeping Search available.
 - Opening Select Chapter no longer restarts X3/X4 readers for EPUBs with thousands of chapters.
 - X4 now clears the retained sleep screen with one half refresh on wake, reducing ghosting before the next screen appears.
 - Saved EPUB clipping highlights no longer wash out their text when reader text anti-aliasing is enabled.
