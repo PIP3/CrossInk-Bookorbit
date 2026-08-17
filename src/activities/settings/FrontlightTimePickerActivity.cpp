@@ -49,12 +49,18 @@ fui::Rect keyboardRect(const GfxRenderer& renderer) {
   return {static_cast<int16_t>(x), static_cast<int16_t>(y), static_cast<int16_t>(width), static_cast<int16_t>(height)};
 }
 
-PickerLayout getPickerLayout(const GfxRenderer& renderer) {
+PickerLayout getPickerLayout(const GfxRenderer& renderer, const MappedInputManager& mappedInput) {
   const int colonWidth = renderer.getTextWidth(UI_12_FONT_ID, ":", EpdFontFamily::BOLD);
   const int fieldsWidth =
       kHourWidth + kFieldGap + kColonGap + colonWidth + kColonGap + kMinuteWidth + kFieldGap + kPeriodWidth;
   const int startX = (renderer.getScreenWidth() - fieldsWidth) / 2;
-  const int fieldY = renderer.getScreenHeight() / 2 - kFieldHeight / 2;
+  int fieldY = renderer.getScreenHeight() / 2 - kFieldHeight / 2;
+  if (mappedInput.hasTouch()) {
+    const Rect header = TouchHeaderBackButton::headerRect(renderer, mappedInput);
+    const int contentTop = header.y + header.height;
+    const int contentHeight = keyboardRect(renderer).y - contentTop;
+    fieldY = contentTop + (contentHeight - kFieldHeight) / 2;
+  }
 
   int x = startX;
   const Rect hourRect{x, fieldY, kHourWidth, kFieldHeight};
@@ -115,7 +121,7 @@ void FrontlightTimePickerActivity::complete() {
 }
 
 bool FrontlightTimePickerActivity::selectFieldAt(const int x, const int y, const bool togglePeriod) {
-  const PickerLayout layout = getPickerLayout(renderer);
+  const PickerLayout layout = getPickerLayout(renderer, mappedInput);
   if (contains(layout.hourRect, x, y)) {
     activeField = Field::Hour;
   } else if (contains(layout.minuteRect, x, y)) {
@@ -265,7 +271,7 @@ void FrontlightTimePickerActivity::render(RenderLock&&) {
     GUI.drawHeader(renderer, header, I18N.get(titleId));
   }
 
-  const PickerLayout layout = getPickerLayout(renderer);
+  const PickerLayout layout = getPickerLayout(renderer, mappedInput);
   char hourText[4];
   char minuteText[4];
   snprintf(hourText, sizeof(hourText), "%u", static_cast<unsigned>(hour12));
