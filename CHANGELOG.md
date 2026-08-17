@@ -6,6 +6,7 @@
 
 ### Changed
 
+- Touch-screen header Back buttons now use a heavier chevron for improved visibility.
 - Frontlight schedules can now use one-minute start and end times.
 - The reader menu now uses tablet icons to show whether its touchscreen is enabled or disabled.
 
