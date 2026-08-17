@@ -2217,6 +2217,8 @@ void EpubReaderActivity::onEnter() {
 }
 
 void EpubReaderActivity::onExit() {
+  mappedInput.setReaderTouchscreenOverride(false);
+
   // The extraction callback holds the Epub as a raw context pointer.
   ImageBlock::setExtractor(nullptr, nullptr);
   releaseGrayscaleStripScratch(true);
@@ -4475,6 +4477,7 @@ void EpubReaderActivity::openQuickActionsPopup() {
   QuickActions::showConfiguredPopup(
       quickActionsPopup, [this] { requestUpdate(); },
       [this](const auto action) {
+        mappedInput.setReaderTouchscreenOverride(false);
         if (action == CrossPointSettings::SHORT_PWRBTN::LOOKUP_WORD) {
           // The popup was the most recent render, so word selection must redraw
           // the reader page instead of reusing the popup framebuffer.
@@ -4484,6 +4487,10 @@ void EpubReaderActivity::openQuickActionsPopup() {
         }
         dispatchShortcutAction(action);
       });
+  if (quickActionsPopup.isActive()) {
+    mappedInput.setReaderTouchscreenOverride(true);
+    quickActionsPopup.setCancelCallback([this] { mappedInput.setReaderTouchscreenOverride(false); });
+  }
 }
 
 bool EpubReaderActivity::quickActionUsesConfirmRelease(const CrossPointSettings::LONG_PRESS_MENU_ACTION action) const {
