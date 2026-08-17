@@ -462,14 +462,6 @@ bool startGlobalSyncProgress(const bool networkBootReady = false) {
 CrossPointSettings::SHORT_PWRBTN getPowerButtonAction() {
   static bool longPowerButtonHandled = false;
 
-  if (activityManager.readerPowerButtonOpensSettings()) {
-    if (mappedInputManager.wasReleased(MappedInputManager::Button::Power)) {
-      longPowerButtonHandled = false;
-      screenshotComboHandled = false;
-    }
-    return CrossPointSettings::SHORT_PWRBTN::IGNORE;
-  }
-
   if (mappedInputManager.wasReleased(MappedInputManager::Button::Power)) {
     if (longPowerButtonHandled) {
       longPowerButtonHandled = false;
@@ -1463,8 +1455,8 @@ void loop() {
     screenshotComboActive = false;
     return;
   }
-  if (!buttonShortcutController.isQuickLocked() && !activityManager.readerPowerButtonOpensSettings() &&
-      gpio.isPressed(HalGPIO::BTN_POWER) && gpio.isPressed(HalGPIO::BTN_DOWN)) {
+  if (!buttonShortcutController.isQuickLocked() && gpio.isPressed(HalGPIO::BTN_POWER) &&
+      gpio.isPressed(HalGPIO::BTN_DOWN)) {
     screenshotComboActive = true;
     if (screenshotButtonsReleased) {
       screenshotButtonsReleased = false;
