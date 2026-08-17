@@ -6523,9 +6523,13 @@ bool EpubReaderActivity::handleTouchFootnoteLink(const int touchX, const int tou
 
 void EpubReaderActivity::drawClippingHighlights(const Page& page, const int fontId, const int orientedMarginTop,
                                                 const int orientedMarginLeft) const {
-  if (!section || !CLIPPINGS.hasClippings()) {
+  if (!section || !CLIPPINGS.hasClippings() || renderer.getRenderMode() != GfxRenderer::BW) {
     return;
   }
+
+  // The BW frame owns the dithered marker and its redrawn black text. Repeating
+  // that marker in the grayscale anti-aliasing planes overlays gray pixels on
+  // the glyphs and makes a saved clipping look washed out.
 
   std::array<ClippingPageMatch, CLIPPING_MAX_PAGE_MATCHES> matches;
   uint16_t matchCount = 0;

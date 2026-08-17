@@ -121,7 +121,7 @@ void KOReaderSettingsActivity::handleSelection() {
                                KOREADER_STORE.saveToFile();
                              }
                            });
-  } else if (index == 2) {
+  } else if (selectedIndex == 2) {
     // Sync Server URL - prefill with https:// if empty to save typing
     const std::string currentUrl = KOREADER_STORE.getServerUrl();
     const std::string prefillUrl = currentUrl.empty() ? "https://" : currentUrl;

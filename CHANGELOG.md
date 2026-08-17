@@ -6,6 +6,7 @@
 
 ### Fixed
 
+- Saved EPUB clipping highlights no longer wash out their text when reader text anti-aliasing is enabled.
 - Dismissing a dictionary definition with Back or an outside tap now returns directly to the reader instead of reopening word selection.
 - The web Settings page now loads reliably when KOReader Sync has an older saved password.
 
