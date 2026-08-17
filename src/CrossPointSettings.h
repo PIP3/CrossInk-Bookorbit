@@ -587,8 +587,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t frontlightBrightness = 60;
   uint8_t frontlightWarmth = 50;  // 0 = cool .. 100 = warm
   uint8_t frontlightOn = 0;
-  // When enabled, restore the on/off state from before sleep. This is the
-  // default policy; a complete schedule is considered only when it is off.
+  // When enabled, restore a previously-on light after sleep. A previous off
+  // state falls through to a complete schedule.
   uint8_t frontlightRestoreOnWake = 1;
   // Daily wake-only schedule, in quarter-hour slots (0 = 00:00, 95 = 23:45).
   // An unset endpoint keeps the schedule inactive; its value is retained while

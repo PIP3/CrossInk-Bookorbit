@@ -21,6 +21,11 @@ constexpr bool hasCompleteWindow(const bool enabled, const uint8_t startSlot, co
   return enabled && isTimeSlotValid(startSlot) && isTimeSlotValid(endSlot) && startSlot != endSlot;
 }
 
+constexpr bool shouldApplyOnWakeSchedule(const bool isSilentReboot, const bool restoreOnWake,
+                                         const bool wasLightOnBeforeSleep) {
+  return !isSilentReboot && (!restoreOnWake || !wasLightOnBeforeSleep);
+}
+
 constexpr TimeOfDay timeOfDayFromSlot(const uint8_t slot) {
   // New endpoints begin at noon so the AM/PM picker has a useful, explicit
   // default instead of presenting the storage-oriented 00:00 value.

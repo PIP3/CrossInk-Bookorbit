@@ -14,6 +14,13 @@ TEST(FrontlightSchedule, DisabledOrIncompleteWindowIsInactive) {
   EXPECT_FALSE(FrontlightSchedule::hasCompleteWindow(true, slot(18), FrontlightSchedule::kUnsetTimeSlot));
 }
 
+TEST(FrontlightSchedule, RestoreOnWakeFallsThroughToScheduleOnlyWhenPreviouslyOff) {
+  EXPECT_FALSE(FrontlightSchedule::shouldApplyOnWakeSchedule(false, true, true));
+  EXPECT_TRUE(FrontlightSchedule::shouldApplyOnWakeSchedule(false, true, false));
+  EXPECT_TRUE(FrontlightSchedule::shouldApplyOnWakeSchedule(false, false, true));
+  EXPECT_FALSE(FrontlightSchedule::shouldApplyOnWakeSchedule(true, false, false));
+}
+
 TEST(FrontlightSchedule, SameEndpointIsAnEmptyWindow) {
   EXPECT_FALSE(FrontlightSchedule::hasCompleteWindow(true, slot(18), slot(18)));
   EXPECT_FALSE(FrontlightSchedule::containsTimeSlot(slot(18), slot(18), slot(18)));

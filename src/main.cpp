@@ -1149,10 +1149,12 @@ void setup() {
   ButtonNavigator::setMappedInputManager(mappedInputManager);
   logBootHeap("boot state ready");
   // A silent restart is a process-level recovery rather than a user wake, so
-  // retain the current light state. Real wakes first honor Restore on Wake;
-  // only when that is disabled can a complete local-time schedule decide.
-  bool restoreLightOn = SETTINGS.frontlightOn != 0 && (isSilentReboot || SETTINGS.frontlightRestoreOnWake != 0);
-  if (!isSilentReboot && SETTINGS.frontlightRestoreOnWake == 0 &&
+  // retain the current light state. On real wakes, Restore on Wake restores a
+  // prior on state; a prior off state falls through to the local-time schedule.
+  const bool wasLightOnBeforeSleep = SETTINGS.frontlightOn != 0;
+  bool restoreLightOn = wasLightOnBeforeSleep && (isSilentReboot || SETTINGS.frontlightRestoreOnWake != 0);
+  if (FrontlightSchedule::shouldApplyOnWakeSchedule(isSilentReboot, SETTINGS.frontlightRestoreOnWake != 0,
+                                                    wasLightOnBeforeSleep) &&
       FrontlightSchedule::hasCompleteWindow(SETTINGS.frontlightScheduleEnabled != 0, SETTINGS.frontlightScheduleStart,
                                             SETTINGS.frontlightScheduleEnd)) {
     uint8_t utcHour = 0;
