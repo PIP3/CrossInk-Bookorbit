@@ -43,6 +43,7 @@
 #include "components/UITheme.h"
 #include "components/UIThemeTokens.h"
 #include "components/UiAppHelpers.h"
+#include "components/icons/frontlightHeaderIcons.h"
 #include "fontIds.h"
 #include "util/DictionaryRegistry.h"
 #include "util/FrontlightSchedule.h"
@@ -225,6 +226,16 @@ fui::BitmapRef twoFingerSwipeIcon(const StrId nameId) {
     default:
       return {};
   }
+}
+
+fui::BitmapRef frontlightScheduleEndpointIcon(const SettingInfo& setting) {
+  if (setting.value16Ptr == &CrossPointSettings::frontlightScheduleStart) {
+    return fui::bitmapFromIcon(icon_lightbulb_28);
+  }
+  if (setting.value16Ptr == &CrossPointSettings::frontlightScheduleEnd) {
+    return fui::bitmapFromIcon(icon_lightbulb_off_28);
+  }
+  return {};
 }
 
 bool isTwoFingerSwipeSetting(const uint8_t CrossPointSettings::* const valuePtr) {
@@ -1332,9 +1343,11 @@ void SettingsActivity::buildSettingsScreen(UiApp::ScreenType& screen) {
     const bool isSectionHeader = settings[i].type == SettingType::SECTION_HEADER;
     fui::ListItem item;
     const fui::BitmapRef directionIcon = twoFingerSwipeIcon(settings[i].nameId);
+    const fui::BitmapRef endpointIcon = frontlightScheduleEndpointIcon(settings[i]);
+    const fui::BitmapRef itemIcon = directionIcon ? directionIcon : endpointIcon;
     item.label = isSectionHeader ? uiListSectionHeaderLabel(values[i], I18N.get(settings[i].nameId))
                                  : (directionIcon ? "" : I18N.get(settings[i].nameId));
-    item.icon = directionIcon;
+    item.icon = itemIcon;
     if (!isSectionHeader && !values[i].empty()) item.value = values[i].c_str();
     item.isHeader = isSectionHeader;
     item.actionValue = static_cast<int16_t>(i);
