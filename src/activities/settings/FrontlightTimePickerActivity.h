@@ -10,12 +10,12 @@
 #include "util/ButtonNavigator.h"
 
 // A compact 12-hour time editor for the frontlight schedule. It stores the
-// same quarter-hour slots as the schedule engine, while presenting tap-target
+// same minute-of-day values as the schedule engine, while presenting tap-target
 // fields for hour, minutes, and AM/PM.
 class FrontlightTimePickerActivity final : public Activity {
  public:
   FrontlightTimePickerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, StrId titleId,
-                               uint8_t initialSlot);
+                               uint16_t initialTimeOfDay);
 
   void onEnter() override;
   void loop() override;
@@ -25,9 +25,9 @@ class FrontlightTimePickerActivity final : public Activity {
   enum class Field : uint8_t { Hour, Minute, Period, Count };
 
   StrId titleId;
-  uint8_t initialSlot;
+  uint16_t initialTimeOfDay;
   uint8_t hour12 = 12;
-  uint8_t minuteQuarter = 0;
+  uint8_t minute = 0;
   bool isPm = true;
   Field activeField = Field::Hour;
   ButtonNavigator buttonNavigator;

@@ -2,23 +2,24 @@
 
 #include <cstdint>
 
-// Daily frontlight schedules are stored as quarter-hour slots. Keeping the
-// policy free of hardware dependencies lets boot code and host tests use the
-// same boundary rules.
+// Daily frontlight schedules are stored as local minutes since midnight.
+// Keeping the policy free of hardware dependencies lets boot code and host
+// tests use the same boundary rules.
 namespace FrontlightSchedule {
-constexpr uint8_t kSlotsPerDay = 24 * 4;
-constexpr uint8_t kUnsetTimeSlot = 0xFF;
+constexpr uint16_t kMinutesPerDay = 24 * 60;
+constexpr uint16_t kUnsetTimeOfDay = 0xFFFF;
 
 struct TimeOfDay {
   uint8_t hour12;
-  uint8_t minuteQuarter;
+  uint8_t minute;
   bool isPm;
 };
 
-constexpr bool isTimeSlotValid(const uint8_t slot) { return slot < kSlotsPerDay; }
+constexpr bool isTimeOfDayValid(const uint16_t timeOfDay) { return timeOfDay < kMinutesPerDay; }
 
-constexpr bool hasCompleteWindow(const bool enabled, const uint8_t startSlot, const uint8_t endSlot) {
-  return enabled && isTimeSlotValid(startSlot) && isTimeSlotValid(endSlot) && startSlot != endSlot;
+constexpr bool hasCompleteWindow(const bool enabled, const uint16_t startTimeOfDay, const uint16_t endTimeOfDay) {
+  return enabled && isTimeOfDayValid(startTimeOfDay) && isTimeOfDayValid(endTimeOfDay) &&
+         startTimeOfDay != endTimeOfDay;
 }
 
 constexpr bool shouldApplyOnWakeSchedule(const bool isSilentReboot, const bool restoreOnWake,
@@ -26,39 +27,41 @@ constexpr bool shouldApplyOnWakeSchedule(const bool isSilentReboot, const bool r
   return !isSilentReboot && (!restoreOnWake || !wasLightOnBeforeSleep);
 }
 
-constexpr TimeOfDay timeOfDayFromSlot(const uint8_t slot) {
+constexpr TimeOfDay timeOfDayFromMinutes(const uint16_t timeOfDay) {
   // New endpoints begin at noon so the AM/PM picker has a useful, explicit
   // default instead of presenting the storage-oriented 00:00 value.
-  if (!isTimeSlotValid(slot)) return {12, 0, true};
+  if (!isTimeOfDayValid(timeOfDay)) return {12, 0, true};
 
-  const uint8_t hour24 = slot / 4;
+  const uint8_t hour24 = static_cast<uint8_t>(timeOfDay / 60);
   const uint8_t hour12 = hour24 % 12 == 0 ? 12 : hour24 % 12;
-  return {hour12, static_cast<uint8_t>(slot % 4), hour24 >= 12};
+  return {hour12, static_cast<uint8_t>(timeOfDay % 60), hour24 >= 12};
 }
 
-constexpr uint8_t slotFromTimeOfDay(const uint8_t hour12, const uint8_t minuteQuarter, const bool isPm) {
+constexpr uint16_t minutesFromTimeOfDay(const uint8_t hour12, const uint8_t minute, const bool isPm) {
   const uint8_t normalizedHour = hour12 >= 1 && hour12 <= 12 ? hour12 : 12;
-  const uint8_t normalizedQuarter = minuteQuarter < 4 ? minuteQuarter : 0;
+  const uint8_t normalizedMinute = minute < 60 ? minute : 0;
   uint8_t hour24 = normalizedHour % 12;
   if (isPm) hour24 = static_cast<uint8_t>(hour24 + 12);
-  return static_cast<uint8_t>(hour24 * 4 + normalizedQuarter);
+  return static_cast<uint16_t>(hour24 * 60 + normalizedMinute);
 }
 
-constexpr bool containsTimeSlot(const uint8_t startSlot, const uint8_t endSlot, const uint8_t currentSlot) {
-  if (!isTimeSlotValid(startSlot) || !isTimeSlotValid(endSlot) || !isTimeSlotValid(currentSlot) ||
-      startSlot == endSlot) {
+constexpr bool containsTimeOfDay(const uint16_t startTimeOfDay, const uint16_t endTimeOfDay,
+                                 const uint16_t currentTimeOfDay) {
+  if (!isTimeOfDayValid(startTimeOfDay) || !isTimeOfDayValid(endTimeOfDay) || !isTimeOfDayValid(currentTimeOfDay) ||
+      startTimeOfDay == endTimeOfDay) {
     return false;
   }
-  return startSlot < endSlot ? currentSlot >= startSlot && currentSlot < endSlot
-                             : currentSlot >= startSlot || currentSlot < endSlot;
+  return startTimeOfDay < endTimeOfDay ? currentTimeOfDay >= startTimeOfDay && currentTimeOfDay < endTimeOfDay
+                                       : currentTimeOfDay >= startTimeOfDay || currentTimeOfDay < endTimeOfDay;
 }
 
-constexpr uint8_t localTimeSlot(const uint8_t utcHour, const uint8_t utcMinute,
-                                const uint8_t utcOffsetQuarterHoursBiased) {
+constexpr uint16_t localTimeOfDay(const uint8_t utcHour, const uint8_t utcMinute,
+                                  const uint8_t utcOffsetQuarterHoursBiased) {
   const int offsetQuarterHours =
       static_cast<int>(utcOffsetQuarterHoursBiased > 104 ? 104 : utcOffsetQuarterHoursBiased) - 48;
   const int utcMinutes = static_cast<int>(utcHour) * 60 + static_cast<int>(utcMinute);
   const int localMinutes = ((utcMinutes + offsetQuarterHours * 15) % 1440 + 1440) % 1440;
-  return static_cast<uint8_t>(localMinutes / 15);
+  return static_cast<uint16_t>(localMinutes);
 }
+
 }  // namespace FrontlightSchedule

@@ -67,9 +67,9 @@ constexpr size_t controlsPowerMaxCount = 3;
 constexpr size_t controlsFrontButtonCount = 6;
 constexpr size_t controlsSideButtonCount = 3;
 
-void formatFrontlightScheduleTimeSlot(const int slot, char* const buf, const size_t len) {
-  const FrontlightSchedule::TimeOfDay time = FrontlightSchedule::timeOfDayFromSlot(static_cast<uint8_t>(slot));
-  snprintf(buf, len, "%u:%02u %s", static_cast<unsigned>(time.hour12), static_cast<unsigned>(time.minuteQuarter * 15),
+void formatFrontlightScheduleTime(const uint16_t timeOfDay, char* const buf, const size_t len) {
+  const FrontlightSchedule::TimeOfDay time = FrontlightSchedule::timeOfDayFromMinutes(timeOfDay);
+  snprintf(buf, len, "%u:%02u %s", static_cast<unsigned>(time.hour12), static_cast<unsigned>(time.minute),
            I18N.get(time.isPm ? StrId::STR_PM : StrId::STR_AM));
 }
 
@@ -183,12 +183,12 @@ void drawSystemVersionFooter(const GfxRenderer& renderer, const int pageWidth, c
 }
 
 std::string formatSettingValue(const SettingInfo& setting) {
-  if (setting.valuePtr == &CrossPointSettings::frontlightScheduleStart ||
-      setting.valuePtr == &CrossPointSettings::frontlightScheduleEnd) {
-    const uint8_t slot = SETTINGS.*(setting.valuePtr);
-    if (SETTINGS.frontlightScheduleEnabled == 0 || !FrontlightSchedule::isTimeSlotValid(slot)) return "--";
+  if (setting.value16Ptr == &CrossPointSettings::frontlightScheduleStart ||
+      setting.value16Ptr == &CrossPointSettings::frontlightScheduleEnd) {
+    const uint16_t timeOfDay = SETTINGS.*(setting.value16Ptr);
+    if (SETTINGS.frontlightScheduleEnabled == 0 || !FrontlightSchedule::isTimeOfDayValid(timeOfDay)) return "--";
     char valueBuffer[16];
-    formatFrontlightScheduleTimeSlot(slot, valueBuffer, sizeof(valueBuffer));
+    formatFrontlightScheduleTime(timeOfDay, valueBuffer, sizeof(valueBuffer));
     return valueBuffer;
   }
   if (setting.nameId == StrId::STR_TIME_TO_SLEEP) {
@@ -906,9 +906,9 @@ void SettingsActivity::toggleCurrentSetting() {
     openSleepTimeoutPicker();
     return;
   }
-  if (setting.valuePtr == &CrossPointSettings::frontlightScheduleStart ||
-      setting.valuePtr == &CrossPointSettings::frontlightScheduleEnd) {
-    openFrontlightScheduleTimePicker(setting.valuePtr, setting.nameId);
+  if (setting.value16Ptr == &CrossPointSettings::frontlightScheduleStart ||
+      setting.value16Ptr == &CrossPointSettings::frontlightScheduleEnd) {
+    openFrontlightScheduleTimePicker(setting.value16Ptr, setting.nameId);
     return;
   }
   if (setting.valuePtr == &CrossPointSettings::lineHeightPercent) {
@@ -1137,13 +1137,13 @@ void SettingsActivity::openLineHeightPicker() {
       });
 }
 
-void SettingsActivity::openFrontlightScheduleTimePicker(uint8_t CrossPointSettings::* const valuePtr,
+void SettingsActivity::openFrontlightScheduleTimePicker(uint16_t CrossPointSettings::* const valuePtr,
                                                         const StrId titleId) {
-  const uint8_t storedValue = SETTINGS.*valuePtr;
+  const uint16_t storedValue = SETTINGS.*valuePtr;
   startActivityForResult(std::make_unique<FrontlightTimePickerActivity>(renderer, mappedInput, titleId, storedValue),
                          [this, valuePtr](const ActivityResult& result) {
                            if (!result.isCancelled) {
-                             SETTINGS.*valuePtr = static_cast<uint8_t>(std::get<IntervalResult>(result.data).value);
+                             SETTINGS.*valuePtr = static_cast<uint16_t>(std::get<IntervalResult>(result.data).value);
                              SETTINGS.saveToFile();
                            }
                            requestUpdate();
@@ -1182,7 +1182,7 @@ std::string SettingsActivity::settingValueText(const SettingInfo& setting) {
   if (setting.type == SettingType::ENUM && setting.valueGetter) {
     return settingEnumOptionLabel(setting, setting.valueGetter());
   }
-  if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
+  if (setting.type == SettingType::VALUE && (setting.valuePtr != nullptr || setting.value16Ptr != nullptr)) {
     return formatSettingValue(setting);
   }
   if (setting.type == SettingType::ACTION && setting.action == SettingAction::Language) {
@@ -1400,9 +1400,9 @@ void SettingsActivity::render(RenderLock&&) {
                           &CrossPointSettings::screenMarginVertical ||
                       (*currentSettings)[selectedSettingIndex - 1].valuePtr ==
                           &CrossPointSettings::screenMarginHorizontal ||
-                      (*currentSettings)[selectedSettingIndex - 1].valuePtr ==
+                      (*currentSettings)[selectedSettingIndex - 1].value16Ptr ==
                           &CrossPointSettings::frontlightScheduleStart ||
-                      (*currentSettings)[selectedSettingIndex - 1].valuePtr ==
+                      (*currentSettings)[selectedSettingIndex - 1].value16Ptr ==
                           &CrossPointSettings::frontlightScheduleEnd)
                  ? tr(STR_SELECT)
                  : tr(STR_TOGGLE));

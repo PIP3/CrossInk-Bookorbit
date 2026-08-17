@@ -1160,9 +1160,9 @@ void setup() {
     uint8_t utcHour = 0;
     uint8_t utcMinute = 0;
     if (halClock.getTime(utcHour, utcMinute)) {
-      const uint8_t localSlot = FrontlightSchedule::localTimeSlot(utcHour, utcMinute, SETTINGS.clockUtcOffsetQ);
-      restoreLightOn = FrontlightSchedule::containsTimeSlot(SETTINGS.frontlightScheduleStart,
-                                                            SETTINGS.frontlightScheduleEnd, localSlot);
+      const uint16_t localTimeOfDay = FrontlightSchedule::localTimeOfDay(utcHour, utcMinute, SETTINGS.clockUtcOffsetQ);
+      restoreLightOn = FrontlightSchedule::containsTimeOfDay(SETTINGS.frontlightScheduleStart,
+                                                             SETTINGS.frontlightScheduleEnd, localTimeOfDay);
     } else {
       restoreLightOn = false;
     }

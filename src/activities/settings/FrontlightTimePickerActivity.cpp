@@ -76,14 +76,14 @@ PickerLayout getPickerLayout(const GfxRenderer& renderer, const MappedInputManag
 }  // namespace
 
 FrontlightTimePickerActivity::FrontlightTimePickerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                                           const StrId titleId, const uint8_t initialSlot)
-    : Activity("FrontlightTimePicker", renderer, mappedInput), titleId(titleId), initialSlot(initialSlot) {}
+                                                           const StrId titleId, const uint16_t initialTimeOfDay)
+    : Activity("FrontlightTimePicker", renderer, mappedInput), titleId(titleId), initialTimeOfDay(initialTimeOfDay) {}
 
 void FrontlightTimePickerActivity::onEnter() {
   Activity::onEnter();
-  const FrontlightSchedule::TimeOfDay time = FrontlightSchedule::timeOfDayFromSlot(initialSlot);
+  const FrontlightSchedule::TimeOfDay time = FrontlightSchedule::timeOfDayFromMinutes(initialTimeOfDay);
   hour12 = time.hour12;
-  minuteQuarter = time.minuteQuarter;
+  minute = time.minute;
   isPm = time.isPm;
   activeField = Field::Hour;
   clearNumericEntry();
@@ -99,7 +99,7 @@ void FrontlightTimePickerActivity::adjustActiveField(const int delta) {
       hour12 = static_cast<uint8_t>((static_cast<int>(hour12) - 1 + delta + 12) % 12 + 1);
       break;
     case Field::Minute:
-      minuteQuarter = static_cast<uint8_t>((static_cast<int>(minuteQuarter) + delta + 4) % 4);
+      minute = static_cast<uint8_t>((static_cast<int>(minute) + delta + 60) % 60);
       break;
     case Field::Period:
       isPm = !isPm;
@@ -116,7 +116,7 @@ void FrontlightTimePickerActivity::selectNextField(const int delta) {
 }
 
 void FrontlightTimePickerActivity::complete() {
-  setResult(IntervalResult{FrontlightSchedule::slotFromTimeOfDay(hour12, minuteQuarter, isPm)});
+  setResult(IntervalResult{FrontlightSchedule::minutesFromTimeOfDay(hour12, minute, isPm)});
   finish();
 }
 
@@ -166,8 +166,8 @@ void FrontlightTimePickerActivity::enterDigit(const uint8_t digit) {
     numericEntryDigits = 1;
   } else {
     const uint8_t candidate = static_cast<uint8_t>(numericEntry * 10 + digit);
-    if (candidate <= 45 && candidate % 15 == 0) {
-      minuteQuarter = candidate / 15;
+    if (candidate < 60) {
+      minute = candidate;
     }
     clearNumericEntry();
   }
@@ -278,7 +278,7 @@ void FrontlightTimePickerActivity::render(RenderLock&&) {
   if (activeField == Field::Minute && numericEntryDigits == 1) {
     snprintf(minuteText, sizeof(minuteText), "%u_", static_cast<unsigned>(numericEntry));
   } else {
-    snprintf(minuteText, sizeof(minuteText), "%02u", static_cast<unsigned>(minuteQuarter * 15));
+    snprintf(minuteText, sizeof(minuteText), "%02u", static_cast<unsigned>(minute));
   }
   const char* periodText = I18N.get(isPm ? StrId::STR_PM : StrId::STR_AM);
 

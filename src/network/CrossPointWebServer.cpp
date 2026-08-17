@@ -1370,6 +1370,8 @@ void CrossPointWebServer::handleGetSettings() const {
         doc["type"] = "value";
         if (s.valuePtr) {
           doc["value"] = static_cast<int>(SETTINGS.*(s.valuePtr));
+        } else if (s.value16Ptr) {
+          doc["value"] = static_cast<int>(SETTINGS.*(s.value16Ptr));
         }
         doc["min"] = s.valueRange.min;
         doc["max"] = s.valueRange.max;
@@ -1470,6 +1472,8 @@ void CrossPointWebServer::handlePostSettings() {
         if (val >= s.valueRange.min && val <= s.valueRange.max) {
           if (s.valuePtr) {
             SETTINGS.*(s.valuePtr) = static_cast<uint8_t>(val);
+          } else if (s.value16Ptr) {
+            SETTINGS.*(s.value16Ptr) = static_cast<uint16_t>(val);
           }
           applied++;
         }

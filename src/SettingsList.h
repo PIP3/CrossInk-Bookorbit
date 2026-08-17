@@ -598,12 +598,12 @@ inline const std::vector<SettingInfo>& getBaseSettingsList() {
     // these values are presented only by Display > Frontlight.
     add(SettingInfo::Toggle(StrId::STR_FRONTLIGHT_SCHEDULE, &CrossPointSettings::frontlightScheduleEnabled,
                             "frontlightScheduleEnabled", StrId::STR_CAT_DISPLAY));
-    add(SettingInfo::Value(StrId::STR_START, &CrossPointSettings::frontlightScheduleStart,
-                           {0, FrontlightSchedule::kUnsetTimeSlot, 1}, "frontlightScheduleStart",
-                           StrId::STR_CAT_DISPLAY));
-    add(SettingInfo::Value(StrId::STR_END, &CrossPointSettings::frontlightScheduleEnd,
-                           {0, FrontlightSchedule::kUnsetTimeSlot, 1}, "frontlightScheduleEnd",
-                           StrId::STR_CAT_DISPLAY));
+    add(SettingInfo::Value16(StrId::STR_START, &CrossPointSettings::frontlightScheduleStart,
+                             {0, FrontlightSchedule::kUnsetTimeOfDay, 1}, "frontlightScheduleStart",
+                             StrId::STR_CAT_DISPLAY));
+    add(SettingInfo::Value16(StrId::STR_END, &CrossPointSettings::frontlightScheduleEnd,
+                             {0, FrontlightSchedule::kUnsetTimeOfDay, 1}, "frontlightScheduleEnd",
+                             StrId::STR_CAT_DISPLAY));
 
     // --- Reader ---
     // Built-in font-family entry. Replaced per-call with a registry-aware

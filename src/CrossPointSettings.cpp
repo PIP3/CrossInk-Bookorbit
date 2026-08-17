@@ -434,7 +434,7 @@ uint16_t CrossPointSettings::getReadingIdleTimeThresholdSeconds() const {
 void CrossPointSettings::toJson(JsonDocument& doc) const {
   std::lock_guard<std::mutex> lock(_mutex);
   for (const auto& info : getBaseSettingsList()) {
-    if (!info.key || (!info.valuePtr && !info.stringOffset)) continue;
+    if (!info.key || (!info.valuePtr && !info.value16Ptr && !info.stringOffset)) continue;
     if (info.stringOffset) {
       const char* value = reinterpret_cast<const char*>(this) + info.stringOffset;
       if (info.obfuscated) {
@@ -444,6 +444,8 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
       } else {
         doc[info.key] = value;
       }
+    } else if (info.value16Ptr) {
+      doc[info.key] = this->*(info.value16Ptr);
     } else {
       uint8_t value = this->*(info.valuePtr);
       if (isSleepScreenSetting(info)) value = sleepScreenModeToStorage(value);
@@ -485,11 +487,10 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   const bool migrateTiltDirectionSchema =
       !doc["tiltPageTurnDirection"].isNull() &&
       ((doc["tiltPageTurnDirectionSchema"] | static_cast<uint8_t>(1)) < TILT_DIRECTION_SCHEMA_CURRENT);
-
   if (doc["statusBarChapterPageCount"].isNull()) applyLegacyStatusBarSettings(*this);
 
   for (const auto& info : getBaseSettingsList()) {
-    if (!info.key || (!info.valuePtr && !info.stringOffset)) continue;
+    if (!info.key || (!info.valuePtr && !info.value16Ptr && !info.stringOffset)) continue;
     if (info.stringOffset) {
       char* destination = reinterpret_cast<char*>(this) + info.stringOffset;
       if (info.stringMaxLen == 0) {
@@ -534,6 +535,16 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
       continue;
     }
 
+    if (info.value16Ptr) {
+      const uint16_t fieldDefault = this->*(info.value16Ptr);
+      uint16_t value = doc[info.key] | fieldDefault;
+      if (info.type == SettingType::VALUE) {
+        value = std::clamp(value, info.valueRange.min, info.valueRange.max);
+      }
+      this->*(info.value16Ptr) = value;
+      continue;
+    }
+
     const uint8_t fieldDefault = this->*(info.valuePtr);
     uint8_t value = doc[info.key] | fieldDefault;
     if (strcmp(info.key, "sdFontSizeRange") == 0 && value == SD_FONT_RANGE_NO_EMOJI_LEGACY) {
@@ -564,14 +575,14 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
     } else if (info.type == SettingType::TOGGLE) {
       value = clamp(value, 2, fieldDefault);
     } else if (info.type == SettingType::VALUE) {
-      value = std::clamp(value, info.valueRange.min, info.valueRange.max);
+      value = std::clamp(value, static_cast<uint8_t>(info.valueRange.min), static_cast<uint8_t>(info.valueRange.max));
     }
     this->*(info.valuePtr) = value;
   }
 
-  const auto normalizeFrontlightScheduleTime = [&needsResave](uint8_t& timeSlot) {
-    if (FrontlightSchedule::isTimeSlotValid(timeSlot) || timeSlot == FrontlightSchedule::kUnsetTimeSlot) return;
-    timeSlot = FrontlightSchedule::kUnsetTimeSlot;
+  const auto normalizeFrontlightScheduleTime = [&needsResave](uint16_t& timeOfDay) {
+    if (FrontlightSchedule::isTimeOfDayValid(timeOfDay) || timeOfDay == FrontlightSchedule::kUnsetTimeOfDay) return;
+    timeOfDay = FrontlightSchedule::kUnsetTimeOfDay;
     needsResave = true;
   };
   normalizeFrontlightScheduleTime(frontlightScheduleStart);
