@@ -108,6 +108,7 @@ inline esp_sleep_wakeup_cause_t esp_sleep_get_wakeup_cause() { return ESP_SLEEP_
 #include "util/ButtonShortcutController.h"
 #include "util/Dictionary.h"
 #include "util/DictionaryRegistry.h"
+#include "util/FrontlightSchedule.h"
 #include "util/ScreenshotUtil.h"
 
 GfxRenderer renderer(display);
@@ -1147,13 +1148,25 @@ void setup() {
   UITheme::getInstance().reload();
   ButtonNavigator::setMappedInputManager(mappedInputManager);
   logBootHeap("boot state ready");
-  // Frontlight PWM up (no-op on boards without one). X4 Pro restores the complete
-  // persisted state; other frontlight boards retain their opt-in wake behavior.
-#if FREEINK_DEVICE_X4PRO || defined(SIMULATOR_DEVICE_X4_PRO)
-  const bool restoreLightOn = SETTINGS.frontlightOn != 0;
-#else
-  const bool restoreLightOn = SETTINGS.frontlightOn != 0 && (SETTINGS.frontlightRestoreOnWake != 0 || isSilentReboot);
-#endif
+  // A silent restart is a process-level recovery rather than a user wake, so
+  // retain the current light state. On real wakes, Restore on Wake restores a
+  // prior on state; a prior off state falls through to the local-time schedule.
+  const bool wasLightOnBeforeSleep = SETTINGS.frontlightOn != 0;
+  bool restoreLightOn = wasLightOnBeforeSleep && (isSilentReboot || SETTINGS.frontlightRestoreOnWake != 0);
+  if (FrontlightSchedule::shouldApplyOnWakeSchedule(isSilentReboot, SETTINGS.frontlightRestoreOnWake != 0,
+                                                    wasLightOnBeforeSleep) &&
+      FrontlightSchedule::hasCompleteWindow(SETTINGS.frontlightScheduleEnabled != 0, SETTINGS.frontlightScheduleStart,
+                                            SETTINGS.frontlightScheduleEnd)) {
+    uint8_t utcHour = 0;
+    uint8_t utcMinute = 0;
+    if (halClock.getTime(utcHour, utcMinute)) {
+      const uint16_t localTimeOfDay = FrontlightSchedule::localTimeOfDay(utcHour, utcMinute, SETTINGS.clockUtcOffsetQ);
+      restoreLightOn = FrontlightSchedule::containsTimeOfDay(SETTINGS.frontlightScheduleStart,
+                                                             SETTINGS.frontlightScheduleEnd, localTimeOfDay);
+    } else {
+      restoreLightOn = false;
+    }
+  }
   Frontlight.begin(SETTINGS.frontlightBrightness, SETTINGS.frontlightWarmth, restoreLightOn);
 
   // Re-sync the wake-hold NVS mirror with the freshly-loaded settings, covering

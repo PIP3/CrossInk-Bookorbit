@@ -4,6 +4,10 @@
 
 - Dictionary lookups can now save the selected word or phrase directly as a clipping.
 
+### Changed
+
+- Frontlight schedules can now use one-minute start and end times.
+
 ### Fixed
 
 - Saved EPUB clipping highlights no longer wash out their text when reader text anti-aliasing is enabled.

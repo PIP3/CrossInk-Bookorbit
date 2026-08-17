@@ -92,6 +92,19 @@ bool isWebSettingAvailable(const SettingInfo& setting) {
   }
 #endif
 
+  const bool isFrontlightWakeSetting = setting.nameId == StrId::STR_RESTORE_LIGHT_ON_WAKE ||
+                                       setting.nameId == StrId::STR_FRONTLIGHT_SCHEDULE ||
+                                       setting.nameId == StrId::STR_START || setting.nameId == StrId::STR_END;
+  if (isFrontlightWakeSetting && !Frontlight.present()) {
+    return false;
+  }
+
+  const bool isFrontlightScheduleSetting = setting.nameId == StrId::STR_FRONTLIGHT_SCHEDULE ||
+                                           setting.nameId == StrId::STR_START || setting.nameId == StrId::STR_END;
+  if (isFrontlightScheduleSetting && !halClock.isAvailable()) {
+    return false;
+  }
+
   if (!halClock.isAvailable()) {
     switch (setting.nameId) {
       case StrId::STR_HIDE_CLOCK:
@@ -1357,6 +1370,8 @@ void CrossPointWebServer::handleGetSettings() const {
         doc["type"] = "value";
         if (s.valuePtr) {
           doc["value"] = static_cast<int>(SETTINGS.*(s.valuePtr));
+        } else if (s.value16Ptr) {
+          doc["value"] = static_cast<int>(SETTINGS.*(s.value16Ptr));
         }
         doc["min"] = s.valueRange.min;
         doc["max"] = s.valueRange.max;
@@ -1457,6 +1472,8 @@ void CrossPointWebServer::handlePostSettings() {
         if (val >= s.valueRange.min && val <= s.valueRange.max) {
           if (s.valuePtr) {
             SETTINGS.*(s.valuePtr) = static_cast<uint8_t>(val);
+          } else if (s.value16Ptr) {
+            SETTINGS.*(s.value16Ptr) = static_cast<uint16_t>(val);
           }
           applied++;
         }
