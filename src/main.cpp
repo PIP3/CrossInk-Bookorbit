@@ -886,6 +886,14 @@ void mirrorWakeShortPressToNvs() {
 #endif
 }
 
+bool shouldClearX4WakeGhosting() {
+#if FREEINK_DEVICE_X4
+  return gpio.deviceIsX4();
+#else
+  return false;
+#endif
+}
+
 // Enter deep sleep mode
 void enterDeepSleep(bool fromTimeout) {
   HalPowerManager::Lock powerLock;  // Ensure we are at normal CPU frequency for sleep preparation
@@ -1263,6 +1271,10 @@ void setup() {
         } else {
           renderer.displayBuffer(HalDisplay::HALF_REFRESH);
         }
+      } else if (shouldClearX4WakeGhosting()) {
+        LOG_INF("BOOT", "X4 wake: clearing retained sleep image with half refresh");
+        renderer.clearScreen();
+        renderer.displayBuffer(HalDisplay::HALF_REFRESH);
       }
       break;
     case BootResume::Splash:
