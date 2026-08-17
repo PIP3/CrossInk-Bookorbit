@@ -3,6 +3,7 @@
 #include <BoardConfig.h>
 #include <GfxRenderer.h>
 #include <HalGPIO.h>
+#include <I18n.h>
 #include <Logging.h>
 
 #include <algorithm>
@@ -67,9 +68,9 @@ constexpr size_t controlsFrontButtonCount = 6;
 constexpr size_t controlsSideButtonCount = 3;
 
 void formatFrontlightScheduleTimeSlot(const int slot, char* const buf, const size_t len) {
-  const int hour = slot / 4;
-  const int minute = (slot % 4) * 15;
-  snprintf(buf, len, "%02d:%02d", hour, minute);
+  const FrontlightSchedule::TimeOfDay time = FrontlightSchedule::timeOfDayFromSlot(static_cast<uint8_t>(slot));
+  snprintf(buf, len, "%u:%02u %s", static_cast<unsigned>(time.hour12), static_cast<unsigned>(time.minuteQuarter * 15),
+           I18N.get(time.isPm ? StrId::STR_PM : StrId::STR_AM));
 }
 
 int settingsTabBarTop(const ThemeMetrics& metrics) { return CompactHeader::headerBottomY(metrics); }
@@ -186,7 +187,7 @@ std::string formatSettingValue(const SettingInfo& setting) {
       setting.valuePtr == &CrossPointSettings::frontlightScheduleEnd) {
     const uint8_t slot = SETTINGS.*(setting.valuePtr);
     if (SETTINGS.frontlightScheduleEnabled == 0 || !FrontlightSchedule::isTimeSlotValid(slot)) return "--";
-    char valueBuffer[6];
+    char valueBuffer[16];
     formatFrontlightScheduleTimeSlot(slot, valueBuffer, sizeof(valueBuffer));
     return valueBuffer;
   }
