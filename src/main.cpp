@@ -1442,6 +1442,15 @@ void loop() {
   // so it cannot replace or double-fire this one.
   static bool screenshotButtonsReleased = true;
   static bool screenshotComboActive = false;
+  // Consume both halves of the screenshot chord through their releases. In
+  // particular, releasing Power first must not let the later Down release
+  // navigate a newly opened overlay or reader page.
+  if (screenshotComboActive) {
+    if (gpio.isPressed(HalGPIO::BTN_POWER) || gpio.isPressed(HalGPIO::BTN_DOWN)) return;
+    screenshotButtonsReleased = true;
+    screenshotComboActive = false;
+    return;
+  }
   if (!buttonShortcutController.isQuickLocked() && !activityManager.readerPowerButtonOpensSettings() &&
       gpio.isPressed(HalGPIO::BTN_POWER) && gpio.isPressed(HalGPIO::BTN_DOWN)) {
     screenshotComboActive = true;
@@ -1453,16 +1462,6 @@ void loop() {
       ScreenshotUtil::takeScreenshot(renderer);
     }
     return;
-  }
-  if (screenshotComboActive) {
-    if (gpio.isPressed(HalGPIO::BTN_POWER)) return;
-    if (gpio.wasReleased(HalGPIO::BTN_POWER)) {
-      screenshotButtonsReleased = true;
-      screenshotComboActive = false;
-      return;
-    }
-    screenshotButtonsReleased = true;
-    screenshotComboActive = false;
   }
 
   const bool powerPressed = gpio.isPressed(HalGPIO::BTN_POWER);
