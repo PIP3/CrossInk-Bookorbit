@@ -7,6 +7,7 @@
 ### Changed
 
 - Frontlight schedules can now use one-minute start and end times.
+- The reader menu now uses tablet icons to show whether its touchscreen is enabled or disabled.
 
 ### Fixed
 
