@@ -3059,7 +3059,6 @@ bool EpubReaderActivity::handleTwoFingerSwipeAction(const CrossPointSettings::TW
       {
         RenderLock lock(*this);
         nextPageNumber = 0;
-        if (direction < 0) pendingPageJump = std::numeric_limits<uint16_t>::max();
         currentSpineIndex = targetSpine;
         section.reset();
       }
