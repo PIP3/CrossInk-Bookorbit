@@ -444,13 +444,13 @@ bool advanceClipCursorToToken(const std::string& text, const uint16_t targetInde
   return false;
 }
 
-ClippingTextMatcher::TokenFragmentMatch matchPageWordToToken(const TextBlock& block, const uint16_t wordIndex,
-                                                             const char* token, const size_t tokenLen,
-                                                             const size_t tokenOffset = 0) {
+ClippingTextMatcher::TokenFragmentResult matchPageWordToToken(const TextBlock& block, const uint16_t wordIndex,
+                                                              const char* token, const size_t tokenLen,
+                                                              const size_t tokenOffset = 0) {
   const char* word = block.wordText(wordIndex);
   const char* visibleWord = word + (hasEmSpacePrefix(word) ? 3 : 0);
-  return ClippingTextMatcher::matchTokenFragment(visibleWord, block.wordEndsWithInsertedHyphen(wordIndex), token,
-                                                 tokenLen, tokenOffset);
+  return ClippingTextMatcher::matchTokenFragmentWithLength(visibleWord, block.wordEndsWithInsertedHyphen(wordIndex),
+                                                           token, tokenLen, tokenOffset);
 }
 
 template <typename Callback>
@@ -504,18 +504,15 @@ bool matchClipRunFromPageWord(const Page& page, const std::string& clippingText,
       return true;
     }
 
-    const auto fragmentMatch = matchPageWordToToken(block, static_cast<uint16_t>(i), token, tokenLen, tokenOffset);
-    if (fragmentMatch == ClippingTextMatcher::TokenFragmentMatch::MISMATCH) {
+    const auto fragmentResult = matchPageWordToToken(block, static_cast<uint16_t>(i), token, tokenLen, tokenOffset);
+    if (fragmentResult.match == ClippingTextMatcher::TokenFragmentMatch::MISMATCH) {
       stoppedByMismatch = true;
       return false;
     }
 
     lastWord = wordIndex;
-    if (fragmentMatch == ClippingTextMatcher::TokenFragmentMatch::CONTINUES_TOKEN) {
-      const char* word = block.wordText(static_cast<uint16_t>(i));
-      const char* visibleWord = word + (hasEmSpacePrefix(word) ? 3 : 0);
-      const size_t visibleWordLength = std::strlen(visibleWord);
-      tokenOffset += visibleWordLength - (block.wordEndsWithInsertedHyphen(static_cast<uint16_t>(i)) ? 1 : 0);
+    if (fragmentResult.match == ClippingTextMatcher::TokenFragmentMatch::CONTINUES_TOKEN) {
+      tokenOffset += fragmentResult.tokenBytes;
       return true;
     }
 
@@ -574,7 +571,7 @@ bool findClippingTextOnPage(const Page& page, const std::string& clippingText, C
       if (tokenIndex >= tokenCount) {
         break;
       }
-      if (matchPageWordToToken(block, static_cast<uint16_t>(i), token, tokenLen) !=
+      if (matchPageWordToToken(block, static_cast<uint16_t>(i), token, tokenLen).match !=
               ClippingTextMatcher::TokenFragmentMatch::MISMATCH &&
           matchClipRunFromPageWord(page, clippingText, wordIndex, tokenIndex, minPartialMatch, match)) {
         found = true;
