@@ -17,7 +17,7 @@
 - Power-button shortcuts now continue to work while the reader touchscreen is disabled.
 - OPDS book lists now use the standard Back header without obscuring its divider, while keeping Search available.
 - Opening Select Chapter no longer restarts X3/X4 readers for EPUBs with thousands of chapters.
-- X4 now clears the retained sleep screen with one half refresh on wake, reducing ghosting before the next screen appears.
+- X4 now clears the retained sleep screen with one half refresh on wake when Sunlight Fading Fix is enabled, reducing ghosting before the next screen appears.
 - Saved EPUB clipping highlights no longer wash out their text when reader text anti-aliasing is enabled.
 - Saved EPUB clipping highlights now continue through ellipses, including non-breaking-space separators.
 - EPUB clipping previews now retain complete multi-paragraph selections.
