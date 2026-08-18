@@ -13,6 +13,7 @@
 
 ### Fixed
 
+- Holding a side button for a chapter skip now skips immediately instead of waiting for release.
 - XTC book covers now appear consistently across all Home screen layouts.
 - Choosing Sleep from Quick Actions now reliably shows the selected cover or sleep screen.
 - TXT readers now font size changes should work more reliably on touch devices and via shortcuts.
