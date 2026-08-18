@@ -61,7 +61,10 @@ class FontCacheManager {
   // Extra font ids still render correctly through the existing per-string path.
   static constexpr uint8_t MAX_SCAN_FONTS = 4;
   struct ScanEntry {
-    int fontId = -1;
+    // Font ids are signed FNV hashes, so negative values are valid ids rather
+    // than a safe sentinel for an unused scan slot.
+    bool used = false;
+    int fontId = 0;
     std::string text;
     uint8_t styleMask = 0;
   };

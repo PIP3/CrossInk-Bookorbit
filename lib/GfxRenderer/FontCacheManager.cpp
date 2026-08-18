@@ -68,11 +68,12 @@ void FontCacheManager::recordText(const char* text, int fontId, EpdFontFamily::S
 
   ScanEntry* entry = nullptr;
   for (auto& candidate : scanEntries_) {
-    if (candidate.fontId == fontId) {
+    if (candidate.used && candidate.fontId == fontId) {
       entry = &candidate;
       break;
     }
-    if (candidate.fontId < 0) {
+    if (!candidate.used) {
+      candidate.used = true;
       candidate.fontId = fontId;
       // The first entry normally holds page text; later ones are short UI
       // furniture such as the status bar title.
@@ -96,7 +97,8 @@ void FontCacheManager::recordText(const char* text, int fontId, EpdFontFamily::S
 
 void FontCacheManager::resetScanEntries() {
   for (auto& entry : scanEntries_) {
-    entry.fontId = -1;
+    entry.used = false;
+    entry.fontId = 0;
     entry.styleMask = 0;
     entry.text.clear();
   }
@@ -116,7 +118,7 @@ bool FontCacheManager::PrewarmScope::endScanAndPrewarm() {
   manager_->scanMode_ = ScanMode::None;
   bool ok = true;
   for (auto& entry : manager_->scanEntries_) {
-    if (entry.fontId < 0 || entry.text.empty()) continue;
+    if (!entry.used || entry.text.empty()) continue;
     if (!manager_->prewarmCache(entry.fontId, entry.text.c_str(), entry.styleMask != 0 ? entry.styleMask : 1,
                                 policy_)) {
       ok = false;
