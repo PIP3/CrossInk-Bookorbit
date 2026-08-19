@@ -3,6 +3,7 @@
 ### Added
 
 - Dictionary lookups can now save the selected word or phrase directly as a clipping.
+- Readers can configure an Up + Down side-button shortcut; on touchscreen devices, while the reader touchscreen is disabled, the same chord always opens Settings so it can be restored.
 
 ### Changed
 
