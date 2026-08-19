@@ -24,7 +24,7 @@ bool isMacOSSidecarFile(const std::string& filename) { return filename.rfind("._
 void drawImageError(GfxRenderer& renderer, const MappedInputManager& mappedInput, const char* message) {
   renderer.clearScreen();
   renderer.drawCenteredText(UI_10_FONT_ID, renderer.getScreenHeight() / 2, message);
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
+  const auto labels = mappedInput.mapLabels(mappedInput.withBackArrow(tr(STR_BACK)), "", "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 }
@@ -117,7 +117,8 @@ bool BmpViewerActivity::renderPngImage() {
   bool hasNext = (siblingImages.size() > 1 && currentImageIndex != -1 &&
                   currentImageIndex < static_cast<int>(siblingImages.size()) - 1);
 
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", (hasPrevious ? "<" : nullptr), (hasNext ? ">" : nullptr));
+  const auto labels = mappedInput.mapLabels(mappedInput.withBackArrow(tr(STR_BACK)), "", (hasPrevious ? "<" : nullptr),
+                                            (hasNext ? ">" : nullptr));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);
   return true;
@@ -174,8 +175,8 @@ void BmpViewerActivity::onEnter() {
       bool hasNext = (siblingImages.size() > 1 && currentImageIndex != -1 &&
                       currentImageIndex < static_cast<int>(siblingImages.size()) - 1);
 
-      const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SET_SLEEP_COVER), (hasPrevious ? "<" : nullptr),
-                                                (hasNext ? ">" : nullptr));
+      const auto labels = mappedInput.mapLabels(mappedInput.withBackArrow(tr(STR_BACK)), tr(STR_SET_SLEEP_COVER),
+                                                (hasPrevious ? "<" : nullptr), (hasNext ? ">" : nullptr));
 
       GUI.fillPopupProgress(renderer, popupRect, 50);
 
