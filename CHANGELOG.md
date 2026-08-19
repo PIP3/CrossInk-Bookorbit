@@ -39,6 +39,7 @@
 - Dismissing a dictionary definition with Back or an outside tap now returns directly to the reader instead of reopening word selection.
 - The web Settings page now loads reliably when KOReader Sync has an older saved password.
 - Nearby Stats Sync now shows Sync and Cancel buttons on touch readers.
+- The image viewer now offers the "Set Cover" option for PNG files.
 
 ## [v1.5.1] - 2026-08-12
 
