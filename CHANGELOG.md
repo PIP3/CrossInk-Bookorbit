@@ -13,6 +13,7 @@
 
 ### Fixed
 
+- Treat empty KOReader sync responses as no remote reading position.
 - Holding a side button for a chapter skip now skips immediately instead of waiting for release.
 - XTC book covers now appear consistently across all Home screen layouts.
 - Choosing Sleep from Quick Actions now reliably shows the selected cover or sleep screen.
