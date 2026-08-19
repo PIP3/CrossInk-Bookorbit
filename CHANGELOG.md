@@ -16,6 +16,7 @@
 
 - OPDS search now accepts the first Confirm press after closing the keyboard.
 - Treat empty KOReader sync responses as no remote reading position.
+- The image viewer no longer leaves a white box behind the hidden Previous/Next hint at the first or last image in a folder.
 - Holding a side button for a chapter skip now skips immediately instead of waiting for release.
 - XTC book covers now appear consistently across all Home screen layouts.
 - Choosing Sleep from Quick Actions now reliably shows the selected cover or sleep screen.
