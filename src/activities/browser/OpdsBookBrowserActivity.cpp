@@ -69,8 +69,6 @@ void OpdsBookBrowserActivity::onEnter() {
   searchTemplate = "";
   currentPath = "";
   selectorIndex = 0;
-  consumeConfirm = false;
-  consumeBack = false;
   errorMessage.clear();
   statusMessage = tr(STR_CHECKING_WIFI);
 
@@ -148,15 +146,6 @@ void OpdsBookBrowserActivity::onCancelEvent(const fui::ActionEvent&, void* user)
 
 void OpdsBookBrowserActivity::loop() {
   if (state == BrowserState::WIFI_SELECTION || state == BrowserState::SEARCH_INPUT) {
-    return;
-  }
-
-  if (consumeConfirm && mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    consumeConfirm = false;
-    return;
-  }
-  if (consumeBack && mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    consumeBack = false;
     return;
   }
 
@@ -726,7 +715,6 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
 }
 
 void OpdsBookBrowserActivity::launchSearch() {
-  consumeConfirm = true;
   state = BrowserState::SEARCH_INPUT;
   requestUpdate();
 
