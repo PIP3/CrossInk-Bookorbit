@@ -413,21 +413,21 @@ class OptionPopup {
   void activateSelection(MappedInputManager& input, const std::function<void()>& requestUpdate,
                          const bool suppressRelease) {
     active = false;
-    if (suppressRelease) input.suppressNextConfirmRelease();
+    suppressSelectionRelease(input, suppressRelease);
     if (onSelectCallback) onSelectCallback(selectedIndex);
     requestUpdate();
   }
 
   void confirm(MappedInputManager& input, const std::function<void()>& requestUpdate, const bool suppressRelease) {
     active = false;
-    if (suppressRelease) input.suppressNextConfirmRelease();
+    suppressSelectionRelease(input, suppressRelease);
     if (onSaveCallback) onSaveCallback();
     requestUpdate();
   }
 
   void save(MappedInputManager& input, const std::function<void()>& requestUpdate, const bool suppressRelease) {
     active = false;
-    if (suppressRelease) input.suppressNextConfirmRelease();
+    suppressSelectionRelease(input, suppressRelease);
     if (onSelectCallback) onSelectCallback(selectedIndex);
     const bool skipUpdate = skipPostSelectionUpdate_;
     skipPostSelectionUpdate_ = false;
@@ -439,6 +439,18 @@ class OptionPopup {
       activateSelection(input, requestUpdate, false);
     } else {
       save(input, requestUpdate, false);
+    }
+  }
+
+  static void suppressSelectionRelease(MappedInputManager& input, const bool suppressRelease) {
+    if (!suppressRelease) return;
+
+    input.suppressNextConfirmRelease();
+    // Some boards expose Power as Confirm directly. Consume its matching Power
+    // release too, otherwise it can immediately re-run the shortcut that opened
+    // this popup after the selection callback closes it.
+    if (input.isPressed(MappedInputManager::Button::Power)) {
+      input.suppressNextPowerRelease();
     }
   }
 
