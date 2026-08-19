@@ -14,6 +14,11 @@
 
 ### Fixed
 
+- File Browser navigation no longer risks corrupted rows while the list is redrawing, and wrapped two-line filenames remain reachable when paging.
+- The web EPUB optimizer now removes oversized XHTML comments that can otherwise stop low-memory chapter indexing.
+- Mixed reader fonts, including SD-card fallback glyphs, are warmed together to avoid repeated slow redraws.
+- Ruby annotations now stay together instead of splitting across lines.
+- Transparent BMP sleep overlays no longer develop white holes over the preserved reader page.
 - OPDS search now accepts the first Confirm press after closing the keyboard.
 - Treat empty KOReader sync responses as no remote reading position.
 - The image viewer no longer leaves a white box behind the hidden Previous/Next hint at the first or last image in a folder.
