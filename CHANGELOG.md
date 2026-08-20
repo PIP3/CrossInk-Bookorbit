@@ -14,6 +14,7 @@
 
 ### Fixed
 
+- Crash reports now include the faulting instruction and CPU exception details needed to diagnose crashes on X3/X4 and X4 Pro/Sticky readers.
 - EPUB text layout now exits safely instead of restarting when an X3/X4 runs out of contiguous memory while arranging right-to-left text.
 - Holding page-turn buttons while browsing saved clippings no longer crashes.
 - File Browser navigation no longer risks corrupted rows while the list is redrawing, and wrapped two-line filenames remain reachable when paging.
