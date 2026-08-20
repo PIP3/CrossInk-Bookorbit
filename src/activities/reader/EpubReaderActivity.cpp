@@ -4598,6 +4598,9 @@ bool EpubReaderActivity::handleShortcutAction(const uint8_t rawAction) {
     case CrossPointSettings::SHORT_PWRBTN::SYNC_PROGRESS:
       executeReaderQuickAction(CrossPointSettings::LONG_MENU_SYNC_PROGRESS);
       return true;
+    case CrossPointSettings::SHORT_PWRBTN::BOOKORBIT_SYNC:
+      executeReaderQuickAction(CrossPointSettings::LONG_MENU_BOOKORBIT_SYNC);
+      return true;
     case CrossPointSettings::SHORT_PWRBTN::MARK_FINISHED:
       executeReaderQuickAction(CrossPointSettings::LONG_MENU_MARK_FINISHED);
       return true;
@@ -4677,6 +4680,9 @@ bool EpubReaderActivity::handleShortcutAction(const CrossPointSettings::SHORT_PW
       return true;
     case CrossPointSettings::SHORT_PWRBTN::SYNC_PROGRESS:
       executeReaderQuickAction(CrossPointSettings::LONG_MENU_SYNC_PROGRESS);
+      return true;
+    case CrossPointSettings::SHORT_PWRBTN::BOOKORBIT_SYNC:
+      executeReaderQuickAction(CrossPointSettings::LONG_MENU_BOOKORBIT_SYNC);
       return true;
     case CrossPointSettings::SHORT_PWRBTN::MARK_FINISHED:
       executeReaderQuickAction(CrossPointSettings::LONG_MENU_MARK_FINISHED);
