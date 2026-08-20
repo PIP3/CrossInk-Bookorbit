@@ -1380,10 +1380,10 @@ void CrossPointWebServer::handleGetSettings() const {
       }
       case SettingType::STRING: {
         doc["type"] = "string";
-        // Passwords are write-only in the web UI. Returning the KOReader
-        // value can expose credentials and, for legacy invalid data, emit
-        // binary bytes that make the whole JSON response unparsable.
-        if (strcmp(s.key, "koPassword") == 0) {
+        // Passwords are write-only in the web UI. Returning the KOReader or
+        // BookOrbit value can expose credentials and, for legacy invalid data,
+        // emit binary bytes that make the whole JSON response unparsable.
+        if (strcmp(s.key, "koPassword") == 0 || strcmp(s.key, "boPassword") == 0) {
           doc["value"] = "";
         } else if (s.stringGetter) {
           doc["value"] = s.stringGetter();
