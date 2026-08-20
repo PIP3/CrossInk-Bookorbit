@@ -111,16 +111,15 @@ void BookOrbitSettingsActivity::handleSelection() {
                            });
   } else if (selectedIndex == 1) {
     // Password
-    startActivityForResult(
-        std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_BOOKORBIT_PASSWORD),
-                                                BOOKORBIT_STORE.getPassword(), 64, InputType::Password),
-        [this](const ActivityResult& result) {
-          if (!result.isCancelled) {
-            const auto& kb = std::get<KeyboardResult>(result.data);
-            BOOKORBIT_STORE.setCredentials(BOOKORBIT_STORE.getUsername(), kb.text);
-            BOOKORBIT_STORE.saveToFile();
-          }
-        });
+    startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_BOOKORBIT_PASSWORD),
+                                                                   BOOKORBIT_STORE.getPassword(), 64, InputType::Text),
+                           [this](const ActivityResult& result) {
+                             if (!result.isCancelled) {
+                               const auto& kb = std::get<KeyboardResult>(result.data);
+                               BOOKORBIT_STORE.setCredentials(BOOKORBIT_STORE.getUsername(), kb.text);
+                               BOOKORBIT_STORE.saveToFile();
+                             }
+                           });
   } else if (selectedIndex == 2) {
     // Server URL - prefill with https:// if empty to save typing
     const std::string currentUrl = BOOKORBIT_STORE.getServerUrl();
