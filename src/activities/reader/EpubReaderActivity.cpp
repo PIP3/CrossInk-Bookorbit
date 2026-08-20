@@ -3796,6 +3796,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       break;
     }
     case EpubReaderMenuActivity::MenuAction::SYNC: {
+#if CROSSINK_APP_CAP_KOREADER_SYNC
       if (activeFootnotePreview) {
         requestUpdate();
         break;
@@ -3827,6 +3828,10 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
         activityManager.replaceActivity(std::move(restartActivity));
       }
       break;
+#else
+      // Unreachable: the menu row and the shortcut are both gated out.
+      break;
+#endif
     }
     case EpubReaderMenuActivity::MenuAction::BOOKORBIT_SYNC: {
       if (activeFootnotePreview) {
@@ -4468,6 +4473,7 @@ void EpubReaderActivity::executeReaderQuickAction(CrossPointSettings::LONG_PRESS
       requestUpdate();
       break;
     case CrossPointSettings::LONG_MENU_SYNC_PROGRESS:
+#if CROSSINK_APP_CAP_KOREADER_SYNC
       if (KOREADER_STORE.hasCredentials()) {
         onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction::SYNC);
       } else {
@@ -4478,6 +4484,7 @@ void EpubReaderActivity::executeReaderQuickAction(CrossPointSettings::LONG_PRESS
                                  saveGlobalSettingsPreservingBookOverrides();
                                });
       }
+#endif
       break;
     case CrossPointSettings::LONG_MENU_BOOKORBIT_SYNC:
       if (BOOKORBIT_STORE.hasCredentials()) {

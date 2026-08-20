@@ -804,6 +804,9 @@ inline const std::vector<SettingInfo>& getBaseSettingsList() {
     add(SettingInfo::Toggle(StrId::STR_FRONTLIGHT, &CrossPointSettings::frontlightOn, "frontlightOn"));
 
     // --- KOReader Sync (web-only, uses KOReaderCredentialStore) ---
+    // Credentials only: koMatchMethod below stays in every build because
+    // Nearby Position Sync reads it to choose its coordinate space.
+#if CROSSINK_APP_CAP_KOREADER_SYNC
     add(SettingInfo::DynamicString(
         StrId::STR_KOREADER_USERNAME, [] { return KOREADER_STORE.getUsername(); },
         [](const std::string& v) {
@@ -825,6 +828,7 @@ inline const std::vector<SettingInfo>& getBaseSettingsList() {
           KOREADER_STORE.saveToFile();
         },
         "koServerUrl", StrId::STR_KOREADER_SYNC));
+#endif
     add(SettingInfo::DynamicEnum(
         StrId::STR_DOCUMENT_MATCHING, {StrId::STR_FILENAME, StrId::STR_BINARY},
         [] { return static_cast<uint8_t>(KOREADER_STORE.getMatchMethod()); },
@@ -833,6 +837,7 @@ inline const std::vector<SettingInfo>& getBaseSettingsList() {
           KOREADER_STORE.saveToFile();
         },
         "koMatchMethod", StrId::STR_KOREADER_SYNC));
+#if CROSSINK_APP_CAP_KOREADER_SYNC
     add(SettingInfo::DynamicEnum(
         StrId::STR_SEND_METADATA, {StrId::STR_STATE_OFF, StrId::STR_STATE_ON},
         [] { return static_cast<uint8_t>(KOREADER_STORE.getSendMetadata()); },
@@ -850,6 +855,7 @@ inline const std::vector<SettingInfo>& getBaseSettingsList() {
           KOREADER_STORE.saveToFile();
         },
         "koSyncBehavior", StrId::STR_KOREADER_SYNC));
+#endif
 
     // --- BookOrbit Sync (web-only, uses BookOrbitCredentialStore) ---
     add(SettingInfo::DynamicString(
@@ -1380,7 +1386,9 @@ inline std::vector<SettingInfo> buildSystemSettingsParentList(const std::vector<
   systemSettings.push_back(SettingInfo::Submenu(StrId::STR_SYSTEM_FILES_CACHE, SettingAction::SystemFilesCache));
   systemSettings.push_back(SettingInfo::Submenu(StrId::STR_READING_STATS, SettingAction::SystemReadingStats));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_WIFI_NETWORKS, SettingAction::Network));
+#if CROSSINK_APP_CAP_KOREADER_SYNC
   systemSettings.push_back(SettingInfo::Action(StrId::STR_KOREADER_SYNC, SettingAction::KOReaderSync));
+#endif
   systemSettings.push_back(SettingInfo::Action(StrId::STR_BOOKORBIT_SYNC, SettingAction::BookOrbitSync));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_OPDS_SERVERS, SettingAction::OPDSBrowser));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates));

@@ -432,6 +432,12 @@ bool isGlobalPowerButtonAction(const CrossPointSettings::SHORT_PWRBTN action) {
 }
 
 bool startGlobalSyncProgress(const bool networkBootReady = false) {
+#if !CROSSINK_APP_CAP_KOREADER_SYNC
+  // No KOReader sync screens in this build: every caller treats false as
+  // "nothing to launch", which is what an unassignable action should do.
+  (void)networkBootReady;
+  return false;
+#else
   if (activityManager.hasActivityNamed(KOReaderSyncActivity::NAME)) {
     LOG_DBG("MAIN", "Ignoring KOReader sync shortcut while sync is already active");
     return true;
@@ -465,6 +471,7 @@ bool startGlobalSyncProgress(const bool networkBootReady = false) {
   }
   activityManager.replaceActivity(std::move(syncActivity));
   return true;
+#endif
 }
 
 // Mirrors startGlobalSyncProgress() for the BookOrbit provider (kept separate, like the
@@ -1391,6 +1398,7 @@ void setup() {
         launched = startGlobalSyncProgress(true);
         break;
       case NetworkBootTarget::KOREADER_AUTH: {
+#if CROSSINK_APP_CAP_KOREADER_SYNC
         const auto mode =
             snapshotPayload == 1 ? KOReaderAuthActivity::Mode::SIGN_UP : KOReaderAuthActivity::Mode::AUTHENTICATE;
         auto authActivity = makeUniqueNoThrow<KOReaderAuthActivity>(renderer, mappedInputManager, mode);
@@ -1401,6 +1409,7 @@ void setup() {
           LOG_ERR("MAIN", "OOM: KOReader auth activity after minimal boot (free=%u maxAlloc=%u)", ESP.getFreeHeap(),
                   ESP.getMaxAllocHeap());
         }
+#endif
         break;
       }
       case NetworkBootTarget::FILE_TRANSFER:
