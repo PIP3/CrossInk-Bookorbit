@@ -6,10 +6,13 @@
 #include <vector>
 
 inline constexpr size_t CLIPPING_CHAPTER_TITLE_MAX = 48;
-// Raised from 512 so long web-created highlights survive sync in full. Files written by
-// older builds hold at most 512 bytes per text; older firmware reading a longer record
-// treats the file as corrupt, so downgrading after saving one drops that book's clippings.
-inline constexpr size_t CLIPPING_TEXT_MAX = 2048;
+// Clipping text lives on the SD card rather than in every in-memory clipping
+// record. Match the reader's bounded selection-text budget so previews retain
+// a complete multi-paragraph selection without growing the saved-item index.
+// Files written before this cap was raised hold at most 512 bytes per text, and
+// older firmware reading a longer record treats the file as corrupt: downgrading
+// after saving one drops that book's clippings.
+inline constexpr size_t CLIPPING_TEXT_MAX = 4U * 1024U;
 inline constexpr uint16_t CLIPPING_MAX_PER_BOOK = 256;
 inline constexpr uint16_t CLIPPING_MAX_PAGE_MATCHES = 16;
 
