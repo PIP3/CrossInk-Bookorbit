@@ -91,6 +91,13 @@ inline constexpr std::array<CrossPointSettings::SHORT_PWRBTN, 29> shortcutAction
 inline bool supportsTiltPageTurn() { return halTiltSensor.isAvailable(); }
 
 inline bool isActionAvailable(const uint8_t action) {
+#if !CROSSINK_APP_CAP_KOREADER_SYNC
+  // The X3/X4 builds of this fork ship without the KOReader sync screens, so no
+  // picker may offer the action. Its persisted number is untouched: a settings
+  // file still holding it simply finds it unavailable, exactly as a frontlight
+  // toggle is unavailable on a board with no frontlight.
+  if (action == CrossPointSettings::SYNC_PROGRESS) return false;
+#endif
   if (action == CrossPointSettings::QUICK_ACTIONS || action == CrossPointSettings::QUICK_LOCK) return true;
   if (action == CrossPointSettings::BOOKORBIT_SYNC) return true;
   if (action == CrossPointSettings::TOGGLE_FRONTLIGHT) return Frontlight.present();

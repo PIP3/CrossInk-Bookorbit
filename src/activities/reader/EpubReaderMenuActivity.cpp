@@ -253,7 +253,9 @@ EpubReaderMenuActivity::TabMenuItems EpubReaderMenuActivity::buildMenuItems(
     bookmarkItems.push_back({MenuAction::VIEW_BOOKMARKS, StrId::STR_VIEW_BOOKMARKS});
     bookmarkItems.push_back({MenuAction::DELETE_BOOKMARKS, StrId::STR_DELETE_BOOKMARKS});
   }
+#if CROSSINK_APP_CAP_KOREADER_SYNC
   bookmarkItems.push_back({MenuAction::SYNC, StrId::STR_SYNC_PROGRESS});
+#endif
   bookmarkItems.push_back({MenuAction::BOOKORBIT_SYNC, StrId::STR_BOOKORBIT_SYNC});
   bookmarkItems.push_back({MenuAction::NEARBY_POSITION_SYNC, StrId::STR_NEARBY_POSITION_SYNC});
   bookmarkItems.push_back({MenuAction::SEND_NEARBY_BOOK, StrId::STR_SEND_NEARBY_BOOK});
