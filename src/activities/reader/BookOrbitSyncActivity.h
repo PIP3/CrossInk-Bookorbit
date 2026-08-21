@@ -62,7 +62,8 @@ class BookOrbitSyncActivity final : public Activity {
     UPLOAD_COMPLETE,
     NO_REMOTE_PROGRESS,
     SYNC_FAILED,
-    NO_CREDENTIALS
+    NO_CREDENTIALS,
+    SYNC_COMPLETE
   };
 
   std::shared_ptr<Epub> epub;  // null until lazy-loaded after TLS in performSync()
@@ -93,6 +94,14 @@ class BookOrbitSyncActivity final : public Activity {
 
   // Selection in result screen (0=Apply, 1=Upload)
   int selectedOption = 0;
+
+  // Smart sync leaves its terminal screens on their own: set when an automatic
+  // outcome lands, checked in loop(). 0 = no auto return armed.
+  unsigned long autoReturnAt = 0;
+  static constexpr unsigned long AUTO_RETURN_DELAY_MS = 1200;
+  bool smartSyncEnabled() const;
+  void markAutoReturn();
+  void completeAlreadySynced();
 
   // See KOReaderSyncActivity for why this tracking exists (esp_wifi_stop() during
   // performUpload() makes WiFi.getMode() unreliable for the onExit() decision).

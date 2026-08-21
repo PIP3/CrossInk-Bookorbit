@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cmath>
 #include <ctime>
 
 #include "BookOrbitAnnotationStore.h"
@@ -95,6 +96,46 @@ ResultActionLayout resultActionLayout(const Rect& screen, const ThemeMetrics& me
   return result;
 }
 
+// Smart sync's memory: the server progress timestamp this device saw at the
+// end of its last successful sync of this book, one 12-byte file beside the
+// book's stats queue. It answers the one question the automatic decision
+// needs -- has the server moved since we were last here? -- which progress
+// percentages alone cannot
+// 0 means "unknown", and unknown always falls back to the choice screen.
+constexpr char SYNC_MARKER_FILE[] = "/bookorbit_sync.bin";
+constexpr uint32_t SYNC_MARKER_MAGIC = 0x424F5359;  // "BOSY"
+
+int64_t readLastSyncMarker(const std::string& bookCachePath) {
+  const std::string path = bookCachePath + SYNC_MARKER_FILE;
+  FsFile file;
+  if (!Storage.openFileForRead("BookOrbit", path.c_str(), file)) return 0;
+  uint32_t magic = 0;
+  int64_t timestamp = 0;
+  const bool ok = file.read(&magic, sizeof(magic)) == sizeof(magic) &&
+                  file.read(&timestamp, sizeof(timestamp)) == sizeof(timestamp) && magic == SYNC_MARKER_MAGIC;
+  file.close();
+  return ok && timestamp > 0 ? timestamp : 0;
+}
+
+void writeLastSyncMarker(const std::string& bookCachePath, const int64_t timestamp) {
+  if (timestamp <= 0) return;  // nothing learned; keep whatever history exists
+  const std::string path = bookCachePath + SYNC_MARKER_FILE;
+  FsFile file = Storage.open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC);
+  if (!file) {
+    LOG_ERR("BookOrbit", "Could not write sync marker %s", path.c_str());
+    return;
+  }
+  const bool ok = file.write(&SYNC_MARKER_MAGIC, sizeof(SYNC_MARKER_MAGIC)) == sizeof(SYNC_MARKER_MAGIC) &&
+                  file.write(&timestamp, sizeof(timestamp)) == sizeof(timestamp);
+  file.close();
+  if (!ok) {
+    // A short marker fails the magic/size check on read, so a partial write
+    // degrades to "unknown", never to a wrong date.
+    LOG_ERR("BookOrbit", "Short write on sync marker %s", path.c_str());
+    Storage.remove(path.c_str());
+  }
+}
+
 // The SNTP client lives behind halClock, whose esp-netif implementation routes every lwIP
 // interaction through the core-lock-safe execution path -- this file and KOReaderSyncActivity
 // used to carry hand-rolled copies of that discipline.
@@ -129,6 +170,21 @@ void BookOrbitSyncActivity::ensureEpubLoaded() {
   }
 }
 
+bool BookOrbitSyncActivity::smartSyncEnabled() const {
+  return BOOKORBIT_STORE.getSyncBehavior() == BookOrbitSyncBehavior::SMART;
+}
+
+void BookOrbitSyncActivity::markAutoReturn() { autoReturnAt = millis() + AUTO_RETURN_DELAY_MS; }
+
+void BookOrbitSyncActivity::completeAlreadySynced() {
+  {
+    RenderLock lock(*this);
+    state = SYNC_COMPLETE;
+  }
+  markAutoReturn();
+  requestUpdate(true);
+}
+
 void BookOrbitSyncActivity::saveProgressAndReturn(const CrossPointPosition& position) {
   assert(epub);
   const int pageCount = std::max(position.totalPages, position.pageNumber + 1);
@@ -145,6 +201,9 @@ void BookOrbitSyncActivity::saveProgressAndReturn(const CrossPointPosition& posi
     requestUpdate(true);
     return;
   }
+  // Manual applies record the marker too, so the history smart sync reads is
+  // already there the day the option gets switched on.
+  writeLastSyncMarker(Epub::cachePathForFilePath(epubPath, "/.crosspoint"), remoteProgress.timestamp);
   returnToReader();
 }
 
@@ -308,6 +367,11 @@ void BookOrbitSyncActivity::performSync() {
   }
 
   if (result == BookOrbitSyncClient::NOT_FOUND) {
+    if (smartSyncEnabled()) {
+      LOG_DBG("BookOrbit", "Smart sync: no remote progress, uploading local %.6f", localProgress.percentage);
+      performUpload();
+      return;
+    }
     {
       RenderLock lock(*this);
       state = NO_REMOTE_PROGRESS;
@@ -385,6 +449,37 @@ void BookOrbitSyncActivity::performSync() {
       } else {
         LOG_DBG("BookOrbit", "Paragraph %u not found in section LUT", remotePosition.paragraphIndex);
       }
+    }
+  }
+
+  if (smartSyncEnabled()) {
+    static constexpr float SAME_PROGRESS_EPSILON = 0.0005f;  // 0.05 percentage points
+    const std::string cachePath = Epub::cachePathForFilePath(epubPath, "/.crosspoint");
+    const int64_t lastSync = readLastSyncMarker(cachePath);
+    const float delta = localProgress.percentage - remoteProgress.percentage;
+    LOG_DBG("BookOrbit", "Smart decision: local=%.6f remote=%.6f serverTs=%lld lastSync=%lld", localProgress.percentage,
+            remoteProgress.percentage, (long long)remoteProgress.timestamp, (long long)lastSync);
+    if (std::fabs(delta) <= SAME_PROGRESS_EPSILON) {
+      // Both sides agree; refresh the marker so the next visit still knows
+      // whether the server moved in the meantime.
+      writeLastSyncMarker(cachePath, remoteProgress.timestamp);
+      completeAlreadySynced();
+      return;
+    }
+    if (remoteProgress.timestamp > 0 && lastSync > 0) {
+      // Act only when the progress order and the time order tell the same story
+      const bool serverMoved = remoteProgress.timestamp > lastSync;
+      if (delta < 0 && serverMoved) {
+        saveProgressAndReturn(remotePosition);
+        return;
+      }
+      if (delta > 0 && !serverMoved) {
+        performUpload();
+        return;
+      }
+      LOG_DBG("BookOrbit", "Smart sync: progress and dates disagree, showing the choice screen");
+    } else {
+      LOG_DBG("BookOrbit", "Smart sync: no sync history for this book yet, showing the choice screen");
     }
   }
 
@@ -1240,9 +1335,13 @@ void BookOrbitSyncActivity::performUpload() {
     return;
   }
 
+  writeLastSyncMarker(Epub::cachePathForFilePath(epubPath, "/.crosspoint"), progress.timestamp);
   {
     RenderLock lock(*this);
     state = UPLOAD_COMPLETE;
+  }
+  if (smartSyncEnabled()) {
+    markAutoReturn();
   }
   requestUpdate(true);
 }
@@ -1408,6 +1507,15 @@ void BookOrbitSyncActivity::render(RenderLock&&) {
     return;
   }
 
+  if (state == SYNC_COMPLETE) {
+    UITheme::drawCenteredText(renderer, screen, UI_10_FONT_ID, top, tr(STR_ALREADY_SYNCED), true, EpdFontFamily::BOLD);
+
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4, true);
+    renderer.displayBuffer();
+    return;
+  }
+
   if (state == UPLOAD_COMPLETE) {
     UITheme::drawCenteredText(renderer, screen, UI_10_FONT_ID, top, tr(STR_UPLOAD_SUCCESS), true, EpdFontFamily::BOLD);
 
@@ -1444,7 +1552,13 @@ void BookOrbitSyncActivity::loop() {
   const bool backRequested = mappedInput.wasReleased(MappedInputManager::Button::Back) ||
                              TouchHeaderBackButton::wasTapped(mappedInput, headerBandRect());
 
-  if (state == NO_CREDENTIALS || state == SYNC_FAILED || state == UPLOAD_COMPLETE) {
+  if (state == NO_CREDENTIALS || state == SYNC_FAILED || state == UPLOAD_COMPLETE || state == SYNC_COMPLETE) {
+    // Armed only by the smart outcomes: the screen already said everything it
+    // has to say, so it walks back to the book on its own.
+    if (autoReturnAt != 0 && millis() >= autoReturnAt) {
+      returnToReader();
+      return;
+    }
     if (backRequested) {
       returnToReader();
     }

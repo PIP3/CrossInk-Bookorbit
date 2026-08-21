@@ -22,9 +22,10 @@
 namespace fui = freeink::ui;
 
 namespace {
-constexpr int MENU_ITEMS = 5;
-const StrId menuNames[MENU_ITEMS] = {StrId::STR_USERNAME, StrId::STR_PASSWORD, StrId::STR_BOOKORBIT_SERVER_URL,
-                                     StrId::STR_AUTHENTICATE, StrId::STR_BOOKORBIT_CATALOG};
+constexpr int MENU_ITEMS = 6;
+const StrId menuNames[MENU_ITEMS] = {
+    StrId::STR_USERNAME,     StrId::STR_PASSWORD,          StrId::STR_BOOKORBIT_SERVER_URL,
+    StrId::STR_AUTHENTICATE, StrId::STR_BOOKORBIT_CATALOG, StrId::STR_SYNC_BEHAVIOR};
 constexpr fui::ActionId ACTION_ROW = 1;
 }  // namespace
 
@@ -150,6 +151,13 @@ void BookOrbitSettingsActivity::handleSelection() {
       return;
     }
     activityManager.goToBookOrbitCatalog();
+  } else if (selectedIndex == 5) {
+    const auto current = BOOKORBIT_STORE.getSyncBehavior();
+    BOOKORBIT_STORE.setSyncBehavior(current == BookOrbitSyncBehavior::ASK_EVERY_TIME
+                                        ? BookOrbitSyncBehavior::SMART
+                                        : BookOrbitSyncBehavior::ASK_EVERY_TIME);
+    BOOKORBIT_STORE.saveToFile();
+    requestUpdate();
   }
 }
 
@@ -177,6 +185,9 @@ void BookOrbitSettingsActivity::buildListScreen(UiApp::ScreenType& screen) {
     } else if (i == 2) {
       const auto serverUrl = BOOKORBIT_STORE.getServerUrl();
       values[i] = serverUrl.empty() ? tr(STR_NOT_SET) : serverUrl;
+    } else if (i == 5) {
+      values[i] = BOOKORBIT_STORE.getSyncBehavior() == BookOrbitSyncBehavior::SMART ? tr(STR_SMART_SYNC)
+                                                                                    : tr(STR_ASK_EVERY_TIME);
     } else {
       // Authenticate and Browse Catalog both need credentials to do anything.
       values[i] = hasCredentials ? "" : std::string("[") + tr(STR_SET_CREDENTIALS_FIRST) + "]";
