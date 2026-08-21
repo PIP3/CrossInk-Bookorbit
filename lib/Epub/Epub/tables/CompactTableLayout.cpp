@@ -359,7 +359,7 @@ bool CompactTableLayout::wrapCell(const Cell& cell, const uint16_t maxWidth, Tab
     }
   }
 
-  if (!flush() && !emittedAny) return false;
+  if (!flush()) return false;
   return output.lines.size() <= MAX_LINES_PER_CELL;
 }
 
