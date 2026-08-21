@@ -15,6 +15,7 @@ void BookOrbitCredentialStore::toJson(JsonDocument& doc) const {
   doc["username"] = getUsername();
   doc["password_obf"] = obfuscation::obfuscateToBase64(getPassword());
   doc["serverUrl"] = getServerUrl();
+  doc["syncBehavior"] = static_cast<uint8_t>(syncBehavior);
 }
 
 bool BookOrbitCredentialStore::fromJson(JsonVariantConst doc) {
@@ -29,6 +30,9 @@ bool BookOrbitCredentialStore::fromJson(JsonVariantConst doc) {
 
   setCredentials(user, pass);
   setServerUrl(doc["serverUrl"] | "");
+  const uint8_t behavior = doc["syncBehavior"] | static_cast<uint8_t>(0);
+  syncBehavior = behavior == static_cast<uint8_t>(BookOrbitSyncBehavior::SMART) ? BookOrbitSyncBehavior::SMART
+                                                                                : BookOrbitSyncBehavior::ASK_EVERY_TIME;
 
   return true;
 }

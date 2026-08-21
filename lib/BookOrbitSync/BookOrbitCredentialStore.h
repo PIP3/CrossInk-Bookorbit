@@ -14,11 +14,19 @@
  * identifies documents by the binary partial-MD5 hash (see KOReaderDocumentId),
  * so unlike KOReaderCredentialStore there is no document matching method to store.
  */
+// Mirrors KOReaderSyncBehavior; declared here so this fork-owned store does
+// not pull upstream's KOReader headers in.
+enum class BookOrbitSyncBehavior : uint8_t {
+  ASK_EVERY_TIME = 0,  // Always show the apply/upload choice screen.
+  SMART = 1,           // Auto-resolve when progress order and sync dates agree.
+};
+
 class BookOrbitCredentialStore : public PersistableStore<BookOrbitCredentialStore> {
  private:
   std::string username;
   std::string password;
   std::string serverUrl;
+  BookOrbitSyncBehavior syncBehavior = BookOrbitSyncBehavior::ASK_EVERY_TIME;
 
   BookOrbitCredentialStore() = default;
   ~BookOrbitCredentialStore() = default;
@@ -40,6 +48,9 @@ class BookOrbitCredentialStore : public PersistableStore<BookOrbitCredentialStor
 
   // Check if credentials and a server address are set
   bool hasCredentials() const;
+
+  void setSyncBehavior(BookOrbitSyncBehavior behavior) { syncBehavior = behavior; }
+  BookOrbitSyncBehavior getSyncBehavior() const { return syncBehavior; }
 
   // Clear credentials
   void clearCredentials();
