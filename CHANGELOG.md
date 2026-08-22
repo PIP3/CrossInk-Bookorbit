@@ -7,7 +7,7 @@ on; for everything inherited from upstream, see the
 
 ## [Unreleased]
 
-Based on CrossInk v1.5.1-rc-3.
+Based on CrossInk v1.5.1-rc-4.
 
 ### Added
 

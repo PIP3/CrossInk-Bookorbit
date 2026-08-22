@@ -453,13 +453,13 @@ bool advanceClipCursorToToken(const std::string& text, const uint16_t targetInde
   return false;
 }
 
-ClippingTextMatcher::TokenFragmentMatch matchPageWordToToken(const TextBlock& block, const uint16_t wordIndex,
-                                                             const char* token, const size_t tokenLen,
-                                                             const size_t tokenOffset = 0) {
+ClippingTextMatcher::TokenFragmentResult matchPageWordToToken(const TextBlock& block, const uint16_t wordIndex,
+                                                              const char* token, const size_t tokenLen,
+                                                              const size_t tokenOffset = 0) {
   const char* word = block.wordText(wordIndex);
   const char* visibleWord = word + (hasEmSpacePrefix(word) ? 3 : 0);
-  return ClippingTextMatcher::matchTokenFragment(visibleWord, block.wordEndsWithInsertedHyphen(wordIndex), token,
-                                                 tokenLen, tokenOffset);
+  return ClippingTextMatcher::matchTokenFragmentWithLength(visibleWord, block.wordEndsWithInsertedHyphen(wordIndex),
+                                                           token, tokenLen, tokenOffset);
 }
 
 template <typename Callback>
@@ -513,18 +513,15 @@ bool matchClipRunFromPageWord(const Page& page, const std::string& clippingText,
       return true;
     }
 
-    const auto fragmentMatch = matchPageWordToToken(block, static_cast<uint16_t>(i), token, tokenLen, tokenOffset);
-    if (fragmentMatch == ClippingTextMatcher::TokenFragmentMatch::MISMATCH) {
+    const auto fragmentResult = matchPageWordToToken(block, static_cast<uint16_t>(i), token, tokenLen, tokenOffset);
+    if (fragmentResult.match == ClippingTextMatcher::TokenFragmentMatch::MISMATCH) {
       stoppedByMismatch = true;
       return false;
     }
 
     lastWord = wordIndex;
-    if (fragmentMatch == ClippingTextMatcher::TokenFragmentMatch::CONTINUES_TOKEN) {
-      const char* word = block.wordText(static_cast<uint16_t>(i));
-      const char* visibleWord = word + (hasEmSpacePrefix(word) ? 3 : 0);
-      const size_t visibleWordLength = std::strlen(visibleWord);
-      tokenOffset += visibleWordLength - (block.wordEndsWithInsertedHyphen(static_cast<uint16_t>(i)) ? 1 : 0);
+    if (fragmentResult.match == ClippingTextMatcher::TokenFragmentMatch::CONTINUES_TOKEN) {
+      tokenOffset += fragmentResult.tokenBytes;
       return true;
     }
 
@@ -583,7 +580,7 @@ bool findClippingTextOnPage(const Page& page, const std::string& clippingText, C
       if (tokenIndex >= tokenCount) {
         break;
       }
-      if (matchPageWordToToken(block, static_cast<uint16_t>(i), token, tokenLen) !=
+      if (matchPageWordToToken(block, static_cast<uint16_t>(i), token, tokenLen).match !=
               ClippingTextMatcher::TokenFragmentMatch::MISMATCH &&
           matchClipRunFromPageWord(page, clippingText, wordIndex, tokenIndex, minPartialMatch, match)) {
         found = true;
@@ -2988,25 +2985,57 @@ void EpubReaderActivity::loop() {
 
   // Side button long-press actions use raw Up/Down so the direction stays
   // physical regardless of the Prev/Next side layout setting.
+  const bool sideLongPressSkipsChapter =
+      SETTINGS.sideButtonLongPress == CrossPointSettings::SIDE_LONG_PRESS::SIDE_LONG_CHAPTER_SKIP;
   const bool sideLongPressChangesFont =
       SETTINGS.sideButtonLongPress == CrossPointSettings::SIDE_LONG_PRESS::SIDE_LONG_FONT_SIZE;
   const bool sideLongPressChangesOrientation =
       SETTINGS.sideButtonLongPress == CrossPointSettings::SIDE_LONG_PRESS::SIDE_LONG_ORIENTATION_CHANGE;
-  if (sideLongPressChangesFont || sideLongPressChangesOrientation) {
+  if (sideLongPressSkipsChapter || sideLongPressChangesFont || sideLongPressChangesOrientation) {
     const bool topReleased = mappedInput.wasReleased(MappedInputManager::Button::Up);
     const bool bottomReleased = mappedInput.wasReleased(MappedInputManager::Button::Down);
-    if (sideButtonLongPressHandled && (topReleased || bottomReleased)) {
+    const bool sidePrevReleased = mappedInput.wasReleased(MappedInputManager::Button::PageBack);
+    const bool sideNextReleased = mappedInput.wasReleased(MappedInputManager::Button::PageForward);
+    const bool sideLongPressReleased =
+        sideLongPressSkipsChapter ? (sidePrevReleased || sideNextReleased) : (topReleased || bottomReleased);
+    if (sideButtonLongPressHandled && sideLongPressReleased) {
       sideButtonLongPressHandled = false;
       return;
     }
 
     const bool longPressReady = mappedInput.getHeldTime() > ReaderUtils::SKIP_HOLD_MS;
+    const bool prevLongPressed = longPressReady && mappedInput.isPressed(MappedInputManager::Button::PageBack);
+    const bool nextLongPressed = longPressReady && mappedInput.isPressed(MappedInputManager::Button::PageForward);
     const bool topLongPressed =
         longPressReady && (mappedInput.isPressed(MappedInputManager::Button::Up) || topReleased);
     const bool bottomLongPressed =
         longPressReady && (mappedInput.isPressed(MappedInputManager::Button::Down) || bottomReleased);
 
-    if (!sideButtonLongPressHandled && topLongPressed) {
+    if (sideLongPressSkipsChapter && !sideButtonLongPressHandled && (prevLongPressed || nextLongPressed)) {
+      sideButtonLongPressHandled = true;
+      if (!nextLongPressed && section && section->currentPage > 0) {
+        section->currentPage = 0;
+        requestUpdate();
+        return;
+      }
+
+      // We don't want to delete the section mid-render, so grab the semaphore.
+      {
+        RenderLock lock(*this);
+        nextPageNumber = 0;
+        if (nextLongPressed) {
+          currentSpineIndex++;
+        } else if (currentSpineIndex > 0) {
+          currentSpineIndex--;
+        }
+        section.reset();
+      }
+      requestUpdate();
+      return;
+    }
+
+    if ((sideLongPressChangesFont || sideLongPressChangesOrientation) && !sideButtonLongPressHandled &&
+        topLongPressed) {
       sideButtonLongPressHandled = !topReleased;
       if (sideLongPressChangesFont) {
         if (sdFontSystem.changeReaderFontSize(/*larger=*/true)) {
@@ -3018,7 +3047,8 @@ void EpubReaderActivity::loop() {
       }
       return;
     }
-    if (!sideButtonLongPressHandled && bottomLongPressed) {
+    if ((sideLongPressChangesFont || sideLongPressChangesOrientation) && !sideButtonLongPressHandled &&
+        bottomLongPressed) {
       sideButtonLongPressHandled = !bottomReleased;
       if (sideLongPressChangesFont) {
         if (sdFontSystem.changeReaderFontSize(/*larger=*/false)) {
@@ -3145,10 +3175,14 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  const unsigned long heldMs = (touch.prev || touch.next) ? touch.heldMs : mappedInput.getHeldTime();
+  // Touch page turns deliberately ignore the physical-button long-press
+  // settings. Keep those saved settings intact for a later move back to a
+  // button device, but never let a held screen tap skip a chapter or rotate.
+  const bool fromTouch = touch.prev || touch.next;
+  const unsigned long heldMs = fromTouch ? touch.heldMs : mappedInput.getHeldTime();
   const bool longPress = !fromTilt && heldMs > ReaderUtils::SKIP_HOLD_MS;
   const bool skipChapter =
-      longPress &&
+      !fromTouch && longPress &&
       (fromSideBtn ? SETTINGS.sideButtonLongPress == CrossPointSettings::SIDE_LONG_PRESS::SIDE_LONG_CHAPTER_SKIP
                    : SETTINGS.longPressButtonBehavior == CrossPointSettings::CHAPTER_SKIP);
 
@@ -3179,7 +3213,8 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  if (longPress && !fromSideBtn && SETTINGS.longPressButtonBehavior == CrossPointSettings::ORIENTATION_CHANGE) {
+  if (!fromTouch && longPress && !fromSideBtn &&
+      SETTINGS.longPressButtonBehavior == CrossPointSettings::ORIENTATION_CHANGE) {
     const uint8_t newOrientation =
         nextTriggered ? (SETTINGS.orientation - 1 + SETTINGS.ORIENTATION_COUNT) % SETTINGS.ORIENTATION_COUNT
                       : (SETTINGS.orientation + 1) % SETTINGS.ORIENTATION_COUNT;
@@ -3194,8 +3229,7 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  const char* pageTurnSource =
-      (touch.prev || touch.next) ? "touch" : (fromTilt ? "tilt" : (fromSideBtn ? "side" : "front"));
+  const char* pageTurnSource = fromTouch ? "touch" : (fromTilt ? "tilt" : (fromSideBtn ? "side" : "front"));
   if (shortPowerTurn || releasedLongPowerTurn || heldLongPowerTurn) {
     pageTurnSource = "power";
   }
@@ -3241,7 +3275,6 @@ bool EpubReaderActivity::handleTwoFingerSwipeAction(const CrossPointSettings::TW
       {
         RenderLock lock(*this);
         nextPageNumber = 0;
-        if (direction < 0) pendingPageJump = std::numeric_limits<uint16_t>::max();
         currentSpineIndex = targetSpine;
         section.reset();
       }
@@ -6690,6 +6723,9 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int fo
   auto* fcm = renderer.getFontCacheManager();
   auto scope = fcm->createPrewarmScope();
   page->renderText(renderer, fontId, orientedMarginLeft, orientedMarginTop);  // scan pass
+  // The status-bar title can route to the same SD fallback as the page. Scan
+  // it into this batch before rendering so it does not evict page glyphs.
+  renderStatusBar();
   scope.endScanAndPrewarm();
 
 #if CROSSINK_APP_CAP_TOUCH
