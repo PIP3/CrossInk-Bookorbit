@@ -476,16 +476,29 @@ bool startGlobalSyncProgress(const bool networkBootReady = false) {
 
 // Mirrors startGlobalSyncProgress() for the BookOrbit provider (kept separate, like the
 // sync activities themselves, so BookOrbit support cannot regress the KOReader path).
-bool startGlobalBookOrbitSync() {
+// networkBootReady mirrors the KOReader flow: false is a live request, which restarts
+// into a minimal network boot like KOReader does; true is the resume after that
+// restart. The payload is the BOOKORBIT_SYNC restart payload.
+bool startGlobalBookOrbitSync(const bool networkBootReady = false, const uint32_t payload = 0) {
   if (!BOOKORBIT_STORE.hasCredentials()) {
+    if (networkBootReady) return false;
     activityManager.pushActivity(std::make_unique<BookOrbitSettingsActivity>(renderer, mappedInputManager));
     return true;
   }
 
   const std::string epubPath = APP_STATE.openEpubPath;
   if (epubPath.empty() || !FsHelpers::hasEpubExtension(epubPath) || !Storage.exists(epubPath.c_str())) {
+    if (networkBootReady) return false;
     LOG_DBG("MAIN", "No syncable EPUB open, opening BookOrbit settings instead");
     activityManager.pushActivity(std::make_unique<BookOrbitSettingsActivity>(renderer, mappedInputManager));
+    return true;
+  }
+
+  // Restart before loading anything: the epub load below would only be thrown away, and
+  // BookOrbitSyncActivity::onEnter() would order this same restart anyway. The position
+  // comes from saved progress here, so the restart payload carries no paragraph anchor.
+  if (!networkBootReady) {
+    silentRestartToNetwork(NetworkBootTarget::BOOKORBIT_SYNC);
     return true;
   }
 
@@ -515,13 +528,24 @@ bool startGlobalBookOrbitSync() {
   }
 
   CrossPointPosition localPos = {spineIndex, pageNumber, totalPagesInSpine};
+  std::optional<uint16_t> paragraphIndex;
+  if ((payload & BOOKORBIT_SYNC_PAYLOAD_HAS_PARAGRAPH) != 0) {
+    paragraphIndex = static_cast<uint16_t>(payload & 0xFFFFu);
+    localPos.paragraphIndex = *paragraphIndex;
+    localPos.hasParagraphIndex = true;
+  }
   KOReaderPosition localKoPos = ProgressMapper::toKOReader(epub, localPos);
   const int tocIdx = epub->getTocIndexForSpineIndex(spineIndex);
   std::string localChapterName = (tocIdx >= 0) ? epub->getTocItem(tocIdx).title : "";
 
-  activityManager.pushActivity(
-      std::make_unique<BookOrbitSyncActivity>(renderer, mappedInputManager, epubPath, spineIndex, pageNumber,
-                                              totalPagesInSpine, std::move(localKoPos), std::move(localChapterName)));
+  auto syncActivity = makeUniqueNoThrow<BookOrbitSyncActivity>(
+      renderer, mappedInputManager, epubPath, spineIndex, pageNumber, totalPagesInSpine, std::move(localKoPos),
+      std::move(localChapterName), paragraphIndex, networkBootReady);
+  if (!syncActivity) {
+    LOG_ERR("MAIN", "OOM: BookOrbit sync activity (free=%u maxAlloc=%u)", ESP.getFreeHeap(), ESP.getMaxAllocHeap());
+    return false;
+  }
+  activityManager.replaceActivity(std::move(syncActivity));
   return true;
 }
 
@@ -1149,6 +1173,7 @@ void setup() {
   const bool useReaderRenderStack =
       !isNetworkResume ||
       (FREEINK_MCU_S3 && (snapshotTarget == static_cast<uint32_t>(NetworkBootTarget::KOREADER_SYNC) ||
+                          snapshotTarget == static_cast<uint32_t>(NetworkBootTarget::BOOKORBIT_SYNC) ||
                           snapshotTarget == static_cast<uint32_t>(NetworkBootTarget::OPDS) ||
                           snapshotTarget == static_cast<uint32_t>(NetworkBootTarget::FILE_TRANSFER)));
   silentRebootMagic = 0;
@@ -1415,6 +1440,9 @@ void setup() {
         break;
       case NetworkBootTarget::KOREADER_SYNC:
         launched = startGlobalSyncProgress(true);
+        break;
+      case NetworkBootTarget::BOOKORBIT_SYNC:
+        launched = startGlobalBookOrbitSync(true, snapshotPayload);
         break;
       case NetworkBootTarget::KOREADER_AUTH: {
 #if CROSSINK_APP_CAP_KOREADER_SYNC

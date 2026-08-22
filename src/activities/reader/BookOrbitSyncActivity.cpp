@@ -5,6 +5,7 @@
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <WallClock.h>
 #include <WiFi.h>
 #include <esp_wifi.h>
@@ -177,6 +178,7 @@ bool BookOrbitSyncActivity::smartSyncEnabled() const {
 void BookOrbitSyncActivity::markAutoReturn() { autoReturnAt = millis() + AUTO_RETURN_DELAY_MS; }
 
 void BookOrbitSyncActivity::completeAlreadySynced() {
+  syncSession.reset();  // no request follows; free the TLS session before the reader reloads
   {
     RenderLock lock(*this);
     state = SYNC_COMPLETE;
@@ -186,6 +188,7 @@ void BookOrbitSyncActivity::completeAlreadySynced() {
 }
 
 void BookOrbitSyncActivity::saveProgressAndReturn(const CrossPointPosition& position) {
+  syncSession.reset();  // applying remote progress is local work; free the TLS session first
   assert(epub);
   const int pageCount = std::max(position.totalPages, position.pageNumber + 1);
   if (pageCount != position.totalPages) {
@@ -207,7 +210,10 @@ void BookOrbitSyncActivity::saveProgressAndReturn(const CrossPointPosition& posi
   returnToReader();
 }
 
-void BookOrbitSyncActivity::returnToReader() { activityManager.goToReader(epubPath); }
+void BookOrbitSyncActivity::returnToReader() {
+  syncSession.reset();
+  activityManager.goToReader(epubPath);
+}
 
 bool BookOrbitSyncActivity::consumeInitialConfirmRelease() {
   if (!lockInitialConfirmRelease) {
@@ -285,30 +291,27 @@ void BookOrbitSyncActivity::performSync() {
     return;
   }
 
-  // One TLS connection for the progress fetch and the stats upload that follows: they go to the
-  // same host, and a handshake costs a second or two here. The session deliberately ends before
-  // the screen waits on a user decision, so no socket is held open across it.
-  BookOrbitSyncClient::Error result;
-  {
-    BookOrbitSyncClient::Session session;
-    result = BookOrbitSyncClient::getProgress(documentHash, remoteProgress);
-    LOG_INF("BookOrbit", "Progress fetch result=%d (http=%d)", static_cast<int>(result),
-            BookOrbitSyncClient::lastHttpCode);
+  // One TLS session for the entire sync, paid right after WiFi came up:
+  // Everything after rides it under the kept-session floor.
+  // The sessions used to be split (fetch+stats, then highlights+bookmarks,
+  // then the upload on its own connection), each fresh handshake re-checked
+  // against the 55KB floor.
+  //
+  // The session is a member and deliberately survives the decision screens: a socket held
+  // through a user wait can be closed by the server, but a re-handshake on the kept
+  // session fails cleanly (NETWORK_ERROR, retry next sync) where a fresh one was refused
+  // outright before it could try.
+  syncSession = makeUniqueNoThrow<BookOrbitSyncClient::Session>();
+  const BookOrbitSyncClient::Error result = BookOrbitSyncClient::getProgress(documentHash, remoteProgress);
+  LOG_INF("BookOrbit", "Progress fetch result=%d (http=%d)", static_cast<int>(result),
+          BookOrbitSyncClient::lastHttpCode);
 
-    // Progress fetch reaching the server (even with no stored progress) means auth and
-    // connectivity are good: piggyback the queued reading-session stats on this session.
-    if (result == BookOrbitSyncClient::OK || result == BookOrbitSyncClient::NOT_FOUND) {
-      uploadQueuedStats();
-    }
-  }
-
-  // Highlights get their own connection rather than sharing the one above. Draining the stats
-  // queue used to hold every queued event at once (~32KB for a full queue) and an annotation
-  // batch with its key set another ~8KB; held at the same time inside a 55KB TLS floor, on the
-  // ~65KB WiFi leaves, the two starved each other and the stats upload was the one that failed.
-  // The drain reads a batch at a time now, but the split stands: an extra handshake costs a
-  // second, losing a feature's payload costs the feature.
+  // Progress fetch reaching the server (even with no stored progress) means auth and
+  // connectivity are good: the queued reading-session stats and the highlight and
+  // bookmark exchanges all follow on the same session.
   if (result == BookOrbitSyncClient::OK || result == BookOrbitSyncClient::NOT_FOUND) {
+    uploadQueuedStats();
+
     {
       RenderLock lock(*this);
       statusMessage = tr(STR_SYNCING_HIGHLIGHTS);
@@ -317,16 +320,13 @@ void BookOrbitSyncActivity::performSync() {
 
     prepareAnnotationBatch();
     prepareBookmarkBatch();
+    uploadAnnotationBatch();
     {
-      BookOrbitSyncClient::Session session;
-      uploadAnnotationBatch();
-      {
-        RenderLock lock(*this);
-        statusMessage = tr(STR_SYNCING_BOOKMARKS);
-      }
-      requestUpdate(true);
-      uploadBookmarkBatch();
+      RenderLock lock(*this);
+      statusMessage = tr(STR_SYNCING_BOOKMARKS);
     }
+    requestUpdate(true);
+    uploadBookmarkBatch();
     // Applied before the returns below, not after: they leave early for a book the server holds
     // no progress for, and the highlights it just sent would leave with them.
     if (!incomingAnnotations.empty() || !incomingBookmarks.empty()) {
@@ -382,6 +382,7 @@ void BookOrbitSyncActivity::performSync() {
   }
 
   if (result != BookOrbitSyncClient::OK) {
+    syncSession.reset();
     {
       RenderLock lock(*this);
       state = SYNC_FAILED;
@@ -394,6 +395,7 @@ void BookOrbitSyncActivity::performSync() {
   hasRemoteProgress = true;
   ensureEpubLoaded();
   if (!epub) {
+    syncSession.reset();
     {
       RenderLock lock(*this);
       state = SYNC_FAILED;
@@ -506,7 +508,7 @@ void BookOrbitSyncActivity::prepareAnnotationBatch() {
 
   const uint32_t watermark = BookOrbitAnnotationStore::readWatermark(cachePath);
   // The store is loaded only for as long as it takes to copy the batch out, and unloaded
-  // before returning: it stays out of the way of the handshake that follows.
+  // before returning: only the small batch stays resident beside the open TLS session.
   if (!CLIPPINGS.loadForBook(epubPath, "", "", "epub")) {
     LOG_ERR("BookOrbit", "Could not read clippings; highlights will not sync");
     return;
@@ -951,7 +953,8 @@ void BookOrbitSyncActivity::applyIncomingBookmarks() {
   LOG_INF("BookOrbit", "Applied %u server bookmark(s), %u deletion(s)", (unsigned)appliedAcks.size(),
           (unsigned)deletedIds.size());
   if (!appliedAcks.empty() || !deletedIds.empty()) {
-    BookOrbitSyncClient::Session session;
+    // Rides syncSession: a nested Session would replace the shared client and close the
+    // connection performSync() is keeping alive for the progress upload.
     BookOrbitSyncClient::ackBookmarks(documentHash, SETTINGS.getEffectiveDeviceName(), appliedAcks, deletedIds);
   }
   incomingBookmarks.clear();
@@ -960,8 +963,10 @@ void BookOrbitSyncActivity::applyIncomingBookmarks() {
 void BookOrbitSyncActivity::applyIncomingAnnotations() {
   if (incomingAnnotations.empty()) return;
 
-  // Outside the TLS session on purpose: this loads the clipping store to write into it, and the
-  // handshake needs the heap that would take. The acknowledgment opens its own connection after.
+  // This loads the clipping store (~20KB) beside the open TLS session; if that load fails on a
+  // tight heap the highlights stay pending for the next sync -- a clean retry, where closing the
+  // session here would force the progress upload back onto an unaffordable fresh handshake. The
+  // acknowledgment that follows rides the kept session, so no handshake needs room beside the store.
   std::vector<BookOrbitAckEntry> appliedIds;
   std::vector<BookOrbitAckEntry> deletedIds;
   if (!CLIPPINGS.loadForBook(epubPath, "", "", "epub")) {
@@ -1135,7 +1140,8 @@ void BookOrbitSyncActivity::applyIncomingAnnotations() {
   LOG_INF("BookOrbit", "Applied %u server annotation(s), %u deletion(s)", (unsigned)appliedIds.size(),
           (unsigned)deletedIds.size());
   if (!appliedIds.empty() || !deletedIds.empty()) {
-    BookOrbitSyncClient::Session session;
+    // Rides syncSession: a nested Session would replace the shared client and close the
+    // connection performSync() is keeping alive for the progress upload.
     BookOrbitSyncClient::ackAnnotations(documentHash, SETTINGS.getEffectiveDeviceName(), appliedIds, deletedIds);
   }
   incomingAnnotations.clear();
@@ -1299,6 +1305,7 @@ void BookOrbitSyncActivity::performUpload() {
   }
   if (requestUpdateAndWait() != RequestUpdateResult::Rendered) {
     LOG_ERR("BookOrbit", "Upload progress screen could not be rendered synchronously; aborting upload");
+    syncSession.reset();
     wifiOff();
     {
       RenderLock lock(*this);
@@ -1323,6 +1330,7 @@ void BookOrbitSyncActivity::performUpload() {
 
   const auto result = BookOrbitSyncClient::updateProgress(progress);
 
+  syncSession.reset();
   wifiOff();
 
   if (result != BookOrbitSyncClient::OK) {
@@ -1358,6 +1366,17 @@ void BookOrbitSyncActivity::onEnter() {
     return;
   }
 
+  // Restart into a minimal network boot first exactly like the KOReader sync flow.
+  // By the time onEnter() runs, the reader has already exited cleanly:
+  // progress is saved and the reading-session stats are queued, so nothing is lost to the restart.
+  // The paragraph anchor is the one piece of the position that lives only in RAM
+  if (!networkBoot) {
+    const uint32_t payload =
+        currentParagraphIndex ? (BOOKORBIT_SYNC_PAYLOAD_HAS_PARAGRAPH | *currentParagraphIndex) : 0;
+    silentRestartToNetwork(NetworkBootTarget::BOOKORBIT_SYNC, payload);
+    return;  // only reached when a deep sleep in progress suppressed the restart
+  }
+
   sdFontSystem.releaseLoadedFont(renderer);
   wifiActivated = true;
 
@@ -1375,6 +1394,7 @@ void BookOrbitSyncActivity::onEnter() {
 void BookOrbitSyncActivity::onExit() {
   Activity::onExit();
 
+  syncSession.reset();
   if (wifiActivated) {
     wifiOff();
     silentRestartToReader();
