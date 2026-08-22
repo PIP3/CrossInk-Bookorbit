@@ -3257,6 +3257,9 @@ void EpubReaderActivity::loop() {
   }
 }
 
+#if CROSSINK_APP_CAP_TOUCH
+// Virtual overrides pin their bodies through the vtable even when
+// supportsMultiTouch() folds to false, so non-touch builds gate them out.
 bool EpubReaderActivity::handleTwoFingerSwipeAction(const CrossPointSettings::TWO_FINGER_SWIPE_ACTION action) {
   if (!epub) return false;
 
@@ -3286,6 +3289,7 @@ bool EpubReaderActivity::handleTwoFingerSwipeAction(const CrossPointSettings::TW
       return false;
   }
 }
+#endif
 
 // Translate an absolute percent into a spine index plus a normalized position
 // within that spine so we can jump after the section is loaded.
@@ -3411,11 +3415,13 @@ bool EpubReaderActivity::handlePinchFontResize() {
 void EpubReaderActivity::resetPinchFontGesture() { pinchFontGesture.reset(); }
 #endif
 
+#if CROSSINK_APP_CAP_TOUCH
 bool EpubReaderActivity::handleTwoFingerRotation(const bool clockwise) {
   applyOrientation(ReaderUtils::rotatedOrientation(SETTINGS.orientation, clockwise));
   requestUpdate();
   return true;
 }
+#endif
 
 bool EpubReaderActivity::handleTouchDictionaryLookup() {
   if (!SETTINGS.touchReaderControls || !mappedInput.hasTouch() || RenderLock::peek() || activeFootnotePreview ||

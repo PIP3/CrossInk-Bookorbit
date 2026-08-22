@@ -682,6 +682,10 @@ inline const std::vector<SettingInfo>& getBaseSettingsList() {
     // --- Controls ---
     add(SettingInfo::Toggle(StrId::STR_PINCH_FONT_RESIZE, &CrossPointSettings::pinchFontResizeEnabled,
                             "pinchFontResizeEnabled", StrId::STR_CAT_CONTROLS));
+#if CROSSINK_APP_CAP_TOUCH
+    // Two-finger swipes exist only on multi-touch hardware; on X3/X4 these rows
+    // were dead UI and their tables dead flash. The settings fields themselves
+    // stay in CrossPointSettings, so persisted values survive either build.
     const std::vector<StrId> twoFingerSwipeActions = {
         StrId::STR_NOT_SET,          StrId::STR_INCREASE_BRIGHTNESS, StrId::STR_DECREASE_BRIGHTNESS,
         StrId::STR_INCREASE_WARMTH,  StrId::STR_DECREASE_WARMTH,     StrId::STR_NEXT_CHAPTER,
@@ -710,6 +714,7 @@ inline const std::vector<SettingInfo>& getBaseSettingsList() {
     add(SettingInfo::Enum(StrId::STR_TWO_FINGER_SWIPE_RIGHT, &CrossPointSettings::twoFingerSwipeRight,
                           twoFingerSwipeActions, "twoFingerSwipeRight", StrId::STR_CAT_CONTROLS)
             .withEnumRawValues(twoFingerSwipeActionValues));
+#endif
     add(SettingInfo::Enum(StrId::STR_SIDE_BTN_LAYOUT, &CrossPointSettings::sideButtonLayout,
                           {StrId::STR_DISABLED, StrId::STR_PREV_NEXT, StrId::STR_NEXT_PREV, StrId::STR_NEXT_NEXT},
                           "sideButtonLayout", StrId::STR_CAT_CONTROLS)

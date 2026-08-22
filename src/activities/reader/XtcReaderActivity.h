@@ -93,7 +93,9 @@ class XtcReaderActivity final : public Activity {
   void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
+#if CROSSINK_APP_CAP_TOUCH
   bool handleTwoFingerSwipeAction(CrossPointSettings::TWO_FINGER_SWIPE_ACTION action) override;
+#endif
   bool prepareManualRefresh() override {
     pagesUntilFullRefresh = -1;
     return true;

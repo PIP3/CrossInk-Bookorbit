@@ -480,8 +480,10 @@ class EpubReaderActivity final : public Activity {
   void onExit() override;
   void loop() override;
   void render(RenderLock&& lock) override;
+#if CROSSINK_APP_CAP_TOUCH
   bool handleTwoFingerSwipeAction(CrossPointSettings::TWO_FINGER_SWIPE_ACTION action) override;
   bool handleTwoFingerRotation(bool clockwise) override;
+#endif
   bool prepareManualRefresh() override {
     pagesUntilFullRefresh = -1;
     cleanImageBasePending = true;
