@@ -556,12 +556,16 @@ void XtcReaderActivity::loop() {
   }
 }
 
+#if CROSSINK_APP_CAP_TOUCH
+// Virtual overrides pin their bodies through the vtable even when
+// supportsMultiTouch() folds to false, so non-touch builds gate them out.
 bool XtcReaderActivity::handleTwoFingerSwipeAction(const CrossPointSettings::TWO_FINGER_SWIPE_ACTION) {
   // XTC pages are pre-rendered images: they cannot be reflowed for font-size
   // changes, and the reader does not expose stable chapter jumps. Consume the
   // configured command without letting it turn into a regular page swipe.
   return true;
 }
+#endif
 
 void XtcReaderActivity::toggleHomeButtonInReader() {
   if (!mappedInput.hasHomeKey()) return;

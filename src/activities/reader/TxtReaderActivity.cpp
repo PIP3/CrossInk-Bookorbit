@@ -394,6 +394,9 @@ bool TxtReaderActivity::handlePinchFontResize() {
 void TxtReaderActivity::resetPinchFontGesture() { pinchFontGesture.reset(); }
 #endif
 
+#if CROSSINK_APP_CAP_TOUCH
+// Virtual overrides pin their bodies through the vtable even when
+// supportsMultiTouch() folds to false, so non-touch builds gate them out.
 bool TxtReaderActivity::handleTwoFingerSwipeAction(const CrossPointSettings::TWO_FINGER_SWIPE_ACTION action) {
   if (action != CrossPointSettings::TWO_FINGER_SWIPE_INCREASE_FONT_SIZE &&
       action != CrossPointSettings::TWO_FINGER_SWIPE_DECREASE_FONT_SIZE) {
@@ -405,7 +408,9 @@ bool TxtReaderActivity::handleTwoFingerSwipeAction(const CrossPointSettings::TWO
   changeReaderFontSize(action == CrossPointSettings::TWO_FINGER_SWIPE_INCREASE_FONT_SIZE, FontSizeStepMode::Clamp);
   return true;
 }
+#endif
 
+#if CROSSINK_APP_CAP_TOUCH
 bool TxtReaderActivity::handleTwoFingerRotation(const bool clockwise) {
   SETTINGS.orientation = ReaderUtils::rotatedOrientation(SETTINGS.orientation, clockwise);
   SETTINGS.saveToFile();
@@ -419,6 +424,7 @@ bool TxtReaderActivity::handleTwoFingerRotation(const bool clockwise) {
   requestUpdate();
   return true;
 }
+#endif
 
 void TxtReaderActivity::toggleDarkMode() {
   SETTINGS.readerDarkMode = !SETTINGS.readerDarkMode;
