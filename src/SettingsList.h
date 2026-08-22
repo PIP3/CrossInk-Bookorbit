@@ -355,7 +355,7 @@ inline SettingInfo buildSleepScreenSetting() {
   return s;
 }
 
-enum class ShortcutOptionCatalog { PowerButton, PowerChord, LongPress, HomeButton };
+enum class ShortcutOptionCatalog { PowerButton, ButtonChord, LongPress, HomeButton };
 
 constexpr uint8_t SHORTCUT_OPTION_UNAVAILABLE = UINT8_MAX;
 
@@ -367,7 +367,7 @@ inline uint8_t shortcutRawValue(const ShortcutOptionCatalog catalog, const Cross
   switch (catalog) {
     case ShortcutOptionCatalog::PowerButton:
       return static_cast<uint8_t>(action);
-    case ShortcutOptionCatalog::PowerChord:
+    case ShortcutOptionCatalog::ButtonChord:
       switch (action) {
         case Action::IGNORE:
           return Chord::CHORD_DISABLED;
@@ -738,7 +738,9 @@ inline const std::vector<SettingInfo>& getBaseSettingsList() {
     add(buildShortcutSetting(StrId::STR_LONG_PRESS_ACTION, &CrossPointSettings::longPwrBtn, "longPwrBtn",
                              ShortcutOptionCatalog::PowerButton));
     add(buildShortcutSetting(StrId::STR_POWER_BUTTON_CHORD, &CrossPointSettings::powerChordAction, "powerChordAction",
-                             ShortcutOptionCatalog::PowerChord));
+                             ShortcutOptionCatalog::ButtonChord));
+    add(buildShortcutSetting(StrId::STR_SIDE_BUTTON_CHORD, &CrossPointSettings::sideButtonChordAction,
+                             "sideButtonChordAction", ShortcutOptionCatalog::ButtonChord));
     add(SettingInfo::Enum(StrId::STR_IN_READER, &CrossPointSettings::homeButtonInReaderEnabled,
                           {StrId::STR_ENABLED, StrId::STR_DISABLED}, "homeButtonInReaderEnabled",
                           StrId::STR_CAT_CONTROLS)
@@ -1047,7 +1049,7 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
             v.end());
     for (auto& setting : v) {
       if (setting.nameId == StrId::STR_SHORT_PWR_BTN || settingKeyIs(setting, "longPwrBtn") ||
-          settingKeyIs(setting, "powerChordAction")) {
+          settingKeyIs(setting, "powerChordAction") || settingKeyIs(setting, "sideButtonChordAction")) {
         removeEnumRawValue(setting, CrossPointSettings::TOGGLE_HOME_BUTTON_IN_READER);
       }
     }
@@ -1055,7 +1057,7 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
   if (!Frontlight.present() || !gpio.hasTouch()) {
     for (auto& setting : v) {
       if (setting.nameId != StrId::STR_SHORT_PWR_BTN && !settingKeyIs(setting, "longPwrBtn") &&
-          !settingKeyIs(setting, "powerChordAction")) {
+          !settingKeyIs(setting, "powerChordAction") && !settingKeyIs(setting, "sideButtonChordAction")) {
         continue;
       }
       if (!Frontlight.present()) removeEnumRawValue(setting, CrossPointSettings::TOGGLE_FRONTLIGHT);
@@ -1286,7 +1288,6 @@ inline std::vector<SettingInfo> buildControlsPowerSettingsList(const std::vector
   std::vector<SettingInfo> settings;
   settings.reserve(4);
   addSettingByName(settings, allSettings, StrId::STR_SHORT_PWR_BTN);
-  addSettingByName(settings, allSettings, StrId::STR_POWER_BUTTON_CHORD);
   addSettingByKey(settings, allSettings, "longPwrBtn");
   if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::FOOTNOTES ||
       SETTINGS.longPwrBtn == CrossPointSettings::SHORT_PWRBTN::FOOTNOTES ||
@@ -1294,6 +1295,7 @@ inline std::vector<SettingInfo> buildControlsPowerSettingsList(const std::vector
       SETTINGS.longPressBackAction == CrossPointSettings::LONG_PRESS_MENU_ACTION::LONG_MENU_FOOTNOTES) {
     addSettingByName(settings, allSettings, StrId::STR_PWR_BTN_FOOTNOTE_BACK);
   }
+  addSettingByName(settings, allSettings, StrId::STR_POWER_BUTTON_CHORD);
   return settings;
 }
 
@@ -1312,10 +1314,11 @@ inline std::vector<SettingInfo> buildControlsFrontButtonSettingsList(const std::
 
 inline std::vector<SettingInfo> buildControlsSideButtonSettingsList(const std::vector<SettingInfo>& allSettings) {
   std::vector<SettingInfo> settings;
-  settings.reserve(3);
+  settings.reserve(4);
   addSettingByName(settings, allSettings, StrId::STR_SIDE_BTN_LAYOUT);
   addSettingByKey(settings, allSettings, "sideButtonOrientationAware");
   addSettingByKey(settings, allSettings, "sideButtonLongPress");
+  addSettingByName(settings, allSettings, StrId::STR_SIDE_BUTTON_CHORD);
   return settings;
 }
 

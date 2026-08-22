@@ -707,6 +707,14 @@ ButtonShortcutController::ChordAction configuredChordAction() {
   return static_cast<ButtonShortcutController::ChordAction>(rawAction);
 }
 
+ButtonShortcutController::ChordAction configuredSideButtonChordAction() {
+  const auto rawAction = SETTINGS.sideButtonChordAction;
+  if (rawAction >= CrossPointSettings::POWER_CHORD_ACTION_COUNT) {
+    return ButtonShortcutController::ChordAction::Disabled;
+  }
+  return static_cast<ButtonShortcutController::ChordAction>(rawAction);
+}
+
 CrossPointSettings::SHORT_PWRBTN chordPowerAction(const ButtonShortcutController::ChordAction action) {
   using Chord = ButtonShortcutController::ChordAction;
   using Power = CrossPointSettings::SHORT_PWRBTN;
@@ -781,6 +789,8 @@ bool dispatchButtonShortcut(const ButtonShortcutController::Result& result) {
       break;
     case ButtonShortcutController::Event::ConfiguredAction:
       return dispatchShortcutAction(chordPowerAction(result.action));
+    case ButtonShortcutController::Event::TouchscreenEscapeHatch:
+      return activityManager.openReaderSettingsForTouchscreenEscapeHatch();
   }
 
   activityManager.loop();
@@ -1358,11 +1368,20 @@ void setup() {
           allowFastInitialReaderRefresh = true;
         } else {
           renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+          if (shouldClearX4WakeGhosting()) {
+            // The X4's explicit wake refresh has already cleaned the retained
+            // frame, so the reader can use its fast initial cycle as well.
+            allowFastInitialReaderRefresh = true;
+          }
         }
-      } else if (shouldClearX4WakeGhosting()) {
+      } else if (shouldClearX4WakeGhosting() && SETTINGS.fadingFix != 0) {
         LOG_INF("BOOT", "X4 wake: clearing retained sleep image with half refresh");
         renderer.clearScreen();
         renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+        // The explicit HALF refresh above has already established a clean panel
+        // baseline, so the reader's first page can use its fast initial cycle
+        // instead of repeating the cleanup waveform.
+        allowFastInitialReaderRefresh = true;
       }
       break;
     case BootResume::Splash:
@@ -1563,6 +1582,16 @@ void loop() {
       RenderLock lock;
       ScreenshotUtil::takeScreenshot(renderer);
     }
+    return;
+  }
+
+  const bool touchscreenEscapeHatch =
+      gpio.hasTouch() && SETTINGS.disableReaderTouchscreen && activityManager.isReaderActivity();
+  const auto sideButtonShortcutResult = buttonShortcutController.updateUpDown(
+      millis(), gpio.isPressed(HalGPIO::BTN_UP), gpio.isPressed(HalGPIO::BTN_DOWN), configuredSideButtonChordAction(),
+      touchscreenEscapeHatch);
+  if (dispatchButtonShortcut(sideButtonShortcutResult) || sideButtonShortcutResult.consumeInput) {
+    lastActivityTime = millis();
     return;
   }
 
