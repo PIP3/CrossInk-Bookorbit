@@ -32,7 +32,7 @@ class BookOrbitSyncActivity final : public Activity {
   explicit BookOrbitSyncActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& epubPath,
                                  int currentSpineIndex, int currentPage, int totalPagesInSpine,
                                  KOReaderPosition localKoPos, std::string localChapterName,
-                                 std::optional<uint16_t> currentParagraphIndex = std::nullopt)
+                                 std::optional<uint16_t> currentParagraphIndex = std::nullopt, bool networkBoot = false)
       : Activity("BookOrbitSync", renderer, mappedInput),
         epubPath(epubPath),
         currentSpineIndex(currentSpineIndex),
@@ -40,6 +40,7 @@ class BookOrbitSyncActivity final : public Activity {
         totalPagesInSpine(totalPagesInSpine),
         currentParagraphIndex(currentParagraphIndex),
         localChapterName(std::move(localChapterName)),
+        networkBoot(networkBoot),
         remoteProgress{},
         remotePosition{},
         localProgress(std::move(localKoPos)) {}
@@ -74,6 +75,10 @@ class BookOrbitSyncActivity final : public Activity {
   int totalPagesInSpine;
   std::optional<uint16_t> currentParagraphIndex;
 
+  // True when this instance was created by the minimal network-boot resume (see
+  // NetworkBootTarget::BOOKORBIT_SYNC); onEnter() then proceeds instead of restarting.
+  bool networkBoot = false;
+
   State state = WIFI_SELECTION;
   std::string statusMessage;
   std::string documentHash;
@@ -103,6 +108,10 @@ class BookOrbitSyncActivity final : public Activity {
   void markAutoReturn();
   void completeAlreadySynced();
 
+  // The sync's one TLS session, created in performSync() and held through every request
+  // that follows
+  std::unique_ptr<BookOrbitSyncClient::Session> syncSession;
+
   // See KOReaderSyncActivity for why this tracking exists (esp_wifi_stop() during
   // performUpload() makes WiFi.getMode() unreliable for the onExit() decision).
   bool wifiActivated = false;
@@ -113,14 +122,16 @@ class BookOrbitSyncActivity final : public Activity {
   void performUpload();
   void uploadQueuedStats();
 
-  // Highlights are prepared before the TLS session and sent inside it, never both at once:
-  // the resident clipping store is ~20KB, a batch ~6KB, and the client needs 55KB free to
-  // handshake at all. One batch per sync; the watermark makes the rest follow on later syncs.
+  // Highlights are copied out of the clipping store one batch at a time and the store is
+  // unloaded before the request runs: the resident store is ~20KB, a batch ~6KB, and only
+  // the batch may stay resident beside the sync's open TLS session. One batch per sync;
+  // the watermark makes the rest follow on later syncs.
   void prepareAnnotationBatch();
   void uploadAnnotationBatch();
-  // Runs after the session closes and the epub is loaded: writing clippings needs the heap the
-  // handshake was using, and placing an incoming annotation needs the spine to parse its
-  // xpointer against. Acknowledges what landed on its own short connection.
+  // Runs once the epub is loaded: placing an incoming annotation needs the spine to parse its
+  // xpointer against. Loads the clipping store beside the open TLS session -- a failed load on
+  // a tight heap leaves the highlights pending for the next sync -- and acknowledges what
+  // landed on that same session.
   void applyIncomingAnnotations();
   std::vector<BookOrbitIncomingAnnotation> incomingAnnotations;
 
