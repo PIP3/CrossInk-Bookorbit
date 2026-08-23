@@ -195,6 +195,11 @@ void BookOrbitSyncActivity::saveProgressAndReturn(const CrossPointPosition& posi
     LOG_DBG("BookOrbit", "Adjusted remote page count before save: page=%d count=%d -> %d", position.pageNumber,
             position.totalPages, pageCount);
   }
+  // Deliberately NOT persisting position.visibleTextOffset here: the mapper derives it by
+  // streaming raw XHTML, which cannot skip CSS-hidden subtrees the way layout does, so its
+  // offset lives in a different coordinate space than the section cache's page offsets and
+  // repositions late on books with hidden content. The page/percentage mapping is exact to
+  // about one page now that senders report estimated chapter totals.
   if (!EpubReaderUtils::saveProgress(*epub, position.spineIndex, position.pageNumber, pageCount)) {
     {
       RenderLock lock(*this);
