@@ -528,6 +528,10 @@ bool startGlobalBookOrbitSync(const bool networkBootReady = false, const uint32_
   }
 
   CrossPointPosition localPos = {spineIndex, pageNumber, totalPagesInSpine};
+  if (progress.hasVisibleTextOffset) {
+    localPos.visibleTextOffset = progress.visibleTextOffset;
+    localPos.hasVisibleTextOffset = true;
+  }
   std::optional<uint16_t> paragraphIndex;
   if ((payload & BOOKORBIT_SYNC_PAYLOAD_HAS_PARAGRAPH) != 0) {
     paragraphIndex = static_cast<uint16_t>(payload & 0xFFFFu);

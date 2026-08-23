@@ -3879,7 +3879,9 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       }
       if (BOOKORBIT_STORE.hasCredentials()) {
         const int currentPage = section ? section->currentPage : nextPageNumber;
-        const int totalPages = section ? section->pageCount : cachedChapterTotalPageCount;
+        // estimatedTotalPages, never pageCount: with incremental indexing pageCount is only
+        // the built-so-far watermark, and a partial total inflates the uploaded percentage.
+        const int totalPages = section ? section->estimatedTotalPages() : cachedChapterTotalPageCount;
         std::optional<uint16_t> paragraphIndex;
         std::optional<uint16_t> listItemIndex;
         if (section) {
