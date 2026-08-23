@@ -459,14 +459,28 @@ void BookOrbitSyncActivity::performSync() {
     }
   }
 
+  // Percentages from different engines are not comparable: KOReader's model runs up to
+  // half a point ahead of ours on some books, which made a remote position read as
+  // "further" even after reading past it here. Everything that orders the two positions
+  // — the smart decision, the default selection, the percentage the screen shows for
+  // the remote side — therefore uses the remote position mapped into local pages.
+  const float remoteIntra = remotePosition.totalPages > 1 ? static_cast<float>(remotePosition.pageNumber) /
+                                                                static_cast<float>(remotePosition.totalPages - 1)
+                                                          : 0.0f;
+  remoteLocalPercent = epub->calculateProgress(remotePosition.spineIndex, remoteIntra);
+  const int spineDelta = currentSpineIndex - remotePosition.spineIndex;
+  const int pageDelta = (spineDelta == 0) ? (currentPage - remotePosition.pageNumber) : 0;
+  // The xpath mapping is exact to about one page, so within a page the sides agree.
+  const bool samePosition = spineDelta == 0 && std::abs(pageDelta) <= 1;
+  const bool localAhead = spineDelta > 0 || (spineDelta == 0 && pageDelta > 1);
+
   if (smartSyncEnabled()) {
-    static constexpr float SAME_PROGRESS_EPSILON = 0.0005f;  // 0.05 percentage points
     const std::string cachePath = Epub::cachePathForFilePath(epubPath, "/.crosspoint");
     const int64_t lastSync = readLastSyncMarker(cachePath);
-    const float delta = localProgress.percentage - remoteProgress.percentage;
-    LOG_DBG("BookOrbit", "Smart decision: local=%.6f remote=%.6f serverTs=%lld lastSync=%lld", localProgress.percentage,
-            remoteProgress.percentage, (long long)remoteProgress.timestamp, (long long)lastSync);
-    if (std::fabs(delta) <= SAME_PROGRESS_EPSILON) {
+    LOG_DBG("BookOrbit", "Smart decision: local spine=%d page=%d, remote spine=%d page=%d, serverTs=%lld lastSync=%lld",
+            currentSpineIndex, currentPage, remotePosition.spineIndex, remotePosition.pageNumber,
+            (long long)remoteProgress.timestamp, (long long)lastSync);
+    if (samePosition) {
       // Both sides agree; refresh the marker so the next visit still knows
       // whether the server moved in the meantime.
       writeLastSyncMarker(cachePath, remoteProgress.timestamp);
@@ -474,13 +488,13 @@ void BookOrbitSyncActivity::performSync() {
       return;
     }
     if (remoteProgress.timestamp > 0 && lastSync > 0) {
-      // Act only when the progress order and the time order tell the same story
+      // Act only when the position order and the time order tell the same story
       const bool serverMoved = remoteProgress.timestamp > lastSync;
-      if (delta < 0 && serverMoved) {
+      if (!localAhead && serverMoved) {
         saveProgressAndReturn(remotePosition);
         return;
       }
-      if (delta > 0 && !serverMoved) {
+      if (localAhead && !serverMoved) {
         performUpload();
         return;
       }
@@ -493,12 +507,7 @@ void BookOrbitSyncActivity::performSync() {
   {
     RenderLock lock(*this);
     state = SHOWING_RESULT;
-
-    if (localProgress.percentage > remoteProgress.percentage) {
-      selectedOption = 1;  // Upload local progress
-    } else {
-      selectedOption = 0;  // Apply remote progress
-    }
+    selectedOption = localAhead ? 1 : 0;  // 1 = Upload local, 0 = Apply remote
   }
   requestUpdate(true);
 }
@@ -1476,8 +1485,10 @@ void BookOrbitSyncActivity::render(RenderLock&&) {
     snprintf(remoteChapterStr, sizeof(remoteChapterStr), "  %s", remoteChapter.c_str());
     renderer.drawText(UI_10_FONT_ID, screen.x + metrics.contentSidePadding, top + 65, remoteChapterStr);
     char remotePageStr[64];
+    // remoteLocalPercent, not the server's raw percentage: the raw value comes from the
+    // sender's engine and is not comparable with the local line drawn just below.
     snprintf(remotePageStr, sizeof(remotePageStr), tr(STR_PAGE_OVERALL_FORMAT), remotePosition.pageNumber + 1,
-             remoteProgress.percentage * 100);
+             remoteLocalPercent * 100);
     renderer.drawText(UI_10_FONT_ID, screen.x + metrics.contentSidePadding, top + 90, remotePageStr);
 
     if (!remoteProgress.device.empty()) {
