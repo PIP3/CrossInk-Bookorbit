@@ -93,6 +93,9 @@ class BookOrbitSyncActivity final : public Activity {
   bool hasRemoteProgress = false;
   KOReaderProgress remoteProgress;
   CrossPointPosition remotePosition;
+  // The remote position's percentage recomputed in the local model (see performSync):
+  // the sender's raw percentage comes from a different engine and orders wrongly here.
+  float remoteLocalPercent = 0.0f;
 
   // Local progress as KOReader-format wire data (pre-computed before Epub was released)
   KOReaderPosition localProgress;
