@@ -155,9 +155,12 @@ void BaseTheme::drawProgressBar(const GfxRenderer& renderer, Rect rect, const si
     renderer.fillRect(rect.x + 2, rect.y + 2, fillWidth, rect.height - 4);
   }
 
-  // Draw percentage text centered below bar
-  const std::string percentText = std::to_string(percent) + "%";
-  renderer.drawCenteredText(UI_10_FONT_ID, rect.y + rect.height + 15, percentText.c_str());
+  // Draw percentage text centered below bar. snprintf into a stack buffer, not a
+  // std::string: this runs on every progress repaint, including mid-download while
+  // the TLS session needs its own tight heap headroom (see HttpDownloader heap notes).
+  char percentText[8];
+  snprintf(percentText, sizeof(percentText), "%d%%", percent);
+  renderer.drawCenteredText(UI_10_FONT_ID, rect.y + rect.height + 15, percentText);
 }
 
 void BaseTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
