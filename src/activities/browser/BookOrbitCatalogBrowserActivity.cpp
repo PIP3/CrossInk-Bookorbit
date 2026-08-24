@@ -39,6 +39,9 @@ constexpr fui::ActionId ACTION_ROW = 1;
 constexpr size_t BOOKORBIT_DOWNLOAD_BUFFER_SIZE = 2048;
 constexpr char READ_FOLDER_PREFIX[] = "/Read";
 constexpr size_t MAX_LOCAL_ENTRIES = 200;
+constexpr int DOWNLOAD_PROGRESS_STEP_PERCENT = 5;
+constexpr unsigned long DOWNLOAD_PROGRESS_MIN_UPDATE_MS = 1000;
+constexpr unsigned long DOWNLOAD_PROGRESS_MAX_UPDATE_MS = 5000;
 // Marker appended (right-aligned) to catalog rows whose book already exists on the
 // device. U+2022 bullet: guaranteed by the built-in fonts' default glyph intervals.
 constexpr char ON_DEVICE_MARKER[] = "\xE2\x80\xA2";
@@ -463,8 +466,12 @@ void BookOrbitCatalogBrowserActivity::performSearch(const std::string& query) {
 
 void BookOrbitCatalogBrowserActivity::downloadBook(const int64_t bookId, const std::string& title) {
   state = BrowserState::DOWNLOADING;
-  statusMessage = title;
+  // Truncate once, up front: render() used to re-truncate this unchanging title on
+  // every progress repaint, an avoidable heap allocation racing the TLS session's
+  // own tight budget mid-download (see HttpDownloader heap notes).
+  statusMessage = renderer.truncatedText(UI_10_FONT_ID, title.c_str(), renderer.getScreenWidth() - 40);
   downloadProgress = downloadTotal = 0;
+  goHomeAfterCancel = false;
   requestUpdate(true);
 
   BookOrbitBookDetail detail;
@@ -491,6 +498,10 @@ void BookOrbitCatalogBrowserActivity::downloadBook(const int64_t bookId, const s
   auto pollCancel = [this, &cancelRequested] {
     if (cancelRequested) return true;
     mappedInput.update();
+    if (mappedInput.wasHomeGesture()) {
+      goHomeAfterCancel = true;
+      cancelRequested = true;
+    }
     if (mappedInput.isPressed(MappedInputManager::Button::Back) ||
         mappedInput.wasPressed(MappedInputManager::Button::Back) ||
         mappedInput.wasReleased(MappedInputManager::Button::Back)) {
@@ -515,6 +526,10 @@ void BookOrbitCatalogBrowserActivity::downloadBook(const int64_t bookId, const s
 
   constexpr int MAX_DOWNLOAD_ATTEMPTS = 3;
   HttpDownloader::DownloadError result = HttpDownloader::HTTP_ERROR;
+  int lastRenderedPercent = -1;
+  unsigned long lastProgressUpdateMs = 0;
+  unsigned long now = 0;
+  int percent = 0;
   for (int attempt = 0; attempt < MAX_DOWNLOAD_ATTEMPTS; attempt++) {
     // Honor a Back press between attempts too: a failing download otherwise runs
     // all its retries (TLS handshake included) with the cancel request ignored.
@@ -525,10 +540,23 @@ void BookOrbitCatalogBrowserActivity::downloadBook(const int64_t bookId, const s
     downloadOptions.resumePartial = attempt > 0;
     result = BookOrbitCatalogClient::downloadFile(
         epubFile.id, filename,
-        [this](const size_t downloaded, const size_t total) {
+        [this, &lastRenderedPercent, &lastProgressUpdateMs, &percent, &now](const size_t downloaded,
+                                                                            const size_t total) {
           downloadProgress = downloaded;
           downloadTotal = total;
-          requestUpdate(true);
+          percent = total > 0 ? static_cast<int>(static_cast<uint64_t>(downloaded) * 100 / total) : 0;
+          now = millis();
+          // Throttle e-ink refreshes to meaningful progress steps: partial
+          // refreshes still wear the panel, and a raw byte-count callback fires
+          // far more often than the screen needs to redraw.
+          if (percent >= 100 || lastRenderedPercent < 0 ||
+              (percent >= lastRenderedPercent + DOWNLOAD_PROGRESS_STEP_PERCENT &&
+               now > DOWNLOAD_PROGRESS_MIN_UPDATE_MS) ||
+              now - lastProgressUpdateMs > DOWNLOAD_PROGRESS_MAX_UPDATE_MS) {
+            lastRenderedPercent = percent;
+            lastProgressUpdateMs = now;
+            requestUpdate(true);
+          }
         },
         &cancelRequested, downloadOptions);
     if (result == HttpDownloader::OK || result == HttpDownloader::ABORTED) break;
@@ -547,6 +575,10 @@ void BookOrbitCatalogBrowserActivity::downloadBook(const int64_t bookId, const s
     clearBookCache(filename);
   } else if (result == HttpDownloader::ABORTED) {
     LOG_DBG("BookOrbit", "Download cancelled");
+    if (goHomeAfterCancel) {
+      onGoHome();
+      return;
+    }
     mappedInput.suppressNextBackRelease();
   } else {
     LOG_ERR("BookOrbit", "Download failed (err=%d)", static_cast<int>(result));
@@ -927,8 +959,7 @@ void BookOrbitCatalogBrowserActivity::render(RenderLock&&) {
 
   if (state == BrowserState::DOWNLOADING) {
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 40, tr(STR_DOWNLOADING));
-    auto title = renderer.truncatedText(UI_10_FONT_ID, statusMessage.c_str(), pageWidth - 40);
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 10, title.c_str());
+    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 10, statusMessage.c_str());
     if (downloadTotal > 0) {
       GUI.drawProgressBar(renderer, Rect{50, pageHeight / 2 + 20, pageWidth - 100, 20}, downloadProgress,
                           downloadTotal);
