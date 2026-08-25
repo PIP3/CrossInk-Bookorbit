@@ -3878,6 +3878,12 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
         break;
       }
       if (BOOKORBIT_STORE.hasCredentials()) {
+        // Everything below reads `section`, then saveProgress() closes its build file, then it is
+        // released -- while render() on the render task may be doing its own progress save on the
+        // very same Section. Hold the RenderLock for the whole sequence: an unlocked saveProgress()
+        // here raced the render task's, which flushed the build file this task had just closed
+        // (HalFile::flush asserting on a null impl -- a panic mid-sync, seen on an X3).
+        RenderLock lock(*this);
         const int currentPage = section ? section->currentPage : nextPageNumber;
         // estimatedTotalPages, never pageCount: with incremental indexing pageCount is only
         // the built-so-far watermark, and a partial total inflates the uploaded percentage.
@@ -3898,7 +3904,12 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
           localPos.liIndex = *listItemIndex;
           localPos.hasLiIndex = true;
         }
-        KOReaderPosition localKoPos = ProgressMapper::toKOReader(epub, localPos);
+        KOReaderPosition localKoPos;
+        {
+          //  Lend the framebuffer, as the highlight minting does; the sync screen repaints everything anyway.
+          GfxRenderer::FrameBufferLoan loan(renderer);
+          localKoPos = ProgressMapper::toKOReader(epub, localPos);
+        }
         const int tocIdx = epub->getTocIndexForSpineIndex(currentSpineIndex);
         std::string localChapterName = (tocIdx >= 0) ? epub->getTocItem(tocIdx).title : "";
         const std::string savedEpubPath = epub->getPath();
@@ -3915,13 +3926,10 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
         // Release the heavy Section now. Keep Epub alive until onExit(), which still
         // needs it for stats/cache cleanup before the sync activity starts.
         LOG_DBG("BookOrbit", "Releasing section for sync (heap before: %u)", (unsigned)ESP.getFreeHeap());
-        {
-          RenderLock lock(*this);
-          if (section) {
-            nextPageNumber = section->currentPage;
-          }
-          section.reset();
+        if (section) {
+          nextPageNumber = section->currentPage;
         }
+        section.reset();
         LOG_DBG("BookOrbit", "Section released for sync (heap after: %u)", (unsigned)ESP.getFreeHeap());
 
         pauseReadingPaceTimer("sync_progress");
@@ -6486,7 +6494,7 @@ void EpubReaderActivity::backfillBookmarkPositions() {
     if (stamped) continue;
 
     LOG_INF("BOB", "Backfilling a bookmark position in spine %d", currentSpineIndex);
-    recordBookmarkPosition(bookmark);
+    recordBookmarkPosition(bookmark, /*onRenderTask=*/true);
     break;
   }
 }
@@ -6525,10 +6533,33 @@ void EpubReaderActivity::backfillAnnotationPositions() {
 
   LOG_INF("BOA", "Backfilling a highlight position in spine %d (%u pending here)", currentSpineIndex,
           (unsigned)pending);
-  recordAnnotationPosition(target, clipping->paragraphIndex, text);
+  recordAnnotationPosition(target, clipping->paragraphIndex, text, /*onRenderTask=*/true);
 }
 
-void EpubReaderActivity::recordBookmarkPosition(const Bookmark& bookmark) {
+// Resolving a position streams the chapter through miniz and Expat: ~45 KB of workspace
+// (32 KB inflate window, ~11 KB decoder state, parser buffers) that this heap rarely has
+// in one pieceonce a page is up.
+// Lend the framebuffer, as chapter indexing does, so the inflater
+// takes its window from it instead of the heap.
+template <typename Resolve>
+void EpubReaderActivity::mintPositionWithFrameBufferLent(const bool onRenderTask, Resolve&& resolve) {
+  auto run = [&] {
+    {
+      GfxRenderer::FrameBufferLoan loan(renderer);
+      resolve();
+    }
+    restoreCurrentPageBufferAfterSilentIndex();
+  };
+
+  if (onRenderTask) {
+    run();
+  } else {
+    RenderLock lock(*this);
+    run();
+  }
+}
+
+void EpubReaderActivity::recordBookmarkPosition(const Bookmark& bookmark, const bool onRenderTask) {
   if (!BOOKORBIT_STORE.hasCredentials() || !epub || !section) return;
   if (bookmark.timestamp == 0) return;  // no plausible clock yet; the backfill retries later
 
@@ -6542,14 +6573,16 @@ void EpubReaderActivity::recordBookmarkPosition(const Bookmark& bookmark) {
                        ? std::min(section->pageCount - 1,
                                   static_cast<int>(bookmark.progress * static_cast<float>(section->pageCount) + 0.5f))
                        : 0;
-  const auto offset = section->getVisibleTextOffsetForPage(static_cast<uint16_t>(page));
   std::string pos;
-  if (offset) {
-    pos = ChapterXPathResolver::findXPathForVisibleTextOffset(epub, currentSpineIndex, *offset);
-  }
-  if (pos.empty() && bookmark.paragraphIndex != UINT16_MAX) {
-    pos = ChapterXPathResolver::findXPathForParagraph(epub, currentSpineIndex, bookmark.paragraphIndex);
-  }
+  mintPositionWithFrameBufferLent(onRenderTask, [&] {
+    const auto offset = section->getVisibleTextOffsetForPage(static_cast<uint16_t>(page));
+    if (offset) {
+      pos = ChapterXPathResolver::findXPathForVisibleTextOffset(epub, currentSpineIndex, *offset);
+    }
+    if (pos.empty() && bookmark.paragraphIndex != UINT16_MAX) {
+      pos = ChapterXPathResolver::findXPathForParagraph(epub, currentSpineIndex, bookmark.paragraphIndex);
+    }
+  });
   if (pos.empty()) {
     LOG_ERR("BOB", "No position for bookmark in spine %d; it will not sync", currentSpineIndex);
     return;
@@ -6564,7 +6597,7 @@ void EpubReaderActivity::recordBookmarkPosition(const Bookmark& bookmark) {
 }
 
 void EpubReaderActivity::recordAnnotationPosition(const size_t clippingIndex, const uint16_t paragraphIndex,
-                                                  const std::string& highlightText) {
+                                                  const std::string& highlightText, const bool onRenderTask) {
   if (!BOOKORBIT_STORE.hasCredentials()) return;  // nothing will ever sync these
   if (paragraphIndex == UINT16_MAX || !epub) return;
 
@@ -6576,15 +6609,17 @@ void EpubReaderActivity::recordAnnotationPosition(const size_t clippingIndex, co
   // make every highlight reappear as new.
   BookOrbitAnnotationRecord record;
   std::string sourceText;
-  if (!HighlightPositionResolver::findHighlightXPointers(epub, currentSpineIndex, paragraphIndex, highlightText,
-                                                         record.pos0, record.pos1, &sourceText)) {
-    // Falling back to a paragraph-level range, which the server will resolve to nothing and
-    // flag as repaired. Imprecise but visible beats a highlight that never syncs at all.
-    record.pos0 = ChapterXPathResolver::findXPathForParagraph(epub, currentSpineIndex, paragraphIndex);
-    record.pos1 = record.pos0;
-    LOG_ERR("BOA", "No precise position for highlight in spine %d paragraph %u; falling back to the paragraph",
-            currentSpineIndex, paragraphIndex);
-  }
+  mintPositionWithFrameBufferLent(onRenderTask, [&] {
+    if (!HighlightPositionResolver::findHighlightXPointers(epub, currentSpineIndex, paragraphIndex, highlightText,
+                                                           record.pos0, record.pos1, &sourceText)) {
+      // Falling back to a paragraph-level range, which the server will resolve to nothing and
+      // flag as repaired. Imprecise but visible beats a highlight that never syncs at all.
+      record.pos0 = ChapterXPathResolver::findXPathForParagraph(epub, currentSpineIndex, paragraphIndex);
+      record.pos1 = record.pos0;
+      LOG_ERR("BOA", "No precise position for highlight in spine %d paragraph %u; falling back to the paragraph",
+              currentSpineIndex, paragraphIndex);
+    }
+  });
   if (record.pos0.empty()) {
     LOG_ERR("BOA", "No xpointer for highlight in spine %d paragraph %u; it will not sync", currentSpineIndex,
             paragraphIndex);
