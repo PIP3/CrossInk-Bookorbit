@@ -1954,6 +1954,39 @@ void HomeActivity::loop() {
       return;
     }
 
+    // Lyra and Lyra Extended show seven menu rows per page and turn pages by moving the
+    // selection past the last row -- a button motion. On touch boards a vertical swipe that
+    // starts in the menu turns the page instead, so the entries beyond the first page
+    // (Settings, last of nine) stay within reach. The swipe is clamped, not wrapped: reaching
+    // the end of a list should feel like the end, not a jump back to the top.
+    const auto uiTheme = static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme);
+    const bool pagedLyraMenu =
+        uiTheme == CrossPointSettings::UI_THEME::LYRA || uiTheme == CrossPointSettings::UI_THEME::LYRA_3_COVERS;
+    if (pagedLyraMenu && mappedInput.hasTouch()) {
+      MappedInputManager::SwipeDir swipe = MappedInputManager::SwipeDir::None;
+      int startX = 0;
+      int startY = 0;
+      int endX = 0;
+      int endY = 0;
+      const int menuTop = metrics.homeTopPadding + metrics.homeCoverTileHeight + metrics.homeMenuTopOffset;
+      if (mappedInput.wasSwipeWithPoints(swipe, startX, startY, endX, endY) && startY >= menuTop &&
+          (swipe == MappedInputManager::SwipeDir::Up || swipe == MappedInputManager::SwipeDir::Down)) {
+        const int itemCount = static_cast<int>(menuItems.size());
+        if (itemCount > LyraTheme::kMenuPageItems) {
+          const int menuOffset = getHomeMenuSelectionOffset(recentBooks);
+          const int page = std::max(0, selectorIndex - menuOffset) / LyraTheme::kMenuPageItems;
+          const int lastPage = (itemCount - 1) / LyraTheme::kMenuPageItems;
+          const int nextPage =
+              swipe == MappedInputManager::SwipeDir::Up ? std::min(page + 1, lastPage) : std::max(page - 1, 0);
+          if (nextPage != page) {
+            selectorIndex = menuOffset + nextPage * LyraTheme::kMenuPageItems;
+            requestUpdate();
+          }
+        }
+        return;
+      }
+    }
+
     const int menuCount = getMenuItemCount();
     buttonNavigator.onNext([this, menuCount] {
       selectorIndex = ButtonNavigator::nextIndex(selectorIndex, menuCount);
