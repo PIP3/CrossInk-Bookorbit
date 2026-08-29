@@ -301,6 +301,10 @@ bool BookOrbitCatalogClient::fetchBooks(const BookOrbitBookQuery& query, const i
   filter["items"][0]["id"] = true;
   filter["items"][0]["title"] = true;
   filter["items"][0]["authors"] = true;
+  // Include devicePath if device path feature is enabled
+  if (BOOKORBIT_STORE.isUseDevicePathEnabled()) {
+    filter["items"][0]["files"][0]["devicePath"] = true;
+  }
   JsonDocument doc;
   if (!fetchJson(url, filter, doc)) return false;
 
@@ -316,6 +320,13 @@ bool BookOrbitCatalogClient::fetchBooks(const BookOrbitBookQuery& query, const i
     JsonArrayConst authors = item["authors"].as<JsonArrayConst>();
     if (!authors.isNull() && authors.size() > 0) {
       book.author = std::string(authors[0].as<const char*>() ? authors[0].as<const char*>() : "");
+    }
+    // Extract devicePath if available
+    if (BOOKORBIT_STORE.isUseDevicePathEnabled() && !item["files"].isNull()) {
+      JsonArrayConst files = item["files"].as<JsonArrayConst>();
+      if (!files.isNull() && files.size() > 0) {
+        book.devicePath = std::string(files[0]["devicePath"] | "");
+      }
     }
     outPage.books.push_back(std::move(book));
   }

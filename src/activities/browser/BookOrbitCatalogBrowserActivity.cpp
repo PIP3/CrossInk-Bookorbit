@@ -70,7 +70,33 @@ bool bookOnDevice(const std::string& title, const std::string& author) {
   const std::string filename = catalogBookFilename(title, author);
   if (Storage.exists(filename.c_str())) return true;
   const std::string readPath = std::string(READ_FOLDER_PREFIX) + filename;
-  return Storage.exists(readPath.c_str());
+  if (Storage.exists(readPath.c_str())) return true;
+
+  return false;
+}
+
+// Overload that accepts BookOrbitCatalogBook to check device path when available
+bool bookOnDevice(const BookOrbitCatalogBook& book) {
+  // First check traditional locations using title and author
+  if (bookOnDevice(book.title, book.author)) {
+    return true;
+  }
+  
+  // If device path feature is enabled and devicePath is available, check for files using devicePath
+  if (BOOKORBIT_STORE.isUseDevicePathEnabled() && !book.devicePath.empty()) {
+    // Check if the file exists at the device path
+    std::string fullPath = "/" + book.devicePath;
+    if (Storage.exists(fullPath.c_str())) {
+      return true;
+    }
+    // Also check in /Read folder
+    std::string readPath = std::string(READ_FOLDER_PREFIX) + "/" + book.devicePath;
+    if (Storage.exists(readPath.c_str())) {
+      return true;
+    }
+  }
+  
+  return false;
 }
 
 bool hasEpubFile(const BookOrbitBookDetail& detail, BookOrbitCatalogFile& outFile) {
@@ -387,7 +413,7 @@ bool BookOrbitCatalogBrowserActivity::loadBooks(const BookOrbitBookQuery& query,
     entry.title = book.title;
     entry.subtitle = book.author;
     entry.bookId = book.id;
-    entry.onDevice = bookOnDevice(book.title, book.author);
+    entry.onDevice = bookOnDevice(book);
     entries.push_back(std::move(entry));
   }
   if (!append) {

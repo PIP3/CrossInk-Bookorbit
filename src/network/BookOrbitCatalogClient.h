@@ -29,6 +29,7 @@ struct BookOrbitCatalogBook {
   int64_t id = 0;
   std::string title;
   std::string author;  // first author only, for compact list display
+  std::string devicePath;  // Server-provided path for device path feature
 };
 
 /** One entry in a drill-down facet listing (an author or a series). */
