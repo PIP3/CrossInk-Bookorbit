@@ -11,6 +11,7 @@
 #include <cstdio>
 
 #include "BookOrbitCredentialStore.h"
+#include "util/FileLogger.h"
 
 bool BookOrbitCatalogClient::lastFetchBadResponse = false;
 
@@ -58,18 +59,22 @@ bool ensureParentDirectoriesExist(const std::string& filePath) {
   std::replace(parentPath.begin(), parentPath.end(), '\\', '/');
   
   LOG_DBG("BOC", "Ensuring parent directory exists: %s", parentPath.c_str());
+  FileLogger::logf("BOC", "Ensuring parent directory exists: %s", parentPath.c_str());
   
   // Try to create the full parent path at once
   if (!Storage.exists(parentPath.c_str())) {
     LOG_DBG("BOC", "Parent directory does not exist, creating: %s", parentPath.c_str());
+    FileLogger::logf("BOC", "Parent directory does not exist, creating: %s", parentPath.c_str());
     
     // First try with recursive flag
     if (Storage.mkdir(parentPath.c_str(), true)) {
       LOG_DBG("BOC", "Successfully created parent directory (recursive): %s", parentPath.c_str());
+      FileLogger::logf("BOC", "Successfully created parent directory (recursive): %s", parentPath.c_str());
       return true;
     }
     
     LOG_ERR("BOC", "Recursive mkdir failed, trying manual creation for: %s", parentPath.c_str());
+    FileLogger::logf("BOC", "Recursive mkdir failed, trying manual creation for: %s", parentPath.c_str());
     
     // If recursive mkdir failed, try creating directories one by one
     std::string currentPath;
@@ -423,9 +428,9 @@ bool BookOrbitCatalogClient::fetchBookDetail(const int64_t bookId, BookOrbitBook
 }
 
 HttpDownloader::DownloadError BookOrbitCatalogClient::downloadFile(const int64_t fileId, const std::string& destPath,
-                                                                    HttpDownloader::ProgressCallback progress,
-                                                                    bool* cancelFlag,
-                                                                    HttpDownloader::DownloadOptions options) {
+                                                                     HttpDownloader::ProgressCallback progress,
+                                                                     bool* cancelFlag,
+                                                                     HttpDownloader::DownloadOptions options) {
   if (!BOOKORBIT_STORE.hasCredentials()) return HttpDownloader::HTTP_ERROR;
 
   const std::string url =
@@ -434,7 +439,17 @@ HttpDownloader::DownloadError BookOrbitCatalogClient::downloadFile(const int64_t
   // Same transport and trust as the JSON endpoints: this request carries the same
   // credentials, and mbedTLS cannot complete the handshake on this hardware.
   options.transport = HttpDownloader::Transport::WOLFSSL;
-  return HttpDownloader::downloadToFile(url, destPath, std::move(progress), cancelFlag, "", "", std::move(options));
+  
+  FileLogger::logf("BOC", "downloadFile: fileId=%lld, destPath=%s", static_cast<long long>(fileId), destPath.c_str());
+  
+  HttpDownloader::DownloadError result = HttpDownloader::downloadToFile(url, destPath, std::move(progress), cancelFlag, "", "", std::move(options));
+  
+  if (result != HttpDownloader::OK) {
+    FileLogger::logf("BOC", "downloadFile FAILED: fileId=%lld, error=%d, http=%d", 
+                    static_cast<long long>(fileId), static_cast<int>(result), HttpDownloader::lastHttpStatus);
+  }
+  
+  return result;
 }
 
 HttpDownloader::DownloadError BookOrbitCatalogClient::downloadFileWithDetail(
@@ -448,6 +463,7 @@ HttpDownloader::DownloadError BookOrbitCatalogClient::downloadFileWithDetail(
   if (BOOKORBIT_STORE.isUseDevicePathEnabled()) {
     std::string devicePath = getDevicePathForFile(detail, fileId);
     LOG_DBG("BOC", "Device path for file %lld: '%s'", static_cast<long long>(fileId), devicePath.c_str());
+    FileLogger::logf("BOC", "Device path for file %lld: '%s'", static_cast<long long>(fileId), devicePath.c_str());
     if (!devicePath.empty()) {
       // Combine base path with devicePath
       // Normalize devicePath to remove leading slashes for consistent joining
@@ -486,12 +502,17 @@ HttpDownloader::DownloadError BookOrbitCatalogClient::downloadFileWithDetail(
   options.transport = HttpDownloader::Transport::WOLFSSL;
   
   LOG_DBG("BOC", "Downloading file %lld to: %s", static_cast<long long>(fileId), finalDestPath.c_str());
+  FileLogger::logf("BOC", "Downloading file %lld to: %s", static_cast<long long>(fileId), finalDestPath.c_str());
   
   HttpDownloader::DownloadError result = HttpDownloader::downloadToFile(url, finalDestPath, std::move(progress), cancelFlag, "", "", std::move(options));
   
   if (result != HttpDownloader::OK) {
     LOG_ERR("BOC", "Download failed for file %lld to %s (error: %d, http: %d)", 
             static_cast<long long>(fileId), finalDestPath.c_str(), static_cast<int>(result), HttpDownloader::lastHttpStatus);
+    FileLogger::logf("BOC", "Download FAILED for file %lld to %s (error: %d, http: %d)", 
+                    static_cast<long long>(fileId), finalDestPath.c_str(), static_cast<int>(result), HttpDownloader::lastHttpStatus);
+  } else {
+    FileLogger::logf("BOC", "Download SUCCESS for file %lld to %s", static_cast<long long>(fileId), finalDestPath.c_str());
   }
   
   return result;
