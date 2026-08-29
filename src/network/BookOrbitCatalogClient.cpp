@@ -57,45 +57,67 @@ bool ensureParentDirectoriesExist(const std::string& filePath) {
   // Normalize path separators to forward slash
   std::replace(parentPath.begin(), parentPath.end(), '\\', '/');
   
-  // Ensure we're working with absolute paths
-  bool isAbsolute = !parentPath.empty() && parentPath[0] == '/';
+  LOG_DBG("BOC", "Ensuring parent directory exists: %s", parentPath.c_str());
   
-  // Create directories recursively
-  size_t start = isAbsolute ? 1 : 0;  // Skip leading '/' for absolute paths
-  size_t end = parentPath.find('/', start);
-  
-  while (end != std::string::npos) {
-    std::string dir = parentPath.substr(0, end);
-    if (!dir.empty()) {
-      if (!Storage.exists(dir.c_str())) {
-        if (!Storage.mkdir(dir.c_str())) {
-          LOG_ERR("BOC", "Failed to create directory: %s", dir.c_str());
-          return false;
+  // Try to create the full parent path at once
+  if (!Storage.exists(parentPath.c_str())) {
+    LOG_DBG("BOC", "Parent directory does not exist, creating: %s", parentPath.c_str());
+    
+    // First try with recursive flag
+    if (Storage.mkdir(parentPath.c_str(), true)) {
+      LOG_DBG("BOC", "Successfully created parent directory (recursive): %s", parentPath.c_str());
+      return true;
+    }
+    
+    LOG_ERR("BOC", "Recursive mkdir failed, trying manual creation for: %s", parentPath.c_str());
+    
+    // If recursive mkdir failed, try creating directories one by one
+    std::string currentPath;
+    size_t start = (parentPath[0] == '/') ? 1 : 0;
+    size_t end = parentPath.find('/', start);
+    
+    while (end != std::string::npos) {
+      std::string dirPart = parentPath.substr(start, end - start);
+      if (!dirPart.empty()) {
+        if (currentPath.empty()) {
+          currentPath = "/" + dirPart;
+        } else {
+          currentPath += "/" + dirPart;
+        }
+        if (!Storage.exists(currentPath.c_str())) {
+          LOG_DBG("BOC", "Creating directory: %s", currentPath.c_str());
+          if (!Storage.mkdir(currentPath.c_str())) {
+            LOG_ERR("BOC", "Failed to create directory: %s", currentPath.c_str());
+            return false;
+          }
+        }
+      }
+      start = end + 1;
+      end = parentPath.find('/', start);
+    }
+    
+    // Create the final directory
+    if (start < parentPath.length()) {
+      std::string dirPart = parentPath.substr(start);
+      if (!dirPart.empty()) {
+        if (currentPath.empty()) {
+          currentPath = "/" + dirPart;
+        } else {
+          currentPath += "/" + dirPart;
+        }
+        if (!Storage.exists(currentPath.c_str())) {
+          LOG_DBG("BOC", "Creating final directory: %s", currentPath.c_str());
+          if (!Storage.mkdir(currentPath.c_str())) {
+            LOG_ERR("BOC", "Failed to create final directory: %s", currentPath.c_str());
+            return false;
+          }
         }
       }
     }
-    start = end + 1;
-    end = parentPath.find('/', start);
-  }
-  
-  // Create the final parent directory
-  if (start < parentPath.length()) {
-    std::string finalDir = parentPath.substr(0, start);
-    if (!finalDir.empty() && !Storage.exists(finalDir.c_str())) {
-      if (!Storage.mkdir(finalDir.c_str())) {
-        LOG_ERR("BOC", "Failed to create directory: %s", finalDir.c_str());
-        return false;
-      }
-    }
-  } else if (isAbsolute && start == parentPath.length() && parentPath.length() > 1) {
-    // Handle case where parentPath ends with '/' and we need to create the last directory
-    std::string finalDir = parentPath;
-    if (!finalDir.empty() && !Storage.exists(finalDir.c_str())) {
-      if (!Storage.mkdir(finalDir.c_str())) {
-        LOG_ERR("BOC", "Failed to create directory: %s", finalDir.c_str());
-        return false;
-      }
-    }
+    
+    LOG_DBG("BOC", "Successfully created parent directory (manual): %s", parentPath.c_str());
+  } else {
+    LOG_DBG("BOC", "Parent directory already exists: %s", parentPath.c_str());
   }
   
   return true;
@@ -407,24 +429,35 @@ HttpDownloader::DownloadError BookOrbitCatalogClient::downloadFileWithDetail(
   // Use server-provided devicePath if enabled and available
   if (BOOKORBIT_STORE.isUseDevicePathEnabled()) {
     std::string devicePath = getDevicePathForFile(detail, fileId);
+    LOG_DBG("BOC", "Device path for file %lld: '%s'", static_cast<long long>(fileId), devicePath.c_str());
     if (!devicePath.empty()) {
       // Combine base path with devicePath
+      // Normalize devicePath to remove leading slashes for consistent joining
+      std::string normalizedDevicePath = devicePath;
+      while (!normalizedDevicePath.empty() && normalizedDevicePath[0] == '/') {
+        normalizedDevicePath = normalizedDevicePath.substr(1);
+      }
+      
       if (!baseDestPath.empty()) {
         // Ensure there's exactly one separator between base and devicePath
         if (baseDestPath.back() == '/') {
-          finalDestPath = baseDestPath + devicePath;
+          finalDestPath = baseDestPath + normalizedDevicePath;
         } else {
-          finalDestPath = baseDestPath + "/" + devicePath;
+          finalDestPath = baseDestPath + "/" + normalizedDevicePath;
         }
       } else {
-        finalDestPath = devicePath;
+        // If no base path, ensure path starts with /
+        finalDestPath = "/" + normalizedDevicePath;
       }
+
+      LOG_DBG("BOC", "Device path download: finalDestPath=%s", finalDestPath.c_str());
 
       // Ensure parent directories exist
       if (!ensureParentDirectoriesExist(finalDestPath)) {
         LOG_ERR("BOC", "Failed to create parent directories for: %s", finalDestPath.c_str());
         // Fall back to base path without devicePath
         finalDestPath = baseDestPath;
+        LOG_ERR("BOC", "Falling back to base path: %s", finalDestPath.c_str());
       }
     }
   }
@@ -433,5 +466,15 @@ HttpDownloader::DownloadError BookOrbitCatalogClient::downloadFileWithDetail(
       BOOKORBIT_STORE.getBaseUrl() + "/plugin/catalog/files/" + std::to_string(fileId) + "/download";
   options.extraHeaders = authHeaders();
   options.transport = HttpDownloader::Transport::WOLFSSL;
-  return HttpDownloader::downloadToFile(url, finalDestPath, std::move(progress), cancelFlag, "", "", std::move(options));
+  
+  LOG_DBG("BOC", "Downloading file %lld to: %s", static_cast<long long>(fileId), finalDestPath.c_str());
+  
+  HttpDownloader::DownloadError result = HttpDownloader::downloadToFile(url, finalDestPath, std::move(progress), cancelFlag, "", "", std::move(options));
+  
+  if (result != HttpDownloader::OK) {
+    LOG_ERR("BOC", "Download failed for file %lld to %s (error: %d, http: %d)", 
+            static_cast<long long>(fileId), finalDestPath.c_str(), static_cast<int>(result), HttpDownloader::lastHttpStatus);
+  }
+  
+  return result;
 }
