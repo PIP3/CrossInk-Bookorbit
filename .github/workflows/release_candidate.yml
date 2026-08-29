@@ -16,10 +16,10 @@ jobs:
         include:
           - environment: default
             firmware: firmware-x3-x4
-          - environment: sticky
-            firmware: firmware-sticky
-          - environment: x4-pro
-            firmware: firmware-x4-pro
+#          - environment: sticky
+#            firmware: firmware-sticky
+#          - environment: x4-pro
+#            firmware: firmware-x4-pro
     env:
       RC_BRANCH: ${{ github.ref_name }}
       RC_HASH: ${{ github.sha }}
