@@ -1,7 +1,6 @@
 #include "FileLogger.h"
 
 #include <HalClock.h>
-#include <Logging.h>
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>

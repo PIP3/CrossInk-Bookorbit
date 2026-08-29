@@ -787,8 +787,8 @@ inline const std::vector<SettingInfo>& getBaseSettingsList() {
                             "moveFinishedToReadFolder", StrId::STR_CAT_SYSTEM));
     add(SettingInfo::Toggle(StrId::STR_AUTO_BACKUP_STATS, &CrossPointSettings::autoBackupStats, "autoBackupStats",
                             StrId::STR_CAT_SYSTEM));
-    add(SettingInfo::Toggle(StrId::STR_ENABLE_FILE_LOGGING, &CrossPointSettings::enableFileLogging, "enableFileLogging",
-                            StrId::STR_CAT_SYSTEM));
+    add(SettingInfo::Toggle(StrId::STR_ENABLE_FILE_LOGGING, &CrossPointSettings::enableFileLogging,
+                            "enableFileLogging", StrId::STR_CAT_SYSTEM));
     // Persisted and available to the web settings API, but category-less because
     // the on-device editor lives under System > OPDS Servers.
     add(SettingInfo::String(StrId::STR_OPDS_DOWNLOAD_FOLDER, SETTINGS.opdsDownloadFolder,
@@ -800,8 +800,6 @@ inline const std::vector<SettingInfo>& getBaseSettingsList() {
                            {CrossPointSettings::MIN_READING_IDLE_TIME_THRESHOLD_UNITS,
                             CrossPointSettings::MAX_READING_IDLE_TIME_THRESHOLD_UNITS, 1},
                            "readingIdleTimeThresholdUnits", StrId::STR_CAT_SYSTEM));
-    add(SettingInfo::Toggle(StrId::STR_ENABLE_FILE_LOGGING, &CrossPointSettings::enableFileLogging,
-                           "enableFileLogging", StrId::STR_CAT_SYSTEM));
 #ifdef CROSSINK_ENABLE_READING_STATS_TOGGLE
     add(SettingInfo::Toggle(StrId::STR_TRACK_READING_STATS, &CrossPointSettings::trackReadingStats, "trackReadingStats",
                             StrId::STR_CAT_SYSTEM));
