@@ -1114,6 +1114,104 @@ void setupDisplayAndFonts(const bool seamless, const bool loadReaderResources, c
   }
 }
 
+// Logging to file implementation
+namespace {
+constexpr const char* LOG_FILE_PATH = "/.crosspoint/logs.txt";
+constexpr size_t MAX_LOG_SIZE = 1024 * 1024; // 1MB max log size
+FsFile logFile;
+
+void rotateLogsIfNeeded() {
+  if (Storage.exists(LOG_FILE_PATH)) {
+    FsFile file;
+    if (Storage.openFileForRead("LOG", LOG_FILE_PATH, file)) {
+      if (file.fileSize() > MAX_LOG_SIZE) {
+        file.close();
+        // Rename current log file
+        Storage.rename(LOG_FILE_PATH, "/.crosspoint/logs_old.txt");
+        // Remove old log file if it exists
+        Storage.remove("/.crosspoint/logs_old.txt");
+      }
+      file.close();
+    }
+  }
+}
+
+void logToFileSink(LogLevel level, const char* tag, const char* message) {
+  if (!logFile) {
+    // Try to open the log file in append mode
+    if (!Storage.openFileForWrite("LOG", LOG_FILE_PATH, logFile, O_WRONLY | O_CREAT | O_APPEND)) {
+      return; // Silently fail if logging isn't critical
+    }
+  }
+
+  if (logFile) {
+    // Format: [YYYY-MM-DD HH:MM:SS] [LEVEL] TAG: message
+    const char* levelStr = (level == LOG_ERR) ? "ERR" : (level == LOG_INF) ? "INF" : "DBG";
+    
+    // Get timestamp if available
+    char timestamp[20] = "";
+    uint8_t utcHour = 0, utcMinute = 0, utcSecond = 0;
+    uint16_t utcYear = 0;
+    uint8_t utcMonth = 0, utcDay = 0;
+    if (halClock.getDateTime(utcYear, utcMonth, utcDay, utcHour, utcMinute, utcSecond)) {
+      snprintf(timestamp, sizeof(timestamp), "%04u-%02u-%02u %02u:%02u:%02u", 
+               utcYear, utcMonth, utcDay, utcHour, utcMinute, utcSecond);
+    }
+    
+    char buffer[256];
+    if (timestamp[0] != '\0') {
+      snprintf(buffer, sizeof(buffer), "[%s] [%s] %s: %s\n", timestamp, levelStr, tag, message);
+    } else {
+      snprintf(buffer, sizeof(buffer), "[%s] %s: %s\n", levelStr, tag, message);
+    }
+    
+    size_t len = strlen(buffer);
+    if (logFile.write(reinterpret_cast<const uint8_t*>(buffer), len) != len) {
+      // Write failed, close the file to avoid corruption
+      logFile.close();
+      logFile = FsFile();
+    }
+    
+    // Flush periodically to avoid data loss
+    static size_t writeCount = 0;
+    if (++writeCount >= 10) {
+      logFile.flush();
+      writeCount = 0;
+    }
+  }
+}
+
+void closeLogFile() {
+  if (logFile) {
+    logFile.flush();
+    logFile.close();
+    logFile = FsFile();
+  }
+}
+} // namespace
+
+void setupFileLogging() {
+  // Only enable file logging if the setting is enabled
+  if (!SETTINGS.enableFileLogging) {
+    return;
+  }
+  
+  // Create the .crosspoint directory if it doesn't exist
+  if (!Storage.exists("/.crosspoint")) {
+    Storage.mkdir("/.crosspoint");
+  }
+  
+  // Rotate logs if needed
+  rotateLogsIfNeeded();
+  
+  // Register the file sink for all log levels
+  Logging::addSink(LOG_ERR, logToFileSink);
+  Logging::addSink(LOG_INF, logToFileSink);
+  Logging::addSink(LOG_DBG, logToFileSink);
+  
+  LOG_INF("LOG", "File logging initialized, writing to %s", LOG_FILE_PATH);
+}
+
 void setup() {
 #ifdef SIMULATOR
   SimulatorLifecycle::restoreSilentRebootToken(silentRebootMagic, silentRebootTarget, silentRebootPayload);
@@ -1260,6 +1358,9 @@ void setup() {
   HalSystem::checkPanic();
 
   SETTINGS.loadFromFile();
+  
+  // Initialize logging to file (after settings are loaded)
+  setupFileLogging();
   Storage.installDateTimeCallback(&SETTINGS.clockUtcOffsetQ);
   // Restore an approximate wall clock on cold boot (RTC-less devices) and track the
   // power era used to correct queued reading-stats timestamps at sync time.
@@ -1779,5 +1880,12 @@ void loop() {
       // Short delay to prevent tight loop while still being responsive
       delay(10);
     }
+  }
+  
+  // Periodically flush logs to ensure they're written to the file
+  static unsigned long lastLogFlush = 0;
+  if (millis() - lastLogFlush > 60000) { // Flush every 60 seconds
+    closeLogFile();
+    lastLogFlush = millis();
   }
 }
