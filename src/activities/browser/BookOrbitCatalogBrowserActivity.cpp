@@ -57,6 +57,10 @@ constexpr unsigned long DOWNLOAD_PROGRESS_MAX_UPDATE_MS = 5000;
 // device. U+2022 bullet: guaranteed by the built-in fonts' default glyph intervals.
 constexpr char ON_DEVICE_MARKER[] = "\xE2\x80\xA2";
 
+// Cache for book ID to device path mapping
+std::map<int64_t, std::string> bookIdToDevicePathCache;
+constexpr size_t MAX_DEVICE_PATH_CACHE_SIZE = 50; // Limit cache to 50 entries
+
 // The SD filename a catalog book downloads to; must stay in sync with downloadBook().
 std::string catalogBookFilename(const std::string& title, const std::string& author) {
   const std::string suffix = author.empty() ? "" : (" - " + author);
@@ -79,20 +83,64 @@ bool bookOnDevice(const std::string& title, const std::string& author) {
 bool bookOnDevice(const BookOrbitCatalogBook& book) {
   // First check traditional locations using title and author
   if (bookOnDevice(book.title, book.author)) {
+    LOG_DBG("BOC", "Book '%s' found at traditional location", book.title.c_str());
     return true;
   }
   
-  // If device path feature is enabled and devicePath is available, check for files using devicePath
-  if (BOOKORBIT_STORE.isUseDevicePathEnabled() && !book.devicePath.empty()) {
-    // Check if the file exists at the device path
-    std::string fullPath = "/" + book.devicePath;
-    if (Storage.exists(fullPath.c_str())) {
-      return true;
+  // If device path feature is enabled, check for files using devicePath
+  if (BOOKORBIT_STORE.isUseDevicePathEnabled()) {
+    std::string devicePath;
+    
+    // Try to get devicePath from the book object first
+    if (!book.devicePath.empty()) {
+      devicePath = book.devicePath;
+      LOG_DBG("BOC", "Book '%s' has devicePath from list: %s", book.title.c_str(), devicePath.c_str());
+    } else {
+      // If not available, try to get it from the cache
+      auto it = bookIdToDevicePathCache.find(book.id);
+      if (it != bookIdToDevicePathCache.end()) {
+        devicePath = it->second;
+        LOG_DBG("BOC", "Book '%s' found devicePath in cache: %s", book.title.c_str(), devicePath.c_str());
+      } else {
+        // Fetch the book detail to get the devicePath
+        LOG_DBG("BOC", "Fetching book detail for '%s' to get devicePath", book.title.c_str());
+        BookOrbitBookDetail detail;
+        if (BookOrbitCatalogClient::fetchBookDetail(book.id, detail)) {
+          for (const auto& file : detail.files) {
+            if (file.format == "epub" && !file.devicePath.empty()) {
+              devicePath = file.devicePath;
+              // Cache it for future use
+              bookIdToDevicePathCache[book.id] = devicePath;
+              LOG_DBG("BOC", "Fetched devicePath for '%s': %s", book.title.c_str(), devicePath.c_str());
+              // Limit cache size
+              if (bookIdToDevicePathCache.size() > MAX_DEVICE_PATH_CACHE_SIZE) {
+                // Remove the oldest entry (first element in the map)
+                bookIdToDevicePathCache.erase(bookIdToDevicePathCache.begin());
+              }
+              break;
+            }
+          }
+        }
+      }
     }
-    // Also check in /Read folder
-    std::string readPath = std::string(READ_FOLDER_PREFIX) + "/" + book.devicePath;
-    if (Storage.exists(readPath.c_str())) {
-      return true;
+    
+    if (!devicePath.empty()) {
+      LOG_DBG("BOC", "Checking device path for book '%s': %s", book.title.c_str(), devicePath.c_str());
+      // Check if the file exists at the device path
+      std::string fullPath = "/" + devicePath;
+      if (Storage.exists(fullPath.c_str())) {
+        LOG_DBG("BOC", "Book '%s' found at device path: %s", book.title.c_str(), fullPath.c_str());
+        return true;
+      }
+      // Also check in /Read folder
+      std::string readPath = std::string(READ_FOLDER_PREFIX) + "/" + devicePath;
+      if (Storage.exists(readPath.c_str())) {
+        LOG_DBG("BOC", "Book '%s' found at device path in Read folder: %s", book.title.c_str(), readPath.c_str());
+        return true;
+      }
+      LOG_DBG("BOC", "Book '%s' not found at device path: %s", book.title.c_str(), fullPath.c_str());
+    } else {
+      LOG_DBG("BOC", "Book '%s' has no devicePath available", book.title.c_str());
     }
   }
   
@@ -403,6 +451,8 @@ bool BookOrbitCatalogBrowserActivity::loadBooks(const BookOrbitBookQuery& query,
 
   if (!append) {
     entries.clear();
+    // Clear the device path cache when loading a new book list
+    bookIdToDevicePathCache.clear();
   }
   // Server order carries the listing's meaning -- recency for "Continue reading"
   // and "Recently added", series order for series -- and appending pages keeps

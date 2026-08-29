@@ -322,10 +322,17 @@ bool BookOrbitCatalogClient::fetchBooks(const BookOrbitBookQuery& query, const i
       book.author = std::string(authors[0].as<const char*>() ? authors[0].as<const char*>() : "");
     }
     // Extract devicePath if available
-    if (BOOKORBIT_STORE.isUseDevicePathEnabled() && !item["files"].isNull()) {
-      JsonArrayConst files = item["files"].as<JsonArrayConst>();
-      if (!files.isNull() && files.size() > 0) {
-        book.devicePath = std::string(files[0]["devicePath"] | "");
+    if (BOOKORBIT_STORE.isUseDevicePathEnabled()) {
+      if (!item["files"].isNull()) {
+        JsonArrayConst files = item["files"].as<JsonArrayConst>();
+        if (!files.isNull() && files.size() > 0) {
+          book.devicePath = std::string(files[0]["devicePath"] | "");
+          LOG_DBG("BOC", "Book %lld has devicePath: %s", static_cast<long long>(book.id), book.devicePath.c_str());
+        } else {
+          LOG_DBG("BOC", "Book %lld has no files array or it's empty", static_cast<long long>(book.id));
+        }
+      } else {
+        LOG_DBG("BOC", "Book %lld has no files field in list response", static_cast<long long>(book.id));
       }
     }
     outPage.books.push_back(std::move(book));
