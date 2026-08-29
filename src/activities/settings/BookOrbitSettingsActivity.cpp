@@ -22,10 +22,10 @@
 namespace fui = freeink::ui;
 
 namespace {
-constexpr int MENU_ITEMS = 6;
-const StrId menuNames[MENU_ITEMS] = {
-    StrId::STR_USERNAME,     StrId::STR_PASSWORD,          StrId::STR_BOOKORBIT_SERVER_URL,
-    StrId::STR_AUTHENTICATE, StrId::STR_BOOKORBIT_CATALOG, StrId::STR_SYNC_BEHAVIOR};
+constexpr int MENU_ITEMS = 7;
+const StrId menuNames[MENU_ITEMS] = {StrId::STR_USERNAME, StrId::STR_PASSWORD, StrId::STR_BOOKORBIT_SERVER_URL,
+                                     StrId::STR_AUTHENTICATE, StrId::STR_BOOKORBIT_CATALOG,
+                                     StrId::STR_USE_DEVICE_PATH, StrId::STR_DEVICE_ID};
 constexpr fui::ActionId ACTION_ROW = 1;
 }  // namespace
 
@@ -152,12 +152,23 @@ void BookOrbitSettingsActivity::handleSelection() {
     }
     activityManager.goToBookOrbitCatalog();
   } else if (selectedIndex == 5) {
-    const auto current = BOOKORBIT_STORE.getSyncBehavior();
-    BOOKORBIT_STORE.setSyncBehavior(current == BookOrbitSyncBehavior::ASK_EVERY_TIME
-                                        ? BookOrbitSyncBehavior::SMART
-                                        : BookOrbitSyncBehavior::ASK_EVERY_TIME);
+    // Toggle use device path
+    bool current = BOOKORBIT_STORE.isUseDevicePathEnabled();
+    BOOKORBIT_STORE.setUseDevicePath(!current);
     BOOKORBIT_STORE.saveToFile();
     requestUpdate();
+  } else if (selectedIndex == 6) {
+    // Device ID
+    startActivityForResult(
+        std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_DEVICE_ID),
+                                                BOOKORBIT_STORE.getDeviceId(), 64, InputType::Text),
+        [this](const ActivityResult& result) {
+          if (!result.isCancelled) {
+            const auto& kb = std::get<KeyboardResult>(result.data);
+            BOOKORBIT_STORE.setDeviceId(kb.text);
+            BOOKORBIT_STORE.saveToFile();
+          }
+        });
   }
 }
 
@@ -184,14 +195,16 @@ void BookOrbitSettingsActivity::buildListScreen(UiApp::ScreenType& screen) {
       values[i] = BOOKORBIT_STORE.getPassword().empty() ? tr(STR_NOT_SET) : "******";
     } else if (i == 2) {
       const auto serverUrl = BOOKORBIT_STORE.getServerUrl();
-      values[i] = serverUrl.empty() ? tr(STR_NOT_SET) : serverUrl;
-    } else if (i == 5) {
-      values[i] = BOOKORBIT_STORE.getSyncBehavior() == BookOrbitSyncBehavior::SMART ? tr(STR_SMART_SYNC)
-                                                                                    : tr(STR_ASK_EVERY_TIME);
-    } else {
-      // Authenticate and Browse Catalog both need credentials to do anything.
-      values[i] = hasCredentials ? "" : std::string("[") + tr(STR_SET_CREDENTIALS_FIRST) + "]";
-    }
+       values[i] = serverUrl.empty() ? tr(STR_NOT_SET) : serverUrl;
+     } else if (i == 5) {
+       values[i] = BOOKORBIT_STORE.isUseDevicePathEnabled() ? tr(STR_ENABLED) : tr(STR_DISABLED);
+     } else if (i == 6) {
+       auto deviceId = BOOKORBIT_STORE.getDeviceId();
+       values[i] = deviceId.empty() ? std::string(tr(STR_NOT_SET)) : deviceId;
+     } else {
+       // Authenticate and Browse Catalog both need credentials to do anything.
+       values[i] = hasCredentials ? "" : std::string("[") + tr(STR_SET_CREDENTIALS_FIRST) + "]";
+     }
   }
 
   std::vector<fui::ListItem> items;

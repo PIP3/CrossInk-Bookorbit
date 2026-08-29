@@ -5,6 +5,8 @@
 #include <ObfuscationUtils.h>
 
 namespace {
+// Default device ID for CrossInk
+constexpr char DEFAULT_DEVICE_ID[] = "crossink-device";
 // BookOrbit's kosync-compatible progress endpoints live under this path prefix
 // (e.g. GET {server}/api/v1/koreader/users/auth), unlike a plain koreader-sync
 // server which serves them at the root.
@@ -15,6 +17,8 @@ void BookOrbitCredentialStore::toJson(JsonDocument& doc) const {
   doc["username"] = getUsername();
   doc["password_obf"] = obfuscation::obfuscateToBase64(getPassword());
   doc["serverUrl"] = getServerUrl();
+  doc["deviceId"] = getDeviceId();
+  doc["useDevicePath"] = isUseDevicePathEnabled();
   doc["syncBehavior"] = static_cast<uint8_t>(syncBehavior);
 }
 
@@ -30,9 +34,11 @@ bool BookOrbitCredentialStore::fromJson(JsonVariantConst doc) {
 
   setCredentials(user, pass);
   setServerUrl(doc["serverUrl"] | "");
+  setDeviceId(doc["deviceId"] | "");
+  setUseDevicePath(doc["useDevicePath"] | false);
   const uint8_t behavior = doc["syncBehavior"] | static_cast<uint8_t>(0);
   syncBehavior = behavior == static_cast<uint8_t>(BookOrbitSyncBehavior::SMART) ? BookOrbitSyncBehavior::SMART
-                                                                                : BookOrbitSyncBehavior::ASK_EVERY_TIME;
+                                                                                 : BookOrbitSyncBehavior::ASK_EVERY_TIME;
 
   return true;
 }
@@ -70,6 +76,24 @@ void BookOrbitCredentialStore::clearCredentials() {
 void BookOrbitCredentialStore::setServerUrl(const std::string& url) {
   serverUrl = url;
   LOG_DBG("BOS", "Set server URL: %s", url.empty() ? "(none)" : url.c_str());
+}
+
+void BookOrbitCredentialStore::setDeviceId(const std::string& id) {
+  deviceId = id;
+  LOG_DBG("BOS", "Set device ID: %s", id.empty() ? "(none)" : id.c_str());
+}
+
+std::string BookOrbitCredentialStore::getOrCreateDeviceId() {
+  if (!deviceId.empty()) {
+    return deviceId;
+  }
+  
+  // Use default device ID for CrossInk
+  // This ensures the server can identify this client and apply device-specific settings
+  deviceId = DEFAULT_DEVICE_ID;
+  saveToFile();
+  LOG_DBG("BOS", "Using default device ID: %s", deviceId.c_str());
+  return deviceId;
 }
 
 std::string BookOrbitCredentialStore::getBaseUrl() const {

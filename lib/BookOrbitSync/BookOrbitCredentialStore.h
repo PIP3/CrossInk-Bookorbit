@@ -26,6 +26,8 @@ class BookOrbitCredentialStore : public PersistableStore<BookOrbitCredentialStor
   std::string username;
   std::string password;
   std::string serverUrl;
+  std::string deviceId;
+  bool useDevicePath = false;
   BookOrbitSyncBehavior syncBehavior = BookOrbitSyncBehavior::ASK_EVERY_TIME;
 
   BookOrbitCredentialStore() = default;
@@ -62,6 +64,15 @@ class BookOrbitCredentialStore : public PersistableStore<BookOrbitCredentialStor
   // Get base URL for API calls: normalized server URL + BookOrbit's kosync-compatible API prefix.
   // Empty when no server URL has been configured (BookOrbit has no public default server).
   std::string getBaseUrl() const;
+
+  // Device ID management for KOReader compatibility
+  void setDeviceId(const std::string& id);
+  const std::string& getDeviceId() const { return deviceId; }
+  std::string getOrCreateDeviceId();
+
+  // Device path settings
+  void setUseDevicePath(bool use) { useDevicePath = use; }
+  bool isUseDevicePathEnabled() const { return useDevicePath; }
 };
 
 // Helper macro to access credential store

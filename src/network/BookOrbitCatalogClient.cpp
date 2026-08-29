@@ -42,6 +42,63 @@ std::string urlEncode(const std::string& s) {
   return out;
 }
 
+// Create parent directories for a file path if they don't exist
+bool ensureParentDirectoriesExist(const std::string& filePath) {
+  size_t lastSlash = filePath.find_last_of("/\\");
+  if (lastSlash == std::string::npos) {
+    return true;  // No parent directory
+  }
+  
+  std::string parentPath = filePath.substr(0, lastSlash);
+  if (parentPath.empty() || parentPath == "." || parentPath == "/") {
+    return true;  // Root or current directory
+  }
+  
+  // Normalize path separators to forward slash
+  std::replace(parentPath.begin(), parentPath.end(), '\\', '/');
+  
+  // Create directories recursively
+  size_t start = 0;
+  size_t end = parentPath.find('/');
+  
+  while (end != std::string::npos) {
+    std::string dir = parentPath.substr(0, end);
+    if (!dir.empty()) {
+      if (!Storage.exists(dir.c_str())) {
+        if (!Storage.mkdir(dir.c_str())) {
+          LOG_ERR("BOC", "Failed to create directory: %s", dir.c_str());
+          return false;
+        }
+      }
+    }
+    start = end + 1;
+    end = parentPath.find('/', start);
+  }
+  
+  // Create the final parent directory
+  if (start < parentPath.length()) {
+    std::string finalDir = parentPath.substr(start);
+    if (!finalDir.empty() && !Storage.exists(finalDir.c_str())) {
+      if (!Storage.mkdir(finalDir.c_str())) {
+        LOG_ERR("BOC", "Failed to create directory: %s", finalDir.c_str());
+        return false;
+      }
+    }
+  }
+  
+  return true;
+}
+
+// Get the devicePath for a specific file from book detail
+std::string getDevicePathForFile(const BookOrbitBookDetail& detail, int64_t fileId) {
+  for (const auto& file : detail.files) {
+    if (file.id == fileId) {
+      return file.devicePath;
+    }
+  }
+  return "";  // File not found in detail
+}
+
 HttpDownloader::HeaderList authHeaders() {
   return {
       {"Accept", "application/json"},
@@ -49,6 +106,8 @@ HttpDownloader::HeaderList authHeaders() {
       {"Accept-Encoding", "identity"},
       {"x-auth-user", BOOKORBIT_STORE.getUsername()},
       {"x-auth-key", BOOKORBIT_STORE.getMd5Password()},
+      // Include device ID so server can apply device-specific file naming patterns
+      {"x-device-id", BOOKORBIT_STORE.getOrCreateDeviceId()},
   };
 }
 
@@ -276,10 +335,11 @@ bool BookOrbitCatalogClient::fetchBookDetail(const int64_t bookId, BookOrbitBook
   if (!BOOKORBIT_STORE.hasCredentials()) return false;
 
   // BookOrbit's own KOReader plugin always sends a deviceId with detail requests
-  // (the server uses it for per-device read state); mirror that with the same
-  // stable id BookOrbitSyncClient reports as device_id in progress updates.
+  // (the server uses it for per-device read state and file naming patterns).
+  // Use the stored device ID or create a default one.
+  const std::string deviceId = BOOKORBIT_STORE.getOrCreateDeviceId();
   const std::string url =
-      BOOKORBIT_STORE.getBaseUrl() + "/plugin/catalog/books/" + std::to_string(bookId) + "?deviceId=crossink-device";
+      BOOKORBIT_STORE.getBaseUrl() + "/plugin/catalog/books/" + std::to_string(bookId) + "?deviceId=" + deviceId;
   JsonDocument filter;
   filter["id"] = true;
   filter["title"] = true;
@@ -287,6 +347,7 @@ bool BookOrbitCatalogClient::fetchBookDetail(const int64_t bookId, BookOrbitBook
   filter["files"][0]["id"] = true;
   filter["files"][0]["format"] = true;
   filter["files"][0]["sizeBytes"] = true;
+  filter["files"][0]["devicePath"] = true;
   JsonDocument doc;
   if (!fetchJson(url, filter, doc)) return false;
 
@@ -303,15 +364,16 @@ bool BookOrbitCatalogClient::fetchBookDetail(const int64_t bookId, BookOrbitBook
     entry.id = file["id"] | 0;
     entry.format = std::string(file["format"] | "");
     entry.sizeBytes = file["sizeBytes"] | 0;
+    entry.devicePath = std::string(file["devicePath"] | "");
     outDetail.files.push_back(std::move(entry));
   }
   return true;
 }
 
 HttpDownloader::DownloadError BookOrbitCatalogClient::downloadFile(const int64_t fileId, const std::string& destPath,
-                                                                   HttpDownloader::ProgressCallback progress,
-                                                                   bool* cancelFlag,
-                                                                   HttpDownloader::DownloadOptions options) {
+                                                                    HttpDownloader::ProgressCallback progress,
+                                                                    bool* cancelFlag,
+                                                                    HttpDownloader::DownloadOptions options) {
   if (!BOOKORBIT_STORE.hasCredentials()) return HttpDownloader::HTTP_ERROR;
 
   const std::string url =
@@ -321,4 +383,43 @@ HttpDownloader::DownloadError BookOrbitCatalogClient::downloadFile(const int64_t
   // credentials, and mbedTLS cannot complete the handshake on this hardware.
   options.transport = HttpDownloader::Transport::WOLFSSL;
   return HttpDownloader::downloadToFile(url, destPath, std::move(progress), cancelFlag, "", "", std::move(options));
+}
+
+HttpDownloader::DownloadError BookOrbitCatalogClient::downloadFileWithDetail(
+    const int64_t fileId, const BookOrbitBookDetail& detail, const std::string& baseDestPath,
+    HttpDownloader::ProgressCallback progress, bool* cancelFlag, HttpDownloader::DownloadOptions options) {
+  if (!BOOKORBIT_STORE.hasCredentials()) return HttpDownloader::HTTP_ERROR;
+
+  std::string finalDestPath = baseDestPath;
+
+  // Use server-provided devicePath if enabled and available
+  if (BOOKORBIT_STORE.isUseDevicePathEnabled()) {
+    std::string devicePath = getDevicePathForFile(detail, fileId);
+    if (!devicePath.empty()) {
+      // Combine base path with devicePath
+      if (!baseDestPath.empty()) {
+        // Ensure there's exactly one separator between base and devicePath
+        if (baseDestPath.back() == '/') {
+          finalDestPath = baseDestPath + devicePath;
+        } else {
+          finalDestPath = baseDestPath + "/" + devicePath;
+        }
+      } else {
+        finalDestPath = devicePath;
+      }
+
+      // Ensure parent directories exist
+      if (!ensureParentDirectoriesExist(finalDestPath)) {
+        LOG_ERR("BOC", "Failed to create parent directories for: %s", finalDestPath.c_str());
+        // Fall back to base path without devicePath
+        finalDestPath = baseDestPath;
+      }
+    }
+  }
+
+  const std::string url =
+      BOOKORBIT_STORE.getBaseUrl() + "/plugin/catalog/files/" + std::to_string(fileId) + "/download";
+  options.extraHeaders = authHeaders();
+  options.transport = HttpDownloader::Transport::WOLFSSL;
+  return HttpDownloader::downloadToFile(url, finalDestPath, std::move(progress), cancelFlag, "", "", std::move(options));
 }

@@ -21,6 +21,7 @@ struct BookOrbitCatalogFile {
   int64_t id = 0;
   std::string format;  // e.g. "epub", lowercase
   size_t sizeBytes = 0;
+  std::string devicePath;  // Server-provided path like "Series Name/01 - Title.epub"
 };
 
 /** One entry in a BookOrbit book listing. */
@@ -118,4 +119,15 @@ class BookOrbitCatalogClient {
   static HttpDownloader::DownloadError downloadFile(
       int64_t fileId, const std::string& destPath, HttpDownloader::ProgressCallback progress = nullptr,
       bool* cancelFlag = nullptr, HttpDownloader::DownloadOptions options = HttpDownloader::DownloadOptions());
+
+  /**
+   * Download a catalog file using server-provided devicePath for organization.
+   * If useDevicePath is enabled in settings and devicePath is available from the server,
+   * the file will be saved at baseDestPath/devicePath with parent directories created as needed.
+   * Otherwise, falls back to baseDestPath.
+   */
+  static HttpDownloader::DownloadError downloadFileWithDetail(
+      int64_t fileId, const BookOrbitBookDetail& detail, const std::string& baseDestPath,
+      HttpDownloader::ProgressCallback progress = nullptr, bool* cancelFlag = nullptr,
+      HttpDownloader::DownloadOptions options = HttpDownloader::DownloadOptions());
 };
