@@ -671,7 +671,8 @@ void BookOrbitSyncActivity::uploadAnnotationBatch() {
   }
 
   const std::string cachePath = Epub::cachePathForFilePath(epubPath, "/.crosspoint");
-  if (!BookOrbitAnnotationStore::advanceWatermark(cachePath, pendingAnnotationWatermark)) {
+  if (pendingAnnotationWatermark > 0 &&
+      !BookOrbitAnnotationStore::advanceWatermark(cachePath, pendingAnnotationWatermark)) {
     LOG_ERR("BookOrbit", "Highlights uploaded but the watermark did not advance; they will be re-sent");
   }
   annotationsSent = static_cast<uint16_t>(pendingAnnotations.size());
@@ -811,7 +812,7 @@ void BookOrbitSyncActivity::uploadBookmarkBatch() {
   }
 
   const std::string cachePath = Epub::cachePathForFilePath(epubPath, "/.crosspoint");
-  if (!BookOrbitBookmarkStore::advanceWatermark(cachePath, pendingBookmarkWatermark)) {
+  if (pendingBookmarkWatermark > 0 && !BookOrbitBookmarkStore::advanceWatermark(cachePath, pendingBookmarkWatermark)) {
     LOG_ERR("BookOrbit", "Bookmarks uploaded but the watermark did not advance; they will be re-sent");
   }
   bookmarksSent = static_cast<uint16_t>(pendingBookmarks.size());

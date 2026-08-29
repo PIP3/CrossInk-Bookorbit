@@ -360,11 +360,19 @@ class EpubReaderActivity final : public Activity {
   // Mints the BookOrbit xpointer for a highlight just added to the clipping store. Done here
   // rather than at sync time because it walks the chapter's HTML structure, which is nearly
   // free while this activity already has the chapter open (see BookOrbitAnnotationStore).
-  void recordAnnotationPosition(size_t clippingIndex, uint16_t paragraphIndex, const std::string& highlightText);
+  // Callers on the render task (the backfills) must say so: the walk runs under a framebuffer
+  // loan, which takes the RenderLock unless it is already held.
+  void recordAnnotationPosition(size_t clippingIndex, uint16_t paragraphIndex, const std::string& highlightText,
+                                bool onRenderTask = false);
 
   // Mints the BookOrbit position for a bookmark just added, from the current page's visible
-  // text offset (see BookOrbitBookmarkStore).
-  void recordBookmarkPosition(const Bookmark& bookmark);
+  // text offset (see BookOrbitBookmarkStore). Same render-task contract as above.
+  void recordBookmarkPosition(const Bookmark& bookmark, bool onRenderTask = false);
+
+  // Runs `resolve` with the framebuffer lent to it,
+  // then rebuilds the page in RAM.
+  template <typename Resolve>
+  void mintPositionWithFrameBufferLent(bool onRenderTask, Resolve&& resolve);
 
   // Stamps a position onto one highlight made before this feature existed, or before a book was
   // moved. Runs once per chapter per session, after the page is on screen.
