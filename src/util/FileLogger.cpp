@@ -37,7 +37,7 @@ void FileLogger::log(const char* tag, const char* message) {
         rotateLogsIfNeeded();
         
         // Open log file in append mode
-        if (!Storage.openFileForWrite("FILELOG", LOG_FILE_PATH, logFile, O_WRONLY | O_CREAT | O_APPEND)) {
+        if (!Storage.openFileForWrite("FILELOG", LOG_FILE_PATH, logFile)) {
             return;
         }
     }
@@ -48,9 +48,9 @@ void FileLogger::log(const char* tag, const char* message) {
         uint8_t utcHour = 0, utcMinute = 0, utcSecond = 0;
         uint16_t utcYear = 0;
         uint8_t utcMonth = 0, utcDay = 0;
-        if (halClock.getDateTime(utcYear, utcMonth, utcDay, utcHour, utcMinute, utcSecond)) {
-            snprintf(timestamp, sizeof(timestamp), "%04u-%02u-%02u %02u:%02u:%02u", 
-                    utcYear, utcMonth, utcDay, utcHour, utcMinute, utcSecond);
+        if (halClock.getDateTime(utcYear, utcMonth, utcDay, utcHour, utcMinute)) {
+            snprintf(timestamp, sizeof(timestamp), "%04u-%02u-%02u %02u:%02u:00", 
+                    utcYear, utcMonth, utcDay, utcHour, utcMinute);
         }
         
         char buffer[256];
