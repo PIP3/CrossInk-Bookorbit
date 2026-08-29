@@ -57,9 +57,12 @@ bool ensureParentDirectoriesExist(const std::string& filePath) {
   // Normalize path separators to forward slash
   std::replace(parentPath.begin(), parentPath.end(), '\\', '/');
   
+  // Ensure we're working with absolute paths
+  bool isAbsolute = !parentPath.empty() && parentPath[0] == '/';
+  
   // Create directories recursively
-  size_t start = 0;
-  size_t end = parentPath.find('/');
+  size_t start = isAbsolute ? 1 : 0;  // Skip leading '/' for absolute paths
+  size_t end = parentPath.find('/', start);
   
   while (end != std::string::npos) {
     std::string dir = parentPath.substr(0, end);
@@ -77,7 +80,16 @@ bool ensureParentDirectoriesExist(const std::string& filePath) {
   
   // Create the final parent directory
   if (start < parentPath.length()) {
-    std::string finalDir = parentPath.substr(start);
+    std::string finalDir = parentPath.substr(0, start);
+    if (!finalDir.empty() && !Storage.exists(finalDir.c_str())) {
+      if (!Storage.mkdir(finalDir.c_str())) {
+        LOG_ERR("BOC", "Failed to create directory: %s", finalDir.c_str());
+        return false;
+      }
+    }
+  } else if (isAbsolute && start == parentPath.length() && parentPath.length() > 1) {
+    // Handle case where parentPath ends with '/' and we need to create the last directory
+    std::string finalDir = parentPath;
     if (!finalDir.empty() && !Storage.exists(finalDir.c_str())) {
       if (!Storage.mkdir(finalDir.c_str())) {
         LOG_ERR("BOC", "Failed to create directory: %s", finalDir.c_str());

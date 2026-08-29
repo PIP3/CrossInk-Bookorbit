@@ -28,6 +28,7 @@
 #include "components/UIThemeTokens.h"
 #include "components/UiAppHelpers.h"
 #include "fontIds.h"
+#include "network/BookOrbitCatalogClient.h"
 #include "network/HttpDownloader.h"
 #include "util/BookCacheUtils.h"
 #include "util/StringUtils.h"
@@ -35,6 +36,16 @@
 namespace fui = freeink::ui;
 
 namespace {
+// Local helper to get the devicePath for a specific file from book detail
+std::string getDevicePathForFile(const BookOrbitBookDetail& detail, int64_t fileId) {
+  for (const auto& file : detail.files) {
+    if (file.id == fileId) {
+      return file.devicePath;
+    }
+  }
+  return "";  // File not found in detail
+}
+
 constexpr fui::ActionId ACTION_ROW = 1;
 constexpr size_t BOOKORBIT_DOWNLOAD_BUFFER_SIZE = 2048;
 constexpr char READ_FOLDER_PREFIX[] = "/Read";
@@ -491,8 +502,16 @@ void BookOrbitCatalogBrowserActivity::downloadBook(const int64_t bookId, const s
     return;
   }
 
-  const std::string filename = catalogBookFilename(detail.title, detail.author);
-  LOG_DBG("BookOrbit", "Downloading file %lld -> %s", static_cast<long long>(epubFile.id), filename.c_str());
+  // Determine the destination path based on whether device path feature is enabled
+  std::string baseDestPath;
+  if (BOOKORBIT_STORE.isUseDevicePathEnabled()) {
+    // When using device path, start with root and let downloadFileWithDetail handle the rest
+    baseDestPath = "/";
+  } else {
+    // When not using device path, use the traditional filename
+    baseDestPath = catalogBookFilename(detail.title, detail.author);
+  }
+  LOG_DBG("BookOrbit", "Downloading file %lld -> %s", static_cast<long long>(epubFile.id), baseDestPath.c_str());
 
   bool cancelRequested = false;
   auto pollCancel = [this, &cancelRequested] {
@@ -538,10 +557,10 @@ void BookOrbitCatalogBrowserActivity::downloadBook(const int64_t bookId, const s
       break;
     }
     downloadOptions.resumePartial = attempt > 0;
-    result = BookOrbitCatalogClient::downloadFile(
-        epubFile.id, filename,
+    result = BookOrbitCatalogClient::downloadFileWithDetail(
+        epubFile.id, detail, baseDestPath,
         [this, &lastRenderedPercent, &lastProgressUpdateMs, &percent, &now](const size_t downloaded,
-                                                                            const size_t total) {
+                                                                             const size_t total) {
           downloadProgress = downloaded;
           downloadTotal = total;
           percent = total > 0 ? static_cast<int>(static_cast<uint64_t>(downloaded) * 100 / total) : 0;
@@ -568,11 +587,32 @@ void BookOrbitCatalogBrowserActivity::downloadBook(const int64_t bookId, const s
   if (downloadFailed) {
     // preservePartial kept the partial file for resuming between attempts; don't
     // leave a truncated EPUB behind once we give up.
-    Storage.remove(filename.c_str());
+    if (BOOKORBIT_STORE.isUseDevicePathEnabled()) {
+      // When using device path, we need to clean up the file at the device path
+      std::string devicePath = getDevicePathForFile(detail, epubFile.id);
+      if (!devicePath.empty()) {
+        std::string fullPath = "/" + devicePath;
+        Storage.remove(fullPath.c_str());
+      }
+    } else {
+      Storage.remove(baseDestPath.c_str());
+    }
   }
 
   if (result == HttpDownloader::OK) {
-    clearBookCache(filename);
+    // When using device path, we need to determine the actual filename for cache clearing
+    std::string actualFilename;
+    if (BOOKORBIT_STORE.isUseDevicePathEnabled()) {
+      std::string devicePath = getDevicePathForFile(detail, epubFile.id);
+      if (!devicePath.empty()) {
+        actualFilename = "/" + devicePath;
+      } else {
+        actualFilename = baseDestPath;
+      }
+    } else {
+      actualFilename = baseDestPath;
+    }
+    clearBookCache(actualFilename);
   } else if (result == HttpDownloader::ABORTED) {
     LOG_DBG("BookOrbit", "Download cancelled");
     if (goHomeAfterCancel) {
