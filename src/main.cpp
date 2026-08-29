@@ -24,7 +24,7 @@
 #include <WallClock.h>
 #include <builtinFonts/all.h>
 #include <uzlib.h>
-#include "util/FileLogger.h"
+
 
 #ifdef SIMULATOR
 using esp_reset_reason_t = int;
@@ -1263,8 +1263,6 @@ void setup() {
 
   SETTINGS.loadFromFile();
   
-  // Initialize file logger if enabled
-  FileLogger::setEnabled(SETTINGS.enableFileLogging != 0);
   Storage.installDateTimeCallback(&SETTINGS.clockUtcOffsetQ);
   // Restore an approximate wall clock on cold boot (RTC-less devices) and track the
   // power era used to correct queued reading-stats timestamps at sync time.
@@ -1786,10 +1784,5 @@ void loop() {
     }
   }
   
-  // Periodically flush file logger
-  static unsigned long lastLogFlush = 0;
-  if (millis() - lastLogFlush > 60000) { // Flush every 60 seconds
-    FileLogger::flush();
-    lastLogFlush = millis();
-  }
+
 }
