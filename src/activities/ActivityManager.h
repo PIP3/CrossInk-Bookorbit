@@ -118,6 +118,9 @@ class ActivityManager {
   bool goToOpdsServer(uint32_t serverIndex, bool networkBootReady = false);
   void goToBookOrbitCatalog();
   void goToBookOrbitAuth();
+  void goToLibrarySelection(bool pickerMode = false);
+  void goToCollectionBrowser(const std::string& libraryId);
+  void goToSmartScopeBrowser(const std::string& libraryId);
   void goToReader(std::string path, bool suppressBackRelease = false, bool allowFastInitialRefresh = false,
                   bool cleanImageBaseOnEntry = false);
   void goToSleep(bool fromTimeout = false);

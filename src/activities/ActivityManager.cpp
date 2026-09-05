@@ -30,8 +30,11 @@
 #include "network/UsbDriveActivity.h"
 #include "reader/ReaderActivity.h"
 #include "settings/BookOrbitAuthActivity.h"
+#include "settings/LibrarySelectionActivity.h"
 #include "settings/OpdsServerListActivity.h"
 #include "settings/SettingsActivity.h"
+#include "browser/CollectionBrowserActivity.h"
+#include "browser/SmartScopeBrowserActivity.h"
 #include "util/FrontlightPanelActivity.h"
 #include "util/FullScreenMessageActivity.h"
 #include "util/TwoFingerSwipe.h"
@@ -536,6 +539,18 @@ void ActivityManager::goToBookOrbitAuth() {
   // is lost by dropping them — the activity ends in a silentRestart() to the home screen
   // once WiFi has been up, so the stack would not have been returned to anyway.
   replaceActivity(std::make_unique<BookOrbitAuthActivity>(renderer, mappedInput));
+}
+
+void ActivityManager::goToLibrarySelection(bool pickerMode) {
+  replaceActivity(std::make_unique<LibrarySelectionActivity>(renderer, mappedInput, pickerMode));
+}
+
+void ActivityManager::goToCollectionBrowser(const std::string& libraryId) {
+  replaceActivity(std::make_unique<CollectionBrowserActivity>(renderer, mappedInput, libraryId));
+}
+
+void ActivityManager::goToSmartScopeBrowser(const std::string& libraryId) {
+  replaceActivity(std::make_unique<SmartScopeBrowserActivity>(renderer, mappedInput, libraryId));
 }
 
 bool ActivityManager::goToOpdsServer(const uint32_t serverIndex, const bool networkBootReady) {
