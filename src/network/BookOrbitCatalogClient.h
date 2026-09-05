@@ -72,6 +72,42 @@ struct BookOrbitBookPage {
   int pageSize = 0;
 };
 
+/** A BookOrbit library, containing collections and books. */
+struct BookOrbitLibrary {
+  int64_t id = 0;
+  std::string name;
+  std::string description;
+  bool isDefault = false;
+  int bookCount = 0;
+};
+
+/** A BookOrbit collection, which can be static or dynamic (smart scope). */
+struct BookOrbitCollection {
+  int64_t id = 0;
+  std::string name;
+  std::string description;
+  int64_t parentId = 0;  // 0 for root-level collections
+  bool isSmartScope = false;
+  std::string smartScopeQuery;  // Query for smart scopes
+  int bookCount = 0;
+};
+
+/** Result of a paged library listing request. */
+struct BookOrbitLibraryPage {
+  std::vector<BookOrbitLibrary> libraries;
+  int page = 1;
+  int total = 0;
+  int pageSize = 0;
+};
+
+/** Result of a paged collection listing request. */
+struct BookOrbitCollectionPage {
+  std::vector<BookOrbitCollection> collections;
+  int page = 1;
+  int total = 0;
+  int pageSize = 0;
+};
+
 /**
  * HTTP client for BookOrbit's KOReader-authenticated JSON catalog endpoints
  * (browsing and downloading books). Uses the same x-auth-user/x-auth-key headers
@@ -81,10 +117,8 @@ struct BookOrbitBookPage {
  * than lib/BookOrbitSync) because it depends on HttpDownloader, an app-level
  * (src/) utility.
  *
- * Only a simplified subset of BookOrbit's catalog is supported: the direct book
- * listings (recently added, continue reading, all books, search) and downloading
- * an EPUB file from a book's detail. Library/collection/smart-scope/author/series
- * drill-down, covers, ratings and read-status editing are out of scope.
+ * Supports fetching root sections, books, and downloading EPUB files.
+ * Extended to support libraries, collections, and smart scopes for enhanced browsing.
  */
 class BookOrbitCatalogClient {
  public:
@@ -131,4 +165,53 @@ class BookOrbitCatalogClient {
       int64_t fileId, const BookOrbitBookDetail& detail, const std::string& baseDestPath,
       HttpDownloader::ProgressCallback progress = nullptr, bool* cancelFlag = nullptr,
       HttpDownloader::DownloadOptions options = HttpDownloader::DownloadOptions());
+
+  /**
+   * Fetch the list of libraries available to the user.
+   * @param outLibraries Vector to populate with libraries.
+   * @return true if fetch succeeded, false otherwise.
+   */
+  static bool fetchLibraries(std::vector<BookOrbitLibrary>& outLibraries);
+
+  /**
+   * Fetch the root-level collections for a library.
+   * @param libraryId The ID of the library to fetch collections from.
+   * @param outCollections Vector to populate with collections.
+   * @return true if fetch succeeded, false otherwise.
+   */
+  static bool fetchLibraryCollections(int64_t libraryId, std::vector<BookOrbitCollection>& outCollections);
+
+  /**
+   * Fetch child collections for a parent collection.
+   * @param parentId The ID of the parent collection.
+   * @param outCollections Vector to populate with child collections.
+   * @return true if fetch succeeded, false otherwise.
+   */
+  static bool fetchCollectionChildren(int64_t parentId, std::vector<BookOrbitCollection>& outCollections);
+
+  /**
+   * Fetch smart scopes for a library.
+   * @param libraryId The ID of the library.
+   * @param outCollections Vector to populate with smart scopes (as collections).
+   * @return true if fetch succeeded, false otherwise.
+   */
+  static bool fetchSmartScopes(int64_t libraryId, std::vector<BookOrbitCollection>& outCollections);
+
+  /**
+   * Fetch books from a specific collection.
+   * @param collectionId The ID of the collection.
+   * @param page 1-based page number.
+   * @param outPage Result page with books.
+   * @return true if fetch succeeded, false otherwise.
+   */
+  static bool fetchCollectionBooks(int64_t collectionId, int page, BookOrbitBookPage& outPage);
+
+  /**
+   * Fetch books matching a smart scope query.
+   * @param smartScopeQuery The smart scope query string.
+   * @param page 1-based page number.
+   * @param outPage Result page with books.
+   * @return true if fetch succeeded, false otherwise.
+   */
+  static bool fetchSmartScopeBooks(const std::string& smartScopeQuery, int page, BookOrbitBookPage& outPage);
 };

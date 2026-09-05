@@ -169,8 +169,26 @@ bool BookOrbitCatalogProvider::fetchCollectionBooks(
 
 // Fetch smart scopes from BookOrbit
 bool BookOrbitCatalogProvider::fetchSmartScopes(std::vector<SmartScope>& outSmartScopes) {
-  // For now, return the default BookOrbit smart scopes
-  // In the future, this could fetch dynamic scopes from the server
+  // Try to fetch smart scopes from the server first
+  std::vector<BookOrbitCollection> serverCollections;
+  if (BookOrbitCatalogClient::fetchSmartScopes(0, serverCollections)) {
+    // Convert BookOrbitCollection to SmartScope
+    outSmartScopes.clear();
+    for (const auto& collection : serverCollections) {
+      SmartScope scope;
+      scope.id = std::to_string(collection.id);
+      scope.title = collection.name;
+      scope.query = collection.smartScopeQuery;
+      scope.description = collection.description;
+      scope.libraryId = libraryId_;
+      scope.isDynamic = true;
+      scope.bookCount = collection.bookCount;
+      outSmartScopes.push_back(scope);
+    }
+    return true;
+  }
+  
+  // Fallback to default smart scopes
   outSmartScopes = SmartScope::getDefaultBookOrbitSmartScopes();
   // Update library IDs
   for (auto& scope : outSmartScopes) {

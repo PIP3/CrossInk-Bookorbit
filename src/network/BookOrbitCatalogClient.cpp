@@ -500,3 +500,246 @@ HttpDownloader::DownloadError BookOrbitCatalogClient::downloadFileWithDetail(
   
   return result;
 }
+
+// Helper function to fetch JSON from BookOrbit API
+static bool fetchJsonFromApi(const std::string& endpoint, JsonDocument& doc) {
+  const std::string url = BOOKORBIT_STORE.getBaseUrl() + "/plugin/catalog/" + endpoint;
+  
+  HttpDownloader::DownloadOptions options;
+  options.extraHeaders = authHeaders();
+  options.transport = HttpDownloader::Transport::WOLFSSL;
+  options.bufferSize = 2048;
+  
+  std::string response;
+  HttpDownloader::DownloadError err = HttpDownloader::downloadToString(url, response, nullptr, nullptr, options);
+  
+  if (err != HttpDownloader::DownloadError::OK) {
+    LOG_ERR("BOC", "Failed to fetch %s: %d", endpoint.c_str(), static_cast<int>(err));
+    lastFetchBadResponse = (err != HttpDownloader::DownloadError::HTTP_ERROR);
+    return false;
+  }
+  
+  // Parse JSON response
+  DeserializationError jsonErr = deserializeJson(doc, response);
+  if (jsonErr) {
+    LOG_ERR("BOC", "Failed to parse JSON from %s: %s", endpoint.c_str(), jsonErr.c_str());
+    lastFetchBadResponse = true;
+    return false;
+  }
+  
+  return true;
+}
+
+bool BookOrbitCatalogClient::fetchLibraries(std::vector<BookOrbitLibrary>& outLibraries) {
+  JsonDocument doc;
+  if (!fetchJsonFromApi("libraries", doc)) {
+    return false;
+  }
+  
+  outLibraries.clear();
+  
+  if (!doc.is<JsonArray>()) {
+    LOG_ERR("BOC", "Expected JSON array for libraries");
+    return false;
+  }
+  
+  for (JsonObject lib : doc.as<JsonArray>()) {
+    BookOrbitLibrary library;
+    library.id = lib["id"] | 0;
+    library.name = lib["name"] | "";
+    library.description = lib["description"] | "";
+    library.isDefault = lib["isDefault"] | false;
+    library.bookCount = lib["bookCount"] | 0;
+    
+    if (!library.name.empty()) {
+      outLibraries.push_back(library);
+    }
+  }
+  
+  LOG_INF("BOC", "Fetched %d libraries", outLibraries.size());
+  return true;
+}
+
+bool BookOrbitCatalogClient::fetchLibraryCollections(int64_t libraryId, std::vector<BookOrbitCollection>& outCollections) {
+  JsonDocument doc;
+  if (!fetchJsonFromApi("libraries/" + std::to_string(libraryId) + "/collections", doc)) {
+    return false;
+  }
+  
+  outCollections.clear();
+  
+  if (!doc.is<JsonArray>()) {
+    LOG_ERR("BOC", "Expected JSON array for collections");
+    return false;
+  }
+  
+  for (JsonObject col : doc.as<JsonArray>()) {
+    BookOrbitCollection collection;
+    collection.id = col["id"] | 0;
+    collection.name = col["name"] | "";
+    collection.description = col["description"] | "";
+    collection.parentId = col["parentId"] | 0;
+    collection.isSmartScope = col["isSmartScope"] | false;
+    collection.smartScopeQuery = col["smartScopeQuery"] | "";
+    collection.bookCount = col["bookCount"] | 0;
+    
+    if (!collection.name.empty()) {
+      outCollections.push_back(collection);
+    }
+  }
+  
+  LOG_INF("BOC", "Fetched %d collections for library %lld", outCollections.size(), static_cast<long long>(libraryId));
+  return true;
+}
+
+bool BookOrbitCatalogClient::fetchCollectionChildren(int64_t parentId, std::vector<BookOrbitCollection>& outCollections) {
+  JsonDocument doc;
+  if (!fetchJsonFromApi("collections/" + std::to_string(parentId) + "/children", doc)) {
+    return false;
+  }
+  
+  outCollections.clear();
+  
+  if (!doc.is<JsonArray>()) {
+    LOG_ERR("BOC", "Expected JSON array for collection children");
+    return false;
+  }
+  
+  for (JsonObject col : doc.as<JsonArray>()) {
+    BookOrbitCollection collection;
+    collection.id = col["id"] | 0;
+    collection.name = col["name"] | "";
+    collection.description = col["description"] | "";
+    collection.parentId = col["parentId"] | parentId;  // Ensure parentId is set
+    collection.isSmartScope = col["isSmartScope"] | false;
+    collection.smartScopeQuery = col["smartScopeQuery"] | "";
+    collection.bookCount = col["bookCount"] | 0;
+    
+    if (!collection.name.empty()) {
+      outCollections.push_back(collection);
+    }
+  }
+  
+  LOG_INF("BOC", "Fetched %d child collections for parent %lld", outCollections.size(), static_cast<long long>(parentId));
+  return true;
+}
+
+bool BookOrbitCatalogClient::fetchSmartScopes(int64_t libraryId, std::vector<BookOrbitCollection>& outCollections) {
+  JsonDocument doc;
+  if (!fetchJsonFromApi("libraries/" + std::to_string(libraryId) + "/smart-scopes", doc)) {
+    return false;
+  }
+  
+  outCollections.clear();
+  
+  if (!doc.is<JsonArray>()) {
+    LOG_ERR("BOC", "Expected JSON array for smart scopes");
+    return false;
+  }
+  
+  for (JsonObject scope : doc.as<JsonArray>()) {
+    BookOrbitCollection collection;
+    collection.id = scope["id"] | 0;
+    collection.name = scope["name"] | "";
+    collection.description = scope["description"] | "";
+    collection.parentId = 0;  // Smart scopes are root-level
+    collection.isSmartScope = true;
+    collection.smartScopeQuery = scope["query"] | "";
+    collection.bookCount = scope["bookCount"] | 0;
+    
+    if (!collection.name.empty()) {
+      outCollections.push_back(collection);
+    }
+  }
+  
+  LOG_INF("BOC", "Fetched %d smart scopes for library %lld", outCollections.size(), static_cast<long long>(libraryId));
+  return true;
+}
+
+bool BookOrbitCatalogClient::fetchCollectionBooks(int64_t collectionId, int page, BookOrbitBookPage& outPage) {
+  JsonDocument doc;
+  std::string endpoint = "collections/" + std::to_string(collectionId) + "/books?page=" + std::to_string(page) + "&pageSize=" + std::to_string(PAGE_SIZE);
+  
+  if (!fetchJsonFromApi(endpoint, doc)) {
+    return false;
+  }
+  
+  outPage.books.clear();
+  outPage.page = page;
+  outPage.pageSize = PAGE_SIZE;
+  
+  if (!doc.is<JsonObject>()) {
+    LOG_ERR("BOC", "Expected JSON object for collection books");
+    return false;
+  }
+  
+  // Parse books array
+  JsonArray booksArray = doc["books"];
+  if (!booksArray.is<JsonArray>()) {
+    LOG_ERR("BOC", "Expected 'books' array in response");
+    return false;
+  }
+  
+  for (JsonObject book : booksArray) {
+    BookOrbitCatalogBook catalogBook;
+    catalogBook.id = book["id"] | 0;
+    catalogBook.title = book["title"] | "";
+    catalogBook.author = book["author"] | "";
+    catalogBook.devicePath = book["devicePath"] | "";
+    
+    if (!catalogBook.title.empty()) {
+      outPage.books.push_back(catalogBook);
+    }
+  }
+  
+  // Parse total count
+  outPage.total = doc["total"] | 0;
+  
+  LOG_INF("BOC", "Fetched %d books for collection %lld (page %d, total %d)", 
+          outPage.books.size(), static_cast<long long>(collectionId), page, outPage.total);
+  return true;
+}
+
+bool BookOrbitCatalogClient::fetchSmartScopeBooks(const std::string& smartScopeQuery, int page, BookOrbitBookPage& outPage) {
+  JsonDocument doc;
+  std::string endpoint = "books?" + smartScopeQuery + "&page=" + std::to_string(page) + "&pageSize=" + std::to_string(PAGE_SIZE);
+  
+  if (!fetchJsonFromApi(endpoint, doc)) {
+    return false;
+  }
+  
+  outPage.books.clear();
+  outPage.page = page;
+  outPage.pageSize = PAGE_SIZE;
+  
+  if (!doc.is<JsonObject>()) {
+    LOG_ERR("BOC", "Expected JSON object for smart scope books");
+    return false;
+  }
+  
+  // Parse books array
+  JsonArray booksArray = doc["books"];
+  if (!booksArray.is<JsonArray>()) {
+    LOG_ERR("BOC", "Expected 'books' array in response");
+    return false;
+  }
+  
+  for (JsonObject book : booksArray) {
+    BookOrbitCatalogBook catalogBook;
+    catalogBook.id = book["id"] | 0;
+    catalogBook.title = book["title"] | "";
+    catalogBook.author = book["author"] | "";
+    catalogBook.devicePath = book["devicePath"] | "";
+    
+    if (!catalogBook.title.empty()) {
+      outPage.books.push_back(catalogBook);
+    }
+  }
+  
+  // Parse total count
+  outPage.total = doc["total"] | 0;
+  
+  LOG_INF("BOC", "Fetched %d books for smart scope '%s' (page %d, total %d)", 
+          outPage.books.size(), smartScopeQuery.c_str(), page, outPage.total);
+  return true;
+}
