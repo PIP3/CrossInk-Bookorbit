@@ -53,3 +53,8 @@ Refer to https://freeink.org/llms.txt for guidance.
 
 - POSIX TZ signs are inverted from ISO 8601 in `TimeStore::applyTimezone()`: `"UTC-1"` means UTC+1.
 - `LyraTheme::drawHeader()` does not call `BaseTheme::drawHeader()`, so header changes in the base theme must be duplicated in Lyra if needed.
+
+## Code References
+
+- External code references are stored in the `references/` directory, which is gitignored.
+- Currently includes: `bookorbit/bookorbit.git` - BookOrbit e-reader firmware for reference and comparison.

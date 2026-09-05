@@ -49,3 +49,6 @@ dist-publish/
 /CMakeLists.txt
 /dependencies.lock
 /sdkconfig.*
+
+# Code references for external projects
+/references/
