@@ -585,8 +585,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t autoBackupStats = 1;
   // Idle threshold for reading stats, stored in 10-second units to fit uint8_t.
   uint8_t readingIdleTimeThresholdUnits = 30;
-  // Enable writing logs to file on SD card (0 = disabled, 1 = enabled)
-  uint8_t enableFileLogging = 0;
   // Image rendering mode in EPUB reader
   uint8_t imageRendering = IMAGES_DISPLAY;
   // Long-press Confirm (menu button) quick action in reader (0 = off)
