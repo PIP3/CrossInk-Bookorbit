@@ -11,6 +11,7 @@
 #include <cstdio>
 
 #include "BookOrbitCredentialStore.h"
+#include "BookOrbitSyncClient.h"
 
 bool BookOrbitCatalogClient::lastFetchBadResponse = false;
 
@@ -387,11 +388,10 @@ bool BookOrbitCatalogClient::fetchBookDetail(const int64_t bookId, BookOrbitBook
   if (!BOOKORBIT_STORE.hasCredentials()) return false;
 
   // BookOrbit's own KOReader plugin always sends a deviceId with detail requests
-  // (the server uses it for per-device read state and file naming patterns).
-  // Use the stored device ID or create a default one.
-  const std::string deviceId = BOOKORBIT_STORE.getOrCreateDeviceId();
-  const std::string url =
-      BOOKORBIT_STORE.getBaseUrl() + "/plugin/catalog/books/" + std::to_string(bookId) + "?deviceId=" + deviceId;
+  // (the server uses it for per-device read state); mirror that with the same
+  // per-reader id BookOrbitSyncClient reports as device_id in progress updates.
+  const std::string url = BOOKORBIT_STORE.getBaseUrl() + "/plugin/catalog/books/" + std::to_string(bookId) +
+                          "?deviceId=" + BookOrbitSyncClient::deviceId();
   JsonDocument filter;
   filter["id"] = true;
   filter["title"] = true;

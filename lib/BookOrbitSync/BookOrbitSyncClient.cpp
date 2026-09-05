@@ -8,6 +8,7 @@
 #include <I18n.h>
 #include <Logging.h>
 #include <Memory.h>
+#include <esp_mac.h>
 #ifdef SIMULATOR
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
@@ -19,6 +20,7 @@
 #endif
 
 #include <algorithm>
+#include <array>
 #include <cstdio>
 #include <cstring>
 #include <ctime>
@@ -34,9 +36,23 @@
 int BookOrbitSyncClient::lastHttpCode = 0;
 int BookOrbitSyncClient::lastTransportError = 0;
 
-namespace {
-constexpr char DEVICE_ID[] = "crossink-device";
+const char* BookOrbitSyncClient::deviceId() {
+  static const std::array<char, 24> id = [] {
+    std::array<char, 24> value{};
+    uint8_t mac[6] = {};
+    if (esp_efuse_mac_get_default(mac) != 0) {
+      LOG_ERR("BookOrbit", "Could not read factory MAC; falling back to shared device id");
+      snprintf(value.data(), value.size(), "crossink-device");
+      return value;
+    }
+    snprintf(value.data(), value.size(), "crossink-%02x%02x%02x%02x%02x%02x", mac[0], mac[1], mac[2], mac[3], mac[4],
+             mac[5]);
+    return value;
+  }();
+  return id.data();
+}
 
+namespace {
 std::string formatHttpStatusMessage(int httpCode) {
   char buffer[96];
   snprintf(buffer, sizeof(buffer), tr(STR_KOREADER_SYNC_HTTP_STATUS_FORMAT), httpCode);
@@ -492,7 +508,7 @@ BookOrbitSyncClient::Error BookOrbitSyncClient::updateProgress(const KOReaderPro
   doc["progress"] = progress.progress;
   doc["percentage"] = progress.percentage;
   doc["device"] = progress.device;
-  doc["device_id"] = DEVICE_ID;
+  doc["device_id"] = deviceId();
   if (progress.timestamp > 0) {
     doc["timestamp"] = progress.timestamp;
   }
@@ -577,7 +593,7 @@ BookOrbitSyncClient::Error BookOrbitSyncClient::uploadPageStats(const std::strin
   JsonBody body;
   {
     JsonDocument doc;
-    doc["deviceId"] = DEVICE_ID;
+    doc["deviceId"] = deviceId();
     doc["deviceModel"] = deviceModel;
     doc["pluginVersion"] = "crossink-bo-1";
     char deviceTime[20] = {};
@@ -639,6 +655,86 @@ BookOrbitSyncClient::Error BookOrbitSyncClient::uploadPageStats(const std::strin
 #endif
 }
 
+BookOrbitSyncClient::Error BookOrbitSyncClient::completeSweep(const std::string& deviceModel,
+                                                              const uint32_t booksMatched,
+                                                              const uint32_t pageStatsUploaded,
+                                                              const uint32_t annotationsUpserted) {
+  lastHttpCode = 0;
+  lastTransportError = 0;
+  if (!BOOKORBIT_STORE.hasCredentials()) {
+    LOG_DBG("BookOrbit", "No credentials configured");
+    return NO_CREDENTIALS;
+  }
+
+  std::string url = BOOKORBIT_STORE.getBaseUrl() + "/plugin/sweeps";
+  const uint32_t freeHeap = ESP.getFreeHeap();
+  LOG_DBG("BookOrbit", "Recording sweep: %s (heap: %u)", url.c_str(), (unsigned)freeHeap);
+  const uint32_t heapFloor = requiredHeapFloor();
+  if (freeHeap < heapFloor) {
+    LOG_ERR("BookOrbit", "Insufficient heap for sync request: %u bytes free (need %u)", freeHeap, heapFloor);
+    return LOW_MEMORY;
+  }
+
+  // See uploadPageStats for why pluginVersion is a literal and the JsonDocument is scoped.
+  JsonBody body;
+  {
+    JsonDocument doc;
+    doc["deviceId"] = deviceId();
+    doc["deviceModel"] = deviceModel;
+    doc["pluginVersion"] = "crossink-bo-1";
+    char deviceTime[20] = {};
+    if (bookOrbitFormatDatetime(static_cast<uint32_t>(time(nullptr)), deviceTime)) {
+      // Optional server-side, but an empty string fails its format validation with HTTP 400
+      // and takes the whole sweep down with it: better omitted when the clock is implausible.
+      doc["deviceTime"] = deviceTime;
+    }
+    doc["booksMatched"] = booksMatched;
+    doc["pageStatsUploaded"] = pageStatsUploaded;
+    doc["annotationsUpserted"] = annotationsUpserted;
+    if (!body.build(doc)) return LOW_MEMORY;
+  }
+
+#ifdef SIMULATOR
+  HTTPClient http;
+  std::unique_ptr<WiFiClientSecure> secureClient;
+  WiFiClient plainClient;
+
+  if (isHttpsUrl(url)) {
+    secureClient.reset(new WiFiClientSecure);
+    secureClient->setInsecure();
+    http.begin(*secureClient, url.c_str());
+  } else {
+    http.begin(plainClient, url.c_str());
+  }
+  addAuthHeaders(http);
+  http.addHeader("Content-Type", "application/json");
+
+  const int httpCode = http.POST(body.c_str());
+  lastHttpCode = httpCode;
+  lastTransportError = (httpCode < 0) ? httpCode : 0;
+  http.end();
+
+  LOG_DBG("BookOrbit", "Sweep response: %d", httpCode);
+
+  if (httpCode >= 200 && httpCode < 300) return OK;
+  if (httpCode == 401) return AUTH_FAILED;
+  if (httpCode < 0) return NETWORK_ERROR;
+  return SERVER_ERROR;
+#else
+  LOG_DBG("BookOrbit", "POST body bytes=%u", static_cast<unsigned>(body.length()));
+  std::string response;
+  const int httpCode = sendBookOrbitRequest("POST", url, &body, response);
+  lastHttpCode = httpCode > 0 ? httpCode : 0;
+  lastTransportError = httpCode < 0 ? httpCode : 0;
+  LOG_DBG("BookOrbit", "Sweep response: %d", httpCode);
+
+  if (httpCode < 0) return NETWORK_ERROR;
+  if (httpCode >= 200 && httpCode < 300) return OK;
+  if (httpCode == 401) return AUTH_FAILED;
+  return SERVER_ERROR;
+#endif
+}
+
 BookOrbitSyncClient::Error BookOrbitSyncClient::exchangeAnnotations(
     const std::string& documentHash, const std::string& deviceModel, const BookOrbitAnnotationKeys& keys,
     const BookOrbitAnnotation* changes, const size_t changeCount, bool& outUnmatched,
@@ -670,7 +766,7 @@ BookOrbitSyncClient::Error BookOrbitSyncClient::exchangeAnnotations(
   JsonBody body;
   {
     JsonDocument doc;
-    doc["deviceId"] = DEVICE_ID;
+    doc["deviceId"] = deviceId();
     doc["deviceModel"] = deviceModel;
     doc["pluginVersion"] = "crossink-bo-1";
 
@@ -842,7 +938,7 @@ BookOrbitSyncClient::Error BookOrbitSyncClient::ackAnnotations(const std::string
   JsonBody body;
   {
     JsonDocument doc;
-    doc["deviceId"] = DEVICE_ID;
+    doc["deviceId"] = deviceId();
     doc["deviceModel"] = deviceModel;
     doc["pluginVersion"] = "crossink-bo-1";
     JsonArray books = doc["books"].to<JsonArray>();
@@ -921,7 +1017,7 @@ BookOrbitSyncClient::Error BookOrbitSyncClient::exchangeBookmarks(
   JsonBody body;
   {
     JsonDocument doc;
-    doc["deviceId"] = DEVICE_ID;
+    doc["deviceId"] = deviceId();
     doc["deviceModel"] = deviceModel;
     doc["pluginVersion"] = "crossink-bo-1";
 
@@ -1065,7 +1161,7 @@ BookOrbitSyncClient::Error BookOrbitSyncClient::ackBookmarks(const std::string& 
   JsonBody body;
   {
     JsonDocument doc;
-    doc["deviceId"] = DEVICE_ID;
+    doc["deviceId"] = deviceId();
     doc["deviceModel"] = deviceModel;
     doc["pluginVersion"] = "crossink-bo-1";
     JsonArray books = doc["books"].to<JsonArray>();
